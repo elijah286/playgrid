@@ -180,15 +180,14 @@ describe("NORMAL_PROMPT — Rule 9b (hand-drawn image translation)", () => {
     expect(NORMAL_PROMPT).toMatch(/kept making this play over and over/i);
   });
 
-  it("walks through the 8-step image workflow in order", () => {
+  it("walks through the 7-step image workflow in order", () => {
     const step1 = NORMAL_PROMPT.indexOf("Step 1 — Enumerate what's LITERALLY on the page");
     const step2 = NORMAL_PROMPT.indexOf("Step 2 — For ONE play at a time");
     const step3 = NORMAL_PROMPT.indexOf("Step 3 — Build the route map");
-    const step4 = NORMAL_PROMPT.indexOf("Step 4 — WAIT. CONFIRM THE ROUTE READS");
-    const step5 = NORMAL_PROMPT.indexOf("Step 5 — On the NEXT turn");
-    const step6 = NORMAL_PROMPT.indexOf("Step 6 — Use `overrides`");
-    const step7 = NORMAL_PROMPT.indexOf("Step 7 — Save with the COACH'S LITERAL LABEL");
-    const step8 = NORMAL_PROMPT.indexOf("Step 8 — Brief post-save confirm");
+    const step4 = NORMAL_PROMPT.indexOf("Step 4 — NOW pick the catalog concept");
+    const step5 = NORMAL_PROMPT.indexOf("Step 5 — Use `overrides`");
+    const step6 = NORMAL_PROMPT.indexOf("Step 6 — Save with the COACH'S LITERAL LABEL");
+    const step7 = NORMAL_PROMPT.indexOf("Step 7 — Confirm BEFORE composing");
     expect(step1).toBeGreaterThan(-1);
     expect(step2).toBeGreaterThan(step1);
     expect(step3).toBeGreaterThan(step2);
@@ -196,24 +195,6 @@ describe("NORMAL_PROMPT — Rule 9b (hand-drawn image translation)", () => {
     expect(step5).toBeGreaterThan(step4);
     expect(step6).toBeGreaterThan(step5);
     expect(step7).toBeGreaterThan(step6);
-    expect(step8).toBeGreaterThan(step7);
-  });
-
-  it("Step 4 forbids calling compose_play in the route-read turn", () => {
-    // The load-bearing accuracy gate: Cal must show the route map +
-    // ASK + WAIT. No compose_play this turn. The coach gets to
-    // verify hand-drawn route reads before geometry locks in.
-    expect(NORMAL_PROMPT).toMatch(/Step 4 — WAIT\. CONFIRM THE ROUTE READS WITH THE COACH BEFORE COMPOSING/);
-    expect(NORMAL_PROMPT).toMatch(/you do NOT call `compose_play` this turn/);
-    expect(NORMAL_PROMPT).toMatch(/Did I read those right\?/);
-  });
-
-  it("commits to a 2-turn-per-play minimum cadence", () => {
-    // The cadence is: route-read turn (Steps 2-4) THEN compose turn
-    // (Steps 5-8). One-turn cycles are the failure mode.
-    expect(NORMAL_PROMPT).toMatch(/TWO TURNS PER PLAY MINIMUM/);
-    expect(NORMAL_PROMPT).toMatch(/route-read turn/);
-    expect(NORMAL_PROMPT).toMatch(/compose turn/);
   });
 
   it("forbids inventing play names from prompt scaffolding or training data", () => {
@@ -286,14 +267,12 @@ describe("NORMAL_PROMPT — Rule 9b (hand-drawn image translation)", () => {
     expect(NORMAL_PROMPT).toMatch(/closest-sounding/i);
   });
 
-  it("structurally enforces no compose_play on the image-upload turn", () => {
-    // After 2026-05-21 (round 2) the rule was tightened from "1
-    // fence" to "0 fences" on the upload turn. The chat-time
-    // validator gate A.0-IMAGE rejects any compose_play call when
-    // the user's current turn includes an image. Composition can
-    // only happen on a follow-up turn after the coach has confirmed
-    // the per-player route reads.
-    expect(NORMAL_PROMPT).toMatch(/NO `compose_play` ON THE IMAGE-UPLOAD TURN\. STRUCTURALLY ENFORCED/);
+  it("structurally enforces one play at a time on image turns", () => {
+    // After 2026-05-21 the rule was promoted from prompt-only to a
+    // chat-time validator gate (A.0-IMAGE) — the prompt must surface
+    // that enforcement so Cal knows the cap is structural, not a
+    // suggestion.
+    expect(NORMAL_PROMPT).toMatch(/ONE PLAY AT A TIME\. STRUCTURALLY ENFORCED\. NO EXCEPTIONS/);
     expect(NORMAL_PROMPT).toMatch(/A\.0-IMAGE/);
     expect(NORMAL_PROMPT).toMatch(/OVERRIDES Rule 7c \(propose_plan/);
   });
@@ -312,16 +291,13 @@ describe("NORMAL_PROMPT — Rule 9b (hand-drawn image translation)", () => {
     expect(NORMAL_PROMPT).toMatch(/"YES" TO STEP 1 IS NOT BLANKET APPROVAL/);
   });
 
-  it("provides a 2-turns-per-play worked example for image installs", () => {
-    // The cadence: Turn 1 = enumerate plays, Turn 2 = route-read
-    // for play 1 (no compose), Turn 3 = compose play 1, Turn 4 =
-    // route-read for play 2, Turn 5 = compose play 2, …
-    expect(NORMAL_PROMPT).toMatch(/WORKED EXAMPLE — multi-play image install \(2 turns per play\)/);
-    expect(NORMAL_PROMPT).toMatch(/\*\*Turn 1 \(image attached\):\*\*/);
-    expect(NORMAL_PROMPT).toMatch(/\*\*Turn 2 \(coach says "yes" \/ "go" \/ "play 1"\):\*\*/);
-    expect(NORMAL_PROMPT).toMatch(/\*\*Turn 3 \(coach says "yes" \/ "correct/);
-    // Turn 3 is where the FIRST compose_play happens.
-    expect(NORMAL_PROMPT).toMatch(/Cal does Steps 5–8 for play #1/);
+  it("provides a multi-turn worked example for image installs", () => {
+    // Without a concrete example of the turn-by-turn flow, Cal
+    // re-invents batching every time. The example pins the right
+    // cadence.
+    expect(NORMAL_PROMPT).toMatch(/WORKED EXAMPLE — multi-play image install/);
+    expect(NORMAL_PROMPT).toMatch(/Turn 1 \(image attached\)/);
+    expect(NORMAL_PROMPT).toMatch(/Turn 2 \(coach says "yes"\)/);
   });
 
   it("preserves the images-are-not-persisted rule", () => {

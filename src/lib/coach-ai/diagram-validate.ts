@@ -1192,37 +1192,33 @@ export function validateDiagrams(opts: {
           );
         }
 
-        // GATE A.0-IMAGE — image-upload turns REJECT all compose_play
-        // fences. The upload turn is for Step 1 enumeration only:
-        // list the labels you literally see, propose the walk-
-        // through, ASK. Composition happens on FOLLOW-UP turns, after
-        // the coach has confirmed the per-player route reads (Step 4).
-        // This is the 2-turns-per-play cadence: a route-read turn
-        // (Cal lists @X = curl, @H = slant, … and asks "did I read
-        // those right?") followed by a compose turn (Cal runs
-        // compose_play with the confirmed map).
-        //
-        // Surfaced 2026-05-21 (twice): a coach uploaded a 6-play
-        // sheet, said "yes" to Cal's enumeration, and Cal batched 6
-        // compose_play calls in one turn (round 1). After tightening
-        // the gate to 1 fence and forcing per-play confirm, Cal
-        // composed on the upload turn itself with no route-read
-        // confirmation — coach reported "still a highly inaccurate
-        // rendering" because Sonnet's route reads were wrong and the
-        // coach had no chance to correct them before geometry locked
-        // in (round 2). The 0-fences gate makes this structurally
-        // impossible: Cal MUST do enumeration first, then route-read
-        // ask, then compose on later turns.
+        // GATE A.0-IMAGE — image-input turns get a STRICTER cap of 1
+        // fence per reply. Hand-drawn play sheets are higher-
+        // uncertainty than catalog composition from a clear prompt:
+        // Cal's route-from-image reads are wrong often enough that
+        // every drawn play needs the coach's explicit "save it" before
+        // composition. The propose_plan + 3-fence-batch workflow that
+        // works for "install 6 named concepts" is wrong for image
+        // input because the coach can't verify route reads per play
+        // when 3 land at once. Surfaced 2026-05-21: a coach uploaded
+        // a 6-play sheet, said "yes" to Cal's enumeration, Cal called
+        // propose_plan and then batched 6 compose_play + 6 create_play
+        // in one turn. Coach: "still not accurate" — they had no
+        // chance to correct route reads before saves landed. Cap is
+        // also justified by SSE budget: image turns use Sonnet (slower
+        // than Haiku), so even 3 compose_play calls + 3 create_play
+        // calls is borderline.
         if (
           opts.currentUserTurnHadImage === true &&
           isFullCatalogConceptFence &&
-          !surgicalBypass
+          !surgicalBypass &&
+          catalogConceptFencesSeen > 1
         ) {
           errors.push(
-            `${tag}the coach attached an image on this turn — \`compose_play\` is NOT allowed on the image-upload turn. ` +
-            `Hand-drawn route reads are wrong often enough that Cal must (1) enumerate the plays in chat first, (2) on a follow-up turn enumerate each player's route family + depth and ASK the coach "did I read those right?", and (3) only on the NEXT turn after the coach confirms or corrects, call \`compose_play\` with the verified map. ` +
-            `Composing on the upload turn skips both confirmation gates and ships wrong geometry the coach has to manually edit. ` +
-            `For THIS turn: drop ALL ${catalogConceptFencesSeen} fences. Reply with the Step 1 enumeration only — list the play labels you see, propose the walk-through, and ask "ready to start with play 1?". Do NOT call \`propose_plan\` either — the per-play 2-turn confirm flow replaces it.`,
+            `${tag}this reply has ${catalogConceptFencesSeen} catalog-concept fences, but image-input turns are capped at 1 fence per reply. ` +
+            `When the coach uploads a play sheet, every drawn play needs explicit per-play confirmation before composition (Rule 9b) — hand-drawn route reads are wrong often enough that batching loses the coach's chance to correct mistakes. ` +
+            `The coach's "yes" to your Step 1 enumeration only approves walking through them one at a time; it is NOT blanket approval to compose all plays. ` +
+            `For THIS turn: keep ONE fence (the play the coach just confirmed in their most recent message), drop the rest, and ask them to confirm the next one. Do NOT call propose_plan on image turns — the per-play confirm flow replaces it.`,
           );
         }
 

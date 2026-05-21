@@ -577,44 +577,20 @@ describe("validateDiagrams — per-reply catalog-concept fence cap (Plan checkli
   });
 });
 
-describe("validateDiagrams — IMAGE-UPLOAD per-reply cap (0 fences max — enumeration only)", () => {
-  // Surfaced 2026-05-21 (twice). Round 1: a coach uploaded a 6-play
-  // sheet, said "yes" to Cal's enumeration, and Cal batched 6×
-  // compose_play in one turn. After tightening the gate to 1 fence
-  // and forcing per-play confirm, Cal still composed on the upload
-  // turn itself — coach: "still a highly inaccurate rendering"
-  // because Sonnet's route reads were wrong and the coach had no
-  // chance to correct them before geometry locked in (round 2). The
-  // 0-fence gate makes this structurally impossible: Cal MUST do
-  // enumeration first (Step 1), then route-read ask on a follow-up
-  // turn (Step 4), then compose on the NEXT turn after the coach
-  // confirms (Steps 5-8). 2-turn-minimum-per-play cadence.
+describe("validateDiagrams — IMAGE-INPUT per-reply cap (1 fence max)", () => {
+  // Surfaced 2026-05-21: a coach uploaded a 6-play sheet, said "yes" to
+  // Cal's enumeration, and Cal interpreted that as blanket approval —
+  // installed all 6 plays via propose_plan + 6× compose_play in one
+  // turn. The coach had no chance to verify Cal's route reads per play
+  // before saves landed. Image-input turns get a stricter cap (1
+  // fence) than the general per-reply cap (3) because hand-drawn route
+  // reads are higher-uncertainty than catalog composition from a
+  // clear coach prompt.
 
-  it("REJECTS even 1 catalog-concept fence on an image-upload turn", () => {
-    const text = `${fullTackleMeshFence()}\nMesh from image — composed on the upload turn (should reject).`;
-    const result = validateDiagrams({
-      text,
-      variant: "tackle_11",
-      lastPlaceDefense: null,
-      placeOffenseCalled: true,
-      conceptSkeletonCallCount: 1,
-      currentUserTurnHadImage: true,
-    });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    const imageGateError = result.errors.find((e) =>
-      /compose_play.*NOT allowed on the image-upload turn/i.test(e),
-    );
-    expect(imageGateError).toBeDefined();
-    // Critique must direct Cal to the 2-turn-per-play cadence.
-    expect(imageGateError).toMatch(/enumerate the plays in chat first/i);
-    expect(imageGateError).toMatch(/Do NOT call `propose_plan`/);
-  });
-
-  it("REJECTS 2 catalog-concept fences on an image-upload turn", () => {
+  it("REJECTS 2 catalog-concept fences on an image-input turn", () => {
     const text =
-      `${fullTackleMeshFence()}\nMesh #1.\n\n` +
-      `${fullTackleMeshFence()}\nMesh #2.`;
+      `${fullTackleMeshFence()}\nMesh #1 from image.\n\n` +
+      `${fullTackleMeshFence()}\nMesh #2 from image.`;
     const result = validateDiagrams({
       text,
       variant: "tackle_11",
@@ -625,12 +601,16 @@ describe("validateDiagrams — IMAGE-UPLOAD per-reply cap (0 fences max — enum
     });
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(
-      result.errors.find((e) => /NOT allowed on the image-upload turn/i.test(e)),
-    ).toBeDefined();
+    const imageGateError = result.errors.find((e) =>
+      /image-input turns are capped at 1 fence per reply/i.test(e),
+    );
+    expect(imageGateError).toBeDefined();
+    // The critique must name Rule 9b and tell Cal to ask for next.
+    expect(imageGateError).toMatch(/Rule 9b/);
+    expect(imageGateError).toMatch(/Do NOT call propose_plan on image turns/i);
   });
 
-  it("REJECTS 6 catalog-concept fences on an image-upload turn (the original failure)", () => {
+  it("REJECTS 6 catalog-concept fences on an image-input turn (the actual user report)", () => {
     const text = Array.from({ length: 6 }, (_, i) =>
       `${fullTackleMeshFence()}\nMesh from image #${i + 1}.`,
     ).join("\n\n");
@@ -645,27 +625,23 @@ describe("validateDiagrams — IMAGE-UPLOAD per-reply cap (0 fences max — enum
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(
-      result.errors.find((e) => /drop ALL 6 fences/i.test(e)),
+      result.errors.find((e) => /6 catalog-concept fences/i.test(e) && /capped at 1/i.test(e)),
     ).toBeDefined();
   });
 
-  it("ACCEPTS 1 catalog-concept fence on a FOLLOW-UP turn (image fell out of history)", () => {
-    // The coach has already uploaded and confirmed route reads in
-    // prior turns; the image is no longer in this turn's history.
-    // This is the compose turn (Steps 5-8) — Cal should be allowed
-    // to compose exactly one play.
-    const text = `${fullTackleMeshFence()}\nMesh — composed after route-read confirmation.`;
+  it("ACCEPTS exactly 1 catalog-concept fence on an image-input turn", () => {
+    const text = `${fullTackleMeshFence()}\nMesh from image — the one play the coach just confirmed.`;
     const result = validateDiagrams({
       text,
       variant: "tackle_11",
       lastPlaceDefense: null,
       placeOffenseCalled: true,
       conceptSkeletonCallCount: 1,
-      currentUserTurnHadImage: false,
+      currentUserTurnHadImage: true,
     });
-    // Other rules may fail; pin only that the image-turn gate is silent.
+    // Other rules may fail; pin only that the image-turn cap doesn't fire at 1.
     if (!result.ok) {
-      expect(result.errors.find((e) => /NOT allowed on the image-upload turn/i.test(e))).toBeUndefined();
+      expect(result.errors.find((e) => /capped at 1 fence per reply/i.test(e))).toBeUndefined();
     }
   });
 
@@ -690,7 +666,7 @@ describe("validateDiagrams — IMAGE-UPLOAD per-reply cap (0 fences max — enum
       currentUserTurnHadImage: false,
     });
     if (!result.ok) {
-      expect(result.errors.find((e) => /NOT allowed on the image-upload turn/i.test(e))).toBeUndefined();
+      expect(result.errors.find((e) => /capped at 1 fence per reply/i.test(e))).toBeUndefined();
     }
   });
 });
