@@ -7,14 +7,24 @@ import { getLlmProvider, type LlmProvider } from "@/lib/site/llm-provider";
 // lookups, scheduling). Fast, cheap, plenty smart enough for text-only work.
 const CLAUDE_MODEL = "claude-haiku-4-5-20251001";
 
-// Vision-tier model — Sonnet 4.6 is meaningfully stronger than Haiku at
+// Vision-tier model — Opus 4.7 is the strongest available Claude model at
 // fine-grained hand-drawn route identification. Used ONLY for turns where
-// the coach attached a photo (play sheet, wristcoach, whiteboard). Surfaced
-// 2026-05-21: Haiku on hand-drawn play sheets misread routes and hallucinated
-// labels even with a tight prompt; Sonnet handles the same images cleanly.
-// Image-attached turns are a small fraction of total Cal traffic, so the
-// per-token cost delta is modest in aggregate.
-const CLAUDE_VISION_MODEL = "claude-sonnet-4-6";
+// the coach attached a photo (play sheet, wristcoach, whiteboard).
+// Progression history:
+//   - Haiku 4.5: misread routes and hallucinated labels even with tight
+//     prompts (initial state, surfaced 2026-05-21).
+//   - Sonnet 4.6: better, but still wrong ~30% of the time on small/faint
+//     pencil drawings (curl mistaken for hitch, in-route for slant,
+//     silently relabeling player ids). Coach reported "still a highly
+//     inaccurate rendering" (2026-05-21, round 2). Tried adding a 2-turn-
+//     per-play coach-confirm workflow — coach pushed back: "I don't want
+//     to have to review every player's route — I want the LLM to
+//     accurately represent the plays."
+//   - Opus 4.7: chosen 2026-05-21 (round 3). Best chance at first-pass
+//     accuracy without coach review. Higher cost is justified by image
+//     turns being a small fraction of total Cal traffic; the image-cap
+//     (getCoachCalImageCapState) bounds runaway exposure per user.
+const CLAUDE_VISION_MODEL = "claude-opus-4-7";
 
 const OPENAI_MODEL = "gpt-4o-mini";
 const ANTHROPIC_VERSION = "2023-06-01";

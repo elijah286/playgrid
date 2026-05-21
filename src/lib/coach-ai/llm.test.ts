@@ -120,7 +120,7 @@ describe("pickClaudeModel — vision routing", () => {
         content: [imageBlock, { type: "text", text: "what plays are these?" }],
       },
     ];
-    expect(pickClaudeModel(msgs)).toMatch(/sonnet/i);
+    expect(pickClaudeModel(msgs)).toMatch(/opus/i);
   });
 
   it("stays on Sonnet across agent-loop iterations of the same image turn", () => {
@@ -135,7 +135,7 @@ describe("pickClaudeModel — vision routing", () => {
       { role: "assistant", content: [{ type: "tool_use", id: "t1", name: "list_my_playbooks", input: {} }] },
       { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: "[]" }] },
     ];
-    expect(pickClaudeModel(msgs)).toMatch(/sonnet/i);
+    expect(pickClaudeModel(msgs)).toMatch(/opus/i);
   });
 
   it("falls back to Haiku on text-only follow-up turns (image already fell out)", () => {
