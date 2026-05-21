@@ -2677,12 +2677,43 @@ export async function runAgent(
     }
   }
 
-  // ── Defense auto-commit (anchored play + clear save intent) ──────────
-  // When chat is anchored to a play and Cal composed a defense overlay
-  // (compose_defense with on_play) AND the coach's most recent message
-  // shows clear save-intent ("install Tampa 2", "add Cover 3", "save this
-  // defense"), persist the overlay as a new defense play linked to the
-  // anchored offense via vs_play_id. Without this branch, Cal renders the
+  // ── Strip hallucinated defense-save suffix (validator backstop) ──────
+  // Cal sometimes mimics the auto-commit suffix format (after my prompt
+  // told it what the harness appends) by writing "_Saved defense play:
+  // [Name](play://<uuid>)._" in its own prose, using a UUID from earlier
+  // in conversation history (e.g. the offense play's id from a prior
+  // update_play_notes call). When that happens AND the auto-commit
+  // doesn't fire (ctx.playId null, or save-intent didn't match, or
+  // commit failed), the coach sees a fake "saved" claim and trusts it —
+  // exactly the phantom-success pattern the prompt rule was supposed to
+  // prevent. Strip the hallucination BEFORE auto-commit runs; the real
+  // commit branch (below) will re-append the suffix if it actually saves.
+  //
+  // Surfaced 2026-05-21: coach on the playbook list page asked "install
+  // Tampa 2 read on this play", request had playId=null, auto-commit
+  // didn't fire, Cal wrote "_Saved defense play: [Tampa 2 vs Smash Right]
+  // (play://30ff924c...)._" using the existing offense play's UUID from
+  // conversation history. Coach thought it saved; nothing landed.
+  const HALLUCINATED_DEFENSE_SAVE_RE = /\n*_Saved defense play:[^\n]*_\.?/g;
+  const calHallucinatedDefenseSave = HALLUCINATED_DEFENSE_SAVE_RE.test(finalText);
+  if (calHallucinatedDefenseSave) {
+    finalText = finalText.replace(HALLUCINATED_DEFENSE_SAVE_RE, "").trimEnd();
+  }
+  // Tracks whether the defense-auto-commit branch (below) actually ran a
+  // successful save this turn. Used at the end of the function to detect
+  // the hallucination-without-save case and surface a warning.
+  let defenseAutoCommitAttempted = false;
+  let defenseAutoCommitSucceeded = false;
+
+  // ── Defense auto-commit (resolvable offense play + clear save intent) ──
+  // When Cal composed a defense overlay (compose_defense with on_play)
+  // AND the coach's most recent message shows clear save-intent ("install
+  // Tampa 2", "add Cover 3", "save this defense"), persist the overlay
+  // as a new defense play linked to the offense via vs_play_id. The
+  // offense play is resolved by (priority order): ctx.playId (anchored
+  // editor), then the fence's title (Cal's compose_defense overlay
+  // preserves the prior play's title verbatim — resolves via
+  // resolvePlayId name lookup). Without this branch, Cal renders the
   // overlay in chat and claims "saved" while the DB stays empty —
   // surfaced 2026-05-21 when a coach said "install a defense... Tampa 2
   // read" and the Plays list stayed at offense-only.
@@ -2702,7 +2733,6 @@ export async function runAgent(
   // asking for explicit coach confirmation. Honor it and let the chip
   // path commit.
   if (
-    ctx.playId &&
     ctx.playbookId &&
     ctx.canEditPlaybook &&
     lastFenceFromTool &&
@@ -2719,8 +2749,34 @@ export async function runAgent(
           : [];
         const hasOffense = players.some((p) => p.team !== "D");
         const hasDefense = players.some((p) => p.team === "D");
+        defenseAutoCommitAttempted = hasOffense && hasDefense;
         if (hasOffense && hasDefense) {
-          const offenseName = ctx.playName?.trim() || "play";
+          // Resolve offensive play: prefer ctx.playId (anchored), fall
+          // back to the fence's title (compose_defense overlay carries
+          // the prior play's title verbatim). This handles the common
+          // failure mode where the coach asks "install Tampa 2 on this
+          // play" from the playbook list page — ctx.playId is null but
+          // the fence's title still names the offense.
+          let effectivePlayId: string | null = ctx.playId;
+          let effectivePlayName: string | null = ctx.playName ?? null;
+          if (!effectivePlayId) {
+            const fenceTitle = typeof parsed.title === "string" ? parsed.title.trim() : "";
+            if (fenceTitle) {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const { resolvePlayId } = require("./play-tools") as typeof import("./play-tools");
+              const resolved = await resolvePlayId(fenceTitle, ctx.playbookId);
+              if (resolved.ok) {
+                effectivePlayId = resolved.id;
+                effectivePlayName = resolved.name;
+              }
+            }
+          }
+          if (!effectivePlayId) {
+            // No anchored play AND fence title didn't resolve — bail out
+            // and let the hallucination warning explain what to do.
+            throw new Error("no resolvable offensive play");
+          }
+          const offenseName = effectivePlayName?.trim() || "play";
           const defenseLabel = lastComposeDefenseArgs
             ? `${lastComposeDefenseArgs.front} ${lastComposeDefenseArgs.coverage}`.trim()
             : (typeof parsed.title === "string" ? parsed.title.trim() : "") || "Defense";
@@ -2729,12 +2785,13 @@ export async function runAgent(
           const { createDefensePlayFromFenceAction } = require("@/app/actions/plays") as typeof import("@/app/actions/plays");
           const commit = await createDefensePlayFromFenceAction({
             fenceJson: lastFenceFromTool,
-            offensivePlayId: ctx.playId,
+            offensivePlayId: effectivePlayId,
             suggestedName,
             playbookId: ctx.playbookId,
           });
           if (commit.ok) {
             mutated = true;
+            defenseAutoCommitSucceeded = true;
             toolCalls.push("create_play");
             const suffix = `\n\n_Saved defense play: [${suggestedName}](play://${commit.playId})._`;
             finalText = finalText + suffix;
@@ -2754,6 +2811,26 @@ export async function runAgent(
         // Fence wasn't valid JSON — leave chat alone.
       }
     }
+  }
+
+  // Hallucination warning: Cal claimed "Saved defense play" earlier in
+  // the reply but the auto-commit didn't actually save anything. Replace
+  // the (already-stripped) false claim with a coach-readable explanation
+  // of why so the coach can react instead of trusting a phantom success.
+  if (calHallucinatedDefenseSave && !defenseAutoCommitSucceeded) {
+    let reason: string;
+    if (!defenseAutoCommitAttempted) {
+      reason =
+        "the request didn't read as a clear save (or the defense fence didn't include both offense + defenders). " +
+        "Try \"install Tampa 2 on Smash Right\" (naming the offense play explicitly) — or click into the play first, then ask me.";
+    } else {
+      reason =
+        "I couldn't resolve which offense play to attach the defense to. " +
+        "Try \"install Tampa 2 on [PlayName]\" (naming the offense play explicitly), or open the play in the editor first.";
+    }
+    const suffix = `\n\n_⚠️ I said I saved a defense play, but I didn't — ${reason}_`;
+    finalText = finalText + suffix;
+    onEvent?.({ type: "text_delta", text: suffix });
   }
 
   // ── Create auto-commit (save-by-default, walk-all-history) ──────────
