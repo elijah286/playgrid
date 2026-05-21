@@ -110,15 +110,31 @@ function saveLastPlayId(storageKey: string, playId: string | null): void {
   } catch { /* ignore */ }
 }
 
-// Image attachment plumbing. Photos taken with a phone often exceed Anthropic's
-// 5MB-per-image limit; resize on the client so the common case (camera roll
-// JPEG, ~3-5MB) just works. We re-encode as JPEG when resizing — it's
-// dramatically smaller than PNG for natural images and Cal doesn't need alpha.
-// 1280 max edge is below Anthropic's 1568 ceiling and still readable for
-// hand-drawn play sheets; quality 0.80 trims another ~20% off the byte size
-// without crossing into legibility risk on typical wristcoach photos.
-const MAX_IMAGE_EDGE_PX = 1280;
-const IMAGE_JPEG_QUALITY = 0.80;
+// Image attachment plumbing. Photos go to Anthropic's vision API which has its
+// own internal resize step (long-side downsample to ~1568px for processing).
+// The client's job is to FIT UNDER the server's binary cap (~5MB) without
+// destroying detail Anthropic could otherwise have used. Prior version
+// downsampled to 1280px @ 0.80 JPEG which sat BELOW Anthropic's processing
+// ceiling — handing them less data than they'd use, and double-compressing.
+// Surfaced 2026-05-21 (rounds 1-5) when coaches uploaded hand-drawn play
+// sheets and Cal misread routes (curl → vertical, slant → flat, players
+// silently relabeled). Investigation traced the failure to image quality,
+// not Cal's prompting: arrows on a 1280-wide photo of a 6-play sheet land at
+// ~213px per play box — too small + too JPEG-compressed for the vision model
+// to read the route shape reliably.
+//
+// New defaults:
+//   - 2400px max edge — well above Anthropic's 1568 ceiling, so they do the
+//     final downsample with their better algorithm instead of us.
+//   - 0.92 JPEG quality — close to lossless on natural images; preserves the
+//     fine line detail in pencil arrows. A 2400×1800 JPEG at q=0.92 typically
+//     lands at 1-2MB, well under the 5MB binary cap.
+//   - Passthrough threshold raised to 4.5MB (under the 5MB cap, with margin
+//     for base64 expansion) so small files are forwarded verbatim — no
+//     re-encoding loss for photos that already fit.
+const MAX_IMAGE_EDGE_PX = 2400;
+const IMAGE_JPEG_QUALITY = 0.92;
+const PASSTHROUGH_MAX_BYTES = 4_500_000;
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
 type PreparedImage = { preview: string; base64: string; mediaType: string };
@@ -135,14 +151,23 @@ async function prepareImageForUpload(file: File): Promise<PreparedImage> {
   if (file.type === "image/gif") {
     return splitDataUrl(await readAsDataUrl(file));
   }
+  // Passthrough for images that already fit under the binary cap AND don't
+  // exceed the max edge. Avoids re-encoding loss on photos that are already
+  // a reasonable size. Covers screenshots, downloaded images, and modern
+  // iPhone HEIC-converted-to-JPEG shares.
   const img = await loadImage(file);
   const maxEdge = Math.max(img.naturalWidth, img.naturalHeight);
-  const scale = maxEdge > MAX_IMAGE_EDGE_PX ? MAX_IMAGE_EDGE_PX / maxEdge : 1;
-  // Already small JPEGs are passed through verbatim — no point re-encoding a
-  // 500KB screenshot through canvas just to lose 5% quality.
-  if (scale === 1 && file.type === "image/jpeg" && file.size < 1_500_000) {
+  if (
+    maxEdge <= MAX_IMAGE_EDGE_PX &&
+    file.size <= PASSTHROUGH_MAX_BYTES &&
+    (file.type === "image/jpeg" || file.type === "image/png" || file.type === "image/webp")
+  ) {
     return splitDataUrl(await readAsDataUrl(file));
   }
+  // Resize down to MAX_IMAGE_EDGE_PX at IMAGE_JPEG_QUALITY. Only fires for
+  // photos that are over the byte cap OR over the dimension cap — most camera
+  // roll JPEGs from iPhone/Android hit one or both.
+  const scale = maxEdge > MAX_IMAGE_EDGE_PX ? MAX_IMAGE_EDGE_PX / maxEdge : 1;
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(img.naturalWidth * scale);
   canvas.height = Math.round(img.naturalHeight * scale);
