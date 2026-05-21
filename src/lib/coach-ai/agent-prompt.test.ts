@@ -256,6 +256,17 @@ describe("NORMAL_PROMPT — Rule 9b (image input, waypoint mode)", () => {
     expect(NORMAL_PROMPT).toMatch(/x change \(≥3yd between adjacent waypoints\) at the bend/);
   });
 
+  it("Step 3b favors 3-5 waypoints per route to preserve shape detail", () => {
+    // Surfaced 2026-05-21 round 8: Cal encoded every route as 1-2
+    // waypoints (minimum-viable), so all rendered routes looked
+    // like short straight arrows even when the drawn arrows had
+    // distinctly different curves and bends. New default: 3-5
+    // waypoints for non-straight routes, with a hard cap at 5.
+    expect(NORMAL_PROMPT).toMatch(/Use 3.5 waypoints by default/);
+    expect(NORMAL_PROMPT).toMatch(/Hard cap: 5 waypoints per route/);
+    expect(NORMAL_PROMPT).toMatch(/trace the SHAPE, not just the destination/);
+  });
+
   it("includes a self-check that catches collapse-to-vertical + pattern-matching bugs", () => {
     // The pre-emit self-check Cal runs: does the path have lateral
     // movement matching the arrow? Does it have enough waypoints

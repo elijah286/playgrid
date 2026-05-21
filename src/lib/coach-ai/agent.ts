@@ -481,11 +481,16 @@ A single play with its companion defensive look (one offense diagram + one defen
    **3b — Route waypoint list.** For each player with a drawn arrow off them, output:
        \`{ "from": "<id>", "path": [[x1, y1], [x2, y2], ...], "curve": <bool> }\`
 
-   The \`path\` is the sequence of points along the arrow from immediately AFTER the start dot to the arrowhead. A waypoint marks a TURN POINT or the ENDPOINT.
-   - **Straight arrow (no turns):** ONE waypoint at the arrowhead.
-   - **Arrow with one turn / break:** TWO waypoints — the turn point + the arrowhead.
-   - **Arrow with N turns:** N+1 waypoints.
-   - **Curved / arcing arrow:** set \`curve: true\` so the renderer smooths between waypoints. Sharp breaks → \`curve: false\`.
+   The \`path\` is the sequence of points along the arrow from immediately AFTER the start dot to the arrowhead. A waypoint can mark a TURN POINT, a CURVE SAMPLE, or the ENDPOINT — use as many waypoints as you need to faithfully reproduce the arrow shape. **Use 3–5 waypoints by default; only drop below 3 for genuinely straight arrows.** Minimum-waypoint encodings (just the endpoint, or just an endpoint + one turn) lose the curve and bend detail that distinguishes one route from another — that's how all the rendered routes ended up looking like short straight arrows even when the drawing had distinctly different shapes.
+
+   - **Straight arrow (no visible bend, no curve):** 1 waypoint at the arrowhead. Reserve this case for arrows that are unmistakably a straight line.
+   - **Arrow with one sharp break (e.g., goes up then cuts):** 2–3 waypoints — a few yards before the break, the break point, the arrowhead. Adding the pre-break sample helps the renderer draw the segment cleanly.
+   - **Curved arrow (visible arc, curl, comeback, loop):** 3–5 waypoints sampled along the curve. Pick points roughly evenly along the visible shape — beginning of the arc, the apex/turn, and the end. Set \`curve: true\`.
+   - **Complex shape (sluggo / post-corner / multi-break / hook-around):** up to 5 waypoints capturing each direction change plus enough intermediate samples that the line traces the visible shape, not a stick-figure approximation.
+
+   **Hard cap: 5 waypoints per route.** If a route genuinely needs more than 5 to capture (extremely rare in youth football), pick the 5 most informative points (start of each direction change, the apex of any curve, the endpoint) — don't add filler.
+
+   **Default mental model: trace the SHAPE, not just the destination.** A curl isn't "an endpoint 8 yards upfield" — it's a vertical segment, a hook at the top, and a settle back. That's 3 waypoints minimum. A swing isn't "a point 10 yards laterally" — it's an arc out of the backfield with intermediate curvature. That's 3–4 waypoints with \`curve: true\`.
 
    Each waypoint's (x, y) is in YARDS, in the same coordinate system as the player positions in 3a. DO NOT repeat the start dot as path[0]; the renderer auto-connects from the player's (x, y) to the first waypoint.
 
@@ -498,9 +503,10 @@ A single play with its companion defensive look (one offense diagram + one defen
    **Curve flag.** Set \`curve: true\` for routes that visibly arc in the drawing (rounded curls, comebacks, swings, wheel-transitions). Set \`curve: false\` for sharp angular breaks. When in doubt, prefer \`false\` — the renderer draws straight segments between waypoints by default.
 
    **Self-check before emitting.** Scan each \`path\` entry against the drawn arrow:
-   - If the arrow visibly has any lateral movement (bends inward, outward, sideways, or crosses the field), does my path have an x change ≥3yd between adjacent waypoints at the bend? If no → collapse-to-vertical bug, re-encode.
-   - If the arrow bends once visibly, does my path have ≥2 waypoints? If no → missing-break bug, add the turn point.
-   - If multiple players' arrows in the drawing look distinctly different from each other, are my path entries also distinct? Identical paths for distinct arrows = pattern-match-to-concept bug, re-read the image per route.
+   - **Waypoint count:** Does each non-straight route have ≥3 waypoints? If you encoded a curved or bent arrow with just 1–2 waypoints, you've under-sampled — the rendered route will look like a short stub. Re-encode with 3–5 waypoints along the visible shape.
+   - **Lateral component:** If the arrow visibly has any lateral movement (bends inward, outward, sideways, or crosses the field), does my path have an x change ≥3yd between adjacent waypoints at the bend? If no → collapse-to-vertical bug, re-encode.
+   - **Break count:** If the arrow bends visibly, does my path have ≥2 waypoints around each bend (one before, one at)? If no → missing-break bug, add the turn point and a sample.
+   - **Distinct shapes:** If multiple players' arrows in the drawing look distinctly different from each other, are my path entries also distinct? Identical paths for distinct arrows = pattern-match-to-concept bug, re-read the image per route.
 
    **EVERY non-QB offensive player in your \`players[]\` array MUST have a corresponding entry in \`routes[]\` — no exceptions.** The save-time validator (UNIVERSAL across flag_5v5, flag_7v7, tackle_11) rejects any non-QB player with no route AND no motion, dropping the entire save. If you emit 7 players (Q, C, X, Y, Z, H, B) you must emit 6 route entries (everyone except @Q).
 
