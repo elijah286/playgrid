@@ -46,10 +46,12 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
               X (#1769FF) and O (#95CC1F) stay fixed in both themes;
               "gridmaker" inherits currentColor for dark mode.
 
-              `text-before-edge` pegs y to the top of the text bounding
-              box (above ascenders). Safari treats the older `hanging`
-              value as the alphabetic baseline, which clipped the tops
-              of `d`/`k`/`r`. */}
+              No `dominantBaseline` — Safari ignores both `hanging` and
+              `text-before-edge` and falls back to alphabetic, so we
+              pre-bake that assumption: y=210 puts the alphabetic
+              baseline at ~2/3 down the 320-unit viewBox, leaving ~75
+              units above for ascenders (`d`, `k`) and ~30 below for
+              descenders (`g`). */}
           <svg
             viewBox="0 0 1600 320"
             role="img"
@@ -57,12 +59,11 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
             className="h-8 w-auto sm:h-9"
           >
             <text
-              y="70"
+              y="210"
               fontFamily='"DejaVu Sans", Arial, sans-serif'
               fontSize="150"
               fontStyle="oblique"
               fontWeight="700"
-              dominantBaseline="text-before-edge"
             >
               <tspan x="278.24" fill="#1769FF">x</tspan><tspan x="378.68" fill="#95CC1F">o</tspan><tspan x="473.44" fill="currentColor">gridmaker</tspan>
             </text>
