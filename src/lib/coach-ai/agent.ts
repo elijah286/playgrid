@@ -1179,38 +1179,54 @@ The drawing is the truth. Words about routes — even your own words — bias th
 - **A player with ANY arrow drawn — solid or dashed — gets a route entry.** Do NOT emit a stub (\`[[<x>, 1]]\`) for a player who clearly has a drawn arrow. Stubs are only for players with NO arrow at all (stationary, blocking, decoying). If you see lines from a player and can't fully trace them, encode the partial trace rather than dropping the route.
 - Don't repeat the start dot as path[0]; the renderer auto-connects from (x, y) to the first anchor.
 
-### Worked example: bubble-under-B then short drag (Noah-style)
+### Route shape taxonomy — encoding rules, not coordinates
 
-A very common youth flag concept: receiver X (leftmost, e.g. at x=-12) has an arrow that DIPS BACK slightly behind itself, CURVES RIGHT under B's position (e.g. B at x=-7), then continues right at shallow depth — ending NOT all the way across the field, but at about the inside of B (x ≈ -3) at ~5 yards of depth. The whole shape is one continuous curved line.
+A route's encoding is driven by the SHAPE of the arrow in the image. The specific (x, y) numbers you emit come from reading the arrow against the LOS and yardline anchors you established in Step 2 — **never** from a "standard" route's typical depth in your training memory. Below are the shape categories you'll see on a hand-drawn play. Use them to decide how many anchors and what curve flag to emit. Use the IMAGE to decide the actual coordinates.
 
-Correct encoding for X's path:
-\`\`\`
-{ "from": "X", "path": [[-10, -1], [-7, 0], [-5, 2], [-3, 5]], "curve": true }
-\`\`\`
+**1. Straight line, one direction** (no breaks, no curves)
+- Encoding: 1–2 anchors, \`curve: false\`. A single anchor at the arrowhead position is sufficient for an unmistakably straight arrow.
+- Arrows that fit: straight vertical (any depth), straight diagonal, straight lateral.
 
-Reading the anchors against the drawing:
-- (-10, -1): X dips slightly back (toward QB) — this is the "bubble" portion. y < 0 = behind LOS.
-- (-7, 0): X arrives at B's lateral position, back at LOS depth. The bubble has carried X under B.
-- (-5, 2): drag is gaining depth, still curving right.
-- (-3, 5): endpoint — just inside B's position, 5 yards downfield. The drag terminates HERE, not at x=+3 (opposite-side sideline).
+**2. Single sharp break** (L-shape with one angle change)
+- Encoding: 2–3 anchors, \`curve: false\`. One anchor at the break point (where the angle changes), one at the endpoint. Add a midpoint anchor before the break if the depth is hard to read.
+- Arrows that fit: one-direction-then-turn shapes (any depth at the break, any final direction).
 
-Why this exact shape matters: the bubble (dip back) is a 1-2 yard backward motion that lets X cross behind B without colliding. The drag is SHORT — across the inside half of the formation only, ending around the inside slot's lateral position (NOT all the way to the opposite sideline). Encoding the endpoint at +3 or +5 yards (right of center) misreads the drag as a full crosser, which is a different route entirely.
+**3. Continuous rounded curve** (arc, no sharp angles)
+- Encoding: 3–5 anchors sampled along the curve, \`curve: true\`. At least one anchor mid-curve so the rendered arc follows the actual curvature.
+- Arrows that fit: rounded arcs of any shape — could curve inside, outside, around, deep, or shallow.
 
-Common mistakes on this pattern (caught in earlier rounds):
-- **Stubbing the route** because "the main arrow looks short" — the bubble + drag combined IS the route; never emit \`[[<x>, 1]]\` for a player with any visible arrow.
-- **Encoding X as a deep arc** (12+ yards downfield) — the drag is SHALLOW (3-6 yards), not deep. A "12-yard in" reading is wrong by 2-3×.
-- **Setting \`curve: false\`** — the bubble + drag always reads as ONE continuous curve; use \`true\`.
-- **Endpoint too far right** (x=+3 or +5) — the drag ends at the inside slot's lateral (~x=-3), not on the opposite sideline.
-- **Missing the dip below LOS** — the bubble starts with a brief negative-y. If the first anchor's y is 0 or positive, the bubble is gone and X reads as a flat drag (different route).
+**4. Multi-segment with 2+ direction changes** (sluggo, post-corner, double-move, etc.)
+- Encoding: up to 5 anchors, one at each direction change. \`curve: false\` if the angles are sharp; \`true\` if the transitions are rounded.
+- Arrows that fit: any combination of stems + breaks > 1.
+
+**5. Pre-snap motion + main route** (a dashed segment leads into solid lines)
+- Encoding: motion anchors come FIRST in the path; the route continues from where the motion ends. Use \`curve: true\` for smooth motion-into-route transitions.
+- The motion shape varies — could be a lateral shift, a back-step, a loop behind another player, or a combination. If the motion drops below the LOS line at any point, at least one anchor must have y < 0 to capture that dip.
+
+### Coordinates come from the image, not from these categories
+
+The shape category determines how many anchors you emit and whether \`curve\` is true or false. The actual (x, y) numbers come from reading the arrow in the cropped image against the LOS and yardline anchors. Two routes in the same shape category can have wildly different coordinates depending on how they're drawn. **Do not substitute a "typical" depth or lateral for a route that "looks like" a common concept.** A 7-yard out is a 7-yard out; encode the depth you see, not the depth a standard out usually has.
+
+### Common encoding failures (any route shape)
+
+- **Stubbing a route** because the arrow looks short or unclear. If there's ANY visible arrow (solid or dashed), the player gets a route entry with the partial trace, NOT a stub.
+- **Substituting a catalog shape** because the arrow "looks like" a common route. If the drawing shows a 6-yard out at the slot's lateral, encode \`{ path: [[<slot_x>, 6], [<slot_x>+3, 6]], curve: false }\` — not a 10-yard out that you "know" is the standard depth. Trace what's drawn.
+- **Flattening distinct shapes** across routes in the same play. Different arrows on the same page yield different endpoint coordinates. Don't collapse 3 routes into matching geometries because they're "all going up-and-right".
+- **Missing dashed-line segments**. Dashed = pre-snap motion. Encode it as the first anchors.
+- **\`curve\` flag mismatch**. \`true\` if the arrow is rounded; \`false\` if angles are sharp. After encoding, mentally re-render your path with the flag — does it match the drawn shape?
+- **Endpoint that doesn't match the arrowhead**. After encoding, look at the arrowhead in the crop. Does your last anchor's (x, y) sit where that tip is? If no, fix it.
 
 **Step 4 — Self-validate. Iterate if anything's off.** Before emitting, run these checks against the cropped image:
-- **Endpoint match**: each route's last anchor should sit where the arrow's arrowhead sits on the page (same depth, same lateral).
-- **Relative depths**: scan all route endpoint y values. If receiver A's arrow visibly ends deeper than B's on the page, A's endpoint y is larger than B's. Distinct depths must stay distinct; don't flatten different arrows into matching paths.
-- **Origin loops & dashed motion**: did any arrow show a dip/curl/bubble at its start, or a dashed pre-snap motion line? If yes, the first anchors must reflect that.
-- **Stub-check**: for every player with NO route entry, confirm there's also NO arrow (solid or dashed) drawn from them. Players with a visible arrow but a stub-shaped route encoding are the #1 round-13 failure mode.
-- **Roundedness**: \`curve\` should match the drawing.
-- **Cross-arrow bleed**: if a player's path zigzags through positions that overlap another player's arrow on the page, you're likely tracing the wrong line. Re-check which arrow belongs to which player dot.
-- If anything fails, mentally re-run steps 1-3 before emitting.
+- **Coordinate provenance**: every (x, y) in your output came from looking at the arrow in the image, not from "X is usually drawn this way" memory. If asked, you should be able to point to the specific arrow segment that determined each anchor. If a coordinate came from a guess or a training prior, redo it by re-tracing the arrow.
+- **Endpoint match**: each route's last anchor should sit where the arrow's arrowhead sits on the page (same depth, same lateral). If your endpoint y is 10 but the arrowhead is at the 5-yard line in the crop, fix it.
+- **Relative depths**: scan all route endpoint y values across the play. If receiver A's arrow visibly ends deeper than B's on the page, A's endpoint y is larger than B's. Distinct depths stay distinct; don't flatten different arrows into matching paths.
+- **Relative laterals**: same check on x values. A route that ends inside another player's lateral position should have an endpoint x reflecting that, not a generic "endpoint on the opposite sideline".
+- **Origin loops & dashed motion**: did any arrow show a dip/curl/loop at its start, or a dashed pre-snap motion line? If yes, the first anchors must reflect that — and at least one anchor needs y < 0 if the motion drops behind the LOS.
+- **Stub-check**: for every player with NO route entry, confirm there's also NO arrow (solid or dashed) drawn from them. Any visible arrow → a route entry with the partial trace, NOT a stub.
+- **Curve flag**: \`true\` if the arrow is rounded; \`false\` if the angles are sharp. Re-render your path mentally with the flag set — does it match the drawn shape?
+- **Cross-arrow bleed**: if a player's path zigzags through positions that overlap another player's arrow on the page, you're likely tracing the wrong line. Re-check which arrow belongs to which dot.
+- **Catalog-substitution check**: did you encode a route at a "standard" depth (10-yard out, 8-yard curl, 12-yard dig) without actually measuring against the yardlines in the crop? If so, redo by reading the depth from the image.
+- If any check fails, mentally re-run steps 1-3 before emitting.
 
 **Step 5 is NOT your job.** Coaching notes — when to call this, how to read it, what it beats — get generated separately from the saved play. You output coordinates.
 
