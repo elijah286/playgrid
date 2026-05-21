@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { getPlayForEditorAction } from "@/app/actions/plays";
 import { Play, Pause, RotateCcw } from "lucide-react";
-import type { PlayDocument, Player, Point2 } from "@/domain/play/types";
+import type { PlayDocument, Player } from "@/domain/play/types";
 import {
   resolveEndDecoration,
   resolveRouteStroke,
@@ -15,10 +15,16 @@ import {
 } from "@/domain/play/factory";
 import { routeToRenderedSegments } from "@/domain/play/geometry";
 import { deriveLabelColor } from "@/domain/play/labelColor";
-import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
+import { usePlayAnimation, type PlayAnimation } from "@/features/animation/usePlayAnimation";
 import { resolveFieldTheme } from "@/domain/play/fieldTheme";
 import { fieldAspectFor, NARROW_FIELD_ASPECT } from "@/domain/play/render-config";
 import { coachDiagramToPlayDocument, type CoachDiagram } from "./coachDiagramConverter";
+
+// Stable empty Set so the idle-state `animatingIds` prop keeps the same
+// reference across renders — that's what lets React.memo skip re-rendering
+// the static DiagramCanvas while the overlay (which is a sibling, not a
+// child) repaints at 60fps during playback.
+const EMPTY_PLAYER_ID_SET: ReadonlySet<string> = new Set();
 
 // ── Player token shape ───────────────────────────────────────────────────────
 
@@ -137,26 +143,16 @@ function RouteDecorations({ doc, fieldAspect }: {
 
 // ── Main canvas ──────────────────────────────────────────────────────────────
 
-function DiagramCanvas({ doc, animPositions, fullFieldWidth }: {
+const DiagramCanvas = memo(function DiagramCanvas({ doc, animatingIds, fieldAspect }: {
   doc: PlayDocument;
-  animPositions: Map<string, Point2> | null;
-  fullFieldWidth: boolean;
+  /** Player IDs whose tokens are being drawn by the AnimatedPlayersOverlay
+   *  on top of this canvas. Static tokens for these players are skipped so
+   *  the overlay isn't doubled. The Set reference is stable across animation
+   *  frames (computed from `anim.flats` + phase), so this memoized canvas
+   *  doesn't re-render during playback — only the overlay does. */
+  animatingIds: ReadonlySet<string>;
+  fieldAspect: number;
 }) {
-  // Full-field aspect ratio matching the editor + game-mode renderers.
-  // Replaces the previous auto-zoom-to-content viewBox that distorted
-  // proportions and produced the "stretched" look a coach surfaced
-  // 2026-05-01.
-  //
-  // Clamping mirrors PlayEditorClient's "full field width" toggle: when
-  // OFF (default), wide variants like tackle_11 cap at NARROW_FIELD_ASPECT
-  // (≈ flag_7v7's 1.6:1) so the chat panel doesn't render a 2.83:1 strip
-  // that compresses the OL row. When ON, the field renders at its
-  // natural variant aspect (sideline-to-sideline). User-controlled via
-  // the Controls checkbox below.
-  const fieldAspect = useMemo(() => {
-    const natural = fieldAspectFor(doc);
-    return fullFieldWidth ? natural : Math.min(natural, NARROW_FIELD_ASPECT);
-  }, [doc, fullFieldWidth]);
   const fx = (x: number) => x * fieldAspect; // mirrors EditorCanvas's fx
   const R  = 0.032;
 
@@ -237,26 +233,18 @@ function DiagramCanvas({ doc, animPositions, fullFieldWidth }: {
     }
   }
 
-  const animatingIds = new Set(animPositions?.keys() ?? []);
-
   return (
-    <div
-      className="w-full max-w-[640px] overflow-hidden rounded-xl border border-border"
-      // Dynamic aspect ratio matching the field's natural proportions.
-      // tackle_11 → ~2.83:1, flag_7v7 → 1.6:1, flag_5v5 → 1.33:1.
-      // Preserves the editor's framing (no auto-zoom distortion).
-      style={{ aspectRatio: String(fieldAspect) }}
+    <svg
+      viewBox={`0 0 ${fieldAspect} 1`}
+      width="100%" height="100%"
+      preserveAspectRatio="xMidYMid meet"
+      // Explicit color="black" so any SVG element that ever falls back
+      // to currentColor (e.g. an unresolved fill="url(#…)") paints black
+      // — never the parent's text color, which on the Coach Cal panel
+      // can be the anchored playbook accent (red/orange on Chiefs Girls).
+      color="#000"
+      className="absolute inset-0 h-full w-full"
     >
-      <svg
-        viewBox={`0 0 ${fieldAspect} 1`}
-        width="100%" height="100%"
-        preserveAspectRatio="xMidYMid meet"
-        // Explicit color="black" so any SVG element that ever falls back
-        // to currentColor (e.g. an unresolved fill="url(#…)") paints black
-        // — never the parent's text color, which on the Coach Cal panel
-        // can be the anchored playbook accent (red/orange on Chiefs Girls).
-        color="#000"
-      >
         {/* Field is a SOLID fill. The previous gradient (top→bottom green)
             had to be referenced via fill="url(#caiFieldGrad-…)", and a
             failed url ref or duplicate-id collision would let the rect
@@ -334,28 +322,85 @@ function DiagramCanvas({ doc, animPositions, fullFieldWidth }: {
         {/* Route decorations (computed in viewBox-aspect space directly) */}
         <RouteDecorations doc={doc} fieldAspect={fieldAspect} />
 
-        {/* Static players (hidden during animation if they have a route) */}
+        {/* Static players. Players being drawn by AnimatedPlayersOverlay
+            during playback are skipped here so the overlay isn't doubled.
+            animatingIds is empty when idle, so all players render statically. */}
         {doc.layers.players.map((p) => {
-          if (animPositions && animatingIds.has(p.id)) return null;
+          if (animatingIds.has(p.id)) return null;
           return (
             <PlayerToken key={p.id} player={p}
               cx={fx(p.position.x)} cy={1 - p.position.y}
               r={R} />
           );
         })}
-
-        {/* Animated player positions */}
-        {animPositions && doc.layers.players.map((p) => {
-          const pos = animPositions.get(p.id);
-          if (!pos) return null;
-          return (
-            <PlayerToken key={`anim-${p.id}`} player={p}
-              cx={fx(pos.x)} cy={1 - pos.y}
-              r={R} />
-          );
-        })}
       </svg>
-    </div>
+  );
+});
+
+// ── Animated players overlay ─────────────────────────────────────────────────
+
+/**
+ * Compositor-promoted SVG that renders ONLY the moving player tokens
+ * on top of the memoized DiagramCanvas. Mirrors the editor's
+ * `src/features/animation/AnimationOverlay.tsx` pattern — same viewBox
+ * and preserveAspectRatio as the canvas so coords align pixel-for-pixel.
+ *
+ * Why a separate SVG: re-rendering the full canvas at 60fps caused the
+ * yard lines, hash marks, LOS dashes, and route strokes to re-rasterize
+ * each frame, producing the aliasing, dashed-phase shifts, and white
+ * flash artifacts coaches have reported since day 1. Isolating the
+ * animation into its own compositor layer (willChange + translateZ)
+ * means the static SVG below isn't invalidated when players move.
+ *
+ * Tokens are rendered with the same `<PlayerToken>` used by the static
+ * canvas, so there's no visual pop when playback starts/stops.
+ */
+function AnimatedPlayersOverlay({
+  doc,
+  anim,
+  fieldAspect,
+}: {
+  doc: PlayDocument;
+  anim: PlayAnimation;
+  fieldAspect: number;
+}) {
+  const fx = (x: number) => x * fieldAspect;
+  const R = 0.032;
+  const playerById = new Map<string, Player>(
+    doc.layers.players.map((p) => [p.id, p]),
+  );
+  return (
+    <svg
+      viewBox={`0 0 ${fieldAspect} 1`}
+      width="100%"
+      height="100%"
+      preserveAspectRatio="xMidYMid meet"
+      color="#000"
+      // Sits over the static canvas; clicks fall through so existing
+      // controls (Play/Pause/Reset) keep handling input. Compositor
+      // layer promotion prevents per-frame paints from invalidating
+      // the canvas below — that's the fix for the playback flicker.
+      className="pointer-events-none absolute inset-0 h-full w-full"
+      style={{ willChange: "transform", transform: "translateZ(0)" }}
+    >
+      {anim.flats.map((f) => {
+        const p = playerById.get(f.carrierPlayerId);
+        if (!p) return null;
+        // Before a route's startDelay elapses, `playerPositions` has no
+        // entry for this player — fall back to the player's starting
+        // position so they don't vanish while waiting to break.
+        const pos = anim.playerPositions.get(p.id) ?? p.position;
+        return (
+          <PlayerToken
+            key={`anim-${p.id}`}
+            player={p}
+            cx={fx(pos.x)}
+            cy={1 - pos.y}
+            r={R}
+          />
+        );
+      })}
+    </svg>
   );
 }
 
@@ -536,13 +581,30 @@ function PlayDocRender({
 }) {
   const anim = usePlayAnimation(doc);
   const hasRoutes = doc.layers.routes.length > 0;
-  const animPositions = anim.phase !== "idle" ? anim.playerPositions : null;
   // Per-message field-width toggle. Defaults OFF — matches the editor's
   // default of clamping wide variants (tackle_11, six-man) to roughly
   // the 7v7 aspect so the chat panel stays at a usable size on a
   // typical screen. Coach can opt in to the full sideline-to-sideline
   // view via the checkbox in Controls.
   const [fullFieldWidth, setFullFieldWidth] = useState<boolean>(false);
+
+  // Lifted out of DiagramCanvas so the AnimatedPlayersOverlay can use the
+  // same aspect for its viewBox — both SVGs must share a coordinate space
+  // or the overlay drifts off the static canvas.
+  const fieldAspect = useMemo(() => {
+    const natural = fieldAspectFor(doc);
+    return fullFieldWidth ? natural : Math.min(natural, NARROW_FIELD_ASPECT);
+  }, [doc, fullFieldWidth]);
+
+  // Player IDs whose tokens are drawn by the overlay. Stable across
+  // animation frames (only changes at phase transitions or when the doc
+  // itself changes), which is what keeps the memoized DiagramCanvas from
+  // re-rendering 60fps during playback.
+  const isAnimating = anim.phase !== "idle";
+  const animatingIds = useMemo(() => {
+    if (!isAnimating) return EMPTY_PLAYER_ID_SET;
+    return new Set(anim.flats.map((f) => f.carrierPlayerId));
+  }, [isAnimating, anim.flats]);
   return (
     <div className="my-3 space-y-1">
       {linkTo ? (
@@ -570,7 +632,22 @@ function PlayDocRender({
           </p>
         )
       )}
-      <DiagramCanvas doc={doc} animPositions={animPositions} fullFieldWidth={fullFieldWidth} />
+      {/* The static canvas + animation overlay share this positioned
+          container. The container holds the aspect ratio and border
+          chrome; both SVGs inside are width:100%/height:100% so they
+          share an identical coordinate space. */}
+      <div
+        className="relative w-full max-w-[640px] overflow-hidden rounded-xl border border-border"
+        // Dynamic aspect ratio matching the field's natural proportions.
+        // tackle_11 → ~2.83:1, flag_7v7 → 1.6:1, flag_5v5 → 1.33:1.
+        // Preserves the editor's framing (no auto-zoom distortion).
+        style={{ aspectRatio: String(fieldAspect) }}
+      >
+        <DiagramCanvas doc={doc} animatingIds={animatingIds} fieldAspect={fieldAspect} />
+        {isAnimating && (
+          <AnimatedPlayersOverlay doc={doc} anim={anim} fieldAspect={fieldAspect} />
+        )}
+      </div>
       {hasRoutes && (
         <Controls
           anim={anim}
