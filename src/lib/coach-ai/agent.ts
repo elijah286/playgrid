@@ -919,6 +919,18 @@ Save under the coach's literal label exactly as written on the page — preserve
 
 **DO NOT INVENT PLAYS, LABELS, PLAYERS, OR ROUTES.** Your only source is the photo attached THIS TURN. If the image has 4 plays, you handle 4 plays — not 6, not 8. If a play has 5 receivers drawn, you emit 5 receivers + QB + center (not 6). Read everything letter-by-letter and dot-by-dot from the photo.
 
+## VISION READ ANCHOR (when present)
+
+A separate pre-flight vision pass may have already produced a structured per-player observation list — look for a "## VISION READ" section appended below. When present, use it as your ANCHOR for waypoint encoding: the player coordinates and \`route_observation\` strings represent the read of the image done in isolation, without output-format pressure. Your job becomes translating those observations into the fence shape, cross-referenced against the image itself.
+
+When VISION READ is present:
+- Player x/y coordinates come from the observation list (use as-is unless you spot a clear discrepancy in the image).
+- For each route, read the \`route_observation\` ("goes up ~5yd then curls back ~2yd", "small arc going up-and-right ending ~4yd up + ~3yd right") and translate the geometric description into 3-5 waypoints.
+- The observations may say "UNCLEAR" — in that case, look at the image directly to make your best call. Don't confabulate.
+- The observations may have minor errors. If your direct read of the image strongly disagrees, trust the image. But the observations are the default starting point.
+
+When VISION READ is absent: fall back to reading the image directly per the workflow below.
+
 ## WORKFLOW
 
 **Step 1 — Enumerate plays from the image.** Count the play regions, read each label exactly as written. If a region has no label, say "unlabeled". Open with what you literally see and ask "ready to start with [first label]?".
@@ -1001,13 +1013,142 @@ Use the anchored playbook's variant (read it from the Current context block belo
 
 You only see the image in the turn it was attached. If the coach asks a follow-up about an image from an earlier turn, ask them to re-attach. Don't pretend to remember image details.`;
 
-function systemPromptFor(ctx: ToolContext, currentUserTurnHadImage: boolean): string {
+/**
+ * Pass-1 vision read prompt (2026-05-21 round 11). Used as the system
+ * prompt for a SEPARATE, pre-flight LLM call before the main agent
+ * loop runs. Its single job: look at the image and output structured
+ * per-player observations as JSON. No prose categorization, no
+ * coaching, no narration — just measurement.
+ *
+ * The hypothesis: production Cal can SEE the routes correctly but
+ * single-pass generation forces it to commit to play-shaped output
+ * before fully attending to the image. By running vision in isolation
+ * — minimal system prompt, no chat history, no tool affordances —
+ * the model's attention is entirely on the photo. The output then
+ * becomes anchor data for the main agent's translation pass.
+ *
+ * Cost: 2x Opus calls per image-upload turn. Image turns are rare and
+ * gated by getCoachCalImageCapState, so the absolute spend bump is
+ * modest.
+ *
+ * Output format is intentionally permissive prose-in-JSON for the
+ * route_observation field — we want geometric description ("up 5yd
+ * then curls back 2yd"), not catalog families ("curl"). The main
+ * agent loop uses these observations alongside the image when
+ * encoding waypoints.
+ */
+export const VISION_PASS_PROMPT = `You are analyzing a hand-drawn football play sheet photo. Your SINGLE TASK this turn: look at the image and output a structured JSON array describing what you see. Nothing else.
+
+NO prose narration. NO coaching notes. NO catalog play names (Mesh / Smash / Snag / etc.). NO route family names (curl / slant / post / etc.). NO opening line. JUST the JSON array. The downstream pass will handle composition and coaching.
+
+For each play box visible in the photo, output one object:
+
+{
+  "label": "<EXACT label text as written on the page, preserving caps / numbers / punctuation. If unlabeled, use 'unlabeled-1' / 'unlabeled-2' etc.>",
+  "scale_note": "<brief calibration anchor — what you used to estimate yardage, e.g. 'page width ~30yd (7v7), yardline numbers visible at 40/45/50' or 'inferred from LOS line + standard 7v7 spacing'>",
+  "players": [
+    {
+      "id": "<the letter labeled next to each dot — X, B, H, Y, Z, etc. Always include Q (the QB) and C (the center) even if unlabeled.>",
+      "x_yards": <number — lateral position from snap. 0 = center; negative = left; positive = right.>,
+      "y_yards": <number — depth from LOS. 0 = LOS; negative = backfield.>,
+      "position_anchor": "<short description of where the dot is on the page relative to landmarks, e.g. 'leftmost edge of LOS' or 'inside slot, ~5yd right of center' or '~4yd behind C'>",
+      "route_observation": "<GEOMETRIC description of the arrow drawn from this dot. Use direction (up / left / right / diagonal), distance (in yards), and turn behavior (straight / one break at X yards / arc / loops back). Examples: 'goes up ~5yd then curls back ~2yd' or 'straight vertical ~12yd, no breaks' or 'small arc going up-and-right, ends ~4yd up + ~3yd right of start'. If no arrow drawn (player sits / blocks / decoys): say 'no arrow drawn — stationary'. If you can't make out the arrow clearly: say 'UNCLEAR — [what you can see]'. DO NOT use catalog family names (curl / slant / dig / post / corner / hitch / drag / flat / etc.).>"
+    },
+    ... one entry per visible dot ...
+  ]
+}
+
+OUTPUT FORMAT: a JSON array of these objects, one per play. NO markdown fences, NO prose before or after, NO "here's what I see" preamble. Start your reply with [ and end with ]. The downstream pass parses this directly.
+
+If you can't make out a play's label, use 'unlabeled-N'. If you can't see a play's routes well enough to be confident, mark route_observation as 'UNCLEAR' — the downstream pass will handle uncertainty more gracefully than silent confabulation.
+
+Constraints:
+- Always include @Q (the QB) and @C (the center), even if unlabeled.
+- @Q is in the backfield (y < 0), typically y ≈ -3 to -5.
+- @C is at LOS (y = 0), typically x = 0.
+- Skill players (@X, @Y, @Z, @H, @B) are at LOS or slightly behind for backs.
+- Use coach-style labels exactly as drawn — do not relabel (e.g., do not turn the coach's @Y into @S).
+
+Output the JSON array NOW. No other content.`;
+
+function systemPromptFor(
+  ctx: ToolContext,
+  currentUserTurnHadImage: boolean,
+  visionObservations: string | null = null,
+): string {
   const base = currentUserTurnHadImage
     ? IMAGE_TURN_PROMPT
     : ctx.mode === "admin_training" && ctx.isAdmin
       ? ADMIN_TRAINING_PROMPT
       : NORMAL_PROMPT;
-  return base + contextBlock(ctx);
+  // When a pre-flight vision pass produced structured observations,
+  // inject them between the prompt body and the runtime context block.
+  // The main agent loop uses these as anchor data — its job is to
+  // translate the observations (plus the image itself) into a play
+  // fence, not to do both vision and translation in one pass.
+  const visionBlock = visionObservations
+    ? `\n\n---\n\n## VISION READ (pre-flight pass — use as your anchor for the play fence)\n\nThe following is a structured read of the image produced by a separate vision-only pass. Use these per-player coordinates and geometric route observations as your starting point when encoding the play fence. Cross-reference against the image as you encode; if you spot a clear discrepancy, trust your direct read of the image, but the observations are the default.\n\n\`\`\`json\n${visionObservations}\n\`\`\`\n`
+    : "";
+  return base + visionBlock + contextBlock(ctx);
+}
+
+/**
+ * Pass-1 vision call. Runs a separate chat() with VISION_PASS_PROMPT
+ * and just the current turn's user message (with image). Returns the
+ * structured-JSON observation string for injection into the main
+ * agent's system prompt.
+ *
+ * Failure-mode handling: any error (LLM call throws, output isn't
+ * valid-looking JSON, etc.) returns null. The caller falls through
+ * to running the main agent loop without observations — equivalent
+ * to pre-2026-05-21-round-11 behavior. Pass 1 should NEVER block the
+ * user-visible response.
+ *
+ * Exported for unit testing.
+ */
+export async function performImageVisionPass(
+  history: ChatMessage[],
+  ctx: ToolContext,
+): Promise<string | null> {
+  // Find the most recent user message that carries an image. In
+  // production this will be the latest turn (image is only attached
+  // to the current turn); guard against odd histories anyway.
+  let userWithImage: ChatMessage | null = null;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const m = history[i];
+    if (
+      m.role === "user" &&
+      Array.isArray(m.content) &&
+      m.content.some((b) => b.type === "image")
+    ) {
+      userWithImage = m;
+      break;
+    }
+  }
+  if (!userWithImage) return null;
+
+  try {
+    const result = await chat({
+      system: VISION_PASS_PROMPT + contextBlock(ctx),
+      messages: [userWithImage],
+      // No tools — pass 1 is pure vision, no tool calls.
+      maxTokens: 2500,
+    });
+    const text = extractAssistantText(result.message).trim();
+    if (!text) return null;
+    // Quick sanity check: response should start with `[` (the JSON
+    // array opener). If the model bailed and emitted prose despite
+    // the instructions, log and skip — main loop runs unanchored
+    // rather than feed garbage into the system prompt.
+    if (!text.startsWith("[")) {
+      console.warn("[coach-ai] vision pass returned non-JSON; skipping injection");
+      return null;
+    }
+    return text;
+  } catch (e) {
+    console.error("[coach-ai] vision pass failed:", e);
+    return null;
+  }
 }
 
 export type AgentStreamEvent =
@@ -1385,7 +1526,26 @@ export async function runAgent(
     }
   }
 
-  const system = systemPromptFor(ctx, currentUserTurnHadImage) + preferencesBlock + planBlock;
+  // Pass-1 vision read (2026-05-21 round 11). When the coach attached
+  // an image this turn, run a separate pre-flight call dedicated to
+  // reading the image — minimal prompt, no tools, no chat history —
+  // and inject the resulting per-player observations into the main
+  // agent's system prompt as anchor data. Decouples vision attention
+  // from output-format attention; the main loop's job becomes
+  // translation (observations → fence), not vision + translation in
+  // one pass.
+  //
+  // Failure-mode: any error returns null and the main loop runs
+  // unanchored (equivalent to prior behavior). Pass 1 never blocks
+  // the user-visible response.
+  const visionObservations = currentUserTurnHadImage
+    ? await performImageVisionPass(history, ctx)
+    : null;
+
+  const system =
+    systemPromptFor(ctx, currentUserTurnHadImage, visionObservations) +
+    preferencesBlock +
+    planBlock;
   const tools = toolDefs(ctx);
 
   // ── Diagram-validation safety net ─────────────────────────────────────────

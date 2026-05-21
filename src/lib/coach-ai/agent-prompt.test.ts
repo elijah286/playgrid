@@ -19,7 +19,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { NORMAL_PROMPT, IMAGE_TURN_PROMPT } from "./agent";
+import { NORMAL_PROMPT, IMAGE_TURN_PROMPT, VISION_PASS_PROMPT } from "./agent";
 
 describe("NORMAL_PROMPT — Rule 1a (tool names are private API)", () => {
   it("forbids telling the coach to call internal tools by name", () => {
@@ -400,50 +400,78 @@ describe("IMAGE_TURN_PROMPT — focused image-only system prompt", () => {
     expect(IMAGE_TURN_PROMPT).not.toMatch(/"Money"|"Drive Pass"|"Trips Plus"/);
   });
 
-  it("forbids narrating the waypoint workflow to the coach", () => {
-    // Surfaced 2026-05-21 (rounds 5 + 9): Cal opened replies with
-    // "I'm in waypoint mode for this image — these are hand-drawn
-    // youth plays, so I'll trace them directly rather than mapping
-    // to catalog concepts" and threw in "(All routes are traced
-    // directly from your drawing — custom paths)" mid-response.
-    // Both are pure internal mechanics. The rule now bans the
-    // CATEGORY of self-narrating workflow descriptions, plus a
-    // first-sentence test to catch borderline cases.
-    expect(NORMAL_PROMPT).toMatch(/NEVER NARRATE THE WORKFLOW, MODE, OR YOUR INTERNAL PROCESS/);
-    expect(NORMAL_PROMPT).toMatch(/"waypoint mode"/);
-    expect(NORMAL_PROMPT).toMatch(/"no catalog matching"/);
-    expect(NORMAL_PROMPT).toMatch(/Scale check from the photo/);
-    expect(NORMAL_PROMPT).toMatch(/All routes are traced directly from your drawing/);
-    expect(NORMAL_PROMPT).toMatch(/TEST THE FIRST SENTENCE/);
+  it("documents the VISION READ anchor when the pre-flight pass produces observations", () => {
+    // Pass 1 (VISION_PASS_PROMPT) runs separately and produces a
+    // structured per-player observation list. The main agent's
+    // IMAGE_TURN_PROMPT must know how to use those observations as
+    // anchor data — otherwise pass 1 is wasted work.
+    expect(IMAGE_TURN_PROMPT).toMatch(/VISION READ ANCHOR/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/use it as your ANCHOR for waypoint encoding/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/When VISION READ is absent: fall back to reading the image directly/);
+  });
+});
+
+describe("VISION_PASS_PROMPT — pre-flight vision-only system prompt", () => {
+  // Surfaced 2026-05-21 round 11: even the focused IMAGE_TURN_PROMPT
+  // (round 10) wasn't enough — Cal still produced pattern-matched
+  // routes because vision + reasoning + JSON happens in one forward
+  // pass. Coach's framing: it's a translation error between
+  // understanding and generating. Pass 1 separates the two: a
+  // separate LLM call with just the image and a tiny prompt does
+  // vision ONLY; the main loop then has anchor data to translate
+  // into the fence.
+
+  it("declares the single task: structured JSON observation, nothing else", () => {
+    expect(VISION_PASS_PROMPT).toMatch(/SINGLE TASK this turn: look at the image and output a structured JSON array/);
   });
 
-  it("offers concrete GOOD OPENING SHAPES (not just forbidden phrases)", () => {
-    // A pure prohibition leaves Cal guessing at what TO say. The
-    // rule must include the desired openings so Cal has a positive
-    // example to anchor to.
-    expect(NORMAL_PROMPT).toMatch(/GOOD OPENING SHAPES/);
-    expect(NORMAL_PROMPT).toMatch(/First turn after upload/);
-    expect(NORMAL_PROMPT).toMatch(/Per-play turns/);
+  it("forbids prose, categorization, and play-name guessing in the vision read", () => {
+    expect(VISION_PASS_PROMPT).toMatch(/NO prose narration/);
+    expect(VISION_PASS_PROMPT).toMatch(/NO catalog play names/);
+    expect(VISION_PASS_PROMPT).toMatch(/NO route family names/);
+    // Spot-check that common family names are explicitly banned.
+    expect(VISION_PASS_PROMPT).toMatch(/curl \/ slant \/ post/);
   });
 
-  it("requires a route entry for every non-QB player (parity rule)", () => {
-    // Surfaced 2026-05-21 round 5: Cal emitted a 7v7 fence with 7
-    // players (Q, C, X, H, Z, S, B) but only 4 route entries (X, Z,
-    // S, B) — missing @H and @C. The 7v7 save-time validator
-    // rejected. Cal's previous rule "stationary players = no route
-    // entry" conflicted with the universal "every non-QB needs an
-    // action" gate. New rule requires stub routes for stationary
-    // non-QB players.
-    expect(NORMAL_PROMPT).toMatch(/EVERY non-QB offensive player in your `players\[\]` array MUST have a corresponding entry in `routes\[\]`/);
-    expect(NORMAL_PROMPT).toMatch(/Roster ↔ routes parity is a HARD gate/);
-    // The stub-path recipe must be concrete so Cal can copy it.
-    expect(NORMAL_PROMPT).toMatch(/path: \[\[<start_x>, 1\]\]/);
+  it("requires geometric route observations (direction / distance / turns)", () => {
+    expect(VISION_PASS_PROMPT).toMatch(/GEOMETRIC description of the arrow/);
+    expect(VISION_PASS_PROMPT).toMatch(/direction \(up \/ left \/ right \/ diagonal\)/);
+    expect(VISION_PASS_PROMPT).toMatch(/distance \(in yards\)/);
   });
 
-  it("documents the QB-only exception to the parity rule", () => {
-    // The one player who legitimately has no route in flag variants
-    // is the QB. The prompt must call this out so Cal doesn't try
-    // to stub-route the QB and trip the FLAG QB validator.
-    expect(NORMAL_PROMPT).toMatch(/For @QB only.*omit @QB from `routes\[\]` entirely/);
+  it("documents UNCLEAR as the answer when the model can't read confidently", () => {
+    // The whole point of pass 1 is to catch confabulation BEFORE
+    // it becomes structured output. The "UNCLEAR" escape hatch
+    // lets the model honestly say "I can't see this" instead of
+    // making something up.
+    expect(VISION_PASS_PROMPT).toMatch(/UNCLEAR/);
+    expect(VISION_PASS_PROMPT).toMatch(/silent confabulation/i);
+  });
+
+  it("requires the output to start with `[` (parseable JSON array)", () => {
+    // performImageVisionPass uses this prefix as a sanity check —
+    // if the model emits prose despite instructions, we skip the
+    // injection rather than feed garbage into the system prompt.
+    expect(VISION_PASS_PROMPT).toMatch(/Start your reply with \[ and end with \]/);
+  });
+
+  it("requires Q (the QB) and C (the center) to always be included", () => {
+    // These are often unlabeled in the drawing but the main agent's
+    // roster-parity gate expects them in players[].
+    expect(VISION_PASS_PROMPT).toMatch(/Always include @Q \(the QB\) and @C \(the center\), even if unlabeled/);
+  });
+
+  it("forbids relabeling players (Y stays Y, not S)", () => {
+    // Failure mode from earlier rounds: Cal silently turned the
+    // coach's @Y into @S in its own roster. Pass 1 must preserve
+    // the labels from the drawing.
+    expect(VISION_PASS_PROMPT).toMatch(/do not relabel/);
+  });
+
+  it("is dramatically shorter than NORMAL_PROMPT and even shorter than IMAGE_TURN_PROMPT", () => {
+    // Pass 1's whole value is attentional focus on the image. The
+    // prompt must stay tight.
+    expect(VISION_PASS_PROMPT.length).toBeLessThan(IMAGE_TURN_PROMPT.length);
+    expect(VISION_PASS_PROMPT.length).toBeLessThan(NORMAL_PROMPT.length / 8);
   });
 });
