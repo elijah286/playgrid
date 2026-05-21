@@ -984,13 +984,19 @@ After the fence, write 1-3 short coaching notes (what's drawn, pre-snap read, wh
 
 ## ROSTER ↔ ROUTES PARITY (HARD GATE)
 
-Every non-QB offensive player in players[] MUST have a corresponding entry in routes[]. The save-time validator rejects any non-QB player with no route AND no motion, dropping the save.
+Every ELIGIBLE offensive player in players[] MUST have a corresponding entry in routes[]. The save-time validator rejects any eligible player with no route AND no motion, dropping the save.
 
-- **Stationary players** (no arrow drawn — sitting, pass-blocking, decoying): emit a stub release \`{ "from": "<id>", "path": [[<start_x>, 1]] }\` so the gate passes. Renders as a tiny vertical at the LOS.
-- **Center in 7v7**: often stationary in the drawing — give it the stub.
-- **QB only**: in flag variants @Q has no route. Omit @Q from routes[] entirely. The ONE exception.
+Eligibility is variant-aware:
+- **flag_5v5**: @Q is not eligible (no route). @C IS eligible — every play must give C a route (use a stub if C is stationary). Everyone else (X/Y/Z and any other labeled receiver) is eligible.
+- **flag_7v7**: @Q and @C are both NOT eligible (long-snap + block/decoy). Omit both from routes[]. Everyone else (X/Y/Z/H/S/B/F) is eligible.
+- **tackle_11**: @Q and @C are both NOT eligible. Linemen are also typically not eligible. Skill players (X/Y/Z/H/B/F) are eligible.
 
-Parity check before emitting: \`players.filter(p => p.id !== "Q" && p.id !== "QB").length\` MUST equal \`routes.length\`.
+- **Stationary eligible players** (no arrow drawn — sitting, pass-blocking, decoying): emit a stub release \`{ "from": "<id>", "path": [[<start_x>, 1]] }\` so the gate passes. Renders as a tiny vertical at the LOS.
+- **Non-eligible players** (@Q always; @C in flag_7v7 and tackle_11; linemen in tackle_11): omit from routes[] entirely.
+
+Parity check before emitting (variant-aware):
+- flag_5v5: \`players.filter(p => p.id !== "Q" && p.id !== "QB").length\` MUST equal \`routes.length\`.
+- flag_7v7 and tackle_11: \`players.filter(p => p.id !== "Q" && p.id !== "QB" && p.id !== "C").length\` MUST equal \`routes.length\`.
 
 ## ONE PLAY PER TURN
 

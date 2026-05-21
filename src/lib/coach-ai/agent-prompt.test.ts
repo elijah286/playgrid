@@ -382,9 +382,24 @@ describe("IMAGE_TURN_PROMPT — focused image-only system prompt", () => {
     expect(IMAGE_TURN_PROMPT).toMatch(/Calibrate against the deepest route/);
   });
 
-  it("includes the roster-parity gate (every non-QB has a route entry)", () => {
+  it("includes the variant-aware roster-parity gate", () => {
     expect(IMAGE_TURN_PROMPT).toMatch(/ROSTER ↔ ROUTES PARITY/);
     expect(IMAGE_TURN_PROMPT).toMatch(/stub release/);
+    // Eligibility is variant-aware: C is eligible in 5v5, not in 7v7 or tackle_11.
+    // Mirrors validateCenterEligibility in play-content-validate.ts.
+    expect(IMAGE_TURN_PROMPT).toMatch(/flag_5v5[^\n]*@C IS eligible/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/flag_7v7[^\n]*@Q and @C are both NOT eligible/);
+  });
+
+  it("does NOT tell Cal to add a stub route for the center in 7v7", () => {
+    // Surfaced 2026-05-21: prior prompt said "Center in 7v7: often
+    // stationary in the drawing — give it the stub", which contradicts
+    // the validator's centerIsEligible:false default for 7v7. The
+    // validator correctly rejects 7v7 plays with a C stub, so the
+    // prompt instruction would have generated rejections — except
+    // Cal correctly ignored the bad instruction. Either way, the
+    // prompt and validator must agree.
+    expect(IMAGE_TURN_PROMPT).not.toMatch(/Center in 7v7.*give it the stub/);
   });
 
   it("includes the one-play-per-turn cap", () => {
