@@ -322,17 +322,29 @@ describe("NORMAL_PROMPT — Rule 9b (image input, waypoint mode)", () => {
   });
 
   it("forbids narrating the waypoint workflow to the coach", () => {
-    // Surfaced 2026-05-21 round 5: Cal opened a reply with "This is
-    // an image-upload turn — I'm in waypoint mode. Let me restart
-    // cleanly." plus "Scale check from the photo:" — pure internal
-    // mechanics leaking to the user. Coaches don't need to hear
-    // about the state machine. The prompt now forbids this kind of
-    // narration explicitly.
-    expect(NORMAL_PROMPT).toMatch(/NEVER NARRATE THE WORKFLOW TO THE COACH/);
-    // Spot-check the worst offenders are named.
-    expect(NORMAL_PROMPT).toMatch(/I'm in waypoint mode/);
-    expect(NORMAL_PROMPT).toMatch(/no catalog matching/);
+    // Surfaced 2026-05-21 (rounds 5 + 9): Cal opened replies with
+    // "I'm in waypoint mode for this image — these are hand-drawn
+    // youth plays, so I'll trace them directly rather than mapping
+    // to catalog concepts" and threw in "(All routes are traced
+    // directly from your drawing — custom paths)" mid-response.
+    // Both are pure internal mechanics. The rule now bans the
+    // CATEGORY of self-narrating workflow descriptions, plus a
+    // first-sentence test to catch borderline cases.
+    expect(NORMAL_PROMPT).toMatch(/NEVER NARRATE THE WORKFLOW, MODE, OR YOUR INTERNAL PROCESS/);
+    expect(NORMAL_PROMPT).toMatch(/"waypoint mode"/);
+    expect(NORMAL_PROMPT).toMatch(/"no catalog matching"/);
     expect(NORMAL_PROMPT).toMatch(/Scale check from the photo/);
+    expect(NORMAL_PROMPT).toMatch(/All routes are traced directly from your drawing/);
+    expect(NORMAL_PROMPT).toMatch(/TEST THE FIRST SENTENCE/);
+  });
+
+  it("offers concrete GOOD OPENING SHAPES (not just forbidden phrases)", () => {
+    // A pure prohibition leaves Cal guessing at what TO say. The
+    // rule must include the desired openings so Cal has a positive
+    // example to anchor to.
+    expect(NORMAL_PROMPT).toMatch(/GOOD OPENING SHAPES/);
+    expect(NORMAL_PROMPT).toMatch(/First turn after upload/);
+    expect(NORMAL_PROMPT).toMatch(/Per-play turns/);
   });
 
   it("requires a route entry for every non-QB player (parity rule)", () => {
