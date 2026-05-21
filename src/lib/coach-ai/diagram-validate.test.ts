@@ -577,17 +577,16 @@ describe("validateDiagrams — per-reply catalog-concept fence cap (Plan checkli
   });
 });
 
-describe("validateDiagrams — IMAGE-INPUT per-reply cap (1 fence max)", () => {
-  // Surfaced 2026-05-21: a coach uploaded a 6-play sheet, said "yes" to
-  // Cal's enumeration, and Cal interpreted that as blanket approval —
-  // installed all 6 plays via propose_plan + 6× compose_play in one
-  // turn. The coach had no chance to verify Cal's route reads per play
-  // before saves landed. Image-input turns get a stricter cap (1
-  // fence) than the general per-reply cap (3) because hand-drawn route
-  // reads are higher-uncertainty than catalog composition from a
-  // clear coach prompt.
+describe("validateDiagrams — IMAGE-INPUT per-reply cap (1 fence max, any type)", () => {
+  // Rule 9b's waypoint mode (2026-05-21 round 3): on image-upload
+  // turns, Cal hand-authors the play fence directly from the drawing
+  // — no compose_play, no place_offense. The per-reply cap stays at
+  // 1 fence so the coach walks through plays one at a time, but the
+  // cap now counts ALL fences (catalog-concept OR hand-authored
+  // waypoint mode), since image turns don't use the catalog-concept
+  // path anymore.
 
-  it("REJECTS 2 catalog-concept fences on an image-input turn", () => {
+  it("REJECTS 2 catalog-concept fences on an image-upload turn", () => {
     const text =
       `${fullTackleMeshFence()}\nMesh #1 from image.\n\n` +
       `${fullTackleMeshFence()}\nMesh #2 from image.`;
@@ -605,12 +604,11 @@ describe("validateDiagrams — IMAGE-INPUT per-reply cap (1 fence max)", () => {
       /image-input turns are capped at 1 fence per reply/i.test(e),
     );
     expect(imageGateError).toBeDefined();
-    // The critique must name Rule 9b and tell Cal to ask for next.
-    expect(imageGateError).toMatch(/Rule 9b/);
-    expect(imageGateError).toMatch(/Do NOT call propose_plan on image turns/i);
+    expect(imageGateError).toMatch(/walk through plays ONE AT A TIME/i);
+    expect(imageGateError).toMatch(/Ready for play/);
   });
 
-  it("REJECTS 6 catalog-concept fences on an image-input turn (the actual user report)", () => {
+  it("REJECTS 6 catalog-concept fences on an image-upload turn (the original failure)", () => {
     const text = Array.from({ length: 6 }, (_, i) =>
       `${fullTackleMeshFence()}\nMesh from image #${i + 1}.`,
     ).join("\n\n");
@@ -625,24 +623,134 @@ describe("validateDiagrams — IMAGE-INPUT per-reply cap (1 fence max)", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(
-      result.errors.find((e) => /6 catalog-concept fences/i.test(e) && /capped at 1/i.test(e)),
+      result.errors.find((e) => /6 play fences/i.test(e) && /capped at 1/i.test(e)),
     ).toBeDefined();
   });
 
-  it("ACCEPTS exactly 1 catalog-concept fence on an image-input turn", () => {
-    const text = `${fullTackleMeshFence()}\nMesh from image — the one play the coach just confirmed.`;
+  it("REJECTS 2 hand-authored (waypoint-mode) fences on an image-upload turn", () => {
+    // Waypoint mode: no concept claim, so the old catalog-concept
+    // counter wouldn't fire. The new gate counts ALL fences via the
+    // loop index — catches batched waypoint plays the same way.
+    const waypointFence = makeFence({
+      title: "Noah",
+      variant: "flag_7v7",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "C", x: 0, y: 0, team: "O" },
+        { id: "X", x: -15, y: 0, team: "O" },
+        { id: "B", x: -10, y: 0, team: "O" },
+        { id: "H", x: -5, y: 0, team: "O" },
+        { id: "Y", x: 5, y: 0, team: "O" },
+        { id: "Z", x: 15, y: 0, team: "O" },
+      ],
+      routes: [
+        { from: "X", path: [[-15, 5]] },
+        { from: "B", path: [[-10, 8]] },
+        { from: "H", path: [[-3, 8]] },
+        { from: "Y", path: [[5, 12]] },
+        { from: "Z", path: [[15, 12]] },
+      ],
+    });
+    const text = `${waypointFence}\nPlay Noah from drawing.\n\n${waypointFence.replace("Noah", "King")}\nPlay King from drawing.`;
+    const result = validateDiagrams({
+      text,
+      variant: "flag_7v7",
+      lastPlaceDefense: null,
+      currentUserTurnHadImage: true,
+      // No place_offense, no compose_play — waypoint mode.
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(
+      result.errors.find((e) => /2 play fences/i.test(e) && /capped at 1/i.test(e)),
+    ).toBeDefined();
+  });
+
+  it("ACCEPTS exactly 1 hand-authored (waypoint-mode) fence on an image-upload turn", () => {
+    const waypointFence = makeFence({
+      title: "Noah",
+      variant: "flag_7v7",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "C", x: 0, y: 0, team: "O" },
+        { id: "X", x: -15, y: 0, team: "O" },
+        { id: "B", x: -10, y: 0, team: "O" },
+        { id: "H", x: -5, y: 0, team: "O" },
+        { id: "Y", x: 5, y: 0, team: "O" },
+        { id: "Z", x: 15, y: 0, team: "O" },
+      ],
+      routes: [
+        { from: "X", path: [[-15, 5]] },
+        { from: "B", path: [[-10, 8]] },
+        { from: "H", path: [[-3, 8]] },
+        { from: "Y", path: [[5, 12]] },
+        { from: "Z", path: [[15, 12]] },
+      ],
+    });
+    const result = validateDiagrams({
+      text: `${waypointFence}\nPlay Noah from drawing.`,
+      variant: "flag_7v7",
+      lastPlaceDefense: null,
+      currentUserTurnHadImage: true,
+    });
+    if (!result.ok) {
+      expect(result.errors.find((e) => /capped at 1 fence per reply/i.test(e))).toBeUndefined();
+      expect(result.errors.find((e) => /place_offense was NOT called/i.test(e))).toBeUndefined();
+    }
+  });
+
+  it("bypasses the place_offense mandatory gate on image-upload turns", () => {
+    // Waypoint mode hand-authors player positions directly from the
+    // drawing — place_offense would override that with canonical
+    // positions, defeating the whole point.
+    const waypointFence = makeFence({
+      title: "Custom",
+      variant: "flag_7v7",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "C", x: 0, y: 0, team: "O" },
+        { id: "X", x: -15, y: 0, team: "O" },
+        { id: "B", x: -10, y: 0, team: "O" },
+        { id: "H", x: -5, y: 0, team: "O" },
+        { id: "Y", x: 5, y: 0, team: "O" },
+        { id: "Z", x: 15, y: 0, team: "O" },
+      ],
+      routes: [
+        { from: "X", path: [[-15, 5]] },
+        { from: "B", path: [[-10, 8]] },
+        { from: "H", path: [[-3, 8]] },
+        { from: "Y", path: [[5, 12]] },
+        { from: "Z", path: [[15, 12]] },
+      ],
+    });
+    const result = validateDiagrams({
+      text: `${waypointFence}\nTraced from drawing.`,
+      variant: "flag_7v7",
+      lastPlaceDefense: null,
+      placeOffenseCalled: false,
+      currentUserTurnHadImage: true,
+    });
+    if (!result.ok) {
+      expect(result.errors.find((e) => /place_offense was NOT called/i.test(e))).toBeUndefined();
+    }
+  });
+
+  it("STILL enforces place_offense mandatory gate when image is NOT attached", () => {
+    // The bypass is image-only. Text-prompted plays still need to
+    // call place_offense; the gate fires when they skip it.
+    const text = `${fullTackleMeshFence()}\n@H drag, @S drag.`;
     const result = validateDiagrams({
       text,
       variant: "tackle_11",
       lastPlaceDefense: null,
-      placeOffenseCalled: true,
-      conceptSkeletonCallCount: 1,
-      currentUserTurnHadImage: true,
+      placeOffenseCalled: false,
+      currentUserTurnHadImage: false,
     });
-    // Other rules may fail; pin only that the image-turn cap doesn't fire at 1.
-    if (!result.ok) {
-      expect(result.errors.find((e) => /capped at 1 fence per reply/i.test(e))).toBeUndefined();
-    }
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(
+      result.errors.find((e) => /place_offense was NOT called/i.test(e)),
+    ).toBeDefined();
   });
 
   it("does NOT fire on text-only turns (3 fences allowed under the normal cap)", () => {

@@ -963,7 +963,21 @@ export function validateDiagrams(opts: {
     // tool is the one piece guaranteed to produce structurally-correct
     // coordinates from a name; skipping it is the root cause of every
     // overlap / wrong-look bug we've debugged.
-    if (offense.length >= expected && !opts.placeOffenseCalled) {
+    //
+    // Bypass for image-input (waypoint-mode) turns. When the coach
+    // attached a photo (currentUserTurnHadImage === true), Cal traces
+    // player positions directly from the drawing — there's no canonical
+    // formation to call place_offense for. The coach's hand-drawn
+    // layout IS the formation. Surfaced 2026-05-21: forcing image plays
+    // through place_offense produced canonical positions that didn't
+    // match what the coach drew, defeating the entire point of image
+    // input. Sanitizer still catches off-field positions, NaN, and
+    // overlapping (x, y).
+    if (
+      offense.length >= expected &&
+      !opts.placeOffenseCalled &&
+      opts.currentUserTurnHadImage !== true
+    ) {
       errors.push(
         `${tag}offensive layout has ${offense.length} players but place_offense was NOT called this turn. Hand-authoring offense produces stacked players, wrong splits, and formation-name mismatches. Call place_offense({ formation: "<name>" }) and copy its players verbatim.`,
       );
@@ -1192,33 +1206,37 @@ export function validateDiagrams(opts: {
           );
         }
 
-        // GATE A.0-IMAGE — image-input turns get a STRICTER cap of 1
-        // fence per reply. Hand-drawn play sheets are higher-
-        // uncertainty than catalog composition from a clear prompt:
-        // Cal's route-from-image reads are wrong often enough that
-        // every drawn play needs the coach's explicit "save it" before
-        // composition. The propose_plan + 3-fence-batch workflow that
-        // works for "install 6 named concepts" is wrong for image
-        // input because the coach can't verify route reads per play
-        // when 3 land at once. Surfaced 2026-05-21: a coach uploaded
-        // a 6-play sheet, said "yes" to Cal's enumeration, Cal called
-        // propose_plan and then batched 6 compose_play + 6 create_play
-        // in one turn. Coach: "still not accurate" — they had no
-        // chance to correct route reads before saves landed. Cap is
-        // also justified by SSE budget: image turns use Sonnet (slower
-        // than Haiku), so even 3 compose_play calls + 3 create_play
-        // calls is borderline.
+        // GATE A.0-IMAGE — image-input turns are capped at exactly 1
+        // play fence per reply (any type — catalog-concept or hand-
+        // authored waypoint mode). Walk through plays one at a time so
+        // the coach can see each rendered play and correct via
+        // revise_play if something's off before moving on.
+        //
+        // Counts ALL fences (not just catalog-concept) because Rule 9b
+        // switched to waypoint mode for image input: Cal hand-authors
+        // the play fence with raw player positions + route waypoints,
+        // bypassing compose_play / place_offense entirely. The
+        // catalog-concept counter (`catalogConceptFencesSeen`) would
+        // miss these. Using the fence loop index (`i > 0`) catches
+        // both modes.
+        //
+        // Surfaced 2026-05-21 (three rounds):
+        //   round 1 — Cal batched 6 compose_play calls.
+        //   round 2 — tightened to "1 catalog-concept fence max" but
+        //     coach still got wrong reads on the upload turn.
+        //   round 3 — coach pushed back on per-route review; we
+        //     switched to waypoint mode + Opus 4.7 vision. The cap
+        //     stays at 1 so the conversational walk-through works,
+        //     but it now applies to any fence type.
         if (
           opts.currentUserTurnHadImage === true &&
-          isFullCatalogConceptFence &&
-          !surgicalBypass &&
-          catalogConceptFencesSeen > 1
+          i > 0 &&
+          !surgicalBypass
         ) {
           errors.push(
-            `${tag}this reply has ${catalogConceptFencesSeen} catalog-concept fences, but image-input turns are capped at 1 fence per reply. ` +
-            `When the coach uploads a play sheet, every drawn play needs explicit per-play confirmation before composition (Rule 9b) — hand-drawn route reads are wrong often enough that batching loses the coach's chance to correct mistakes. ` +
-            `The coach's "yes" to your Step 1 enumeration only approves walking through them one at a time; it is NOT blanket approval to compose all plays. ` +
-            `For THIS turn: keep ONE fence (the play the coach just confirmed in their most recent message), drop the rest, and ask them to confirm the next one. Do NOT call propose_plan on image turns — the per-play confirm flow replaces it.`,
+            `${tag}this reply has ${fences.length} play fences, but image-input turns are capped at 1 fence per reply. ` +
+            `When the coach uploads a play sheet, walk through plays ONE AT A TIME — the coach's "yes" / "next" between plays is how they catch mis-reads via revise_play before you move on. ` +
+            `For THIS turn: keep the FIRST fence only, drop the rest, end your reply with "Saved '<label>'. Ready for play <N+1>?" and wait for the coach's response.`,
           );
         }
 
