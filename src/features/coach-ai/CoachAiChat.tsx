@@ -312,6 +312,15 @@ export function CoachAiChat({
   // While set, a polling effect drives the visible "thinking" indicator and
   // appends the finished assistant turn to history when status flips to done.
   const [pollingRunningTurnId, setPollingRunningTurnId] = useState<string | null>(null);
+  // Distinguishes WHY polling was kicked off. "resume" = the initial-mount
+  // hydration saw a running turn from a prior session (e.g. coach closed
+  // and reopened the window mid-response). "continue" = the SSE connection
+  // for the CURRENT submission dropped mid-stream while the server is
+  // still processing (common on image-upload turns where the full pass-1
+  // + pass-2 + auto-save can exceed 30s of SSE keepalive). The status
+  // text picks based on this — "Picking up where Cal left off…" reads
+  // wrong when the coach just hit send 20 seconds ago.
+  const [pollingReason, setPollingReason] = useState<"resume" | "continue" | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Index of the user turn added by the most recent send() call — receives
   // the .msg-in animation. Null for history turns loaded from localStorage.
@@ -607,6 +616,8 @@ export function CoachAiChat({
         saveTurns(storageKey, serverTurns);
       }
       if (data.runningTurnId) {
+        // Resume path: initial mount found a turn from a prior session.
+        setPollingReason("resume");
         setPollingRunningTurnId(data.runningTurnId);
       }
     })();
@@ -621,7 +632,15 @@ export function CoachAiChat({
   useEffect(() => {
     if (!pollingRunningTurnId) return;
     setStreaming(true);
-    setStatusText("Picking up where Cal left off…");
+    // Status text reflects why we're polling. "Resume" is the cross-session
+    // re-attach case (you closed the window mid-response and reopened);
+    // "continue" is the current-turn SSE-timeout case (your request is
+    // taking longer than the SSE keepalive — common on image uploads).
+    setStatusText(
+      pollingReason === "continue"
+        ? "Still working on this… (image uploads can take ~30–60s)"
+        : "Picking up where Cal left off…",
+    );
 
     let cancelled = false;
     let timeout: ReturnType<typeof setTimeout> | null = null;
@@ -685,6 +704,7 @@ export function CoachAiChat({
         setToolCallsDuringStream([]);
         setUsageTick((n) => n + 1);
         setPollingRunningTurnId(null);
+        setPollingReason(null);
         return;
       }
       if (data.status === "errored") {
@@ -694,6 +714,7 @@ export function CoachAiChat({
         setPartialText("");
         setToolCallsDuringStream([]);
         setPollingRunningTurnId(null);
+        setPollingReason(null);
         return;
       }
       // Still running — schedule the next poll. 1.5s strikes a balance
@@ -722,6 +743,7 @@ export function CoachAiChat({
     // poll effect won't fire on its own because we're not unmounting,
     // just nulling the id which the effect's setter is keyed on.
     setPollingRunningTurnId(null);
+    setPollingReason(null);
     setStreaming(false);
     setPartialText("");
     setStatusText(null);
@@ -976,6 +998,7 @@ export function CoachAiChat({
       // restart, etc.) but we have a turn id — pivot to polling so the
       // coach still gets the answer Cal is finishing server-side.
       if (!savedFinalTurn && !blocked && capturedTurnId && !ctrl.signal.aborted) {
+        setPollingReason("continue");
         setPollingRunningTurnId(capturedTurnId);
         capturedTurnId = null;
       }
@@ -987,6 +1010,7 @@ export function CoachAiChat({
         // detached on the server, so hand off to polling if we know which
         // turn to ask about; otherwise surface a retry-friendly error.
         if (!savedFinalTurn && capturedTurnId) {
+          setPollingReason("continue");
           setPollingRunningTurnId(capturedTurnId);
           capturedTurnId = null;
         } else if (!savedFinalTurn) {
@@ -997,6 +1021,7 @@ export function CoachAiChat({
         // polling effect deliver the result rather than surface an error
         // for a turn that's almost certainly going to complete.
         if (!savedFinalTurn && capturedTurnId) {
+          setPollingReason("continue");
           setPollingRunningTurnId(capturedTurnId);
           capturedTurnId = null;
         } else {
