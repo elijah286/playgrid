@@ -304,4 +304,39 @@ describe("NORMAL_PROMPT — Rule 9b (image input, waypoint mode)", () => {
     expect(NORMAL_PROMPT).toMatch(/NO ANCHORED PLAYBOOK\?/);
     expect(NORMAL_PROMPT).toMatch(/Call `list_my_playbooks` first/);
   });
+
+  it("forbids narrating the waypoint workflow to the coach", () => {
+    // Surfaced 2026-05-21 round 5: Cal opened a reply with "This is
+    // an image-upload turn — I'm in waypoint mode. Let me restart
+    // cleanly." plus "Scale check from the photo:" — pure internal
+    // mechanics leaking to the user. Coaches don't need to hear
+    // about the state machine. The prompt now forbids this kind of
+    // narration explicitly.
+    expect(NORMAL_PROMPT).toMatch(/NEVER NARRATE THE WORKFLOW TO THE COACH/);
+    // Spot-check the worst offenders are named.
+    expect(NORMAL_PROMPT).toMatch(/I'm in waypoint mode/);
+    expect(NORMAL_PROMPT).toMatch(/no catalog matching/);
+    expect(NORMAL_PROMPT).toMatch(/Scale check from the photo/);
+  });
+
+  it("requires a route entry for every non-QB player (parity rule)", () => {
+    // Surfaced 2026-05-21 round 5: Cal emitted a 7v7 fence with 7
+    // players (Q, C, X, H, Z, S, B) but only 4 route entries (X, Z,
+    // S, B) — missing @H and @C. The 7v7 save-time validator
+    // rejected. Cal's previous rule "stationary players = no route
+    // entry" conflicted with the universal "every non-QB needs an
+    // action" gate. New rule requires stub routes for stationary
+    // non-QB players.
+    expect(NORMAL_PROMPT).toMatch(/EVERY non-QB offensive player in your `players\[\]` array MUST have a corresponding entry in `routes\[\]`/);
+    expect(NORMAL_PROMPT).toMatch(/Roster ↔ routes parity is a HARD gate/);
+    // The stub-path recipe must be concrete so Cal can copy it.
+    expect(NORMAL_PROMPT).toMatch(/path: \[\[<start_x>, 1\]\]/);
+  });
+
+  it("documents the QB-only exception to the parity rule", () => {
+    // The one player who legitimately has no route in flag variants
+    // is the QB. The prompt must call this out so Cal doesn't try
+    // to stub-route the QB and trip the FLAG QB validator.
+    expect(NORMAL_PROMPT).toMatch(/For @QB only.*omit @QB from `routes\[\]` entirely/);
+  });
 });
