@@ -19,7 +19,13 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { NORMAL_PROMPT, IMAGE_TURN_PROMPT, VISION_PASS_PROMPT } from "./agent";
+import {
+  NORMAL_PROMPT,
+  IMAGE_TURN_PROMPT,
+  VISION_PASS_PROMPT,
+  LAYOUT_DETECTION_PROMPT,
+  PER_CROP_VISION_PROMPT,
+} from "./agent";
 
 describe("NORMAL_PROMPT — Rule 1a (tool names are private API)", () => {
   it("forbids telling the coach to call internal tools by name", () => {
@@ -565,5 +571,109 @@ describe("VISION_PASS_PROMPT — numeric image-to-fence translation (round 12)",
     // Pass-1's value is undivided attention on the image. The 5-step
     // flow adds bulk vs round 11 — soft cap is /3 rather than /8.
     expect(VISION_PASS_PROMPT.length).toBeLessThan(NORMAL_PROMPT.length / 3);
+  });
+});
+
+describe("LAYOUT_DETECTION_PROMPT — per-play bounding-box detection (round 13)", () => {
+  // Round 13 (2026-05-21): the single-shot vision pass couldn't
+  // discriminate small details in a full-sheet photo (the
+  // model sees ~30-40 pixels per play box, not enough to trace a
+  // 2yd hook). Per-play cropping addresses this: detect each
+  // play's bounding box, crop the source, run pass-1 per crop.
+  //
+  // This prompt is the FIRST step of the new pipeline. Its only
+  // job is to find the play boxes; route tracing is downstream.
+
+  it("declares the single task: identify play bounding boxes, nothing else", () => {
+    expect(LAYOUT_DETECTION_PROMPT).toMatch(/SINGLE TASK this turn: identify the bounding box of each play/);
+  });
+
+  it("forbids route tracing, player counting, and coaching prose", () => {
+    expect(LAYOUT_DETECTION_PROMPT).toMatch(/NO route tracing/);
+    expect(LAYOUT_DETECTION_PROMPT).toMatch(/NO player counts/);
+    expect(LAYOUT_DETECTION_PROMPT).toMatch(/NO coaching notes/);
+    expect(LAYOUT_DETECTION_PROMPT).toMatch(/NO catalog play names/);
+  });
+
+  it("specifies the bbox output shape (label + normalized x/y/w/h)", () => {
+    expect(LAYOUT_DETECTION_PROMPT).toMatch(/"label":/);
+    expect(LAYOUT_DETECTION_PROMPT).toMatch(/"bbox":/);
+    expect(LAYOUT_DETECTION_PROMPT).toMatch(/"x":\s*<number, 0 to 1/);
+    expect(LAYOUT_DETECTION_PROMPT).toMatch(/"y":\s*<number, 0 to 1/);
+    expect(LAYOUT_DETECTION_PROMPT).toMatch(/"w":\s*<number, 0 to 1/);
+    expect(LAYOUT_DETECTION_PROMPT).toMatch(/"h":\s*<number, 0 to 1/);
+  });
+
+  it("requires bboxes to stay within image bounds and not overlap", () => {
+    expect(LAYOUT_DETECTION_PROMPT).toMatch(/bbox\.x \+ bbox\.w must NOT exceed 1\.0/);
+    expect(LAYOUT_DETECTION_PROMPT).toMatch(/bbox\.y \+ bbox\.h must NOT exceed 1\.0/);
+    expect(LAYOUT_DETECTION_PROMPT).toMatch(/Play boxes must NOT overlap/);
+  });
+
+  it("requires output to start with [ for parsing safety", () => {
+    expect(LAYOUT_DETECTION_PROMPT).toMatch(/Start your reply with \[ and end with \]/);
+    expect(LAYOUT_DETECTION_PROMPT).toMatch(/NO markdown fences/);
+  });
+
+  it("preserves coach-style labels verbatim", () => {
+    // Same hazard as VISION_PASS_PROMPT — label normalization
+    // ("noah" → "Noah") loses the coach's intent.
+    expect(LAYOUT_DETECTION_PROMPT).toMatch(/exactly as written/);
+    expect(LAYOUT_DETECTION_PROMPT).toMatch(/do not normalize/);
+  });
+
+  it("stays small (focused detection prompt, not full Cal context)", () => {
+    expect(LAYOUT_DETECTION_PROMPT.length).toBeLessThan(NORMAL_PROMPT.length / 6);
+  });
+});
+
+describe("PER_CROP_VISION_PROMPT — per-crop single-play translation (round 13)", () => {
+  // After cropping, each LLM call sees exactly ONE play. The
+  // output shape changes from "JSON array of fences" (full sheet)
+  // to "single JSON object" (one play). Same 5-step flow as
+  // VISION_PASS_PROMPT, scoped to a single play.
+
+  it("declares the single task: one play in this image, output a single fence", () => {
+    expect(PER_CROP_VISION_PROMPT).toMatch(/The image contains EXACTLY ONE play/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Output is a single JSON object/);
+  });
+
+  it("requires the output to start with { (single object, not array)", () => {
+    // The aggregation step wraps the per-crop outputs in [...].
+    // If a per-crop call returns an array, the wrap-step produces
+    // malformed JSON. Validator catches this; prompt must agree.
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Start your reply with `\{`, end with `\}`/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Do NOT wrap in an array/);
+  });
+
+  it("uses the coach's label from the user message as the fence title", () => {
+    expect(PER_CROP_VISION_PROMPT).toMatch(/coach's label for this play will be provided in the user message/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Don't second-guess/);
+  });
+
+  it("inherits the 5-step flow from VISION_PASS_PROMPT", () => {
+    // The flow stays the same — only the output shape changes.
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Step 1 — Place the players/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Step 2 — Estimate field scale/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Step 3 — Define routes by anchor points/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Step 4 — Self-validate/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Step 5 is NOT your job/);
+  });
+
+  it("forbids prose route descriptions and concept names (same as VISION_PASS_PROMPT)", () => {
+    expect(PER_CROP_VISION_PROMPT).toMatch(/NO catalog play names/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/NO route family names/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Mesh \/ Smash \/ Snag \/ 3-vertical/);
+  });
+
+  it("requires pre-route motion and relative-depth checks (same as VISION_PASS_PROMPT)", () => {
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Pre-route motion belongs IN the path/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Relative depths/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Origin loops/);
+  });
+
+  it("includes variant-aware roster parity (Q always exempt; C in 5v5 only)", () => {
+    expect(PER_CROP_VISION_PROMPT).toMatch(/flag_5v5.*@Q is exempt.*@C IS eligible/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/flag_7v7.*@Q AND @C are both exempt/);
   });
 });

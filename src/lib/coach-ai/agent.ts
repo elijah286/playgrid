@@ -3,6 +3,7 @@ import { runTool, toolDefs, type ToolContext } from "./tools";
 import { validateDiagrams } from "./diagram-validate";
 import { projectSpecToNotes } from "./notes-from-spec";
 import { coachDiagramToPlaySpec } from "@/domain/play/specParser";
+import { cropPlaysFromSheet, type PlayLayoutEntry } from "./image-crop";
 import type { CoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
 import type { SportVariant } from "@/domain/play/types";
 
@@ -1094,6 +1095,135 @@ For stationary eligible players (no arrow drawn — sitting, decoying): emit a s
 
 Output the JSON array NOW. No other content.`;
 
+/**
+ * Layout detection prompt (2026-05-21 round 13). Used as the system
+ * prompt for a tiny pre-pre-flight LLM call: just locate each play
+ * box on the sheet. Output is a JSON array of `{label, bbox}` in
+ * normalized [0,1] coordinates. The downstream crop step then
+ * splits the source into per-play crops for the real vision pass.
+ *
+ * Why this is a separate, focused call: identifying play boundaries
+ * is a different skill from tracing routes. Asking one prompt to
+ * do both at full sheet resolution gives the model 200 things to
+ * attend to at once. Separating "where are the plays" from "what
+ * are the routes" lets each pass concentrate.
+ *
+ * No prose. No route descriptions. No player counts. JUST the
+ * label + the bounding box.
+ */
+export const LAYOUT_DETECTION_PROMPT = `You are analyzing a hand-drawn football play sheet photo. Your SINGLE TASK this turn: identify the bounding box of each play on the sheet. Nothing else.
+
+NO route tracing. NO player counts. NO coaching notes. NO prose about what each play does. NO catalog play names. JUST the labels and bounding boxes.
+
+For each distinct play region in the photo, output one entry:
+
+{
+  "label": "<EXACT label text as written on the page, preserving caps / numbers / punctuation. If a region has no label, use 'unlabeled-1' / 'unlabeled-2' etc.>",
+  "bbox": {
+    "x": <number, 0 to 1 — left edge of the play box, as a fraction of image width>,
+    "y": <number, 0 to 1 — top edge of the play box, as a fraction of image height>,
+    "w": <number, 0 to 1 — width of the play box, as a fraction of image width>,
+    "h": <number, 0 to 1 — height of the play box, as a fraction of image height>
+  }
+}
+
+The bbox should TIGHTLY enclose the play: the player dots, all routes drawn from them, and the label. Include a little margin (a few percent of the sheet's dimensions) so route arrowheads that extend slightly past the visual box aren't clipped, but do NOT overlap into adjacent plays.
+
+OUTPUT FORMAT: a JSON array of these objects, one per play. NO markdown fences, NO prose before or after, NO "here's what I see" preamble. Start your reply with [ and end with ]. The downstream pass parses this directly.
+
+If you can't make out a play's label, use 'unlabeled-N'. If you can only confidently identify some of the plays, return just those — the downstream pipeline handles partial detection.
+
+Constraints:
+- Coordinates are NORMALIZED to image dimensions: (0, 0) is top-left, (1, 1) is bottom-right.
+- bbox.x + bbox.w must NOT exceed 1.0 (the right edge of the image).
+- bbox.y + bbox.h must NOT exceed 1.0 (the bottom edge of the image).
+- Play boxes must NOT overlap. If two plays share a boundary, pick the line that visually separates them.
+- Use coach-style labels exactly as written (do not normalize "noah" → "Noah" or vice versa).
+
+Output the JSON array NOW. No other content.`;
+
+/**
+ * Per-crop vision prompt (2026-05-21 round 13). Used after per-play
+ * cropping when each LLM call sees exactly ONE play, not a full
+ * sheet. The crop fills the input frame — 10-20x more pixels per
+ * arrow visible than the full-sheet pass — so route tracing
+ * becomes practical.
+ *
+ * Same numeric 5-step flow as VISION_PASS_PROMPT, but scoped to
+ * a single play. Output is a SINGLE play fence (object), not an
+ * array.
+ */
+export const PER_CROP_VISION_PROMPT = `You are translating a hand-drawn football play diagram into a structured numeric play fence. The image contains EXACTLY ONE play. Output is a single JSON object. Numbers only. No prose about the routes.
+
+This is your ONLY job. NO coaching notes. NO catalog play names (Mesh / Smash / Snag / 3-vertical / etc.). NO route family names (curl / slant / post / dig / out / in / drag / corner / etc.). NO "what's drawn" descriptions. NO opening line. Just the JSON object.
+
+The drawing is the truth. Words about routes — even your own words — bias the output toward known concepts and away from the actual lines the coach drew. So you don't write any.
+
+## 5-STEP TRANSLATION
+
+**Step 1 — Place the players.** Read the label exactly (preserve case, numbers, punctuation). Find each player dot in the play region. Estimate (x, y) in yards: x is lateral (0 = center, negative = left, positive = right), y is depth (0 = LOS, negative = backfield). Always include @Q and @C even if unlabeled.
+
+**Step 2 — Estimate field scale.** Anchor yardage to visual cues in the cropped image:
+- Yardline numbers (40, 45, 50): exactly 5 yards apart.
+- Horizontal lines spanning the cropped region: usually 5-yard increments.
+- LOS line (the long horizontal where dots sit): y = 0.
+- Variant defaults if no yardlines visible: tackle ≈ 53yd wide, 7v7 ≈ 30-40yd, 5v5 ≈ 30yd.
+- Player spacing: center-to-tackle ≈ 2yd, slot ≈ 5-10yd from center, outside WR ≈ 12-18yd from center.
+
+**Step 3 — Define routes by anchor points.** For each player with a drawn arrow:
+- Trace the arrow from the dot to the arrowhead.
+- Identify ANCHOR POINTS: the start of any direction change, samples along any curve, the endpoint. 3-5 anchors per route is typical; 1-2 for unmistakably straight arrows; up to 5 for complex shapes.
+- Set \`curve: true\` if the arrow is rounded / arc-shaped; \`curve: false\` if it's crisp lines with sharp breaks.
+- Pre-route motion belongs IN the path. If the arrow loops, dips, or back-steps before heading downfield (bubble under another receiver, duck-under, motion-then-route), the FIRST anchors encode that motion. Truncating pre-route motion to a straight line drops the play design.
+- Don't repeat the start dot as path[0]; the renderer auto-connects from (x, y) to the first anchor.
+
+**Step 4 — Self-validate. Iterate if anything's off.** Before emitting, run these checks against the cropped image:
+- **Endpoint match**: each route's last anchor should sit where the arrow's arrowhead sits on the page (same depth, same lateral).
+- **Relative depths**: scan all route endpoint y values. If receiver A's arrow visibly ends deeper than B's on the page, A's endpoint y is larger than B's. Distinct depths must stay distinct; don't flatten different arrows into matching paths.
+- **Origin loops**: did any arrow show a dip/curl/bubble at its start? If yes, the first anchors must reflect that.
+- **Roundedness**: \`curve\` should match the drawing.
+- If anything fails, mentally re-run steps 1-3 before emitting.
+
+**Step 5 is NOT your job.** Coaching notes — when to call this, how to read it, what it beats — get generated separately from the saved play. You output coordinates.
+
+## OUTPUT FORMAT
+
+A single JSON object:
+
+{
+  "title": "<coach's literal label — exact case, numbers, punctuation>",
+  "players": [
+    { "id": "<label>", "x": <yards>, "y": <yards>, "team": "O" },
+    ...
+  ],
+  "routes": [
+    { "from": "<id>", "path": [[<x>, <y>], ...], "curve": <bool> },
+    ...
+  ]
+}
+
+- Start your reply with \`{\`, end with \`}\`. NO markdown fences (no \`\`\`json), NO prose before or after, NO preamble.
+- This is ONE play. Do NOT wrap in an array.
+- The coach's label for this play will be provided in the user message — use it as \`title\` exactly. Don't second-guess.
+- If a route is too unclear to encode confidently, OMIT it from \`routes[]\` rather than confabulate.
+
+## ROSTER PARITY (variant-aware)
+
+Eligibility for the routes[] array:
+- **flag_5v5**: @Q is exempt. @C IS eligible — give C a stub \`{ "from": "C", "path": [[0, 1]] }\` if stationary.
+- **flag_7v7**: @Q AND @C are both exempt. Omit both from routes[].
+- **tackle_11**: @Q and @C exempt; linemen also exempt. Skill players are eligible.
+
+For stationary eligible players: emit a stub \`{ "from": "<id>", "path": [[<start_x>, 1]] }\`.
+
+## PLAYER ID CONVENTIONS
+
+- Use coach-style labels EXACTLY as drawn. Do NOT relabel.
+- Always include @Q (typically y ≈ -3 to -5) and @C (typically y = 0, x = 0), even when not labeled.
+- Skill players sit at LOS or slightly behind for backs.
+
+Output the JSON object NOW. No other content.`;
+
 function systemPromptFor(
   ctx: ToolContext,
   currentUserTurnHadImage: boolean,
@@ -1118,27 +1248,11 @@ function systemPromptFor(
 }
 
 /**
- * Pass-1 vision call. Runs a separate chat() with VISION_PASS_PROMPT
- * and just the current turn's user message (with image). Returns the
- * structured-JSON observation string for injection into the main
- * agent's system prompt.
- *
- * Failure-mode handling: any error (LLM call throws, output isn't
- * valid-looking JSON, etc.) returns null. The caller falls through
- * to running the main agent loop without observations — equivalent
- * to pre-2026-05-21-round-11 behavior. Pass 1 should NEVER block the
- * user-visible response.
- *
- * Exported for unit testing.
+ * Find the most recent user message in history that carries an image.
+ * In production this is always the latest turn; guard anyway for odd
+ * histories.
  */
-export async function performImageVisionPass(
-  history: ChatMessage[],
-  ctx: ToolContext,
-): Promise<string | null> {
-  // Find the most recent user message that carries an image. In
-  // production this will be the latest turn (image is only attached
-  // to the current turn); guard against odd histories anyway.
-  let userWithImage: ChatMessage | null = null;
+function findLatestImageMessage(history: ChatMessage[]): ChatMessage | null {
   for (let i = history.length - 1; i >= 0; i--) {
     const m = history[i];
     if (
@@ -1146,34 +1260,255 @@ export async function performImageVisionPass(
       Array.isArray(m.content) &&
       m.content.some((b) => b.type === "image")
     ) {
-      userWithImage = m;
-      break;
+      return m;
     }
   }
+  return null;
+}
+
+/**
+ * Extract the first image block (base64 + media type) from a user
+ * message. Used to feed the bytes back into sharp for cropping.
+ */
+function extractImagePayload(
+  msg: ChatMessage,
+): { base64: string; mediaType: string } | null {
+  if (!Array.isArray(msg.content)) return null;
+  for (const block of msg.content) {
+    if (block.type === "image" && block.source.type === "base64") {
+      return { base64: block.source.data, mediaType: block.source.media_type };
+    }
+  }
+  return null;
+}
+
+/**
+ * Layout detection (2026-05-21 round 13). Runs a focused LLM call
+ * with LAYOUT_DETECTION_PROMPT against the full play sheet, returns
+ * `[{label, bbox}, ...]`. Any error or malformed output returns
+ * null — the caller then falls back to the single-image vision
+ * path (round 12 behavior) so a detection miss never blocks the
+ * coach's response.
+ *
+ * Exported for unit testing.
+ */
+export async function detectPlaySheetLayout(
+  history: ChatMessage[],
+  ctx: ToolContext,
+): Promise<PlayLayoutEntry[] | null> {
+  const userWithImage = findLatestImageMessage(history);
   if (!userWithImage) return null;
 
   try {
     const result = await chat({
+      system: LAYOUT_DETECTION_PROMPT + contextBlock(ctx),
+      messages: [userWithImage],
+      maxTokens: 1500,
+    });
+    const text = extractAssistantText(result.message).trim();
+    if (!text || !text.startsWith("[")) {
+      console.warn("[coach-ai] layout detection returned non-JSON; skipping");
+      return null;
+    }
+    const parsed = JSON.parse(text) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    // Shape-check each entry; drop malformed ones silently rather
+    // than reject the whole detection.
+    const entries: PlayLayoutEntry[] = [];
+    for (const raw of parsed) {
+      if (
+        raw &&
+        typeof raw === "object" &&
+        "label" in raw &&
+        "bbox" in raw &&
+        typeof (raw as { label: unknown }).label === "string"
+      ) {
+        const bbox = (raw as { bbox: unknown }).bbox;
+        if (
+          bbox &&
+          typeof bbox === "object" &&
+          "x" in bbox &&
+          "y" in bbox &&
+          "w" in bbox &&
+          "h" in bbox
+        ) {
+          entries.push({
+            label: (raw as { label: string }).label,
+            bbox: bbox as PlayLayoutEntry["bbox"],
+          });
+        }
+      }
+    }
+    return entries.length > 0 ? entries : null;
+  } catch (e) {
+    console.error("[coach-ai] layout detection failed:", e);
+    return null;
+  }
+}
+
+/**
+ * Run VISION_PASS_PROMPT on the full play sheet (no cropping).
+ * Returns the JSON array string for injection, or null on failure.
+ *
+ * This is the round-12 fallback path. The round-13 cropped flow
+ * (preferred) is in `performImageVisionPass` below; if layout
+ * detection or cropping fails, the agent loop falls through to
+ * here so the coach still gets *something* even if accuracy
+ * regresses to the pre-crop baseline.
+ */
+async function performFullImageVisionPass(
+  userWithImage: ChatMessage,
+  ctx: ToolContext,
+): Promise<string | null> {
+  try {
+    const result = await chat({
       system: VISION_PASS_PROMPT + contextBlock(ctx),
       messages: [userWithImage],
-      // No tools — pass 1 is pure vision, no tool calls.
       maxTokens: 2500,
     });
     const text = extractAssistantText(result.message).trim();
-    if (!text) return null;
-    // Quick sanity check: response should start with `[` (the JSON
-    // array opener). If the model bailed and emitted prose despite
-    // the instructions, log and skip — main loop runs unanchored
-    // rather than feed garbage into the system prompt.
-    if (!text.startsWith("[")) {
-      console.warn("[coach-ai] vision pass returned non-JSON; skipping injection");
+    if (!text || !text.startsWith("[")) {
+      console.warn("[coach-ai] full-image vision pass returned non-JSON; skipping");
       return null;
     }
     return text;
   } catch (e) {
-    console.error("[coach-ai] vision pass failed:", e);
+    console.error("[coach-ai] full-image vision pass failed:", e);
     return null;
   }
+}
+
+/**
+ * Run PER_CROP_VISION_PROMPT on a single play crop. Returns the
+ * fence JSON string, or null on failure. Each crop call gets the
+ * label as a user-side hint so the model uses it as the fence
+ * title verbatim.
+ */
+async function performPerCropVisionPass(
+  crop: { label: string; base64: string; mediaType: string },
+  ctx: ToolContext,
+): Promise<string | null> {
+  try {
+    const userMessage: ChatMessage = {
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: `This image contains exactly one play. Its label is "${crop.label}". Trace the routes per the 5-step flow and emit a single play-fence JSON object with that title.`,
+        },
+        {
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: crop.mediaType,
+            data: crop.base64,
+          },
+        },
+      ],
+    };
+    const result = await chat({
+      system: PER_CROP_VISION_PROMPT + contextBlock(ctx),
+      messages: [userMessage],
+      maxTokens: 2000,
+    });
+    const text = extractAssistantText(result.message).trim();
+    if (!text || !text.startsWith("{")) {
+      console.warn(`[coach-ai] per-crop vision for "${crop.label}" returned non-object`);
+      return null;
+    }
+    return text;
+  } catch (e) {
+    console.error(`[coach-ai] per-crop vision for "${crop.label}" failed:`, e);
+    return null;
+  }
+}
+
+/**
+ * Pass-1 vision orchestration (2026-05-21 round 13).
+ *
+ * Flow:
+ *   1. Detect layout (LAYOUT_DETECTION_PROMPT). Returns bbox per
+ *      play, or null on failure.
+ *   2. Crop the source image into per-play crops via sharp.
+ *   3. Run PER_CROP_VISION_PROMPT in parallel for each crop.
+ *      Each call fills the model's input frame with one play —
+ *      10-20x effective resolution vs single-image pass.
+ *   4. Aggregate the resulting fences into a JSON array string
+ *      (same shape the downstream IMAGE_TURN_PROMPT consumes).
+ *
+ * Fallback: any failure step (layout detection, cropping, all
+ * per-crop calls null) routes to performFullImageVisionPass
+ * (round-12 behavior). The coach always gets a response; in the
+ * worst case it matches what they would have seen on round-12.
+ *
+ * Returns the JSON array string for injection, or null when even
+ * the fallback fails. Pass-1 NEVER blocks the user-visible
+ * response — caller falls through to the main agent loop with
+ * no vision anchor (round-10 behavior) on null.
+ *
+ * Cost: ~3x more LLM calls per image upload (1 layout + N crops
+ * vs 1 single-image). Image turns are rare and rate-limited;
+ * the absolute spend bump is modest. Per-crop calls run in
+ * parallel so the wall-clock cost is closer to 2x.
+ *
+ * Exported for unit testing.
+ */
+export async function performImageVisionPass(
+  history: ChatMessage[],
+  ctx: ToolContext,
+): Promise<string | null> {
+  const userWithImage = findLatestImageMessage(history);
+  if (!userWithImage) return null;
+
+  // Step 1: layout detection. If this fails we fall straight
+  // through to the single-image path — no point trying to crop
+  // without bounding boxes.
+  const layout = await detectPlaySheetLayout(history, ctx);
+  if (!layout || layout.length === 0) {
+    console.warn("[coach-ai] layout detection returned no plays; falling back to full-image pass");
+    return performFullImageVisionPass(userWithImage, ctx);
+  }
+
+  // Step 2: extract the source bytes and crop per the detected
+  // layout. Any error here (corrupt image, unsupported format,
+  // all bboxes invalid) falls back to full-image.
+  const payload = extractImagePayload(userWithImage);
+  if (!payload) {
+    console.warn("[coach-ai] could not extract image bytes; falling back to full-image pass");
+    return performFullImageVisionPass(userWithImage, ctx);
+  }
+  let crops: Awaited<ReturnType<typeof cropPlaysFromSheet>>;
+  try {
+    crops = await cropPlaysFromSheet(payload.base64, payload.mediaType, layout);
+  } catch (e) {
+    console.error("[coach-ai] cropping failed; falling back to full-image pass:", e);
+    return performFullImageVisionPass(userWithImage, ctx);
+  }
+  if (crops.length === 0) {
+    console.warn("[coach-ai] cropping yielded no valid crops; falling back to full-image pass");
+    return performFullImageVisionPass(userWithImage, ctx);
+  }
+
+  // Step 3: per-crop vision passes in parallel. A subset of these
+  // can fail (returning null) and we still proceed with the rest;
+  // only if EVERY call fails do we fall back.
+  const fencesOrNull = await Promise.all(
+    crops.map((c) => performPerCropVisionPass(c, ctx)),
+  );
+  const validFences = fencesOrNull.filter((f): f is string => f !== null);
+  if (validFences.length === 0) {
+    console.warn("[coach-ai] all per-crop vision passes failed; falling back to full-image pass");
+    return performFullImageVisionPass(userWithImage, ctx);
+  }
+
+  // Step 4: aggregate. The per-crop outputs are individual JSON
+  // OBJECTS; the downstream IMAGE_TURN_PROMPT expects a JSON
+  // ARRAY of fences. Wrap the validated fences in [...] and join.
+  // We don't re-parse + re-stringify — the per-crop validator
+  // already confirmed each starts with `{` and the join keeps the
+  // model's formatting intact. JSON parsers ignore the inter-
+  // entry whitespace.
+  return `[${validFences.join(",\n")}]`;
 }
 
 export type AgentStreamEvent =
