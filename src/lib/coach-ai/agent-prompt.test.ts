@@ -19,7 +19,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { NORMAL_PROMPT } from "./agent";
+import { NORMAL_PROMPT, IMAGE_TURN_PROMPT } from "./agent";
 
 describe("NORMAL_PROMPT — Rule 1a (tool names are private API)", () => {
   it("forbids telling the coach to call internal tools by name", () => {
@@ -319,6 +319,85 @@ describe("NORMAL_PROMPT — Rule 9b (image input, waypoint mode)", () => {
   it("preserves the lobby-mode handoff (list_my_playbooks first)", () => {
     expect(NORMAL_PROMPT).toMatch(/NO ANCHORED PLAYBOOK\?/);
     expect(NORMAL_PROMPT).toMatch(/Call `list_my_playbooks` first/);
+  });
+});
+
+describe("IMAGE_TURN_PROMPT — focused image-only system prompt", () => {
+  // Surfaced 2026-05-21 round 10: coach's hypothesis — Cal can SEE
+  // the hand-drawn routes correctly (Opus 4.7 confirmed in a parallel
+  // chat) but the JSON output is pattern-matched to "play-shaped"
+  // generic geometry. Likely cause: prompt-context dilution — the
+  // model's attention splits across hundreds of unrelated Cal rules
+  // (KB, scheduling, defense composition, color rules, etc.) when
+  // generating waypoints, leaving little focus for the vision task.
+  //
+  // Fix: a separate, focused system prompt used ONLY on image-upload
+  // turns. ~80 lines vs the normal ~700+. Strips everything that
+  // doesn't apply to image-tracing. Text-only turns are untouched —
+  // they keep using NORMAL_PROMPT.
+
+  it("is dramatically shorter than NORMAL_PROMPT (frees attention for vision)", () => {
+    // If the focused prompt grows back toward NORMAL_PROMPT's size,
+    // the whole point of this fix is defeated.
+    expect(IMAGE_TURN_PROMPT.length).toBeLessThan(NORMAL_PROMPT.length / 4);
+  });
+
+  it("opens with identity scoped to the image task", () => {
+    expect(IMAGE_TURN_PROMPT).toMatch(/^You are Coach Cal helping a football coach digitize a hand-drawn play sheet/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/This is your ONE job this turn/);
+  });
+
+  it("includes the no-narration rule", () => {
+    expect(IMAGE_TURN_PROMPT).toMatch(/NEVER NARRATE THE WORKFLOW/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/TEST THE FIRST SENTENCE/);
+  });
+
+  it("includes the no-prose-categorization rule (direct image → coordinates)", () => {
+    expect(IMAGE_TURN_PROMPT).toMatch(/Skip prose categorization/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/Do NOT classify routes as catalog families/);
+  });
+
+  it("includes the 3-5 waypoint fidelity rule", () => {
+    expect(IMAGE_TURN_PROMPT).toMatch(/Use 3-5 waypoints by default/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/Hard cap: 5 waypoints per route/);
+  });
+
+  it("includes the roster-parity gate (every non-QB has a route entry)", () => {
+    expect(IMAGE_TURN_PROMPT).toMatch(/ROSTER ↔ ROUTES PARITY/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/stub release/);
+  });
+
+  it("includes the one-play-per-turn cap", () => {
+    expect(IMAGE_TURN_PROMPT).toMatch(/ONE PLAY PER TURN/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/exactly 1 play fence per reply/);
+  });
+
+  it("forbids compose_play / place_offense / get_route_template / propose_plan", () => {
+    expect(IMAGE_TURN_PROMPT).toMatch(/FORBIDDEN ON IMAGE TURNS/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/`compose_play`, `place_offense`, `get_route_template`, `get_concept_skeleton`, `propose_plan`/);
+  });
+
+  it("preserves the lobby-mode handoff to list_my_playbooks", () => {
+    expect(IMAGE_TURN_PROMPT).toMatch(/`list_my_playbooks`/);
+  });
+
+  it("does NOT contain unrelated Cal rules (KB curation, scheduling, defense, plans)", () => {
+    // The whole point of the focused prompt is to strip these. If
+    // they sneak back in, the context-dilution fix is defeated.
+    // (propose_plan is mentioned ONCE in the FORBIDDEN tools list — that's fine.
+    //  The hazard is workflow rules about these tools, not naming them as forbidden.)
+    expect(IMAGE_TURN_PROMPT).not.toMatch(/edit_kb_entry|add_kb_entry|retire_kb_entry/);
+    expect(IMAGE_TURN_PROMPT).not.toMatch(/create_event|create_practice_plan/);
+    expect(IMAGE_TURN_PROMPT).not.toMatch(/compose_defense|place_defense/);
+    expect(IMAGE_TURN_PROMPT).not.toMatch(/update_plan_step/);
+    expect(IMAGE_TURN_PROMPT).not.toMatch(/Admin Training Mode/);
+  });
+
+  it("does NOT contain specific team-named labels (regression from rounds 4-5)", () => {
+    // Same hazard as NORMAL_PROMPT — example labels Cal could
+    // mistakenly recite as if they were in the current image.
+    expect(IMAGE_TURN_PROMPT).not.toMatch(/labeled Noah, 67, King, Vert Under, Money, Drive Pass/);
+    expect(IMAGE_TURN_PROMPT).not.toMatch(/"Money"|"Drive Pass"|"Trips Plus"/);
   });
 
   it("forbids narrating the waypoint workflow to the coach", () => {
