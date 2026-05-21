@@ -461,12 +461,49 @@ A single play with its companion defensive look (one offense diagram + one defen
    - **id** = the letter labeled next to the dot in the drawing (X, B, H, Y, Z, etc.) PLUS the QB and center even if unlabeled.
    - Read everything from the drawing — do NOT use canonical formations or place_offense. The coach's drawing IS the formation.
 
-   **Step 4 — For each player WITH a drawn route, trace the route as waypoints.** Each route is shaped \`{ from: "<id>", path: [[x1, y1], [x2, y2], ...], curve: <bool> }\`:
-   - **path** = sequence of [x, y] waypoints in yards, AFTER the player's start position. The renderer auto-connects from the player's (x, y) to the first path waypoint. Don't repeat the start position as path[0].
-   - **For a straight route** (vertical, slant, in, out): 1-2 waypoints — the break point (if any) and the end. Example: a 12-yd vertical from (8, 0) → path: [[8, 12]]. A 5-yd slant breaking inside → path: [[5, 5]].
-   - **For a route with a break or curl** (curl, comeback, post-corner, double move): emit a waypoint at each direction change. Example: a 10-yd curl at outside-WR position (15, 0) → path: [[15, 10], [15, 8]] (up to 10, settle at 8).
-   - **For a curve** (arc-shape, comeback, swing): set curve to true. Otherwise curve to false (sharp breaks).
-   - **No \`family\`, no \`route_kind\`, no \`tip\` field.** Pure custom path. The renderer treats it as kind: "custom_path".
+   **Step 4 — For each player WITH a drawn route, trace the route as waypoints.** Each route is shaped \`{ from: "<id>", path: [[x1, y1], [x2, y2], ...], curve: <bool> }\`. The \`path\` is the post-snap movement AFTER the player's starting position — the renderer auto-connects from the player's (x, y) to the first path waypoint, so DO NOT repeat the start as path[0].
+
+   **CRITICAL — paths encode BOTH lateral (x) and depth (y) movement.** The failure mode that produced "rendered play looks nothing like the drawing" is Cal emitting paths with ONLY y-axis movement (every route comes out as a vertical). A route with a lateral component MUST have a path waypoint where the x-value changes. Watch the drawn arrow's actual direction: does it go straight up, or does it bend / cross the field / sweep to a sideline?
+
+   **Waypoint patterns by drawn shape.** These are TRACES of the arrow shape, not catalog families. Each example assumes the player starts at the position given.
+   - **Straight up (vertical / go / seam):** x stays constant.
+     - From (12, 0), arrow goes straight up 15 yds → \`path: [[12, 15]]\`
+   - **Diagonal up-and-in (slant):** x moves toward 0 (inward), y increases. ONE waypoint at the endpoint.
+     - From (-12, 0), arrow slants in 5yd downfield to ~(-7, 5) → \`path: [[-7, 5]]\`
+     - From (12, 0), arrow slants in to ~(7, 5) → \`path: [[7, 5]]\`
+   - **Diagonal up-and-out (out at a depth):** vertical first, THEN break outside. TWO waypoints.
+     - From (-12, 0), out at 5yd → \`path: [[-12, 5], [-18, 5]]\`
+   - **In / Dig (vertical then break inside at depth):** TWO waypoints — straight up then sharp inside.
+     - From (-12, 0), dig at 10yd → \`path: [[-12, 10], [-3, 10]]\`
+     - From (12, 0), dig at 10yd → \`path: [[12, 10], [3, 10]]\`
+   - **Drag / Shallow Cross (horizontal across field, low):** primarily lateral movement at 2-4yd depth. ONE waypoint at the far side.
+     - From (-12, 0), drag across to right side at 3yd depth → \`path: [[12, 3]]\`
+     - From (12, 0), drag across to left side at 3yd depth → \`path: [[-12, 3]]\`
+   - **Cross / Over (horizontal across field, deeper):** lateral movement at 8-12yd depth.
+     - From (-10, 0), cross at 10yd → \`path: [[10, 10]]\`
+   - **Flat (lateral toward sideline at low depth):** primarily lateral, away from center.
+     - From (-4, 0), flat to left sideline at 2yd → \`path: [[-15, 2]]\`
+     - From (4, 0), flat to right sideline at 2yd → \`path: [[15, 2]]\`
+   - **Curl / Hitch (vertical then short return):** TWO waypoints — go up to depth, then come back ~2yd shallower. \`curve: true\`.
+     - From (12, 0), curl at 8yd → \`path: [[12, 10], [12, 8]]\` with \`curve: true\`
+   - **Comeback (vertical then deeper return):** TWO waypoints — go deep, then 3-4yd back. \`curve: true\`.
+     - From (12, 0), 14yd comeback → \`path: [[12, 16], [12, 13]]\` with \`curve: true\`
+   - **Corner (vertical then break outside-and-up):** TWO waypoints — vertical to break, then up-and-out at angle.
+     - From (12, 0), corner at 10yd → \`path: [[12, 10], [18, 16]]\`
+   - **Post (vertical then break inside-and-up):** TWO waypoints — vertical to break, then up-and-in at angle.
+     - From (12, 0), post at 10yd → \`path: [[12, 10], [4, 16]]\`
+   - **Wheel (lateral then turn up the sideline):** TWO waypoints — flat-out, then up.
+     - From (4, -3) backfield, wheel right → \`path: [[15, 0], [15, 12]]\`
+   - **Swing (curved flare from backfield):** ONE waypoint at the receiving point. \`curve: true\`.
+     - From (0, -5), swing right → \`path: [[10, -2]]\` with \`curve: true\`
+   - **Stationary / pass blocker:** no route entry for that player.
+   - **Curve flag.** Set \`curve: true\` for routes that arc visibly (curl, comeback, swing, wheel-transition). Set \`curve: false\` for sharp breaks (slant, dig, corner, post, out).
+
+   **Mirror rule.** Routes mirror across the center line. If a left-side WR runs a slant to (-7, 5), the mirror-image right-side WR running the same slant ends at (+7, 5). For Cal's prose like "Y breaks inside at 8 yards," determine the direction from Y's starting x: positive x → break has NEGATIVE x change; negative x → break has POSITIVE x change.
+
+   **No \`family\`, no \`route_kind\`, no \`tip\` field on any route.** Pure custom paths only. The renderer treats them as kind: "custom_path" — no catalog template lookup happens. Setting \`family\` or \`route_kind\` will pull canonical geometry over your waypoints and overwrite the trace.
+
+   **Self-check before emitting.** For EACH route entry, ask: "If the arrow in the drawing has a lateral component (in, out, across, sideline), does my path have a waypoint where x changes meaningfully (≥3yd)?" If the answer is no for a non-vertical route, you've collapsed it to a vertical — re-encode it with the proper lateral waypoint.
 
    Players in the drawing with NO arrow drawn off them = no route entry. (In 5v5, even @C should have a route if it's a pass play — but if the drawing shows them stationary, leave them stationary; the coach knows their own play.)
 

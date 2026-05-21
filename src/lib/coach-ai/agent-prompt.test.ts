@@ -228,6 +228,40 @@ describe("NORMAL_PROMPT — Rule 9b (image input, waypoint mode)", () => {
     expect(NORMAL_PROMPT).toMatch(/No `family`, no `route_kind`/);
   });
 
+  it("includes waypoint patterns for non-vertical routes (lateral encoding)", () => {
+    // Surfaced 2026-05-21 round 4: Cal's prose said "Y breaks inside
+    // at 8 yards (dig)" but emitted path: [[6, 8]] — a vertical, no
+    // inside-break waypoint. The rendered play looked nothing like
+    // the drawing because every route collapsed to a vertical. The
+    // fix: explicit examples for in / dig / out / corner / post /
+    // drag / flat / curl / comeback that show the lateral waypoint.
+    expect(NORMAL_PROMPT).toMatch(/paths encode BOTH lateral \(x\) and depth \(y\) movement/i);
+    // Spot-check the most failure-prone routes get concrete examples.
+    expect(NORMAL_PROMPT).toMatch(/Drag[\s\S]*?\[\[12, 3\]\]/);     // lateral across the field
+    expect(NORMAL_PROMPT).toMatch(/Flat[\s\S]*?\[\[-15, 2\]\]/);    // lateral to sideline
+    expect(NORMAL_PROMPT).toMatch(/Dig[\s\S]*?\[\[-12, 10\], \[-3, 10\]\]/);  // vertical then in
+    expect(NORMAL_PROMPT).toMatch(/Corner[\s\S]*?\[\[12, 10\], \[18, 16\]\]/); // vertical then out-up
+    expect(NORMAL_PROMPT).toMatch(/Post[\s\S]*?\[\[12, 10\], \[4, 16\]\]/);    // vertical then in-up
+  });
+
+  it("includes a mirror rule for left-vs-right starting positions", () => {
+    // Players on the left run inside-breaks toward POSITIVE x;
+    // players on the right toward NEGATIVE x. The mirror rule
+    // prevents Cal from emitting a left-side dig that breaks the
+    // wrong direction.
+    expect(NORMAL_PROMPT).toMatch(/Mirror rule/);
+    expect(NORMAL_PROMPT).toMatch(/positive x → break has NEGATIVE x change/);
+  });
+
+  it("includes a self-check that prevents lateral-component collapse", () => {
+    // The post-emit self-check Cal runs before emitting: "does this
+    // path have a meaningful x change for any non-vertical route?"
+    // Catches the prose-says-dig-but-fence-shows-vertical failure
+    // mode.
+    expect(NORMAL_PROMPT).toMatch(/Self-check before emitting/);
+    expect(NORMAL_PROMPT).toMatch(/lateral component.*does my path have a waypoint where x changes/i);
+  });
+
   it("forbids compose_play / place_offense / get_route_template / propose_plan on image turns", () => {
     // The waypoint workflow REPLACES these tools for image input.
     // Calling them is the failure mode that produced wrong reads in
