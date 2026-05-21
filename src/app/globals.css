@@ -381,6 +381,18 @@ html.coach-docked body {
   html.coach-docked body { transition: none; }
 }
 
+/* Fixed-position floating bars (selection actions, reorder hints, consent)
+ * are anchored to the viewport, so the body padding-right above doesn't shift
+ * them. Apply `.coach-dock-aware` to any such bar to keep it centered in the
+ * visible area (left of the dock) instead of under the panel. */
+html.coach-docked .coach-dock-aware {
+  right: var(--coach-dock-w, 0px);
+  transition: right 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  html.coach-docked .coach-dock-aware { transition: none; }
+}
+
 /* iOS Safari zooms in on focus when an input's font-size is < 16px, which
  * expands the page horizontally and chops off the right side of layouts.
  * Force a 16px minimum on all text-entry controls on small viewports.

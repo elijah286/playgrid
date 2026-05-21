@@ -579,7 +579,7 @@ export function PlaybookFormationsTab({
       )}
 
       {reorderMode && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
+        <div className="coach-dock-aware pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
           <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-border bg-surface-raised px-4 py-2 shadow-elevated">
             <ArrowUpDown className="size-4 text-primary" />
             <span className="text-sm font-medium text-foreground">
@@ -593,7 +593,7 @@ export function PlaybookFormationsTab({
       )}
 
       {selectionMode && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
+        <div className="coach-dock-aware pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
           <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-border bg-surface-raised px-4 py-2 shadow-elevated sm:gap-3 sm:rounded-full">
             <span className="text-sm font-medium text-foreground">
               {selectedIds.size} selected

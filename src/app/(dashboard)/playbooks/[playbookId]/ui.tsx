@@ -2449,7 +2449,7 @@ function PlaybookDetailClientInner({
       )}
 
       {reorderMode && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+72px)] z-40 flex justify-center px-4 sm:bottom-6">
+        <div className="coach-dock-aware pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+72px)] z-40 flex justify-center px-4 sm:bottom-6">
           <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-border bg-surface-raised px-4 py-2 shadow-elevated">
             <ArrowUpDown className="size-4 text-primary" />
             <span className="text-sm font-medium text-foreground">
@@ -2467,7 +2467,7 @@ function PlaybookDetailClientInner({
       )}
 
       {selectionMode && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+72px)] z-40 flex justify-center px-4 sm:bottom-6">
+        <div className="coach-dock-aware pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+72px)] z-40 flex justify-center px-4 sm:bottom-6">
           {/*
             The pill grows as the action set grows. Layout strategy:
               - Mobile (< sm): stack into two rows. Top = status / select-all
