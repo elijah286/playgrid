@@ -105,6 +105,9 @@ Behavior rules — follow these strictly:
       3. The fence didn't make it into your reply text (rare — only if you composed but then truncated the fence out). Force a save by passing the fence as \`diagram\`.
       For the common anchored-fence flow (rule 7c-paragraph-1), call \`compose_play\`, paste the fence, stop. The harness does the rest.
     - **\`create_play\` rules when you DO call it**: pass \`play_spec\` (preferred) when you can describe the play in named primitives — formation, optional defense, per-player assignments via catalog route families (Slant, Post, Dig, Curl, Hitch, Out, In). Fall back to \`diagram\` for off-catalog shapes. Strip defenders client-side before calling (the play is one-sided). Notes are auto-generated from spec — you don't need to call update_play_notes; the "when-to-use" opener is templated and you can rephrase later as an enhancement.
+    - **Defense saves are different — auto-commit ONLY fires on save-intent.** Offense fences auto-save on every full-roster fence (above). Defense overlays from \`compose_defense(on_play=...)\` auto-save ONLY when (a) chat is anchored to an offense play AND (b) the coach's most recent message uses save-intent verbs ("install Tampa 2", "add Cover 3", "save this defense", "keep this", "build me a Tampa 2", "set up a blitz"). When the coach uses exploration phrasing ("show me Tampa 2", "how does Cover 3 play this", "what about a blitz here", "walk me through Tampa 2"), drop the fence in your reply for the visual answer — do NOT claim "saved/added/installed/created" because nothing was. The harness appends "_Saved defense play: [name] — [play://uuid]_" when the auto-commit fires; that suffix IS the canonical confirmation, same rule as offense.
+    - **Defense-only fences (compose_defense WITHOUT on_play) NEVER auto-save.** Standalone defense ("just show me a 4-3 Cover 3") is visual answer only — there's no offense to link via vs_play_id. If the coach asks to save a standalone defense, re-run \`compose_defense\` WITH \`on_play\` set to an offensive play fence (or call \`propose_save_defense_play\` for the chip path).
+    - **\`update_play_notes\` on the OFFENSE play does NOT save a defense.** Common trap: calling \`compose_defense\` then \`update_play_notes\` on the anchored offense, thinking the offense's new notes "describe the defense". The defense play never lands and the coach sees nothing in the Defense tab. Use the auto-commit (save-intent flow) OR \`propose_save_defense_play\` (chip).
     - **Notes shape depends on the play's side — DO NOT default to offense for defense plays.** Whether the auto-projector wrote them or you're rephrasing via \`update_play_notes\`, defense-play notes describe DEFENDER actions, not offensive reads.
       - **Offense play** → when-to-run summary, @Q's primary read, per-skill-player jobs, decision points on option routes. ✓ "@Q reads the safety; hit @X on the slant if the corner squats."
       - **Defense play** → when-to-call summary, the primary key/trigger defenders read, per-defender assignments (zone drops + voids to protect, man matches + leverage, blitz lanes, pattern-match rules). ✓ "Best on 3rd-and-long vs trips. @M keys #3 strong; if #2 goes vertical, @M carries; otherwise sink to the hook."
@@ -1839,6 +1842,33 @@ export function extractPlayFencesFromText(text: string): string[] {
   return [...text.matchAll(/```play\s*\n([\s\S]*?)\n```/g)].map((m) => m[1].trim());
 }
 
+/** Most recent user message's plain text (concatenated text blocks). Used
+ *  by the defense auto-commit branch to detect save-intent verbiage in the
+ *  message that prompted the compose_defense call. Empty string when the
+ *  history has no user message. */
+export function extractLastUserText(history: ChatMessage[]): string {
+  for (let i = history.length - 1; i >= 0; i--) {
+    const m = history[i];
+    if (m.role !== "user") continue;
+    if (typeof m.content === "string") return m.content;
+    if (Array.isArray(m.content)) {
+      return m.content
+        .filter((b): b is { type: "text"; text: string } => b.type === "text")
+        .map((b) => b.text)
+        .join("\n");
+    }
+  }
+  return "";
+}
+
+/** Save-intent verbs (install/save/add/create/etc.) used by the defense
+ *  auto-commit gate. When the user message containing the request that
+ *  prompted compose_defense includes one of these verbs, the overlay
+ *  fence becomes a saved defense play. Exploration phrasing ("show me
+ *  Tampa 2", "what does Cover 3 look like") deliberately does NOT match. */
+export const SAVE_INTENT_DEFENSE_RE =
+  /\b(install|save|add|create|build|make|keep|store|stick|lock\s+in|set\s+up|put\s+in|wire\s+up)\b/i;
+
 /** Does this fence look like a full-roster play (worth auto-saving) rather than
  *  a single-element demo (rule 9a)? Decision rule: count the players on the
  *  most-populated side (offense vs defense vs unspecified). If the larger side
@@ -2139,6 +2169,11 @@ export async function runAgent(
    *  compose_play, modify_play_route) are safe to auto-persist into the
    *  anchored playId; defense overlays may target a different play. */
   let lastFenceToolName: string | null = null;
+  /** Inputs (front, coverage) of the most recent successful compose_defense
+   *  call this turn. Used by the defense auto-commit branch to construct
+   *  the saved play's name as "{front} {coverage} vs {offense}" without
+   *  having to re-parse the tool result text. */
+  let lastComposeDefenseArgs: { front: string; coverage: string } | null = null;
   let lastPlaceDefense: { players: Array<{ id: string; x: number; y: number }> } | null = null;
   let lastPlaceOffense: { players: Array<{ id: string; x: number; y: number }> } | null = null;
   let validatorRetried = false;
@@ -2411,6 +2446,14 @@ export async function runAgent(
           lastFenceToolName = tu.name;
         }
       }
+      // Capture compose_defense input args so the defense auto-commit
+      // branch can name the saved play "{front} {coverage} vs {offense}".
+      if (r.ok && tu.name === "compose_defense") {
+        const input = tu.input as { front?: unknown; coverage?: unknown };
+        const front = typeof input.front === "string" ? input.front.trim() : "";
+        const coverage = typeof input.coverage === "string" ? input.coverage.trim() : "";
+        if (front && coverage) lastComposeDefenseArgs = { front, coverage };
+      }
       // Mark the run as mutating so the client refreshes surrounding UI.
       if (r.ok && MUTATING_TOOLS.has(tu.name)) mutated = true;
       // Record successful write-tool runs so the validator can detect
@@ -2631,6 +2674,85 @@ export async function runAgent(
     } catch {
       // Fence wasn't valid JSON — leave the chat output alone and let the
       // coach retry. We deliberately don't surface this to the LLM mid-turn.
+    }
+  }
+
+  // ── Defense auto-commit (anchored play + clear save intent) ──────────
+  // When chat is anchored to a play and Cal composed a defense overlay
+  // (compose_defense with on_play) AND the coach's most recent message
+  // shows clear save-intent ("install Tampa 2", "add Cover 3", "save this
+  // defense"), persist the overlay as a new defense play linked to the
+  // anchored offense via vs_play_id. Without this branch, Cal renders the
+  // overlay in chat and claims "saved" while the DB stays empty —
+  // surfaced 2026-05-21 when a coach said "install a defense... Tampa 2
+  // read" and the Plays list stayed at offense-only.
+  //
+  // Why save-intent gated (not every compose_defense): a coach asking
+  // "show me Tampa 2" or "what does Cover 3 do here" is exploring, not
+  // adding to the playbook. Auto-saving those would pollute the playbook.
+  // SAVE_INTENT_DEFENSE_RE captures save-intent without false positives
+  // on exploration phrasing.
+  //
+  // Why overlay-only (hasOffense && hasDefense): a defense-only fence
+  // has nothing to link via vs_play_id; the saved play would render as
+  // defenders alone with no offensive reference. propose_save_defense_play
+  // (chip path) handles that case explicitly.
+  //
+  // Why skip when propose_save_defense_play was called: that's Cal
+  // asking for explicit coach confirmation. Honor it and let the chip
+  // path commit.
+  if (
+    ctx.playId &&
+    ctx.playbookId &&
+    ctx.canEditPlaybook &&
+    lastFenceFromTool &&
+    lastFenceToolName === "compose_defense" &&
+    !toolCalls.includes("propose_save_defense_play") &&
+    !writeToolsCalledOk.includes("create_play")
+  ) {
+    const lastUserText = extractLastUserText(history);
+    if (lastUserText && SAVE_INTENT_DEFENSE_RE.test(lastUserText)) {
+      try {
+        const parsed = JSON.parse(lastFenceFromTool) as Record<string, unknown>;
+        const players = Array.isArray(parsed.players)
+          ? (parsed.players as Array<Record<string, unknown>>)
+          : [];
+        const hasOffense = players.some((p) => p.team !== "D");
+        const hasDefense = players.some((p) => p.team === "D");
+        if (hasOffense && hasDefense) {
+          const offenseName = ctx.playName?.trim() || "play";
+          const defenseLabel = lastComposeDefenseArgs
+            ? `${lastComposeDefenseArgs.front} ${lastComposeDefenseArgs.coverage}`.trim()
+            : (typeof parsed.title === "string" ? parsed.title.trim() : "") || "Defense";
+          const suggestedName = `${defenseLabel} vs ${offenseName}`.slice(0, 80);
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const { createDefensePlayFromFenceAction } = require("@/app/actions/plays") as typeof import("@/app/actions/plays");
+          const commit = await createDefensePlayFromFenceAction({
+            fenceJson: lastFenceFromTool,
+            offensivePlayId: ctx.playId,
+            suggestedName,
+            playbookId: ctx.playbookId,
+          });
+          if (commit.ok) {
+            mutated = true;
+            toolCalls.push("create_play");
+            const suffix = `\n\n_Saved defense play: [${suggestedName}](play://${commit.playId})._`;
+            finalText = finalText + suffix;
+            onEvent?.({ type: "text_delta", text: suffix });
+          } else {
+            // Surface the failure so coach knows the defense didn't land.
+            // Same rationale as the existing failedSaves suffix on the
+            // create auto-commit: silent failure → coach thinks Cal saved
+            // it when nothing did.
+            const reason = commit.error.slice(0, 600);
+            const suffix = `\n\n_⚠️ Couldn't auto-save defense play "${suggestedName}": ${reason}_`;
+            finalText = finalText + suffix;
+            onEvent?.({ type: "text_delta", text: suffix });
+          }
+        }
+      } catch {
+        // Fence wasn't valid JSON — leave chat alone.
+      }
     }
   }
 

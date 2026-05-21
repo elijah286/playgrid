@@ -27,6 +27,8 @@ import {
   collectAllHistoryFences,
   extractPlayIdFromCreateResult,
   formatAutoSaveReason,
+  extractLastUserText,
+  SAVE_INTENT_DEFENSE_RE,
 } from "./agent";
 import type { ChatMessage } from "./llm";
 
@@ -363,5 +365,109 @@ describe("formatAutoSaveReason — strip the validator preamble, keep the action
 
   it("guards against empty input", () => {
     expect(formatAutoSaveReason("")).toBe("(no reason given)");
+  });
+});
+
+describe("extractLastUserText — pulls text from the most recent user message", () => {
+  function userString(text: string): ChatMessage {
+    return { role: "user", content: text };
+  }
+  function userBlocks(...blocks: Array<{ type: "text"; text: string }>): ChatMessage {
+    return { role: "user", content: blocks };
+  }
+  function assistant(text: string): ChatMessage {
+    return { role: "assistant", content: [{ type: "text", text }] };
+  }
+
+  it("returns string content from a plain user message", () => {
+    expect(extractLastUserText([userString("install Tampa 2")])).toBe("install Tampa 2");
+  });
+
+  it("returns concatenated text from block-content user messages", () => {
+    expect(
+      extractLastUserText([
+        userBlocks({ type: "text", text: "install" }, { type: "text", text: "Tampa 2" }),
+      ]),
+    ).toBe("install\nTampa 2");
+  });
+
+  it("walks backward and returns the LATEST user message", () => {
+    const history: ChatMessage[] = [
+      userString("first ask"),
+      assistant("here you go"),
+      userString("second ask — install Tampa 2"),
+    ];
+    expect(extractLastUserText(history)).toBe("second ask — install Tampa 2");
+  });
+
+  it("skips assistant turns to find the prior user message", () => {
+    const history: ChatMessage[] = [
+      userString("install Tampa 2"),
+      assistant("done"),
+      assistant("(synth message)"),
+    ];
+    expect(extractLastUserText(history)).toBe("install Tampa 2");
+  });
+
+  it("returns empty string when no user message exists", () => {
+    expect(extractLastUserText([])).toBe("");
+    expect(extractLastUserText([assistant("solo assistant")])).toBe("");
+  });
+});
+
+describe("SAVE_INTENT_DEFENSE_RE — pins the defense auto-commit decision boundary", () => {
+  // Surfaced 2026-05-21: coach said "now install a defense... Tampa two read"
+  // anchored to Smash Right. Cal called compose_defense + update_play_notes;
+  // claimed "saved" but no defense play landed in the playbook because
+  // (a) compose_defense doesn't persist, (b) update_play_notes touched the
+  // OFFENSE play, and (c) the existing create-auto-commit skips when
+  // ctx.playId is set. The new defense-auto-commit branch fires on save-
+  // intent verbs in the prompting user message. This regex IS the gate.
+
+  it("matches the original-bug phrasing ('install a defense')", () => {
+    expect(SAVE_INTENT_DEFENSE_RE.test("now install a defense — Tampa 2 read")).toBe(true);
+  });
+
+  it("matches common save verbs across phrasings", () => {
+    const positives = [
+      "install Tampa 2",
+      "save this defense",
+      "add a Cover 3 to this play",
+      "create a Tampa 2 here",
+      "build me a Cover 2 vs Smash",
+      "make a blitz package for this",
+      "keep this defense",
+      "set up a 4-3 Cover 3",
+      "put in a Tampa 2 read",
+      "lock in Cover 1",
+      "wire up a 7v7 zone here",
+      "stick a Cover 3 on this play",
+    ];
+    for (const text of positives) {
+      expect(SAVE_INTENT_DEFENSE_RE.test(text), `should match: ${text}`).toBe(true);
+    }
+  });
+
+  it("does NOT match exploration phrasing — preserves the 'show me' / 'how does X' UX", () => {
+    const negatives = [
+      "show me Tampa 2",
+      "how does Cover 3 play this",
+      "what does a 4-3 look like",
+      "walk me through Tampa 2",
+      "what about a blitz here",
+      "explain Cover 3",
+      "describe how Tampa 2 defends Smash",
+      "I'm curious about Cover 1",
+      "compare Tampa 2 vs Cover 3 here",
+      "tell me about the Mike's read",
+    ];
+    for (const text of negatives) {
+      expect(SAVE_INTENT_DEFENSE_RE.test(text), `should NOT match: ${text}`).toBe(false);
+    }
+  });
+
+  it("is case-insensitive", () => {
+    expect(SAVE_INTENT_DEFENSE_RE.test("INSTALL TAMPA 2")).toBe(true);
+    expect(SAVE_INTENT_DEFENSE_RE.test("Save This Defense")).toBe(true);
   });
 });

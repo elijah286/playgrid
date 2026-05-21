@@ -1264,7 +1264,8 @@ const compose_defense: CoachAiTool = {
       "(2) `coverage` — coverage name ('Cover 1', 'Cover 3', 'Tampa 2'). " +
       "(3) `strength` — optional, 'left' or 'right' (default 'right'). " +
       "(4) `on_play` — optional. When provided, the defense is overlayed onto this prior ```play fence, preserving offense exactly; any existing defenders in the prior fence are stripped and replaced. When omitted, returns a defense-only diagram. " +
-      "Output is sanitized — zones cannot exceed field bounds, NaN coordinates are dropped, etc.",
+      "Output is sanitized — zones cannot exceed field bounds, NaN coordinates are dropped, etc. " +
+      "AUTO-SAVE BEHAVIOR: when this is called with `on_play` in an anchored-play context AND the coach's request uses save-intent verbs ('install', 'save', 'add', 'create', 'build', 'keep'), the harness auto-commits the overlay as a new defense play linked to the anchored offense via vs_play_id, then appends a '_Saved defense play: [name]_' suffix. For 'show me' / 'what does X look like' / 'walk me through' phrasing, no auto-save fires — the fence is visual answer only. NEVER claim 'saved' in your own prose for defense fences; trust the suffix.",
     input_schema: {
       type: "object",
       properties: {
