@@ -73,6 +73,12 @@ const FEATURES: FeatureMeta[] = [
     disabledScopes: ["me"],
     previewHref: "/tour",
   },
+  {
+    key: "coach_ai_image_upload",
+    label: "Coach Cal — photo / file attach",
+    description:
+      "Surfaces the paperclip in the Coach Cal chat so coaches can attach a play-sheet photo or a file. The hand-drawn play-sheet vision pipeline is currently unreliable on small pencil arrows and rounded routes; pulled back to \"Only me\" while we work on accuracy. Re-widen once translation quality is consistently good across arbitrary drawings.",
+  },
 ];
 
 const SCOPE_OPTIONS: { value: BetaFeatureScope; label: string; hint: string }[] = [

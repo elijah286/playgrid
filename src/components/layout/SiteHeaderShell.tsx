@@ -14,6 +14,14 @@ type Props = {
   coachAiAvailable?: boolean;
   showCoachCalPromo?: boolean;
   coachAiEvalDays: number;
+  /**
+   * Whether Coach Cal's photo/file attach affordance (paperclip in the chat
+   * input) is visible for this user. 2026-05-21: gated behind a beta flag
+   * (`coach_ai_image_upload`) while the hand-drawn play-sheet vision
+   * pipeline is unreliable. Default site-wide scope is "off"; admin
+   * sets "me" via the beta-features admin tab for self-only testing.
+   */
+  coachAiImageUploadAvailable?: boolean;
 };
 
 // Routes where the playbook banner takes over the top of the screen on
@@ -21,7 +29,7 @@ type Props = {
 // stacked headers. Desktop always shows both.
 const PLAYBOOK_DETAIL_RE = /^\/playbooks\/[^/]+(?:\/.*)?$/;
 
-export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAiAvailable, showCoachCalPromo, coachAiEvalDays }: Props) {
+export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAiAvailable, showCoachCalPromo, coachAiEvalDays, coachAiImageUploadAvailable }: Props) {
   const pathname = usePathname();
   const hideOnMobile = PLAYBOOK_DETAIL_RE.test(pathname);
   // Pricing link is a landing-page-only nav affordance. Everywhere else
@@ -85,6 +93,7 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
                   entitled={coachAiAvailable ?? false}
                   acceptGlobalCommands
                   evalDays={coachAiEvalDays}
+                  imageUploadAvailable={coachAiImageUploadAvailable ?? false}
                 />
               </div>
             )}
