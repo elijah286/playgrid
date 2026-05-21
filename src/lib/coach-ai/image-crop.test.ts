@@ -12,7 +12,7 @@
 
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
-import { cropPlaysFromSheet, validateBBox } from "./image-crop";
+import { cropPlaysFromSheet, expandBBox, validateBBox } from "./image-crop";
 
 /**
  * Generate a 400x400 PNG with 4 colored quadrants:
@@ -159,6 +159,63 @@ describe("cropPlaysFromSheet — geometric correctness", () => {
     // 200x200 bottom-right quadrant; tolerate 1px clamp slop.
     expect(crops[0].width).toBeGreaterThanOrEqual(199);
     expect(crops[0].height).toBeGreaterThanOrEqual(199);
+  });
+});
+
+describe("expandBBox", () => {
+  // Round 13 surface: tight bboxes from layout detection clipped
+  // pre-snap motion lines and arrowheads, causing the per-crop
+  // vision pass to emit stub routes for players whose arrows were
+  // clipped. expandBBox grows each bbox by a fixed margin before
+  // cropping so motion lines are reliably captured.
+
+  it("grows a centered bbox by margin on each side", () => {
+    const bbox = { x: 0.25, y: 0.25, w: 0.5, h: 0.5 };
+    const expanded = expandBBox(bbox, 0.1);
+    // 10% margin on a 0.5-wide box adds 0.05 on each side.
+    expect(expanded.x).toBeCloseTo(0.2);
+    expect(expanded.y).toBeCloseTo(0.2);
+    expect(expanded.w).toBeCloseTo(0.6);
+    expect(expanded.h).toBeCloseTo(0.6);
+  });
+
+  it("clamps at left/top edges (no negative coords)", () => {
+    const bbox = { x: 0, y: 0, w: 0.5, h: 0.5 };
+    const expanded = expandBBox(bbox, 0.1);
+    expect(expanded.x).toBe(0);
+    expect(expanded.y).toBe(0);
+    // Margin can still grow rightward / downward.
+    expect(expanded.w).toBeGreaterThan(0.5);
+    expect(expanded.h).toBeGreaterThan(0.5);
+  });
+
+  it("clamps at right/bottom edges (no overrun past 1)", () => {
+    const bbox = { x: 0.7, y: 0.7, w: 0.3, h: 0.3 };
+    const expanded = expandBBox(bbox, 0.2);
+    // Expanded x should shift left to give the box room.
+    expect(expanded.x).toBeCloseTo(0.64);
+    expect(expanded.y).toBeCloseTo(0.64);
+    // But the right edge cannot exceed 1.
+    expect(expanded.x + expanded.w).toBeLessThanOrEqual(1.0001);
+    expect(expanded.y + expanded.h).toBeLessThanOrEqual(1.0001);
+  });
+
+  it("is an identity when marginPct is 0 or negative", () => {
+    const bbox = { x: 0.25, y: 0.25, w: 0.5, h: 0.5 };
+    expect(expandBBox(bbox, 0)).toEqual(bbox);
+    expect(expandBBox(bbox, -0.1)).toEqual(bbox);
+  });
+
+  it("handles a tight corner bbox that already touches an edge", () => {
+    // Top-left corner play: x=0, y=0, w=0.3, h=0.3.
+    const bbox = { x: 0, y: 0, w: 0.3, h: 0.3 };
+    const expanded = expandBBox(bbox, 0.05);
+    // Origin can't go negative, but the box grows rightward and
+    // downward (one-sided margin).
+    expect(expanded.x).toBe(0);
+    expect(expanded.y).toBe(0);
+    expect(expanded.w).toBeGreaterThan(0.3);
+    expect(expanded.h).toBeGreaterThan(0.3);
   });
 });
 

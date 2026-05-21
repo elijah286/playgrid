@@ -3,7 +3,7 @@ import { runTool, toolDefs, type ToolContext } from "./tools";
 import { validateDiagrams } from "./diagram-validate";
 import { projectSpecToNotes } from "./notes-from-spec";
 import { coachDiagramToPlaySpec } from "@/domain/play/specParser";
-import { cropPlaysFromSheet, type PlayLayoutEntry } from "./image-crop";
+import { cropPlaysFromSheet, expandBBox, type PlayLayoutEntry } from "./image-crop";
 import type { CoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
 import type { SportVariant } from "@/domain/play/types";
 
@@ -1127,7 +1127,9 @@ For each distinct play region in the photo, output one entry:
   }
 }
 
-The bbox should TIGHTLY enclose the play: the player dots, all routes drawn from them, and the label. Include a little margin (a few percent of the sheet's dimensions) so route arrowheads that extend slightly past the visual box aren't clipped, but do NOT overlap into adjacent plays.
+The bbox should enclose EVERYTHING related to the play: the player dots, ALL routes drawn from them (including arrowheads), the play label, AND any pre-snap motion lines (dashed arrows showing where a player moves before the snap). Pre-snap motion lines often extend further laterally than the visible play box drawn around the players — they MUST be inside your bbox or the downstream vision pass will see a player with no route and incorrectly mark them stationary.
+
+Include a 5-10% margin on each side. Better to be slightly loose than tight: a tight bbox that clips an arrowhead or motion line drops a route entirely. A loose bbox that includes blank paper around the play is harmless. The ONE constraint: do not overlap into adjacent plays' content (player dots, arrows, labels).
 
 OUTPUT FORMAT: a JSON array of these objects, one per play. NO markdown fences, NO prose before or after, NO "here's what I see" preamble. Start your reply with [ and end with ]. The downstream pass parses this directly.
 
@@ -1175,13 +1177,17 @@ The drawing is the truth. Words about routes — even your own words — bias th
 - Identify ANCHOR POINTS: the start of any direction change, samples along any curve, the endpoint. 3-5 anchors per route is typical; 1-2 for unmistakably straight arrows; up to 5 for complex shapes.
 - Set \`curve: true\` if the arrow is rounded / arc-shaped; \`curve: false\` if it's crisp lines with sharp breaks.
 - Pre-route motion belongs IN the path. If the arrow loops, dips, or back-steps before heading downfield (bubble under another receiver, duck-under, motion-then-route), the FIRST anchors encode that motion. Truncating pre-route motion to a straight line drops the play design.
+- **Dashed lines = pre-snap motion.** A dashed arrow (not solid) from a player shows where that player MOVES before the snap. The dashed segment is part of the route — encode it as the FIRST anchors, then the route continues solid from the motion's endpoint. Common shape: dashed arrow goes laterally behind another player (motion), then a solid line continues downfield as the actual route. NEVER drop a dashed line just because it's different from the solid arrows; it's load-bearing.
+- **A player with ANY arrow drawn — solid or dashed — gets a route entry.** Do NOT emit a stub (\`[[<x>, 1]]\`) for a player who clearly has a drawn arrow. Stubs are only for players with NO arrow at all (stationary, blocking, decoying). If you see lines from a player and can't fully trace them, encode the partial trace rather than dropping the route.
 - Don't repeat the start dot as path[0]; the renderer auto-connects from (x, y) to the first anchor.
 
 **Step 4 — Self-validate. Iterate if anything's off.** Before emitting, run these checks against the cropped image:
 - **Endpoint match**: each route's last anchor should sit where the arrow's arrowhead sits on the page (same depth, same lateral).
 - **Relative depths**: scan all route endpoint y values. If receiver A's arrow visibly ends deeper than B's on the page, A's endpoint y is larger than B's. Distinct depths must stay distinct; don't flatten different arrows into matching paths.
-- **Origin loops**: did any arrow show a dip/curl/bubble at its start? If yes, the first anchors must reflect that.
+- **Origin loops & dashed motion**: did any arrow show a dip/curl/bubble at its start, or a dashed pre-snap motion line? If yes, the first anchors must reflect that.
+- **Stub-check**: for every player with NO route entry, confirm there's also NO arrow (solid or dashed) drawn from them. Players with a visible arrow but a stub-shaped route encoding are the #1 round-13 failure mode.
 - **Roundedness**: \`curve\` should match the drawing.
+- **Cross-arrow bleed**: if a player's path zigzags through positions that overlap another player's arrow on the page, you're likely tracing the wrong line. Re-check which arrow belongs to which player dot.
 - If anything fails, mentally re-run steps 1-3 before emitting.
 
 **Step 5 is NOT your job.** Coaching notes — when to call this, how to read it, what it beats — get generated separately from the saved play. You output coordinates.
@@ -1460,34 +1466,58 @@ export async function performImageVisionPass(
   const userWithImage = findLatestImageMessage(history);
   if (!userWithImage) return null;
 
+  const t0 = Date.now();
   // Step 1: layout detection. If this fails we fall straight
   // through to the single-image path — no point trying to crop
   // without bounding boxes.
-  const layout = await detectPlaySheetLayout(history, ctx);
-  if (!layout || layout.length === 0) {
-    console.warn("[coach-ai] layout detection returned no plays; falling back to full-image pass");
+  const rawLayout = await detectPlaySheetLayout(history, ctx);
+  const tLayout = Date.now();
+  if (!rawLayout || rawLayout.length === 0) {
+    console.warn(`[coach-ai:image] layout detection returned no plays in ${tLayout - t0}ms; falling back to full-image pass`);
     return performFullImageVisionPass(userWithImage, ctx);
   }
+  console.log(
+    `[coach-ai:image] layout detected ${rawLayout.length} plays in ${tLayout - t0}ms:`,
+    rawLayout.map((e) => ({ label: e.label, bbox: e.bbox })),
+  );
 
-  // Step 2: extract the source bytes and crop per the detected
+  // Apply a deterministic margin expansion before cropping. The
+  // layout-detection LLM tends to return tight bboxes that clip
+  // pre-snap motion lines and arrowheads extending slightly past
+  // the visual play box (round-13 failure mode: X bubble
+  // motion → stub route in saved play). 8% on each side ≈ ±15%
+  // total per dimension, enough to catch motion arrows without
+  // pulling in neighboring plays.
+  const BBOX_MARGIN_PCT = 0.08;
+  const layout: PlayLayoutEntry[] = rawLayout.map((e) => ({
+    label: e.label,
+    bbox: expandBBox(e.bbox, BBOX_MARGIN_PCT),
+  }));
+
+  // Step 2: extract the source bytes and crop per the (expanded)
   // layout. Any error here (corrupt image, unsupported format,
   // all bboxes invalid) falls back to full-image.
   const payload = extractImagePayload(userWithImage);
   if (!payload) {
-    console.warn("[coach-ai] could not extract image bytes; falling back to full-image pass");
+    console.warn("[coach-ai:image] could not extract image bytes; falling back to full-image pass");
     return performFullImageVisionPass(userWithImage, ctx);
   }
   let crops: Awaited<ReturnType<typeof cropPlaysFromSheet>>;
   try {
     crops = await cropPlaysFromSheet(payload.base64, payload.mediaType, layout);
   } catch (e) {
-    console.error("[coach-ai] cropping failed; falling back to full-image pass:", e);
+    console.error("[coach-ai:image] cropping failed; falling back to full-image pass:", e);
     return performFullImageVisionPass(userWithImage, ctx);
   }
+  const tCrop = Date.now();
   if (crops.length === 0) {
-    console.warn("[coach-ai] cropping yielded no valid crops; falling back to full-image pass");
+    console.warn(`[coach-ai:image] cropping yielded no valid crops in ${tCrop - tLayout}ms; falling back to full-image pass`);
     return performFullImageVisionPass(userWithImage, ctx);
   }
+  console.log(
+    `[coach-ai:image] cropped ${crops.length} plays in ${tCrop - tLayout}ms:`,
+    crops.map((c) => ({ label: c.label, width: c.width, height: c.height })),
+  );
 
   // Step 3: per-crop vision passes in parallel. A subset of these
   // can fail (returning null) and we still proceed with the rest;
@@ -1495,9 +1525,25 @@ export async function performImageVisionPass(
   const fencesOrNull = await Promise.all(
     crops.map((c) => performPerCropVisionPass(c, ctx)),
   );
+  const tVision = Date.now();
   const validFences = fencesOrNull.filter((f): f is string => f !== null);
+  console.log(
+    `[coach-ai:image] per-crop vision: ${validFences.length}/${crops.length} succeeded in ${tVision - tCrop}ms`,
+  );
+  // Per-fence diagnostic: label + first ~120 chars + length, so
+  // failures (or weird outputs) are visible in Cloud Run logs
+  // without dumping the whole JSON.
+  for (let i = 0; i < crops.length; i++) {
+    const out = fencesOrNull[i];
+    if (out === null) {
+      console.warn(`[coach-ai:image]   "${crops[i].label}": vision pass FAILED (null)`);
+    } else {
+      const preview = out.length > 120 ? out.slice(0, 120) + "…" : out;
+      console.log(`[coach-ai:image]   "${crops[i].label}" (${out.length} chars): ${preview.replace(/\s+/g, " ")}`);
+    }
+  }
   if (validFences.length === 0) {
-    console.warn("[coach-ai] all per-crop vision passes failed; falling back to full-image pass");
+    console.warn("[coach-ai:image] all per-crop vision passes failed; falling back to full-image pass");
     return performFullImageVisionPass(userWithImage, ctx);
   }
 

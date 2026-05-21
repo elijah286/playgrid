@@ -610,6 +610,16 @@ describe("LAYOUT_DETECTION_PROMPT — per-play bounding-box detection (round 13)
     expect(LAYOUT_DETECTION_PROMPT).toMatch(/Play boxes must NOT overlap/);
   });
 
+  it("explicitly requires capturing pre-snap motion / dashed lines + a 5-10% margin", () => {
+    // Round-13 surface: tight bboxes clipped pre-snap motion
+    // arrows, downstream vision saw a player with no route, and
+    // emitted a stub. The prompt now calls out motion lines AND
+    // a concrete margin (instead of "a little margin").
+    expect(LAYOUT_DETECTION_PROMPT).toMatch(/pre-snap motion lines/);
+    expect(LAYOUT_DETECTION_PROMPT).toMatch(/Include a 5-10% margin/);
+    expect(LAYOUT_DETECTION_PROMPT).toMatch(/Better to be slightly loose than tight/);
+  });
+
   it("requires output to start with [ for parsing safety", () => {
     expect(LAYOUT_DETECTION_PROMPT).toMatch(/Start your reply with \[ and end with \]/);
     expect(LAYOUT_DETECTION_PROMPT).toMatch(/NO markdown fences/);
@@ -670,6 +680,34 @@ describe("PER_CROP_VISION_PROMPT — per-crop single-play translation (round 13)
     expect(PER_CROP_VISION_PROMPT).toMatch(/Pre-route motion belongs IN the path/);
     expect(PER_CROP_VISION_PROMPT).toMatch(/Relative depths/);
     expect(PER_CROP_VISION_PROMPT).toMatch(/Origin loops/);
+  });
+
+  it("teaches dashed lines = pre-snap motion (round 13 bbox-tuning fix)", () => {
+    // The Noah play's X has a dashed motion line going behind B
+    // pre-snap. Round-13 per-crop failed to capture this as part
+    // of the route — Cal emitted a stub for X. The fix tells Cal
+    // that dashed lines ARE the route's start, not decoration.
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Dashed lines = pre-snap motion/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/NEVER drop a dashed line/);
+  });
+
+  it("forbids stub-when-confused (the #1 round-13 failure mode)", () => {
+    // Cal's failure was: if a route's geometry was unclear, emit
+    // a stub `[[<x>, 1]]` instead of partial trace. That silently
+    // converts "I can't read this" into "this player is stationary",
+    // which is misleading. The rule: ANY visible arrow → route
+    // entry, partial trace ok, never stub.
+    expect(PER_CROP_VISION_PROMPT).toMatch(/A player with ANY arrow drawn — solid or dashed — gets a route entry/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Do NOT emit a stub/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Stub-check/);
+  });
+
+  it("warns about cross-arrow bleed in the self-validate step", () => {
+    // Round-13 surface: Y's path zigzagged through positions that
+    // overlapped Z's vertical, suggesting Cal was tracing the
+    // wrong arrow. The new self-check tells Cal to re-verify
+    // arrow-to-player attribution when paths zigzag oddly.
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Cross-arrow bleed/);
   });
 
   it("includes variant-aware roster parity (Q always exempt; C in 5v5 only)", () => {
