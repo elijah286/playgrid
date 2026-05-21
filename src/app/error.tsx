@@ -2,6 +2,7 @@
 
 import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
+import { unstable_isUnrecognizedActionError } from "next/navigation";
 import { Button } from "@/components/ui";
 
 export default function RouteError({
@@ -11,9 +12,21 @@ export default function RouteError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // After a deploy, server-action IDs change. A user with a stale tab open
+  // (old client JS) hits a 404 on the next action call — Next.js surfaces
+  // this as UnrecognizedActionError. The fix is a hard reload so the
+  // browser fetches the new JS; the next click then matches.
+  const isStaleClient = unstable_isUnrecognizedActionError(error);
+
   useEffect(() => {
+    if (isStaleClient) {
+      // Not an app error — expected version-skew condition. Skip Sentry
+      // (would spam the dashboard on every deploy) and reload to recover.
+      window.location.reload();
+      return;
+    }
     Sentry.captureException(error);
-  }, [error]);
+  }, [error, isStaleClient]);
 
   // "Go home" needs to actually go somewhere when the device is offline.
   // /home isn't always in the SW cache (first launch with no signal, or
@@ -26,6 +39,17 @@ export default function RouteError({
       typeof navigator !== "undefined" && navigator.onLine === false;
     window.location.href = offline ? "/offline" : "/home";
   };
+
+  if (isStaleClient) {
+    // Reload is firing in useEffect; render a quiet placeholder so the
+    // user doesn't see a flash of "Something went wrong" before the
+    // browser navigates away.
+    return (
+      <div className="mx-auto max-w-lg px-6 py-16 text-center">
+        <p className="text-sm text-muted">Updating to the latest version…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-lg px-6 py-16 text-center">
