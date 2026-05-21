@@ -656,9 +656,18 @@ describe("PER_CROP_VISION_PROMPT — per-crop single-play translation (round 13)
     expect(PER_CROP_VISION_PROMPT).toMatch(/Do NOT wrap in an array/);
   });
 
-  it("uses the coach's label from the user message as the fence title", () => {
-    expect(PER_CROP_VISION_PROMPT).toMatch(/coach's label for this play will be provided in the user message/);
-    expect(PER_CROP_VISION_PROMPT).toMatch(/Don't second-guess/);
+  it("treats title as a placeholder; caller stamps the label post-trace", () => {
+    // Round-13 fix (2026-05-21 evening): passing the label as a
+    // pre-trace hint made Opus template-lock to its trained
+    // priors on common play names ("Noah", "King", "Drive Post"
+    // all collapsed to a generic spread-offense template). The
+    // fix: the per-crop call gets only pixels, emits with a
+    // placeholder title, and the caller stamps the real label
+    // AFTER the trace so it can't bias geometry.
+    expect(PER_CROP_VISION_PROMPT).toMatch(/title.*placeholder/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/caller will replace it/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Pixels only/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Even if you recognize a play name, ignore it/);
   });
 
   it("inherits the 5-step flow from VISION_PASS_PROMPT", () => {

@@ -1210,7 +1210,7 @@ A single JSON object:
 
 - Start your reply with \`{\`, end with \`}\`. NO markdown fences (no \`\`\`json), NO prose before or after, NO preamble.
 - This is ONE play. Do NOT wrap in an array.
-- The coach's label for this play will be provided in the user message — use it as \`title\` exactly. Don't second-guess.
+- The \`title\` field is a placeholder — use \`"untitled"\` or any short string. The caller will replace it with the coach's literal label AFTER your trace, so you do NOT need to identify or name the play. **Do not let any text in the image (a play name, formation note, scribble) influence the route geometry you emit. Pixels only.** Even if you recognize a play name, ignore it — your training data's idea of what that name "should" look like will bias the trace.
 - If a route is too unclear to encode confidently, OMIT it from \`routes[]\` rather than confabulate.
 
 ## ROSTER PARITY (variant-aware)
@@ -1395,12 +1395,22 @@ async function performPerCropVisionPass(
   ctx: ToolContext,
 ): Promise<string | null> {
   try {
+    // Do NOT include crop.label in the user message. Opus has
+    // strong priors on common play names ("Noah" / "King" /
+    // "Drive Post" map to generic spread-offense templates in
+    // its training data) and will template-lock to those priors
+    // when the crop's geometry is hard to read. Forcing the
+    // model to derive routes from PIXELS ONLY (no name hint)
+    // surfaced this regression — saved plays were "what Cal
+    // thinks a play named X looks like" instead of "what's
+    // drawn in the crop". The title gets stamped on the fence
+    // post-trace; the layout detector already provided it.
     const userMessage: ChatMessage = {
       role: "user",
       content: [
         {
           type: "text",
-          text: `This image contains exactly one play. Its label is "${crop.label}". Trace the routes per the 5-step flow and emit a single play-fence JSON object with that title.`,
+          text: `Trace the play drawn in this image. Output the single play-fence JSON object per the 5-step flow in your system prompt. Use any title placeholder (e.g. "untitled") for the title field — the caller will replace it with the coach's literal label.`,
         },
         {
           type: "image",
@@ -1422,7 +1432,23 @@ async function performPerCropVisionPass(
       console.warn(`[coach-ai] per-crop vision for "${crop.label}" returned non-object`);
       return null;
     }
-    return text;
+    // Stamp the coach's literal label on the fence title,
+    // replacing whatever placeholder the model emitted. This
+    // step is what previously happened implicitly by passing
+    // the label in the user message; now it happens explicitly
+    // post-trace so the label can't bias the geometry.
+    try {
+      const parsed = JSON.parse(text) as Record<string, unknown>;
+      parsed.title = crop.label;
+      return JSON.stringify(parsed);
+    } catch {
+      // Parser failed — the model returned something that
+      // looked JSON-ish (starts with `{`) but isn't valid.
+      // Treat as failure rather than risk feeding malformed
+      // JSON downstream.
+      console.warn(`[coach-ai] per-crop vision for "${crop.label}" returned unparseable JSON`);
+      return null;
+    }
   } catch (e) {
     console.error(`[coach-ai] per-crop vision for "${crop.label}" failed:`, e);
     return null;
