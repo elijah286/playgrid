@@ -749,10 +749,17 @@ export function CoachAiChat({
     setPartialText("");
     setToolCallsDuringStream([]);
 
-    // Bubble text matches what the server persists — placeholder when the
-    // coach sent only an image, so history reads after refresh have
-    // something to render.
-    const bubbleText = text || "[image attached]";
+    // Bubble text mirrors what the server persists (see route.ts
+    // persistedUserText) so the optimistic in-session bubble matches the
+    // post-refresh bubble — including the "📎 <name>" attachment indicator
+    // when an image was attached.
+    const imageName = image?.name?.trim() || (image ? "attached image" : null);
+    const imageSuffix = imageName ? `\n\n📎 ${imageName}` : "";
+    const bubbleText = text
+      ? `${text}${imageSuffix}`
+      : imageName
+        ? `📎 ${imageName}`
+        : "[image attached]";
     const userTurn: CoachAiTurn = { role: "user", text: bubbleText };
     const prior = turns;
     nextFreshIdxRef.current = turns.length;
@@ -1473,7 +1480,7 @@ function UserMessageBubble({ text, animate }: { text: string; animate?: boolean 
   }
   return (
     <div className={`flex max-w-[82%] flex-col items-end gap-1${animate ? " msg-in" : ""}`}>
-      <div className="rounded-2xl rounded-tr-sm bg-brand-green px-3.5 py-2 text-sm leading-relaxed text-white">
+      <div className="whitespace-pre-line rounded-2xl rounded-tr-sm bg-brand-green px-3.5 py-2 text-sm leading-relaxed text-white">
         {text}
       </div>
       <button
