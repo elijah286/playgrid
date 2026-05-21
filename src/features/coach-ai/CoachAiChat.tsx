@@ -249,6 +249,7 @@ export function CoachAiChat({
   mode = "normal",
   isAdmin = false,
   injectedPrompt = null,
+  imageUploadAvailable = false,
 }: {
   playbookId?: string | null;
   playId?: string | null;
@@ -263,6 +264,15 @@ export function CoachAiChat({
    * click re-fire — the launcher bumps it on every dispatch.
    */
   injectedPrompt?: { text: string; autoSubmit: boolean; key: number } | null;
+  /**
+   * Whether the photo/file attach affordance (paperclip) renders in the
+   * chat input. 2026-05-21: gated behind the `coach_ai_image_upload`
+   * beta flag while the hand-drawn play-sheet vision pipeline is
+   * unreliable on small pencil arrows and rounded routes. The flag
+   * resolves server-side via isBetaFeatureAvailable in SiteHeader.tsx;
+   * default scope is "off", site admin sets "me" for self-only testing.
+   */
+  imageUploadAvailable?: boolean;
 }) {
   const storageKey = storageKeyFor(mode, playbookId ?? null);
   // Initialize from localStorage synchronously so the first paint shows
@@ -294,8 +304,15 @@ export function CoachAiChat({
   // of data inputs than image upload introduces. Re-enable after the next
   // Play resubmission updates the data-safety form. iOS + web remain on.
   // See memory: feedback_image_upload_android_disabled.
+  //
+  // 2026-05-21: ALSO gated behind the `coach_ai_image_upload` beta flag
+  // because the hand-drawn play-sheet vision pipeline is currently
+  // unreliable (small pencil arrows, rounded routes, dashed motion are
+  // all hit-or-miss). Default scope is "off" site-wide; admin sets "me"
+  // for self-only testing in production. The two gates AND together:
+  // platform must allow it AND the flag must be on.
   const platform = useNativePlatform();
-  const imageInputEnabled = platform !== "android";
+  const imageInputEnabled = imageUploadAvailable && platform !== "android";
   const [streaming, setStreaming] = useState(false);
   const [statusText, setStatusText] = useState<string | null>(null);
   const [partialText, setPartialText] = useState("");

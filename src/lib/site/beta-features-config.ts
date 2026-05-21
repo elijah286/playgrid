@@ -12,7 +12,8 @@ export type BetaFeatureKey =
   | "play_comments"
   | "version_history"
   | "practice_plans"
-  | "team_messaging";
+  | "team_messaging"
+  | "coach_ai_image_upload";
 export type BetaFeatureScope = "off" | "me" | "all" | "custom";
 
 export type BetaFeatures = Record<BetaFeatureKey, BetaFeatureScope>;
@@ -26,6 +27,11 @@ const DEFAULTS: BetaFeatures = {
   version_history: "off",
   practice_plans: "off",
   team_messaging: "off",
+  // Coach Cal photo/file upload. 2026-05-21: pulled back from
+  // general availability while the hand-drawn play-sheet vision
+  // pipeline is still unreliable. Default "off"; the admin sets
+  // scope="me" via the admin UI for site-admin-only testing.
+  coach_ai_image_upload: "off",
 };
 
 /** Safe "everything off" fallback for callers that need a value even when

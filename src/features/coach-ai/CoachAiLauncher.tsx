@@ -83,6 +83,7 @@ export function CoachAiLauncher({
   entitled = true,
   acceptGlobalCommands = false,
   evalDays,
+  imageUploadAvailable = false,
 }: {
   playbookId?: string | null;
   isAdmin?: boolean;
@@ -96,6 +97,14 @@ export function CoachAiLauncher({
   acceptGlobalCommands?: boolean;
   /** Coach AI eval window length in days (admin-configurable). */
   evalDays: number;
+  /**
+   * Whether the photo/file attach affordance (paperclip) is visible in
+   * the chat input. 2026-05-21: gated behind the `coach_ai_image_upload`
+   * beta flag while the hand-drawn play-sheet vision pipeline is
+   * unreliable. Default false; the global header computes this server-
+   * side via isBetaFeatureAvailable.
+   */
+  imageUploadAvailable?: boolean;
 }) {
   const [open,          setOpen]          = useState(false);
   const [panelMode,     setPanelMode]     = useState<PanelMode>("float");
@@ -1044,6 +1053,7 @@ export function CoachAiLauncher({
                   mode={mode}
                   isAdmin={isAdmin}
                   injectedPrompt={injectedPrompt}
+                  imageUploadAvailable={imageUploadAvailable}
                 />
               )}
             </div>

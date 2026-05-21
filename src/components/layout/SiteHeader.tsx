@@ -5,6 +5,10 @@ import { getCachedUserRole } from "@/lib/auth/profile-cache";
 import { SiteHeaderShell } from "@/components/layout/SiteHeaderShell";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
+import {
+  getBetaFeatures,
+  isBetaFeatureAvailable,
+} from "@/lib/site/beta-features-config";
 
 export async function SiteHeader() {
   let user: { id: string; email: string | null } | null = null;
@@ -13,6 +17,7 @@ export async function SiteHeader() {
   let avatarUrl: string | null = null;
   let coachAiAvailable = false;
   let showCoachCalPromo = false; // logged-in user without Coach Pro sees the CTA
+  let coachAiImageUploadAvailable = false;
   const coachAiEvalDays = await getCoachAiEvalDays();
 
   if (hasSupabaseEnv()) {
@@ -47,6 +52,19 @@ export async function SiteHeader() {
         } catch {
           /* best effort */
         }
+        // Photo/file upload in Coach Cal — gated behind a beta flag
+        // while the hand-drawn play-sheet vision pipeline is still
+        // unreliable. Default scope is "off"; site admin sets "me"
+        // for site-admin-only testing in production.
+        try {
+          const betaFeatures = await getBetaFeatures();
+          coachAiImageUploadAvailable = isBetaFeatureAvailable(
+            betaFeatures.coach_ai_image_upload,
+            { isAdmin, isEntitled: coachAiAvailable },
+          );
+        } catch {
+          /* best effort */
+        }
       }
     } catch {
       /* unauthenticated — render anonymous header */
@@ -62,6 +80,7 @@ export async function SiteHeader() {
       coachAiAvailable={coachAiAvailable}
       showCoachCalPromo={showCoachCalPromo}
       coachAiEvalDays={coachAiEvalDays}
+      coachAiImageUploadAvailable={coachAiImageUploadAvailable}
     />
   );
 }
