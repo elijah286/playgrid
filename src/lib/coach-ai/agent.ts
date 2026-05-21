@@ -2021,8 +2021,17 @@ export async function runAgent(
   // mode (one step per turn, call update_plan_step at the end). The
   // helper returns null when no plan is active; the block is then
   // omitted entirely.
+  //
+  // IMAGE TURNS: never inject the active-plan block. The image-upload
+  // workflow has its own emit-all-in-turn-1 flow that's incompatible
+  // with the per-step plan execution model. If an old plan from a
+  // prior session is still active, leaking it into the system prompt
+  // causes Cal to call update_plan_step instead of emitting the
+  // VISION READ fences (the "(no response)" regression observed
+  // 2026-05-21 evening — Cal called the plan tool, then had no text
+  // path forward and emitted nothing).
   let planBlock = "";
-  if (ctx.threadId) {
+  if (ctx.threadId && !currentUserTurnHadImage) {
     try {
       const plansMod = await import("./plans");
       const activePlan = await plansMod.getActivePlan(ctx.threadId);
@@ -2053,7 +2062,31 @@ export async function runAgent(
     systemPromptFor(ctx, currentUserTurnHadImage, visionObservations) +
     preferencesBlock +
     planBlock;
-  const tools = toolDefs(ctx);
+  // Tool gating on image turns. IMAGE_TURN_PROMPT forbids most tools
+  // in prose, but the model can still call any tool that's in the
+  // available-tools array. Surfaced 2026-05-21 evening: Cal saw a
+  // leftover active plan in chat history and called update_plan_step
+  // on an image-upload turn, then emitted no text (which
+  // ensureNonEmptyAssistantContent backfilled as "(no response)").
+  //
+  // Whitelist what's actually useful on an image turn:
+  //   - list_my_playbooks: lobby-mode handoff (no anchored playbook)
+  //   - list_plays: dedupe against existing playbook names before
+  //     the auto-save creates duplicates
+  //   - search_kb / flag_outside_kb / flag_refusal: meta tools, harmless
+  // Everything else (compose_play, place_offense, propose_plan,
+  // update_plan_step, revise_play, etc.) is suppressed structurally
+  // — the model can't call what isn't there.
+  const IMAGE_TURN_ALLOWED_TOOLS = new Set([
+    "list_my_playbooks",
+    "list_plays",
+    "search_kb",
+    "flag_outside_kb",
+    "flag_refusal",
+  ]);
+  const tools = currentUserTurnHadImage
+    ? toolDefs(ctx).filter((t) => IMAGE_TURN_ALLOWED_TOOLS.has(t.name))
+    : toolDefs(ctx);
 
   // ── Diagram-validation safety net ─────────────────────────────────────────
   // When the model calls place_defense, the next non-tool-use turn is almost
