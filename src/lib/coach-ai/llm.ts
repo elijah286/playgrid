@@ -165,14 +165,34 @@ async function chatClaude(opts: ChatOptions): Promise<ChatResult> {
       }))
     : undefined;
   const selectedModel = pickClaudeModel(opts.messages);
-  // Extended thinking: enabled on non-streaming calls with thinkingBudget
-  // set. Anthropic requires `max_tokens` >= `thinking.budget_tokens + 1`,
-  // so we bump max_tokens up if the caller's budget would underflow.
-  // Streaming + thinking together isn't wired here (per-crop vision uses
-  // non-streaming, which is where we want thinking the most).
+  // Extended thinking: Opus 4.7 changed the thinking API shape.
+  // The old { type: "enabled", budget_tokens: N } form returns
+  // a 400 ("Use thinking.type.adaptive ..."). The new form uses
+  // { type: "adaptive" } and tunes effort via output_config.
+  //
+  // To unblock the vision pipeline (broken since the old form
+  // shipped — every image upload was 400-ing), this call uses
+  // the new adaptive form. The thinkingBudget option still maps
+  // to effort level: 8k → "high", smaller → "medium". Streaming
+  // + thinking together isn't wired here (per-crop vision uses
+  // non-streaming, which is where we want thinking most).
   const useThinking =
     typeof opts.thinkingBudget === "number" && opts.thinkingBudget > 0 && !opts.onTextDelta;
+  // Map the legacy token-budget to the new effort scale. The
+  // budgets currently in use (2k for layout, 8k for vision) map
+  // cleanly to medium / high.
+  const effortLevel: "low" | "medium" | "high" = useThinking
+    ? (opts.thinkingBudget ?? 0) >= 5000
+      ? "high"
+      : (opts.thinkingBudget ?? 0) >= 1500
+        ? "medium"
+        : "low"
+    : "low";
   const requestedMaxTokens = opts.maxTokens ?? 1024;
+  // Adaptive thinking still bills thinking tokens as output, so
+  // keep the max_tokens bump from the old form. High-effort
+  // responses can use several thousand tokens of reasoning before
+  // emitting any visible text.
   const effectiveMaxTokens = useThinking
     ? Math.max(requestedMaxTokens, (opts.thinkingBudget ?? 0) + 1024)
     : requestedMaxTokens;
@@ -184,7 +204,10 @@ async function chatClaude(opts: ChatOptions): Promise<ChatResult> {
     stream: opts.onTextDelta ? true : undefined,
     ...(tools ? { tools } : {}),
     ...(useThinking
-      ? { thinking: { type: "enabled" as const, budget_tokens: opts.thinkingBudget } }
+      ? {
+          thinking: { type: "adaptive" as const },
+          output_config: { effort: effortLevel },
+        }
       : {}),
   };
   const res = await fetchWithRetry("https://api.anthropic.com/v1/messages", {
