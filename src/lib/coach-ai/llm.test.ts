@@ -11,7 +11,7 @@
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import type { ChatMessage, ContentBlock, ImageBlock } from "./llm";
-import { chat } from "./llm";
+import { chat, pickClaudeModel } from "./llm";
 
 describe("ImageBlock composition", () => {
   it("can be placed alongside text in a user ChatMessage", () => {
@@ -79,5 +79,93 @@ describe("OpenAI provider rejects image input", () => {
 describe("chat() is exported", () => {
   it("exists as a function", () => {
     expect(typeof chat).toBe("function");
+  });
+});
+
+describe("pickClaudeModel — vision routing", () => {
+  // Surfaced 2026-05-21: Haiku 4.5 misread hand-drawn play sheets and even
+  // with the tightest prompt couldn't reliably identify route shapes from
+  // an arrow drawn on lined paper. Image-attached turns now route to
+  // Sonnet 4.6; everything else stays on Haiku.
+
+  const imageBlock: ImageBlock = {
+    type: "image",
+    source: { type: "base64", media_type: "image/jpeg", data: "x" },
+  };
+
+  it("picks Haiku for text-only conversations", () => {
+    const msgs: ChatMessage[] = [
+      { role: "user", content: "what's a Cover 2?" },
+    ];
+    expect(pickClaudeModel(msgs)).toMatch(/haiku/i);
+  });
+
+  it("picks Haiku when content is an array of text blocks (no image)", () => {
+    const msgs: ChatMessage[] = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "build me a Snag" },
+          { type: "text", text: "from Trips Right" },
+        ],
+      },
+    ];
+    expect(pickClaudeModel(msgs)).toMatch(/haiku/i);
+  });
+
+  it("picks Sonnet when ANY user message contains an image block", () => {
+    const msgs: ChatMessage[] = [
+      {
+        role: "user",
+        content: [imageBlock, { type: "text", text: "what plays are these?" }],
+      },
+    ];
+    expect(pickClaudeModel(msgs)).toMatch(/sonnet/i);
+  });
+
+  it("stays on Sonnet across agent-loop iterations of the same image turn", () => {
+    // After Cal calls a tool, the conversation grows: [user(image+text),
+    // assistant(tool_use), user(tool_result)]. We must keep using Sonnet
+    // so the prompt cache stays warm across the same user turn.
+    const msgs: ChatMessage[] = [
+      {
+        role: "user",
+        content: [imageBlock, { type: "text", text: "what plays are these?" }],
+      },
+      { role: "assistant", content: [{ type: "tool_use", id: "t1", name: "list_my_playbooks", input: {} }] },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: "[]" }] },
+    ];
+    expect(pickClaudeModel(msgs)).toMatch(/sonnet/i);
+  });
+
+  it("falls back to Haiku on text-only follow-up turns (image already fell out)", () => {
+    // stream/route.ts strips images from history before sending the next
+    // turn. So when the coach types a follow-up, the conversation no
+    // longer contains an image block and the model picker correctly
+    // returns to Haiku.
+    const msgs: ChatMessage[] = [
+      { role: "user", content: "save it as 'Noah'" },
+      { role: "assistant", content: [{ type: "text", text: "(prior reply)" }] },
+      { role: "user", content: "next play" },
+    ];
+    expect(pickClaudeModel(msgs)).toMatch(/haiku/i);
+  });
+
+  it("does NOT consider assistant-role content for the image check", () => {
+    // Assistant turns can't carry images (the model doesn't emit image
+    // blocks; only text + tool_use). But defensively: an image-shaped
+    // block in an assistant turn must not flip us to Sonnet — only
+    // genuine user-attached images should.
+    const msgs: ChatMessage[] = [
+      // Mock an assistant turn that somehow has an image block. Cast
+      // through unknown since the type union forbids this — that's
+      // exactly the malformed case we want to guard against.
+      {
+        role: "assistant",
+        content: [imageBlock] as unknown as ContentBlock[],
+      },
+      { role: "user", content: "hello" },
+    ];
+    expect(pickClaudeModel(msgs)).toMatch(/haiku/i);
   });
 });

@@ -2,9 +2,42 @@ import { getStoredClaudeApiKey } from "@/lib/site/claude-key";
 import { getStoredOpenAIApiKey } from "@/lib/site/openai-key";
 import { getLlmProvider, type LlmProvider } from "@/lib/site/llm-provider";
 
+// Default text model — Haiku 4.5 is the right tradeoff for the vast majority
+// of Coach Cal turns (rules Q&A, play composition from named concepts, KB
+// lookups, scheduling). Fast, cheap, plenty smart enough for text-only work.
 const CLAUDE_MODEL = "claude-haiku-4-5-20251001";
+
+// Vision-tier model — Sonnet 4.6 is meaningfully stronger than Haiku at
+// fine-grained hand-drawn route identification. Used ONLY for turns where
+// the coach attached a photo (play sheet, wristcoach, whiteboard). Surfaced
+// 2026-05-21: Haiku on hand-drawn play sheets misread routes and hallucinated
+// labels even with a tight prompt; Sonnet handles the same images cleanly.
+// Image-attached turns are a small fraction of total Cal traffic, so the
+// per-token cost delta is modest in aggregate.
+const CLAUDE_VISION_MODEL = "claude-sonnet-4-6";
+
 const OPENAI_MODEL = "gpt-4o-mini";
 const ANTHROPIC_VERSION = "2023-06-01";
+
+/**
+ * Pick the Claude model for a turn based on whether any user message in the
+ * conversation includes an image block. When the answer is yes, all agent-
+ * loop iterations of that turn use the vision model — switching mid-turn
+ * would burn the prompt cache. Once the image falls out of history on the
+ * next user turn, this returns the text model again.
+ *
+ * Exported for tests; in production only chatClaude calls it.
+ */
+export function pickClaudeModel(messages: ChatMessage[]): string {
+  for (const m of messages) {
+    if (m.role !== "user") continue;
+    if (typeof m.content === "string") continue;
+    for (const block of m.content) {
+      if (block.type === "image") return CLAUDE_VISION_MODEL;
+    }
+  }
+  return CLAUDE_MODEL;
+}
 
 export type ToolDef = {
   name: string;
@@ -98,8 +131,9 @@ async function chatClaude(opts: ChatOptions): Promise<ChatResult> {
         ...(i === opts.tools!.length - 1 ? { cache_control: { type: "ephemeral" as const } } : {}),
       }))
     : undefined;
+  const selectedModel = pickClaudeModel(opts.messages);
   const body = {
-    model: CLAUDE_MODEL,
+    model: selectedModel,
     max_tokens: opts.maxTokens ?? 1024,
     system: [{ type: "text" as const, text: opts.system, cache_control: { type: "ephemeral" as const } }],
     messages: opts.messages.map(toClaudeMessage),
@@ -144,7 +178,7 @@ async function chatClaude(opts: ChatOptions): Promise<ChatResult> {
   type PartialBlock = { type: "text"; text: string } | { type: "tool_use"; id: string; name: string; _json: string };
   let cur: PartialBlock | null = null;
   let stopReason = "other";
-  let modelId = CLAUDE_MODEL;
+  let modelId = selectedModel;
 
   while (true) {
     const { done, value } = await reader.read();
