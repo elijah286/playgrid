@@ -1193,7 +1193,7 @@ These are about the JSON shape, not what's drawn. Violations cause silent render
 ### Tracing the arrow
 
 - Find the start of the arrow (touches the player dot) and the arrowhead (the tip).
-- Identify ANCHOR POINTS along the path: each direction change, samples along any curve, and the endpoint. 3-5 anchors is typical; 1-2 for unmistakably straight arrows; up to 5 for complex shapes.
+- Identify ANCHOR POINTS along the path: each direction change, samples along any curve, and the endpoint. **5-8 anchors is typical for a normal route**; 1-2 for unmistakably straight arrows; up to 12 for complex multi-segment shapes. **More anchors are almost always better than fewer** — undershooting the count produces routes that miss curvature and snap to wrong angles, the dominant failure mode observed in earlier rounds. The cost of extra anchors is zero; the cost of too few is a wrong-shape route.
 - Pre-route motion belongs IN the path. If the arrow loops, dips, or back-steps before heading downfield (bubble, duck-under, motion-then-route), the FIRST anchors encode that motion. If the motion drops below the LOS line at any point, at least one anchor must have y < 0 to capture that dip.
 - **Dashed lines = pre-snap motion.** A dashed segment from a player shows where they MOVE before the snap. The dashed segment is part of the route — encode it as the FIRST anchors, then the route continues solid from the motion's endpoint. NEVER drop a dashed line just because it's different from the solid arrows; it's load-bearing.
 - **Any visible arrow → a route entry with a partial or full trace.** Never stub a player who clearly has lines drawn from them. If you can only confidently trace part of the arrow, encode the partial trace.
@@ -1207,20 +1207,21 @@ A route's encoding is driven by the SHAPE of the arrow in the image. The specifi
 - Arrows that fit: straight vertical (any depth), straight diagonal, straight lateral.
 
 **2. Single sharp break** (L-shape with one angle change)
-- Encoding: 2–3 anchors, \`curve: false\`. One anchor at the break point (where the angle changes), one at the endpoint. Add a midpoint anchor before the break if the depth is hard to read.
+- Encoding: 3–4 anchors, \`curve: false\`. One mid-stem anchor (so the stem direction is captured), one anchor at the break point (where the angle changes), one at the endpoint. The extra mid-stem anchor matters: with only 2 anchors (stem-end + endpoint), a 7-yard out reads identically to a 7-yard slant if the stem isn't pinned.
 - Arrows that fit: one-direction-then-turn shapes (any depth at the break, any final direction).
 
 **3. Continuous rounded curve** (arc, no sharp angles)
-- Encoding: 3–5 anchors sampled along the curve, \`curve: true\`. At least one anchor mid-curve so the rendered arc follows the actual curvature.
+- Encoding: 5–8 anchors sampled along the curve, \`curve: true\`. The curve renders as a smooth spline through your anchors; too few anchors flatten the arc. Sample anchors every ~2-3 yards along the arc so the shape is captured.
 - Arrows that fit: rounded arcs of any shape — could curve inside, outside, around, deep, or shallow.
 
 **4. Multi-segment with 2+ direction changes** (sluggo, post-corner, double-move, etc.)
-- Encoding: up to 5 anchors, one at each direction change. \`curve: false\` if the angles are sharp; \`true\` if the transitions are rounded.
+- Encoding: 5–10 anchors. Place anchors at each direction change AND a midpoint between changes so the segment shape is captured. \`curve: false\` if the angles are sharp; \`true\` if the transitions are rounded.
 - Arrows that fit: any combination of stems + breaks > 1.
 
 **5. Pre-snap motion + main route** (a dashed segment leads into solid lines)
 - Encoding: motion anchors come FIRST in the path; the route continues from where the motion ends. Use \`curve: true\` for smooth motion-into-route transitions.
 - The motion shape varies — could be a lateral shift, a back-step, a loop behind another player, or a combination. If the motion drops below the LOS line at any point, at least one anchor must have y < 0 to capture that dip.
+- Total anchor count: motion-portion 2-4 anchors + route-portion 4-7 anchors = 6-11 anchors typical. Don't compress the motion into a single anchor — the dashed segment's shape matters.
 
 ### Coordinates come from the image, not from these categories
 
@@ -1236,6 +1237,7 @@ The shape category determines how many anchors you emit and whether \`curve\` is
 - **Endpoint that doesn't match the arrowhead**. After encoding, look at the arrowhead in the crop. Does your last anchor's (x, y) sit where that tip is? If no, fix it.
 
 **Step 4 — Self-validate. Iterate if anything's off.** Before emitting, run these checks against the cropped image:
+- **Render check (CRITICAL)**: for each route, mentally render its path the way the diagram will display it — connect player(x,y) → path[0] → path[1] → ... → path[N-1] with straight line segments if \`curve:false\`, or as a smooth spline through the anchors if \`curve:true\`. Does the rendered shape match the arrow drawn in the crop? If a curve straightens, a break lands at the wrong angle, or a stem looks tilted vs vertical, you need MORE ANCHORS. Add waypoints between existing anchors at the problem spots. Iterate until the rendered path traces the arrow. This is the single highest-leverage check — fence accuracy hinges on it.
 - **Coordinate provenance**: every (x, y) in your output came from looking at the arrow in the image, not from "X is usually drawn this way" memory. If asked, you should be able to point to the specific arrow segment that determined each anchor. If a coordinate came from a guess or a training prior, redo it by re-tracing the arrow.
 - **Endpoint match**: each route's last anchor should sit where the arrow's arrowhead sits on the page (same depth, same lateral). If your endpoint y is 10 but the arrowhead is at the 5-yard line in the crop, fix it.
 - **Relative depths**: scan all route endpoint y values across the play. If receiver A's arrow visibly ends deeper than B's on the page, A's endpoint y is larger than B's. Distinct depths stay distinct; don't flatten different arrows into matching paths.
