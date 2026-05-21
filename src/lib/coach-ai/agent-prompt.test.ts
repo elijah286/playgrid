@@ -189,8 +189,8 @@ describe("NORMAL_PROMPT — Rule 9b (image input, waypoint mode)", () => {
   it("walks through the 6-step waypoint workflow in order", () => {
     const step1 = NORMAL_PROMPT.indexOf("Step 1 — Enumerate plays");
     const step2 = NORMAL_PROMPT.indexOf("Step 2 — CALIBRATE SCALE");
-    const step3 = NORMAL_PROMPT.indexOf("Step 3 — For ONE play at a time, read player positions");
-    const step4 = NORMAL_PROMPT.indexOf("Step 4 — For each player WITH a drawn route, trace the route as waypoints");
+    const step3 = NORMAL_PROMPT.indexOf("Step 3 — ANCHORED OBSERVATION PASS");
+    const step4 = NORMAL_PROMPT.indexOf("Step 4 — Translate the observation list into the JSON fence");
     const step5 = NORMAL_PROMPT.indexOf("Step 5 — Emit the hand-authored play fence");
     const step6 = NORMAL_PROMPT.indexOf("Step 6 — Move to the next play");
     expect(step1).toBeGreaterThan(-1);
@@ -199,6 +199,35 @@ describe("NORMAL_PROMPT — Rule 9b (image input, waypoint mode)", () => {
     expect(step4).toBeGreaterThan(step3);
     expect(step5).toBeGreaterThan(step4);
     expect(step6).toBeGreaterThan(step5);
+  });
+
+  it("Step 3 requires anchored observation (player + route lists) before JSON encoding", () => {
+    // The fix for the hallucination failure mode (Cal making up
+    // "play-shaped output" that doesn't match the drawing). Forcing
+    // explicit anchored observations against image landmarks gives
+    // the vision model a chance to verify what it actually sees
+    // before committing to waypoints.
+    expect(NORMAL_PROMPT).toMatch(/ANCHORED OBSERVATION PASS/);
+    expect(NORMAL_PROMPT).toMatch(/3a — Player anchor list/);
+    expect(NORMAL_PROMPT).toMatch(/3b — Route observation list/);
+    expect(NORMAL_PROMPT).toMatch(/3c — Cross-check with the play label/);
+    expect(NORMAL_PROMPT).toMatch(/3d — Hallucination guard/);
+  });
+
+  it("Step 3b requires per-route Direction + Distance + Endpoint observations", () => {
+    // The three things Cal must verbalize per route. Without all
+    // three, the encoding step has nothing to ground against.
+    expect(NORMAL_PROMPT).toMatch(/Direction \(FIRST move\)/);
+    expect(NORMAL_PROMPT).toMatch(/Distance \/ depth/);
+    expect(NORMAL_PROMPT).toMatch(/Endpoint \/ breaks/);
+  });
+
+  it("Step 4 ties prose accuracy to waypoint accuracy explicitly", () => {
+    // The encoding step must MATCH the observation prose. If prose
+    // says "short curl" and waypoints encode a deep out, the
+    // encoding is wrong — not a free-form re-interpretation.
+    expect(NORMAL_PROMPT).toMatch(/route prose AND the waypoints MUST match/);
+    expect(NORMAL_PROMPT).toMatch(/The fence is a mechanical encoding of the observation list/);
   });
 
   it("Step 2 requires scale calibration from yardlines / LOS / variant defaults", () => {
@@ -214,9 +243,12 @@ describe("NORMAL_PROMPT — Rule 9b (image input, waypoint mode)", () => {
   it("instructs Cal to hand-author player positions in yards (not call place_offense)", () => {
     // Coach's drawing IS the formation — no canonical formation
     // lookup needed. The validator's place_offense mandatory gate
-    // is bypassed when an image is attached.
-    expect(NORMAL_PROMPT).toMatch(/read player positions/);
-    expect(NORMAL_PROMPT).toMatch(/do NOT use canonical formations or place_offense/);
+    // is bypassed when an image is attached. Cal anchors each
+    // player to image landmarks in Step 3a, then converts to (x, y)
+    // in Step 4 — without going through place_offense.
+    expect(NORMAL_PROMPT).toMatch(/Player anchor list/);
+    expect(NORMAL_PROMPT).toMatch(/DO NOT CALL THESE TOOLS ON IMAGE TURNS/);
+    expect(NORMAL_PROMPT).toMatch(/`compose_play`, `place_offense`/);
   });
 
   it("describes route waypoints with explicit JSON shape (from + path + curve, no family)", () => {
