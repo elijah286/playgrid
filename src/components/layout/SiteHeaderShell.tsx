@@ -41,9 +41,10 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
           aria-label="XO Gridmaker home"
           className="flex cursor-pointer items-center text-[#06255E] dark:text-foreground"
         >
-          {/* Inlined so the "gridmaker" word can inherit currentColor and
-              adapt to dark mode. The X (#1769FF) and O (#95CC1F) are brand
-              accents and stay fixed in both themes. */}
+          {/* Single <text> with colored <tspan>s so crawlers read the
+              wordmark as one token ("xogridmaker") rather than three. The
+              X (#1769FF) and O (#95CC1F) stay fixed in both themes;
+              "gridmaker" inherits currentColor for dark mode. */}
           <svg
             viewBox="0 0 1600 320"
             role="img"
@@ -51,40 +52,14 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
             className="h-8 w-auto sm:h-9"
           >
             <text
-              x="278.24"
               y="70"
-              fill="#1769FF"
               fontFamily='"DejaVu Sans", Arial, sans-serif'
               fontSize="150"
               fontStyle="oblique"
               fontWeight="700"
               dominantBaseline="hanging"
             >
-              x
-            </text>
-            <text
-              x="378.68"
-              y="70"
-              fill="#95CC1F"
-              fontFamily='"DejaVu Sans", Arial, sans-serif'
-              fontSize="150"
-              fontStyle="oblique"
-              fontWeight="700"
-              dominantBaseline="hanging"
-            >
-              o
-            </text>
-            <text
-              x="473.44"
-              y="70"
-              fill="currentColor"
-              fontFamily='"DejaVu Sans", Arial, sans-serif'
-              fontSize="150"
-              fontStyle="oblique"
-              fontWeight="700"
-              dominantBaseline="hanging"
-            >
-              gridmaker
+              <tspan x="278.24" fill="#1769FF">x</tspan><tspan x="378.68" fill="#95CC1F">o</tspan><tspan x="473.44" fill="currentColor">gridmaker</tspan>
             </text>
           </svg>
         </Link>
