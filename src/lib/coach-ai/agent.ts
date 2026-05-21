@@ -966,6 +966,8 @@ Each waypoint's (x, y) is in YARDS, in the same coordinate system as 3a. DO NOT 
 
 **Lateral component MUST match the drawing.** If the arrow visibly bends LEFT, RIGHT, or ACROSS the field, your waypoints must include a meaningful x change (≥3yd between adjacent waypoints) at the bend. An arrow that visibly bends but you encode as a straight vertical is a collapse-to-vertical bug — the most common failure mode.
 
+**Pre-route motion belongs IN the path.** If the arrow loops, dips, or back-steps BEFORE the main route — bubble under another receiver, duck-under, mesh, switch release, motion-then-route — encode that motion as the FIRST waypoints of the path. Do NOT truncate to just the main route's destination. Example: X bubbling under B reads as start dot → dip toward QB (small negative y, ~1-2yd) → curve laterally behind B's position → resume main route → endpoint. That's 4-5 waypoints (dip + behind + transition + destination), not 1-2 (just the destination). If the arrow has a visible loop or hook at its origin and you encode it as a straight line, you've dropped the play design.
+
 **No \`family\`, no \`route_kind\`, no \`tip\` field.** Pure custom paths only.
 
 **Curve flag.** Set \`curve: true\` for routes that visibly arc (rounded curls, comebacks, swings). \`curve: false\` for sharp angular breaks. When in doubt, prefer \`false\`.
@@ -1000,6 +1002,8 @@ Scan each \`path\` entry against the drawn arrow:
 - **Waypoint count**: Does each non-straight route have ≥3 waypoints? Stub (1-2) = under-sampled.
 - **Lateral component**: If the arrow has any lateral movement, does the path have an x change ≥3yd between adjacent waypoints? If no → collapse-to-vertical bug.
 - **Distinct shapes**: If multiple players' arrows look distinctly different, are the path entries also distinct? Identical paths for distinct arrows = pattern-match-to-concept bug.
+- **Relative route depths**: Scan all route endpoints' y values in order. The deepest arrow on the page = the largest y; the shortest = smallest. If receiver A's arrow visibly ends deeper than B's, A's y endpoint MUST exceed B's by the same proportion you see in the image. A receiver whose arrow plainly matches the depth of a 12-yard seam cannot encode as a 3-yard stem — that's an under-length bug, usually caused by treating the photo's perspective foreshortening as actual route length. Calibrate against the deepest route, then derive everything else's depth proportionally to it.
+- **Origin loops**: Did any arrow have a visible curl, dip, or back-step at its START (before heading downfield)? If yes, the FIRST waypoints must encode that pre-route motion. A bubble or duck-under reduced to a straight line is the second-most-common bug after collapse-to-vertical.
 
 ## FORBIDDEN ON IMAGE TURNS
 
@@ -1052,7 +1056,7 @@ For each play box visible in the photo, output one object:
       "x_yards": <number — lateral position from snap. 0 = center; negative = left; positive = right.>,
       "y_yards": <number — depth from LOS. 0 = LOS; negative = backfield.>,
       "position_anchor": "<short description of where the dot is on the page relative to landmarks, e.g. 'leftmost edge of LOS' or 'inside slot, ~5yd right of center' or '~4yd behind C'>",
-      "route_observation": "<GEOMETRIC description of the arrow drawn from this dot. Use direction (up / left / right / diagonal), distance (in yards), and turn behavior (straight / one break at X yards / arc / loops back). Examples: 'goes up ~5yd then curls back ~2yd' or 'straight vertical ~12yd, no breaks' or 'small arc going up-and-right, ends ~4yd up + ~3yd right of start'. If no arrow drawn (player sits / blocks / decoys): say 'no arrow drawn — stationary'. If you can't make out the arrow clearly: say 'UNCLEAR — [what you can see]'. DO NOT use catalog family names (curl / slant / dig / post / corner / hitch / drag / flat / etc.).>"
+      "route_observation": "<GEOMETRIC description of the arrow drawn from this dot. Use direction (up / left / right / diagonal), distance (in yards), and turn behavior (straight / one break at X yards / arc / loops back). Examples: 'goes up ~5yd then curls back ~2yd' or 'straight vertical ~12yd, no breaks' or 'small arc going up-and-right, ends ~4yd up + ~3yd right of start'. If no arrow drawn (player sits / blocks / decoys): say 'no arrow drawn — stationary'. If you can't make out the arrow clearly: say 'UNCLEAR — [what you can see]'. DO NOT use catalog family names (curl / slant / dig / post / corner / hitch / drag / flat / etc.). PRE-ROUTE MOTION: if the arrow has a loop, dip, or back-step at its START before heading downfield (one receiver bubbling/ducking under another, a back-step before the route), describe it FIRST in the observation — e.g. 'dips back ~1yd then curves under [other player] and crosses ~12yd to the right'. Truncating pre-route motion to a straight line is the most common observation miss.>"
     },
     ... one entry per visible dot ...
   ]
@@ -1068,6 +1072,7 @@ Constraints:
 - @C is at LOS (y = 0), typically x = 0.
 - Skill players (@X, @Y, @Z, @H, @B) are at LOS or slightly behind for backs.
 - Use coach-style labels exactly as drawn — do not relabel (e.g., do not turn the coach's @Y into @S).
+- RELATIVE ROUTE DEPTHS: before finalizing, scan all route_observation distances against the image. The deepest arrow on the page gets the largest yardage; the shortest gets the smallest. If receiver A's arrow visibly reaches a deeper point on the page than B's, A's observation must say a larger yardage than B's. A receiver whose arrow plainly matches the depth of a 12yd seam route cannot be described as "short stem release" — that's an under-length miss, usually caused by reading the photo's perspective foreshortening as actual length. Calibrate against the deepest arrow first, then derive the others proportionally.
 
 Output the JSON array NOW. No other content.`;
 

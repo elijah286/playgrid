@@ -362,6 +362,26 @@ describe("IMAGE_TURN_PROMPT — focused image-only system prompt", () => {
     expect(IMAGE_TURN_PROMPT).toMatch(/Hard cap: 5 waypoints per route/);
   });
 
+  it("includes the pre-route-motion rule (bubble / duck-under / mesh)", () => {
+    // Surfaced 2026-05-21 (Noah play): X had a bubble-under-B at the
+    // start of its route, but Cal traced only the main cross. The rule
+    // tells Cal to encode loops/dips/back-steps as the FIRST waypoints
+    // of the path, not truncate them away.
+    expect(IMAGE_TURN_PROMPT).toMatch(/Pre-route motion belongs IN the path/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/bubble under another receiver/);
+    // The Self-Check section repeats the rule as a final scan trigger.
+    expect(IMAGE_TURN_PROMPT).toMatch(/Origin loops/);
+  });
+
+  it("includes the relative-route-depths self-check", () => {
+    // Surfaced 2026-05-21 (Noah play): Z's route was encoded as a
+    // 3-yard stub when its arrow plainly matched the depth of Y's
+    // 12-yard seam. The rule tells Cal to compare endpoints across
+    // routes before sending, not encode each route in isolation.
+    expect(IMAGE_TURN_PROMPT).toMatch(/Relative route depths/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/Calibrate against the deepest route/);
+  });
+
   it("includes the roster-parity gate (every non-QB has a route entry)", () => {
     expect(IMAGE_TURN_PROMPT).toMatch(/ROSTER ↔ ROUTES PARITY/);
     expect(IMAGE_TURN_PROMPT).toMatch(/stub release/);
@@ -437,6 +457,25 @@ describe("VISION_PASS_PROMPT — pre-flight vision-only system prompt", () => {
     expect(VISION_PASS_PROMPT).toMatch(/GEOMETRIC description of the arrow/);
     expect(VISION_PASS_PROMPT).toMatch(/direction \(up \/ left \/ right \/ diagonal\)/);
     expect(VISION_PASS_PROMPT).toMatch(/distance \(in yards\)/);
+  });
+
+  it("requires pre-route motion (bubbles / dips / duck-unders) in the observation", () => {
+    // Surfaced 2026-05-21 (Noah play): X had a bubble-under-B at the
+    // start of its route, but pass 1 truncated to just the cross. If
+    // pass 1 doesn't observe pre-route motion, pass 2 has no anchor
+    // for it. The rule tells pass 1 to describe origin loops/dips
+    // FIRST in the observation string.
+    expect(VISION_PASS_PROMPT).toMatch(/PRE-ROUTE MOTION/);
+    expect(VISION_PASS_PROMPT).toMatch(/bubbling\/ducking under another/);
+  });
+
+  it("requires cross-checking relative route depths before finalizing", () => {
+    // Surfaced 2026-05-21 (Noah play): Z's route was observed as a
+    // "short stem release" when its arrow plainly matched the depth
+    // of Y's seam. Pass 1 must compare arrow lengths across the play
+    // and calibrate against the deepest, not encode each in isolation.
+    expect(VISION_PASS_PROMPT).toMatch(/RELATIVE ROUTE DEPTHS/);
+    expect(VISION_PASS_PROMPT).toMatch(/Calibrate against the deepest arrow/);
   });
 
   it("documents UNCLEAR as the answer when the model can't read confidently", () => {
