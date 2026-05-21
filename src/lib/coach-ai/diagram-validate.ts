@@ -512,6 +512,19 @@ export function validateDiagrams(opts: {
    *  match on phrases like "new play", "another concept", "show me a
    *  different one"). Bypasses the modify-not-regenerate gate. */
   userRequestsNewPlay?: boolean;
+  /** True iff the current user turn (the one Cal is responding to)
+   *  attached an image. When set, Rule 9b's one-play-at-a-time
+   *  confirm flow applies and Cal must NOT batch multiple
+   *  catalog-concept fences in one reply — every drawn play needs
+   *  the coach's explicit "save it" before composition, because
+   *  hand-drawn route reads are higher-uncertainty than catalog
+   *  composition from a clear coach prompt. Surfaced 2026-05-21: a
+   *  coach uploaded a 6-play sheet, said "yes" to Cal's enumeration,
+   *  and Cal interpreted that as blanket approval — installed all 6
+   *  via propose_plan + a 6× compose_play batch, none of which the
+   *  coach got to verify per-play. The gate below structurally
+   *  forbids that path. */
+  currentUserTurnHadImage?: boolean;
 }): ValidationResult {
   // ── Phantom-write detection ────────────────────────────────────
   // This runs FIRST and independently of diagram fences — Cal can claim a
@@ -1176,6 +1189,36 @@ export function validateDiagrams(opts: {
             `Cramming N plays into one reply hits the SSE timeout and produces silent partial failures (Cal copies fence #1's structure for plays 2-N, the copies fail save-time validation). ` +
             `Split this work across multiple turns: open with a markdown Plan checklist naming every play you'll build (rule 7c), then compose AT MOST ${MAX_CATALOG_CONCEPT_FENCES_PER_REPLY} per turn. The coach types "next" between batches. ` +
             `For THIS turn: keep the first ${MAX_CATALOG_CONCEPT_FENCES_PER_REPLY} fences, drop the rest, and tell the coach how many remain.`,
+          );
+        }
+
+        // GATE A.0-IMAGE — image-input turns get a STRICTER cap of 1
+        // fence per reply. Hand-drawn play sheets are higher-
+        // uncertainty than catalog composition from a clear prompt:
+        // Cal's route-from-image reads are wrong often enough that
+        // every drawn play needs the coach's explicit "save it" before
+        // composition. The propose_plan + 3-fence-batch workflow that
+        // works for "install 6 named concepts" is wrong for image
+        // input because the coach can't verify route reads per play
+        // when 3 land at once. Surfaced 2026-05-21: a coach uploaded
+        // a 6-play sheet, said "yes" to Cal's enumeration, Cal called
+        // propose_plan and then batched 6 compose_play + 6 create_play
+        // in one turn. Coach: "still not accurate" — they had no
+        // chance to correct route reads before saves landed. Cap is
+        // also justified by SSE budget: image turns use Sonnet (slower
+        // than Haiku), so even 3 compose_play calls + 3 create_play
+        // calls is borderline.
+        if (
+          opts.currentUserTurnHadImage === true &&
+          isFullCatalogConceptFence &&
+          !surgicalBypass &&
+          catalogConceptFencesSeen > 1
+        ) {
+          errors.push(
+            `${tag}this reply has ${catalogConceptFencesSeen} catalog-concept fences, but image-input turns are capped at 1 fence per reply. ` +
+            `When the coach uploads a play sheet, every drawn play needs explicit per-play confirmation before composition (Rule 9b) — hand-drawn route reads are wrong often enough that batching loses the coach's chance to correct mistakes. ` +
+            `The coach's "yes" to your Step 1 enumeration only approves walking through them one at a time; it is NOT blanket approval to compose all plays. ` +
+            `For THIS turn: keep ONE fence (the play the coach just confirmed in their most recent message), drop the rest, and ask them to confirm the next one. Do NOT call propose_plan on image turns — the per-play confirm flow replaces it.`,
           );
         }
 

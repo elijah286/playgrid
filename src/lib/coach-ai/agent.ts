@@ -472,7 +472,18 @@ A single play with its companion defensive look (one offense diagram + one defen
 
    **When the drawn play doesn't fit ANY catalog concept cleanly — ASK; don't approximate.** If the route map doesn't recognizably belong to any concept in the catalog (Curl-Flat, Smash, Stick, Snag, Four Verticals, Mesh, Flood/Sail, Drive, Levels, Y-Cross, Dagger, plus run concepts), name what you see and ask the coach to confirm or describe it in prose: *"'[exact-label]' has [@X = comeback, @H = out, @B = wheel, @C = corner, @Z = corner — substitute what you observed]. That doesn't cleanly match any catalog concept I have. Want me to (a) save it as the closest match plus your label, (b) skip it for now and you describe the play in chat, or (c) skip it entirely?"* **Approximating with the "closest-sounding" concept name and shipping the canonical geometry is the bug we're trying to prevent — when in doubt, ASK.**
 
-   **One play at a time. No batching.** This OVERRIDES rule 9 multi-diagram (chunk 4 per turn). Image imports are NOT bulk-emit-and-save — they are one-at-a-time confirm because (a) the coach's team-specific name matters, (b) wrong-concept-saved is harder to undo than not-yet-saved, and (c) eight similar-looking canonical plays in a row is the failure mode coaches report most often.
+   **ONE PLAY AT A TIME. STRUCTURALLY ENFORCED. NO EXCEPTIONS.** Image-input turns are capped at **exactly one** \`compose_play\` per reply by the chat-time validator (gate A.0-IMAGE). This OVERRIDES Rule 7c (propose_plan + 3-fence batches), Rule 9 (multi-diagram chunk-of-4), and any other batching rule. Image imports are NOT bulk-emit-and-save — they are one-at-a-time confirm because (a) the coach's team-specific name matters, (b) wrong-concept-saved is harder to undo than not-yet-saved, (c) hand-drawn route reads are higher-uncertainty than catalog composition from a clear coach prompt, and (d) the failure mode is dramatic — coaches report "kept making the same play over and over" / "still not accurate" when N wrong plays land at once.
+
+   **DO NOT CALL \`propose_plan\` ON IMAGE TURNS.** The propose_plan workflow exists for explicit "install 6 plays for me" requests where the coach NAMED the concepts. Image input is different: the coach hasn't named anything — Cal has to read the drawings, and Cal's reads are wrong often enough that batching loses the coach's chance to correct mistakes. On image turns: skip propose_plan entirely; the per-play confirm flow IS the plan.
+
+   **"YES" TO STEP 1 IS NOT BLANKET APPROVAL.** When the coach answers "yes" / "go" / "ok" after your Step 1 enumeration ("I see 6 plays — let's walk through them"), that ONLY approves the workflow — proceed to Step 2 for play #1. It does NOT approve composing any plays. Every individual play still needs its own Step 7 confirm. Treating "yes" as blanket approval and ripping through compose_play for all 6 plays is exactly the failure the validator gate blocks.
+
+   **WORKED EXAMPLE — multi-play image install:**
+   - Turn 1 (image attached): Cal does Step 1 only. Lists the labels. Asks "ready to start with play 1?"
+   - Turn 2 (coach says "yes"): Cal does Steps 2–7 for play #1 ONLY. Composes once. Asks "save this one?" — wait. NO propose_plan, NO other compose_play calls.
+   - Turn 3 (coach says "save it" / "yes" / "next"): the auto-commit landed play #1. Cal now does Steps 2–7 for play #2 ONLY. One compose_play. Asks again.
+   - ... repeat until all plays processed.
+   This is slow on purpose. Slowness here trades for accuracy — and accuracy is the entire point of image input.
 
    **Variant — read it off the image or ask.** If the image is clearly 7v7 (7 offensive players, no OL) and the anchored playbook is 7v7, save as-is. If the image variant disagrees with the anchored playbook (e.g. image shows 11-player tackle plays but the anchored playbook is flag_5v5), flag the mismatch and ask before saving.
 
@@ -1102,6 +1113,20 @@ export async function runAgent(
   onEvent?: (e: AgentStreamEvent) => void,
 ): Promise<AgentResult> {
   const messages = [...history];
+  // Whether THIS coach turn attached an image. Computed once from the
+  // initial history — stays stable across agent-loop iterations of this
+  // turn (the image is in the original user message and never moves).
+  // Passed to validateDiagrams so the image-turn fence cap (1 fence
+  // max) fires structurally instead of just by prompt. Surfaced
+  // 2026-05-21: a coach uploaded a 6-play sheet, Cal batched 6
+  // compose_play calls in one turn, coach had no chance to correct
+  // route reads per play before saves landed.
+  const currentUserTurnHadImage = history.some(
+    (m) =>
+      m.role === "user" &&
+      Array.isArray(m.content) &&
+      m.content.some((b) => b.type === "image"),
+  );
   const newMessages: ChatMessage[] = [];
   const toolCalls: string[] = [];
   let modelId = "";
@@ -1331,6 +1356,7 @@ export async function runAgent(
           priorAssistantTurnHadFence,
           priorAssistantFenceJson,
           userRequestsNewPlay,
+          currentUserTurnHadImage,
         });
         if (!validation.ok && !validatorRetried) {
           // Discard the broken assistant turn and feed the model a critique.

@@ -267,11 +267,37 @@ describe("NORMAL_PROMPT — Rule 9b (hand-drawn image translation)", () => {
     expect(NORMAL_PROMPT).toMatch(/closest-sounding/i);
   });
 
-  it("preserves the one-play-at-a-time confirm rule from before", () => {
-    // The rule that image imports OVERRIDE the multi-diagram batch cap
-    // was already in place and must survive the rewrite.
-    expect(NORMAL_PROMPT).toMatch(/One play at a time/);
-    expect(NORMAL_PROMPT).toMatch(/OVERRIDES rule 9 multi-diagram/);
+  it("structurally enforces one play at a time on image turns", () => {
+    // After 2026-05-21 the rule was promoted from prompt-only to a
+    // chat-time validator gate (A.0-IMAGE) — the prompt must surface
+    // that enforcement so Cal knows the cap is structural, not a
+    // suggestion.
+    expect(NORMAL_PROMPT).toMatch(/ONE PLAY AT A TIME\. STRUCTURALLY ENFORCED\. NO EXCEPTIONS/);
+    expect(NORMAL_PROMPT).toMatch(/A\.0-IMAGE/);
+    expect(NORMAL_PROMPT).toMatch(/OVERRIDES Rule 7c \(propose_plan/);
+  });
+
+  it("forbids calling propose_plan on image turns", () => {
+    // The propose_plan workflow conflicts with the one-at-a-time
+    // confirm flow image input requires. Surfaced 2026-05-21: Cal
+    // called propose_plan + batched 6 compose_play in one turn.
+    expect(NORMAL_PROMPT).toMatch(/DO NOT CALL `propose_plan` ON IMAGE TURNS/);
+  });
+
+  it("clarifies that 'yes' to Step 1 enumeration is NOT blanket approval", () => {
+    // The failure mode Cal exhibited: coach said "yes" to the
+    // enumeration in turn 1, Cal interpreted that as approval to
+    // install all 6 plays. The prompt must explicitly call this out.
+    expect(NORMAL_PROMPT).toMatch(/"YES" TO STEP 1 IS NOT BLANKET APPROVAL/);
+  });
+
+  it("provides a multi-turn worked example for image installs", () => {
+    // Without a concrete example of the turn-by-turn flow, Cal
+    // re-invents batching every time. The example pins the right
+    // cadence.
+    expect(NORMAL_PROMPT).toMatch(/WORKED EXAMPLE — multi-play image install/);
+    expect(NORMAL_PROMPT).toMatch(/Turn 1 \(image attached\)/);
+    expect(NORMAL_PROMPT).toMatch(/Turn 2 \(coach says "yes"\)/);
   });
 
   it("preserves the images-are-not-persisted rule", () => {

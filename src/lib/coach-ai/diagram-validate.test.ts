@@ -577,6 +577,100 @@ describe("validateDiagrams — per-reply catalog-concept fence cap (Plan checkli
   });
 });
 
+describe("validateDiagrams — IMAGE-INPUT per-reply cap (1 fence max)", () => {
+  // Surfaced 2026-05-21: a coach uploaded a 6-play sheet, said "yes" to
+  // Cal's enumeration, and Cal interpreted that as blanket approval —
+  // installed all 6 plays via propose_plan + 6× compose_play in one
+  // turn. The coach had no chance to verify Cal's route reads per play
+  // before saves landed. Image-input turns get a stricter cap (1
+  // fence) than the general per-reply cap (3) because hand-drawn route
+  // reads are higher-uncertainty than catalog composition from a
+  // clear coach prompt.
+
+  it("REJECTS 2 catalog-concept fences on an image-input turn", () => {
+    const text =
+      `${fullTackleMeshFence()}\nMesh #1 from image.\n\n` +
+      `${fullTackleMeshFence()}\nMesh #2 from image.`;
+    const result = validateDiagrams({
+      text,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      placeOffenseCalled: true,
+      conceptSkeletonCallCount: 2,
+      currentUserTurnHadImage: true,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const imageGateError = result.errors.find((e) =>
+      /image-input turns are capped at 1 fence per reply/i.test(e),
+    );
+    expect(imageGateError).toBeDefined();
+    // The critique must name Rule 9b and tell Cal to ask for next.
+    expect(imageGateError).toMatch(/Rule 9b/);
+    expect(imageGateError).toMatch(/Do NOT call propose_plan on image turns/i);
+  });
+
+  it("REJECTS 6 catalog-concept fences on an image-input turn (the actual user report)", () => {
+    const text = Array.from({ length: 6 }, (_, i) =>
+      `${fullTackleMeshFence()}\nMesh from image #${i + 1}.`,
+    ).join("\n\n");
+    const result = validateDiagrams({
+      text,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      placeOffenseCalled: true,
+      conceptSkeletonCallCount: 6,
+      currentUserTurnHadImage: true,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(
+      result.errors.find((e) => /6 catalog-concept fences/i.test(e) && /capped at 1/i.test(e)),
+    ).toBeDefined();
+  });
+
+  it("ACCEPTS exactly 1 catalog-concept fence on an image-input turn", () => {
+    const text = `${fullTackleMeshFence()}\nMesh from image — the one play the coach just confirmed.`;
+    const result = validateDiagrams({
+      text,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      placeOffenseCalled: true,
+      conceptSkeletonCallCount: 1,
+      currentUserTurnHadImage: true,
+    });
+    // Other rules may fail; pin only that the image-turn cap doesn't fire at 1.
+    if (!result.ok) {
+      expect(result.errors.find((e) => /capped at 1 fence per reply/i.test(e))).toBeUndefined();
+    }
+  });
+
+  it("does NOT fire on text-only turns (3 fences allowed under the normal cap)", () => {
+    // The image gate is additive — it kicks in only when
+    // currentUserTurnHadImage is true. A text-only multi-play install
+    // still respects the looser 3-fence cap.
+    const text = [
+      fullTackleMeshFence(),
+      "Mesh #1.",
+      fullTackleMeshFence(),
+      "Mesh #2.",
+      fullTackleMeshFence(),
+      "Mesh #3.",
+    ].join("\n\n");
+    const result = validateDiagrams({
+      text,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      placeOffenseCalled: true,
+      conceptSkeletonCallCount: 3,
+      currentUserTurnHadImage: false,
+    });
+    if (!result.ok) {
+      expect(result.errors.find((e) => /capped at 1 fence per reply/i.test(e))).toBeUndefined();
+    }
+  });
+});
+
 describe("validateDiagrams — LOBBY-MODE anchor gate (full-roster play requires playbook anchor)", () => {
   // Surfaced 2026-05-20: a coach chatted with Cal from the home page,
   // Cal emitted 6 full-roster ```play fences across multiple turns
