@@ -39,11 +39,13 @@ type StreamRequest = {
   timezone?: string | null;
   /**
    * Optional image attached to THIS turn only. Forwarded to Claude in-flight
-   * and NEVER persisted — the coach_ai_turns row holds only the text body.
-   * History replay on subsequent turns will not include the image; Cal sees
-   * it once and falls back to its own text description after that.
+   * and NEVER persisted — the coach_ai_turns row holds only the text body
+   * (plus a "📎 <name>" attachment indicator appended so the coach can see
+   * in history which messages had attachments). History replay on
+   * subsequent turns will not include the image; Cal sees it once and
+   * falls back to its own text description after that.
    */
-  userImage?: { mediaType: string; base64: string };
+  userImage?: { mediaType: string; base64: string; name?: string };
 };
 
 // Anthropic's vision endpoint supports JPG/PNG/WebP/GIF. Anything else we
@@ -338,9 +340,20 @@ export async function POST(req: Request): Promise<Response> {
   ];
 
   // What we persist to coach_ai_turns. The image bytes never touch the DB —
-  // a placeholder marker stands in for image-only turns so history reads have
-  // something to render.
-  const persistedUserText = text || "[image attached]";
+  // a "📎 <name>" suffix stands in so coaches can see in history which
+  // messages had attachments. Surfaced 2026-05-21: a coach uploaded a
+  // playsheet, scrolled back later, and couldn't tell which messages had
+  // attached the image vs which were plain text — leading to confusion
+  // when re-asking Cal about a play from earlier. The indicator solves it
+  // without persisting the image bytes themselves.
+  const imageName = userImage?.name?.trim() || (userImage ? "attached image" : null);
+  const imageSuffix = imageName ? `\n\n📎 ${imageName}` : "";
+  const persistedUserText = text
+    ? `${text}${imageSuffix}`
+    : imageName
+      ? `📎 ${imageName}`
+      : "[image attached]"; // legacy fallback — shouldn't hit since name has a default
+
 
   // ── Persist the turn server-side BEFORE kicking off the agent ─────────────
   // This is the change that makes "close the window, come back to the

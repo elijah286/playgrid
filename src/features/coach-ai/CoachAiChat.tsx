@@ -137,7 +137,7 @@ const IMAGE_JPEG_QUALITY = 0.92;
 const PASSTHROUGH_MAX_BYTES = 4_500_000;
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
-type PreparedImage = { preview: string; base64: string; mediaType: string };
+type PreparedImage = { preview: string; base64: string; mediaType: string; name: string };
 
 async function prepareImageForUpload(file: File): Promise<PreparedImage> {
   if (!file.type.startsWith("image/")) {
@@ -146,10 +146,14 @@ async function prepareImageForUpload(file: File): Promise<PreparedImage> {
   if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
     throw new Error("Unsupported image type. Use JPG, PNG, WebP, or GIF.");
   }
+  // Filename for the chat-history attachment indicator. Pasted clipboard
+  // images often have an empty / generic name ("image.png" or just ""), so
+  // fall back to a friendly placeholder rather than showing nothing.
+  const displayName = file.name && file.name !== "image.png" ? file.name : `pasted-image.${file.type.split("/")[1] || "png"}`;
   // GIF re-encode would lose frames; pass through. They're typically small
   // enough that the server-side base64 cap (~5MB) won't reject them.
   if (file.type === "image/gif") {
-    return splitDataUrl(await readAsDataUrl(file));
+    return splitDataUrl(await readAsDataUrl(file), displayName);
   }
   // Passthrough for images that already fit under the binary cap AND don't
   // exceed the max edge. Avoids re-encoding loss on photos that are already
@@ -162,7 +166,7 @@ async function prepareImageForUpload(file: File): Promise<PreparedImage> {
     file.size <= PASSTHROUGH_MAX_BYTES &&
     (file.type === "image/jpeg" || file.type === "image/png" || file.type === "image/webp")
   ) {
-    return splitDataUrl(await readAsDataUrl(file));
+    return splitDataUrl(await readAsDataUrl(file), displayName);
   }
   // Resize down to MAX_IMAGE_EDGE_PX at IMAGE_JPEG_QUALITY. Only fires for
   // photos that are over the byte cap OR over the dimension cap — most camera
@@ -174,7 +178,7 @@ async function prepareImageForUpload(file: File): Promise<PreparedImage> {
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("This browser can't process the image.");
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-  return splitDataUrl(canvas.toDataURL("image/jpeg", IMAGE_JPEG_QUALITY));
+  return splitDataUrl(canvas.toDataURL("image/jpeg", IMAGE_JPEG_QUALITY), displayName);
 }
 
 function readAsDataUrl(file: File): Promise<string> {
@@ -196,10 +200,10 @@ function loadImage(file: File): Promise<HTMLImageElement> {
   });
 }
 
-function splitDataUrl(dataUrl: string): PreparedImage {
+function splitDataUrl(dataUrl: string, name: string): PreparedImage {
   const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(dataUrl);
   if (!match) throw new Error("Couldn't read image data.");
-  return { preview: dataUrl, mediaType: match[1], base64: match[2] };
+  return { preview: dataUrl, mediaType: match[1], base64: match[2], name };
 }
 
 /** Minimal SSE parser — handles `event: foo\ndata: {...}\n\n` frames. */
@@ -274,6 +278,7 @@ export function CoachAiChat({
     preview: string;       // data: URL for thumbnail rendering
     base64: string;        // raw base64 (no `data:...,` prefix)
     mediaType: string;     // image/jpeg | image/png | image/webp | image/gif
+    name: string;          // filename for the attachment indicator in chat history
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // TODO(re-enable image upload on Android): the paperclip button is hidden
@@ -835,7 +840,7 @@ export function CoachAiChat({
           livePlayDoc,
           mode,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          ...(image ? { userImage: { mediaType: image.mediaType, base64: image.base64 } } : {}),
+          ...(image ? { userImage: { mediaType: image.mediaType, base64: image.base64, name: image.name } } : {}),
         }),
         signal: ctrl.signal,
       });
