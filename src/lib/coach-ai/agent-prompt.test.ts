@@ -345,10 +345,14 @@ describe("IMAGE_TURN_PROMPT — fence-only emit on image turns (round 12)", () =
     expect(IMAGE_TURN_PROMPT.length).toBeLessThan(NORMAL_PROMPT.length / 4);
   });
 
-  it("opens by establishing pass-2 as a fence-selector, not a route-describer", () => {
-    expect(IMAGE_TURN_PROMPT).toMatch(/walking a coach through plays/);
-    expect(IMAGE_TURN_PROMPT).toMatch(/A separate vision pass has ALREADY translated/);
-    expect(IMAGE_TURN_PROMPT).toMatch(/SELECT one of those fences and EMIT it verbatim/);
+  it("opens by establishing pass-2 as a fence emitter for ALL plays in turn 1", () => {
+    // Round 13 evening: pass-2 emits every fence from VISION READ
+    // in this one reply, not one per turn. Eliminated the lossy
+    // multi-turn walkthrough where turns 2-N regenerated from
+    // history without vision context.
+    expect(IMAGE_TURN_PROMPT).toMatch(/processing a hand-drawn play sheet photo/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/A separate per-play vision pass has ALREADY translated/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/EMIT ALL fences in this single reply/);
   });
 
   it("explicitly forbids route-describing prose and concept naming", () => {
@@ -359,7 +363,7 @@ describe("IMAGE_TURN_PROMPT — fence-only emit on image turns (round 12)", () =
     // in the image turn, period.
     expect(IMAGE_TURN_PROMPT).toMatch(/You do NOT describe routes/);
     expect(IMAGE_TURN_PROMPT).toMatch(/You do NOT write "What's drawn:" bullets/);
-    expect(IMAGE_TURN_PROMPT).toMatch(/You do NOT(:[\s\S]+?)?[\s\S]*?Classify the play as a known concept/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/Classify any play as a known concept/);
     // Spot-check that common concept names are explicitly called out as
     // forbidden — these are the priors that bias the waypoints.
     expect(IMAGE_TURN_PROMPT).toMatch(/"3-vert", "Mesh", "Smash", "Y-stick"/);
@@ -371,25 +375,41 @@ describe("IMAGE_TURN_PROMPT — fence-only emit on image turns (round 12)", () =
     // must say this explicitly so Cal doesn't sneak coaching
     // paragraphs back in.
     expect(IMAGE_TURN_PROMPT).toMatch(/generated DOWNSTREAM from the saved play/);
-    expect(IMAGE_TURN_PROMPT).toMatch(/auto-save will project coaching notes from the saved play/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/auto-save block will persist all of them and append the projected notes/);
   });
 
-  it("specifies the exact reply shape (intro line + fence + Ready prompt)", () => {
-    // Pass-2's job is now structural: one fence per turn, with a
-    // minimal intro/outro. The shape is explicit so Cal can't drift
-    // toward longer descriptive replies.
+  it("specifies the emit-all-in-one-reply shape (intro + fence-per-play, no Ready prompt)", () => {
+    // Round-13 evening: the one-play-per-turn walkthrough was
+    // dropped because turns 2-N fell back to NORMAL_PROMPT without
+    // per-crop vision context, causing plays to converge toward a
+    // template AND duplicating "Saved: X" lines. Cal now emits ALL
+    // fences in turn 1; coach revises individuals via revise_play.
     expect(IMAGE_TURN_PROMPT).toMatch(/REPLY SHAPE/);
-    expect(IMAGE_TURN_PROMPT).toMatch(/Walking through them one at a time/);
-    expect(IMAGE_TURN_PROMPT).toMatch(/Here's \[label\]/);
-    expect(IMAGE_TURN_PROMPT).toMatch(/Ready for \[next label\]\?/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/EMIT ALL PLAYS IN THIS TURN/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/Here they are/);
+    // The old per-play "Ready for [next]?" prompt is gone — it
+    // was the trigger for the lossy NORMAL_PROMPT walkthrough.
+    expect(IMAGE_TURN_PROMPT).not.toMatch(/Ready for \[next label\]\?/);
+    expect(IMAGE_TURN_PROMPT).not.toMatch(/walk through plays ONE AT A TIME/);
   });
 
-  it("preserves the one-play-per-turn cap and variant-aware roster parity", () => {
-    expect(IMAGE_TURN_PROMPT).toMatch(/ONE PLAY PER TURN/);
-    // Variant eligibility mirrors validateCenterEligibility in
+  it("includes variant-aware roster parity (preserved across the refactor)", () => {
+    // Variant eligibility still mirrors validateCenterEligibility in
     // play-content-validate.ts: C eligible in 5v5 only.
     expect(IMAGE_TURN_PROMPT).toMatch(/flag_5v5: Q exempt; C eligible/);
     expect(IMAGE_TURN_PROMPT).toMatch(/flag_7v7 \/ tackle_11: both Q and C exempt/);
+  });
+
+  it("explicitly forbids Cal from emitting its own 'Saved: ...' lines", () => {
+    // Surfaced 2026-05-21 evening: on multi-turn walkthroughs, Cal
+    // (now on NORMAL_PROMPT after turn 1 since the image is no
+    // longer in history) started mimicking the harness "Saved: X"
+    // suffix it had seen in chat history. Result: duplicated
+    // "Saved: X" lines in the chat output. The emit-all-in-turn-1
+    // model dodges this structurally, but the prompt also names
+    // it explicitly so future regressions stay caught.
+    expect(IMAGE_TURN_PROMPT).toMatch(/Emit "Saved: \.\.\." \/ "Saved play X" \/ "Added X to your playbook"/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/harness appends its OWN "Saved N plays" suffix/);
   });
 
   it("does NOT tell Cal to add a stub route for the center in 7v7", () => {
@@ -698,6 +718,20 @@ describe("PER_CROP_VISION_PROMPT — per-crop single-play translation (round 13)
     // that dashed lines ARE the route's start, not decoration.
     expect(PER_CROP_VISION_PROMPT).toMatch(/Dashed lines = pre-snap motion/);
     expect(PER_CROP_VISION_PROMPT).toMatch(/NEVER drop a dashed line/);
+  });
+
+  it("includes a worked example for bubble-under-then-drag (round 13 evening)", () => {
+    // Even with the dashed-lines rule, Cal kept missing the X
+    // bubble on Noah. The few-shot example anchors the model to
+    // a concrete encoding: dashed motion → behind-other-player
+    // transition → drag continuation. 4 anchors, curve:true.
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Worked example: bubble-under-B then 5yd drag/);
+    // The example references the specific anchor pattern.
+    expect(PER_CROP_VISION_PROMPT).toMatch(/\[\[-10, -0\.5\], \[-7, 0\.5\], \[-3, 3\], \[3, 4\]\]/);
+    // Common mistakes spelled out so the model can pattern-match
+    // its own forbidden output.
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Encoding X as a stub because "the main arrow is short"/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Encoding X as a deep route/);
   });
 
   it("forbids stub-when-confused (the #1 round-13 failure mode)", () => {

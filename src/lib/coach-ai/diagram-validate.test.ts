@@ -577,19 +577,22 @@ describe("validateDiagrams — per-reply catalog-concept fence cap (Plan checkli
   });
 });
 
-describe("validateDiagrams — IMAGE-INPUT per-reply cap (1 fence max, any type)", () => {
-  // Rule 9b's waypoint mode (2026-05-21 round 3): on image-upload
-  // turns, Cal hand-authors the play fence directly from the drawing
-  // — no compose_play, no place_offense. The per-reply cap stays at
-  // 1 fence so the coach walks through plays one at a time, but the
-  // cap now counts ALL fences (catalog-concept OR hand-authored
-  // waypoint mode), since image turns don't use the catalog-concept
-  // path anymore.
+describe("validateDiagrams — IMAGE-INPUT batch behavior (cap lifted round 13 evening)", () => {
+  // Round-13 evening (2026-05-21) lifted the 1-fence-per-image-turn
+  // cap. The cap was originally for "coach review each play before
+  // saving" but it created a worse failure mode: turns 2-N of the
+  // walkthrough fell back to NORMAL_PROMPT without per-crop vision
+  // context. Plays converged toward a template; "Saved: X" lines
+  // duplicated with Cal's NORMAL_PROMPT claim.
+  //
+  // New model: emit ALL fences in turn 1 (the one that ran per-crop
+  // vision). Coach reviews everything in one screen, revises
+  // individual plays via revise_play.
 
-  it("REJECTS 2 catalog-concept fences on an image-upload turn", () => {
+  it("ACCEPTS 2 catalog-concept fences on an image-upload turn", () => {
     const text =
       `${fullTackleMeshFence()}\nMesh #1 from image.\n\n` +
-      `${fullTackleMeshFence()}\nMesh #2 from image.`;
+      `${fullTackleMeshFence().replace("Spread Doubles — Mesh", "Spread Doubles — Smash")}\nSmash from image.`;
     const result = validateDiagrams({
       text,
       variant: "tackle_11",
@@ -598,72 +601,57 @@ describe("validateDiagrams — IMAGE-INPUT per-reply cap (1 fence max, any type)
       conceptSkeletonCallCount: 2,
       currentUserTurnHadImage: true,
     });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    const imageGateError = result.errors.find((e) =>
-      /image-input turns are capped at 1 fence per reply/i.test(e),
-    );
-    expect(imageGateError).toBeDefined();
-    expect(imageGateError).toMatch(/walk through plays ONE AT A TIME/i);
-    expect(imageGateError).toMatch(/Ready for play/);
-  });
-
-  it("REJECTS 6 catalog-concept fences on an image-upload turn (the original failure)", () => {
-    const text = Array.from({ length: 6 }, (_, i) =>
-      `${fullTackleMeshFence()}\nMesh from image #${i + 1}.`,
-    ).join("\n\n");
-    const result = validateDiagrams({
-      text,
-      variant: "tackle_11",
-      lastPlaceDefense: null,
-      placeOffenseCalled: true,
-      conceptSkeletonCallCount: 6,
-      currentUserTurnHadImage: true,
-    });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
+    // No image-turn fence-count gate fires anymore. Other gates
+    // (catalog-concept count cap, etc.) still apply — but those
+    // are separate.
+    const result_errors = result.ok ? [] : result.errors;
     expect(
-      result.errors.find((e) => /6 play fences/i.test(e) && /capped at 1/i.test(e)),
-    ).toBeDefined();
+      result_errors.find((e) =>
+        /image-input turns are capped at 1 fence per reply/i.test(e),
+      ),
+    ).toBeUndefined();
   });
 
-  it("REJECTS 2 hand-authored (waypoint-mode) fences on an image-upload turn", () => {
-    // Waypoint mode: no concept claim, so the old catalog-concept
-    // counter wouldn't fire. The new gate counts ALL fences via the
-    // loop index — catches batched waypoint plays the same way.
-    const waypointFence = makeFence({
-      title: "Noah",
-      variant: "flag_7v7",
-      players: [
-        { id: "Q", x: 0, y: -3, team: "O" },
-        { id: "C", x: 0, y: 0, team: "O" },
-        { id: "X", x: -15, y: 0, team: "O" },
-        { id: "B", x: -10, y: 0, team: "O" },
-        { id: "H", x: -5, y: 0, team: "O" },
-        { id: "Y", x: 5, y: 0, team: "O" },
-        { id: "Z", x: 15, y: 0, team: "O" },
-      ],
-      routes: [
-        { from: "X", path: [[-15, 5]] },
-        { from: "B", path: [[-10, 8]] },
-        { from: "H", path: [[-3, 8]] },
-        { from: "Y", path: [[5, 12]] },
-        { from: "Z", path: [[15, 12]] },
-      ],
-    });
-    const text = `${waypointFence}\nPlay Noah from drawing.\n\n${waypointFence.replace("Noah", "King")}\nPlay King from drawing.`;
+  it("ACCEPTS 6 hand-authored (waypoint-mode) fences on an image-upload turn", () => {
+    // The Noah/67/King/Vert Under/Money/Drive Post case — coach
+    // uploads a 6-play sheet, per-crop vision produces all 6 fences,
+    // Cal emits them all in turn 1. The image-turn fence cap should
+    // NOT block this.
+    const waypointFence = (title: string) =>
+      makeFence({
+        title,
+        variant: "flag_7v7",
+        players: [
+          { id: "Q", x: 0, y: -3, team: "O" },
+          { id: "C", x: 0, y: 0, team: "O" },
+          { id: "X", x: -15, y: 0, team: "O" },
+          { id: "B", x: -10, y: 0, team: "O" },
+          { id: "H", x: -5, y: 0, team: "O" },
+          { id: "Y", x: 5, y: 0, team: "O" },
+          { id: "Z", x: 15, y: 0, team: "O" },
+        ],
+        routes: [
+          { from: "X", path: [[-15, 5]] },
+          { from: "B", path: [[-10, 8]] },
+          { from: "H", path: [[-3, 8]] },
+          { from: "Y", path: [[5, 12]] },
+          { from: "Z", path: [[15, 12]] },
+        ],
+      });
+    const titles = ["Noah", "67", "King", "Vert Under", "Money", "Drive Post"];
+    const text = titles.map((t) => `${waypointFence(t)}\nFrom drawing: ${t}.`).join("\n\n");
     const result = validateDiagrams({
       text,
       variant: "flag_7v7",
       lastPlaceDefense: null,
       currentUserTurnHadImage: true,
-      // No place_offense, no compose_play — waypoint mode.
     });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
+    const result_errors = result.ok ? [] : result.errors;
     expect(
-      result.errors.find((e) => /2 play fences/i.test(e) && /capped at 1/i.test(e)),
-    ).toBeDefined();
+      result_errors.find((e) =>
+        /image-input turns are capped at 1 fence per reply/i.test(e),
+      ),
+    ).toBeUndefined();
   });
 
   it("ACCEPTS exactly 1 hand-authored (waypoint-mode) fence on an image-upload turn", () => {
