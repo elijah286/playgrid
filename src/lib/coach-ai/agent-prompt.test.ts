@@ -122,30 +122,34 @@ describe("NORMAL_PROMPT — Rule 7c (Plan checklist for N ≥ 3 multi-play insta
   });
 });
 
-describe("NORMAL_PROMPT — Rule 8a (lobby-mode auto-save gap)", () => {
+describe("NORMAL_PROMPT — Rule 8a (lobby-mode ASK-FIRST rule)", () => {
   // Surfaced 2026-05-20: a coach chatted with Cal from the home page
   // (no playbook open), Cal emitted 6 play fences, claimed all 6
   // saved, and the playbook count stayed at 0. The auto-commit only
   // runs when ctx.playbookId is set; in lobby mode every fence
-  // silently evaporates. The prompt now explicitly warns Cal about
-  // this so it stops claiming "saved" in lobby mode.
+  // silently evaporates. Rule 8a now FORCES Cal to ask "save or
+  // describe?" before composing AND a validator gate rejects any
+  // full-roster play emitted in lobby mode.
 
-  it("explicitly names the LOBBY-MODE AUTO-SAVE GAP", () => {
-    expect(NORMAL_PROMPT).toMatch(/LOBBY-MODE AUTO-SAVE GAP/);
+  it("names the LOBBY-MODE ASK-FIRST RULE as a hard gate", () => {
+    expect(NORMAL_PROMPT).toMatch(/LOBBY-MODE ASK-FIRST RULE/);
+    expect(NORMAL_PROMPT).toMatch(/HARD GATE/);
   });
 
-  it("warns that lobby-mode play fences evaporate at end of turn", () => {
-    expect(NORMAL_PROMPT).toMatch(/silently EVAPORATES/);
+  it("tells Cal to ask 'save or describe?' before composing in lobby mode", () => {
+    expect(NORMAL_PROMPT).toMatch(/Save this to a playbook, or just describe the concept\?/);
   });
 
-  it("calls Cal narrating 'Saved' in lobby mode a hallucination", () => {
-    expect(NORMAL_PROMPT).toMatch(/lobby mode is a hallucination/i);
+  it("instructs Cal to call list_my_playbooks if the coach says save", () => {
+    expect(NORMAL_PROMPT).toMatch(/coach says \*\*save\*\*[\s\S]*?call `list_my_playbooks`/);
   });
 
-  it("tells Cal what to do when the harness surfaces the lobby suffix", () => {
-    // The next-turn recovery instruction must include "stop composing
-    // until anchored" so Cal doesn't keep emitting fences that vanish.
-    expect(NORMAL_PROMPT).toMatch(/STOP composing until anchored/i);
+  it("preserves single-route demos (rule 9a) as exempt from the lobby gate", () => {
+    expect(NORMAL_PROMPT).toMatch(/Single-route demos per rule 9a[\s\S]*?are still fine/);
+  });
+
+  it("names the validator-gate enforcement so Cal knows the rule is structural", () => {
+    expect(NORMAL_PROMPT).toMatch(/full-roster play fence in lobby mode is REJECTED/);
   });
 });
 

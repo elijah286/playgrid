@@ -577,6 +577,94 @@ describe("validateDiagrams — per-reply catalog-concept fence cap (Plan checkli
   });
 });
 
+describe("validateDiagrams — LOBBY-MODE anchor gate (full-roster play requires playbook anchor)", () => {
+  // Surfaced 2026-05-20: a coach chatted with Cal from the home page,
+  // Cal emitted 6 full-roster ```play fences across multiple turns
+  // claiming each saved, and the playbook count stayed at 0 because
+  // the auto-commit can only run when ctx.playbookId is set. The
+  // gate makes that failure mode structurally impossible — any
+  // full-roster play emitted in lobby mode is rejected and Cal is
+  // forced to ask "save or describe?" then call list_my_playbooks.
+
+  it("REJECTS a full-roster play fence when the chat is in lobby mode", () => {
+    const result = validateDiagrams({
+      text: `${fullTackleMeshFence()}\n@H drag, @S drag — Mesh concept.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      placeOffenseCalled: true,
+      conceptSkeletonCallCount: 1,
+      playbookAnchored: false,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const lobbyError = result.errors.find((e) =>
+      /lobby mode/i.test(e) && /save this to a playbook, or just describe/i.test(e),
+    );
+    expect(lobbyError).toBeDefined();
+    // The critique must name `list_my_playbooks` as the recovery
+    // path so Cal knows exactly what to call.
+    expect(lobbyError).toMatch(/`list_my_playbooks`/);
+  });
+
+  it("ACCEPTS the same full-roster fence when the chat IS anchored", () => {
+    const result = validateDiagrams({
+      text: `${fullTackleMeshFence()}\n@H drag, @S drag — Mesh concept.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      placeOffenseCalled: true,
+      conceptSkeletonCallCount: 1,
+      playbookAnchored: true,
+    });
+    if (!result.ok) {
+      // Other rules may fail; pin only that the lobby gate is silent.
+      expect(result.errors.find((e) => /lobby mode/i.test(e))).toBeUndefined();
+    }
+  });
+
+  it("ACCEPTS a single-route demo (rule 9a, 3 players) in lobby mode", () => {
+    // Single-route demos are visual aids, not saves — the gate must
+    // let them through even without an anchor.
+    const demoFence = makeFence({
+      title: "Slant demo",
+      variant: "tackle_11",
+      players: [
+        { id: "QB", x: 0, y: -5, team: "O" },
+        { id: "X",  x: -12, y: 0, team: "O" },
+        { id: "CB", x: -12, y: 5, team: "D" },
+      ],
+      routes: [
+        { from: "X", path: [[-9, 3]], route_kind: "Slant" },
+      ],
+    });
+    const result = validateDiagrams({
+      text: `${demoFence}\n@X runs a 3-yd slant.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      playbookAnchored: false,
+    });
+    if (!result.ok) {
+      expect(result.errors.find((e) => /lobby mode/i.test(e))).toBeUndefined();
+    }
+  });
+
+  it("falls back to silent when playbookAnchored is unset (backward-compat)", () => {
+    // Legacy callers (admin training paths, tests that don't simulate
+    // a thread) don't pass playbookAnchored. The gate stays silent
+    // rather than rejecting them spuriously.
+    const result = validateDiagrams({
+      text: `${fullTackleMeshFence()}\n@H drag, @S drag — Mesh concept.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      placeOffenseCalled: true,
+      conceptSkeletonCallCount: 1,
+      // playbookAnchored intentionally omitted
+    });
+    if (!result.ok) {
+      expect(result.errors.find((e) => /lobby mode/i.test(e))).toBeUndefined();
+    }
+  });
+});
+
 describe("validateDiagrams — skeleton-fidelity gate", () => {
   // 2026-05-02 image-1 retry: even with the concept-skeleton-required
   // gate, Cal called get_concept_skeleton, IGNORED its returned fence,

@@ -464,6 +464,17 @@ export function validateDiagrams(opts: {
    *  gate fired once per turn and let the cascade through. Falls
    *  back to `conceptSkeletonCalled ? 1 : 0` when unset. */
   conceptSkeletonCallCount?: number;
+  /** True when the chat is anchored to a playbook the coach can edit
+   *  (ctx.playbookId is set). Used by the lobby-mode play-fence gate:
+   *  in lobby mode the auto-commit can't run (no target playbook),
+   *  so emitting a full-roster play fence guarantees the play
+   *  evaporates at end of turn. The gate forces Cal to call
+   *  `list_my_playbooks` first so the coach can pick an anchor.
+   *  Surfaced 2026-05-20: a coach chatted with Cal from the home
+   *  page, Cal emitted 6 ```play fences, narrated "Play 2 saved"
+   *  across multiple turns, and the playbook count stayed at 0
+   *  because nothing actually persisted. */
+  playbookAnchored?: boolean;
   /** When get_concept_skeleton ran ok, the verbatim ```play fence JSON
    *  it returned. The validator enforces that the emitted diagram's
    *  route paths match this skeleton fence per-player — catches the
@@ -1108,12 +1119,43 @@ export function validateDiagrams(opts: {
         // already satisfied upstream.
         const isFullCatalogConceptFence =
           claimedConcepts.length > 0 && offense.length >= expected;
+        const isFullRosterOffensivePlay = offense.length >= expected;
         if (isFullCatalogConceptFence) {
           catalogConceptFencesSeen += 1;
         }
         const surgicalBypass =
           opts.modifyPlayRouteCalled === true ||
           opts.addDefenseToPlayCalled === true;
+
+        // GATE A.-1 — LOBBY-MODE ANCHOR REQUIREMENT. In lobby mode
+        // (no anchored playbook) the auto-commit can't run because
+        // there's no target playbook. Full-roster play fences would
+        // silently evaporate at end of turn — Cal would narrate
+        // "saved" but the dashboard count stays at 0. Force Cal to
+        // ask "save or describe?" and call list_my_playbooks before
+        // composing. Bypassed by surgical-edit tools (the existing
+        // fence was anchored upstream) and by the explicit
+        // create_play(playbook_id:) path which targets a playbook
+        // directly. Surfaced 2026-05-20 from a coach's home-page
+        // session that emitted 6 full plays into the void.
+        //
+        // Single-route demos (rule 9a — "show me a slant", 1-3
+        // players) intentionally fall through: they're visual aids,
+        // not saves, and the validator allows them in lobby mode.
+        if (
+          isFullRosterOffensivePlay &&
+          opts.playbookAnchored === false &&
+          !surgicalBypass
+        ) {
+          errors.push(
+            `${tag}this is a full-roster play fence but the chat is in lobby mode (no playbook anchored). ` +
+            `In lobby mode the auto-commit can't save plays — every fence you emit silently evaporates at end of turn, and the coach sees the playbook count stay at 0. ` +
+            `Before composing ANY full play in lobby mode, ASK the coach first: ` +
+            `"Save this to a playbook, or just describe the concept?" ` +
+            `If save → call \`list_my_playbooks\` and STOP — the chips render automatically, the coach picks a playbook, the page anchors, and the NEXT turn you can compose with the auto-commit working. ` +
+            `If describe → answer in prose (no full-roster fence). Single-route demos per rule 9a (≤3 players) are fine in lobby mode; this gate fires only on full plays.`,
+          );
+        }
 
         // GATE A.0 — per-reply fence cap. No more than MAX_FENCES_PER_REPLY
         // catalog-concept fences in a single reply, regardless of how
