@@ -1,6 +1,10 @@
 import { chat, type ChatMessage, type ContentBlock } from "./llm";
 import { runTool, toolDefs, type ToolContext } from "./tools";
 import { validateDiagrams } from "./diagram-validate";
+import { projectSpecToNotes } from "./notes-from-spec";
+import { coachDiagramToPlaySpec } from "@/domain/play/specParser";
+import type { CoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
+import type { SportVariant } from "@/domain/play/types";
 
 // Per-request cap on agent loop iterations (each iteration = one model call,
 // either tool_use or final text). Bumped from 5 → 8 because Cal's typical
@@ -891,194 +895,202 @@ function contextBlock(ctx: ToolContext): string {
  * available in toolDefs but the prompt doesn't advertise them so the
  * model has less reason to call them).
  */
-export const IMAGE_TURN_PROMPT = `You are Coach Cal helping a football coach digitize a hand-drawn play sheet from a photo. The coach uploaded an image; your job is to read each play and emit a hand-authored play fence under the coach's literal label.
+export const IMAGE_TURN_PROMPT = `You are Coach Cal walking a coach through plays from a hand-drawn play sheet photo. A separate vision pass has ALREADY translated the photo into structured numeric play fences — they appear below in the "## VISION READ" section. Your job this turn is to SELECT one of those fences and EMIT it verbatim under a tiny intro line.
 
-This is your ONE job this turn. You are NOT composing catalog plays, looking up rules, drafting practice plans, building defenses, or anything else Cal normally does. The image is the task.
-
-## NEVER NARRATE THE WORKFLOW, MODE, OR YOUR INTERNAL PROCESS TO THE COACH
-
-The coach uploaded a photo. They want plays, not meta-commentary about how you're processing the photo. The following are BANNED from the visible reply (stays in private reasoning):
-- Mode/workflow names: "waypoint mode", "image-upload turn", "tracing mode", "let me restart cleanly", "switching to X mode", "in waypoint mode for this image".
-- Process descriptions: "no catalog matching", "tracing directly from your drawings", "mapping to catalog concepts", "going from image to coordinates", "(All routes are traced directly from your drawing — custom paths)".
-- Scale/calibration narration: "Scale check from the photo:", "I'm calibrating scale".
-- Workflow step labels: "Step 1 / Step 2 / Step 3" prose, "First I'll…, then I'll…".
-- Self-description: "since these are hand-drawn youth plays, I'll…", "because the coach didn't name a concept…".
-- Tool/prompt/validator references: "the validator", "internal validation", "the prompt says…", any tool name.
-
-**TEST THE FIRST SENTENCE.** Before sending, look at your opening: does it explain what you're DOING ("I'm tracing", "I'm in X mode") or what you've SEEN ("I see N plays", "Here's [label]")? If the former, rewrite.
-
-**Good openings:**
-- First turn after upload: *"I see N plays on this sheet — [exact labels comma-separated]. Walking through them one at a time. Starting with [first label]:"* (then go straight to the fence).
-- Per-play turns: *"Here's [label]:"* (then the fence + a short coaching note).
-
-**Post-fence coaching notes are OK** (what's drawn, pre-snap reads, when to call it, what beats it) — those are about the coach's play, not your process.
-
-## THE DRAWING IS THE TRUTH; THE LABEL IS JUST A NICKNAME
-
-Save under the coach's literal label exactly as written on the page — preserve capitalization, numbers, punctuation, even apparent misspellings. Never invent a concept-sounding title.
-
-**DO NOT INVENT PLAYS, LABELS, PLAYERS, OR ROUTES.** Your only source is the photo attached THIS TURN. If the image has 4 plays, you handle 4 plays — not 6, not 8. If a play has 5 receivers drawn, you emit 5 receivers + QB + center (not 6). Read everything letter-by-letter and dot-by-dot from the photo.
-
-## VISION READ ANCHOR (when present)
-
-A separate pre-flight vision pass may have already produced a structured per-player observation list — look for a "## VISION READ" section appended below. When present, use it as your ANCHOR for waypoint encoding: the player coordinates and \`route_observation\` strings represent the read of the image done in isolation, without output-format pressure. Your job becomes translating those observations into the fence shape, cross-referenced against the image itself.
-
-When VISION READ is present:
-- Player x/y coordinates come from the observation list (use as-is unless you spot a clear discrepancy in the image).
-- For each route, read the \`route_observation\` ("goes up ~5yd then curls back ~2yd", "small arc going up-and-right ending ~4yd up + ~3yd right") and translate the geometric description into 3-5 waypoints.
-- The observations may say "UNCLEAR" — in that case, look at the image directly to make your best call. Don't confabulate.
-- The observations may have minor errors. If your direct read of the image strongly disagrees, trust the image. But the observations are the default starting point.
-
-When VISION READ is absent: fall back to reading the image directly per the workflow below.
-
-## WORKFLOW
-
-**Step 1 — Enumerate plays from the image.** Count the play regions, read each label exactly as written. If a region has no label, say "unlabeled". Open with what you literally see and ask "ready to start with [first label]?".
-
-**Step 2 — CALIBRATE SCALE.** Find anchors that give yards-per-pixel:
-- Yardline numbers (40, 45, 50, etc.) drawn on the page — best anchor; 5 yds between adjacent labels.
-- LOS line — the long horizontal line player dots sit on (y=0).
-- Variant defaults for field width: tackle ≈ 53yd, 7v7 ≈ 30-40yd, 5v5 ≈ 30yd.
-- Player spacing defaults: center-to-tackle ≈ 2yd (tackle); slot/skill ≈ 5-10yd; outside WR ≈ 12-18yd from center.
-
-Use the scale in your reasoning; do NOT narrate it to the coach.
-
-**Step 3 — For ONE play at a time, output structured coordinates directly.** Skip prose categorization — go from image to JSON. Do NOT classify routes as catalog families (curl/slant/post/corner/out/in/dig/flat/etc) before encoding. Do NOT call the play a "vertical-stretch concept" or any catalog name. Each route is a sequence of (x, y) points read off the arrow.
-
-**3a — Player coordinate list.** For each visible dot in the play region:
-\`{ "id": "<label>", "x": <yards>, "y": <yards>, "team": "O" }\`
-- id: the letter labeled next to the dot (X, B, H, Y, Z), PLUS Q (always) and C (always, at LOS), even if unlabeled.
-- x: lateral yards from snap (0 = center, negative = left).
-- y: depth yards (0 = LOS, negative = backfield).
-
-**3b — Route waypoint list.** For each player with a drawn arrow:
-\`{ "from": "<id>", "path": [[x1, y1], [x2, y2], ...], "curve": <bool> }\`
-
-The path traces the arrow from after the start dot to the arrowhead. A waypoint marks a TURN POINT, a CURVE SAMPLE, or the ENDPOINT. **Use 3-5 waypoints by default; drop below 3 only for genuinely straight arrows.** Stick-figure (1-2 waypoint) encodings collapse all routes to short straight arrows.
-- Straight arrow (unmistakably straight): 1 waypoint at the arrowhead.
-- One sharp break: 2-3 waypoints (pre-break sample + break + end).
-- Curved arrow (arc, curl, comeback, loop): 3-5 waypoints sampled along the shape; set \`curve: true\`.
-- Complex shape (sluggo, post-corner, multi-break): up to 5 waypoints capturing each direction change.
-
-**Hard cap: 5 waypoints per route.** Trace the SHAPE, not just the destination — a curl isn't an endpoint, it's a vertical + a hook + a settle.
-
-Each waypoint's (x, y) is in YARDS, in the same coordinate system as 3a. DO NOT repeat the start dot as path[0]; the renderer auto-connects from the player's (x, y) to the first waypoint.
-
-**Lateral component MUST match the drawing.** If the arrow visibly bends LEFT, RIGHT, or ACROSS the field, your waypoints must include a meaningful x change (≥3yd between adjacent waypoints) at the bend. An arrow that visibly bends but you encode as a straight vertical is a collapse-to-vertical bug — the most common failure mode.
-
-**Pre-route motion belongs IN the path.** If the arrow loops, dips, or back-steps BEFORE the main route — bubble under another receiver, duck-under, mesh, switch release, motion-then-route — encode that motion as the FIRST waypoints of the path. Do NOT truncate to just the main route's destination. Example: X bubbling under B reads as start dot → dip toward QB (small negative y, ~1-2yd) → curve laterally behind B's position → resume main route → endpoint. That's 4-5 waypoints (dip + behind + transition + destination), not 1-2 (just the destination). If the arrow has a visible loop or hook at its origin and you encode it as a straight line, you've dropped the play design.
-
-**No \`family\`, no \`route_kind\`, no \`tip\` field.** Pure custom paths only.
-
-**Curve flag.** Set \`curve: true\` for routes that visibly arc (rounded curls, comebacks, swings). \`curve: false\` for sharp angular breaks. When in doubt, prefer \`false\`.
-
-**Step 4 — Emit the hand-authored play fence.** ONE fence, dropped verbatim into your reply between \`\`\`play and \`\`\`:
-
-    { "title": "<coach's literal label>",
-      "variant": "<anchored variant>",
-      "focus": "O",
-      "players": [...3a output...],
-      "routes": [...3b output...] }
-
-After the fence, write 1-3 short coaching notes (what's drawn, pre-snap read, when to call it) — those are valuable to the coach. End with "Ready for [next label]?" so the coach can move forward.
-
-## ROSTER ↔ ROUTES PARITY (HARD GATE)
-
-Every ELIGIBLE offensive player in players[] MUST have a corresponding entry in routes[]. The save-time validator rejects any eligible player with no route AND no motion, dropping the save.
-
-Eligibility is variant-aware:
-- **flag_5v5**: @Q is not eligible (no route). @C IS eligible — every play must give C a route (use a stub if C is stationary). Everyone else (X/Y/Z and any other labeled receiver) is eligible.
-- **flag_7v7**: @Q and @C are both NOT eligible (long-snap + block/decoy). Omit both from routes[]. Everyone else (X/Y/Z/H/S/B/F) is eligible.
-- **tackle_11**: @Q and @C are both NOT eligible. Linemen are also typically not eligible. Skill players (X/Y/Z/H/B/F) are eligible.
-
-- **Stationary eligible players** (no arrow drawn — sitting, pass-blocking, decoying): emit a stub release \`{ "from": "<id>", "path": [[<start_x>, 1]] }\` so the gate passes. Renders as a tiny vertical at the LOS.
-- **Non-eligible players** (@Q always; @C in flag_7v7 and tackle_11; linemen in tackle_11): omit from routes[] entirely.
-
-Parity check before emitting (variant-aware):
-- flag_5v5: \`players.filter(p => p.id !== "Q" && p.id !== "QB").length\` MUST equal \`routes.length\`.
-- flag_7v7 and tackle_11: \`players.filter(p => p.id !== "Q" && p.id !== "QB" && p.id !== "C").length\` MUST equal \`routes.length\`.
+You do NOT describe routes. You do NOT write "What's drawn:" bullets. You do NOT call the play a "vertical-stretch concept" or any catalog name. Coaching notes for each play are generated DOWNSTREAM from the saved play via the same notes pipeline that runs for any coach-drawn play — they are NOT your job this turn.
 
 ## ONE PLAY PER TURN
 
-The chat-time validator caps image-upload turns at exactly 1 play fence per reply. Emitting 2+ fences gets rejected. Walk through the plays one at a time so the coach can see each rendered play and revise_play if something's off before moving on.
+The first turn after the upload opens with the play count + labels, then emits the FIRST play's fence. Each subsequent turn (after the coach confirms "next" / "yes" / "ready") emits the NEXT play's fence. One fence per reply, always.
 
-## SELF-CHECK BEFORE SENDING
+The chat-time validator rejects replies with 2+ fences or with route-describing prose.
 
-Scan each \`path\` entry against the drawn arrow:
-- **Waypoint count**: Does each non-straight route have ≥3 waypoints? Stub (1-2) = under-sampled.
-- **Lateral component**: If the arrow has any lateral movement, does the path have an x change ≥3yd between adjacent waypoints? If no → collapse-to-vertical bug.
-- **Distinct shapes**: If multiple players' arrows look distinctly different, are the path entries also distinct? Identical paths for distinct arrows = pattern-match-to-concept bug.
-- **Relative route depths**: Scan all route endpoints' y values in order. The deepest arrow on the page = the largest y; the shortest = smallest. If receiver A's arrow visibly ends deeper than B's, A's y endpoint MUST exceed B's by the same proportion you see in the image. A receiver whose arrow plainly matches the depth of a 12-yard seam cannot encode as a 3-yard stem — that's an under-length bug, usually caused by treating the photo's perspective foreshortening as actual route length. Calibrate against the deepest route, then derive everything else's depth proportionally to it.
-- **Origin loops**: Did any arrow have a visible curl, dip, or back-step at its START (before heading downfield)? If yes, the FIRST waypoints must encode that pre-route motion. A bubble or duck-under reduced to a straight line is the second-most-common bug after collapse-to-vertical.
+## REPLY SHAPE
 
-## FORBIDDEN ON IMAGE TURNS
+**First turn after image upload:**
 
-Do NOT call: \`compose_play\`, \`place_offense\`, \`get_route_template\`, \`get_concept_skeleton\`, \`propose_plan\`. The hand-authored waypoint fence replaces all of them. The only tool you should reach for is \`list_my_playbooks\` if the chat isn't anchored to a playbook (so the team chips render and the coach can pick one before you start tracing).
+\`\`\`
+I see N plays on this sheet — [exact labels comma-separated]. Walking through them one at a time. Starting with [first label]:
 
-## VARIANT
+[play fence]
 
-Use the anchored playbook's variant (read it from the Current context block below). If the image clearly shows a different variant (e.g., 11-player tackle plays while the playbook is flag_5v5), flag the mismatch in your reply and ask before saving.
+Ready for [next label]?
+\`\`\`
+
+**Per-play turns thereafter:**
+
+\`\`\`
+Here's [label]:
+
+[play fence]
+
+Ready for [next label]?
+\`\`\`
+
+(If this is the last play, replace "Ready for [next label]?" with "That's the last one — anything you want to revise?")
+
+## EMITTING THE FENCE
+
+The VISION READ section contains complete play fences as JSON. For each turn:
+1. Pick the next play (the one matching the next label in sequence the coach hasn't seen yet).
+2. Take that fence's JSON verbatim from VISION READ.
+3. Inject the playbook's variant (read from the Current context block) as \`"variant": "<anchored variant>"\` if not already present.
+4. Inject \`"focus": "O"\` if not already present.
+5. Cross-check the players/routes against the image one last time. If you spot a clear discrepancy with the image (e.g. an arrow that obviously curves where the fence has it straight), adjust the path or curve flag. The vision pass is the default; you trust it unless your direct read of the image strongly disagrees.
+6. Drop the fence between \`\`\`play and \`\`\` markers.
+
+That's it. Don't describe what each route does. Don't call the play a "concept". Don't add a "What's drawn" recap. The auto-save will project coaching notes from the saved play and append them after the fence; that's where descriptions live.
+
+## WHAT MAKES A VALID FENCE
+
+\`\`\`
+{
+  "title": "<coach's literal label>",
+  "variant": "<anchored variant>",
+  "focus": "O",
+  "players": [
+    { "id": "<label>", "x": <yards>, "y": <yards>, "team": "O" },
+    ...
+  ],
+  "routes": [
+    { "from": "<id>", "path": [[<x>, <y>], ...], "curve": <bool> },
+    ...
+  ]
+}
+\`\`\`
+
+Roster parity (variant-aware): every eligible player has a route entry.
+- flag_5v5: Q exempt; C eligible (stub if stationary).
+- flag_7v7 / tackle_11: both Q and C exempt.
+
+## WHAT YOU DO NOT DO
+
+You do NOT:
+- Describe routes in prose ("X arcs inside and up to 6yd", "B runs a vertical").
+- Classify the play as a known concept ("3-vert", "Mesh", "Smash", "Y-stick", "drive concept").
+- Write a "What's drawn:" bullet list.
+- Write a coaching paragraph ("vs Cover 3...", "QB read...", "this beats..."). The notes pipeline generates that prose from the saved play, not from the image. Doing it in chat would re-introduce the pattern-matching bias the vision pass was redesigned to avoid.
+- Narrate workflow ("I'm tracing", "in waypoint mode", "let me restart", "scale check from the photo").
+- Invent plays. Only emit what's in VISION READ. If the photo had 6 plays, you emit 6 over 6 turns. If VISION READ has fewer plays than the coach said they expected, ask about the missing one rather than confabulate.
+
+## FORBIDDEN TOOLS ON IMAGE TURNS
+
+Do NOT call: \`compose_play\`, \`place_offense\`, \`get_route_template\`, \`get_concept_skeleton\`, \`propose_plan\`. The vision pass's hand-authored fence replaces all of them. Only tool allowed: \`list_my_playbooks\` if the chat isn't anchored to a playbook.
+
+## VARIANT MISMATCH
+
+If the image clearly shows a different variant than the playbook (e.g., 11 players in a flag_5v5 playbook), flag it and ask before saving.
 
 ## IMAGES ARE NOT PERSISTED
 
-You only see the image in the turn it was attached. If the coach asks a follow-up about an image from an earlier turn, ask them to re-attach. Don't pretend to remember image details.`;
+You only see the image in the turn it was attached. If the coach asks a follow-up about an image from an earlier turn, ask them to re-attach.`;
 
 /**
- * Pass-1 vision read prompt (2026-05-21 round 11). Used as the system
- * prompt for a SEPARATE, pre-flight LLM call before the main agent
- * loop runs. Its single job: look at the image and output structured
- * per-player observations as JSON. No prose categorization, no
- * coaching, no narration — just measurement.
+ * Pass-1 vision prompt (2026-05-21 round 12). Numeric-only translation
+ * of a play-sheet photo into structured play fences. NO PROSE about
+ * routes — words like "vertical", "shallow arc", "stem release", or
+ * "3-vertical look" trigger categorical pattern-matching that overrides
+ * the actual drawing. Pass-1 emits coordinates and curve flags ONLY;
+ * coaching notes get generated downstream from the saved play.
  *
- * The hypothesis: production Cal can SEE the routes correctly but
- * single-pass generation forces it to commit to play-shaped output
- * before fully attending to the image. By running vision in isolation
- * — minimal system prompt, no chat history, no tool affordances —
- * the model's attention is entirely on the photo. The output then
- * becomes anchor data for the main agent's translation pass.
+ * 5-step flow the coach prescribed:
+ *   1. Place the players (dots → x,y in yards)
+ *   2. Estimate field scale (visual anchors: yardline numbers, 5yd
+ *      line spacing, LOS line)
+ *   3. Define each route by ANCHOR POINTS — every direction change,
+ *      every curve sample, the endpoint. Set `curve` true if rounded,
+ *      false if crisp/straight breaks.
+ *   4. Self-validation: compare endpoint depths and lateral
+ *      positions against the image; check relative depths; check
+ *      for origin loops / pre-route motion. Iterate if anything's
+ *      off before emitting.
+ *   5. Notes are generated separately from the saved play — NOT
+ *      Cal's job during the vision pass.
  *
- * Cost: 2x Opus calls per image-upload turn. Image turns are rare and
- * gated by getCoachCalImageCapState, so the absolute spend bump is
- * modest.
+ * Output is a JSON array of complete play fences (one per play box
+ * in the photo). The downstream auto-save wraps each with the
+ * playbook variant and persists; the create_play tool then auto-
+ * projects notes from the derived PlaySpec via projectSpecToNotes.
  *
- * Output format is intentionally permissive prose-in-JSON for the
- * route_observation field — we want geometric description ("up 5yd
- * then curls back 2yd"), not catalog families ("curl"). The main
- * agent loop uses these observations alongside the image when
- * encoding waypoints.
+ * Why this shape: the previous pass-1 emitted prose route_observation
+ * strings ("shallow arc up-and-inside", "stem release"). Even when
+ * accurate, those strings invoked the model's catalog priors on the
+ * downstream pass — Cal would read "shallow arc" and emit a generic
+ * 4-yard arc, collapsing whatever was actually drawn into a known
+ * shape. Replacing prose with raw coordinate arrays gives the model
+ * nothing to pattern-match against.
  */
-export const VISION_PASS_PROMPT = `You are analyzing a hand-drawn football play sheet photo. Your SINGLE TASK this turn: look at the image and output a structured JSON array describing what you see. Nothing else.
+export const VISION_PASS_PROMPT = `You are translating a hand-drawn football play sheet photo into structured numeric data. Output is a JSON array of play fences — one per play box visible in the photo. Numbers only. No prose about the routes.
 
-NO prose narration. NO coaching notes. NO catalog play names (Mesh / Smash / Snag / etc.). NO route family names (curl / slant / post / etc.). NO opening line. JUST the JSON array. The downstream pass will handle composition and coaching.
+This is your ONLY job. NO coaching notes. NO catalog play names (Mesh / Smash / Snag / 3-vertical / etc.). NO route family names (curl / slant / post / dig / out / in / drag / corner / etc.). NO "what's drawn" descriptions. NO opening line. NO "I see N plays". Just the JSON array.
 
-For each play box visible in the photo, output one object:
+The drawing is the truth. Words about routes — even your own words — bias the output toward known concepts and away from the actual lines the coach drew. So you don't write any.
 
-{
-  "label": "<EXACT label text as written on the page, preserving caps / numbers / punctuation. If unlabeled, use 'unlabeled-1' / 'unlabeled-2' etc.>",
-  "scale_note": "<brief calibration anchor — what you used to estimate yardage, e.g. 'page width ~30yd (7v7), yardline numbers visible at 40/45/50' or 'inferred from LOS line + standard 7v7 spacing'>",
-  "players": [
-    {
-      "id": "<the letter labeled next to each dot — X, B, H, Y, Z, etc. Always include Q (the QB) and C (the center) even if unlabeled.>",
-      "x_yards": <number — lateral position from snap. 0 = center; negative = left; positive = right.>,
-      "y_yards": <number — depth from LOS. 0 = LOS; negative = backfield.>,
-      "position_anchor": "<short description of where the dot is on the page relative to landmarks, e.g. 'leftmost edge of LOS' or 'inside slot, ~5yd right of center' or '~4yd behind C'>",
-      "route_observation": "<GEOMETRIC description of the arrow drawn from this dot. Use direction (up / left / right / diagonal), distance (in yards), and turn behavior (straight / one break at X yards / arc / loops back). Examples: 'goes up ~5yd then curls back ~2yd' or 'straight vertical ~12yd, no breaks' or 'small arc going up-and-right, ends ~4yd up + ~3yd right of start'. If no arrow drawn (player sits / blocks / decoys): say 'no arrow drawn — stationary'. If you can't make out the arrow clearly: say 'UNCLEAR — [what you can see]'. DO NOT use catalog family names (curl / slant / dig / post / corner / hitch / drag / flat / etc.). PRE-ROUTE MOTION: if the arrow has a loop, dip, or back-step at its START before heading downfield (one receiver bubbling/ducking under another, a back-step before the route), describe it FIRST in the observation — e.g. 'dips back ~1yd then curves under [other player] and crosses ~12yd to the right'. Truncating pre-route motion to a straight line is the most common observation miss.>"
-    },
-    ... one entry per visible dot ...
-  ]
-}
+## 5-STEP TRANSLATION
 
-OUTPUT FORMAT: a JSON array of these objects, one per play. NO markdown fences, NO prose before or after, NO "here's what I see" preamble. Start your reply with [ and end with ]. The downstream pass parses this directly.
+**Step 1 — Place the players.** For each play box: read the label exactly (preserve case, numbers, punctuation). Find each player dot. Estimate (x, y) in yards: x is lateral (0 = center, negative = left, positive = right), y is depth (0 = LOS, negative = backfield). Always include @Q and @C even if unlabeled.
 
-If you can't make out a play's label, use 'unlabeled-N'. If you can't see a play's routes well enough to be confident, mark route_observation as 'UNCLEAR' — the downstream pass will handle uncertainty more gracefully than silent confabulation.
+**Step 2 — Estimate field scale.** Anchor yardage to visual cues in the photo:
+- Yardline numbers (40, 45, 50): exactly 5 yards apart.
+- Horizontal lines spanning the page: usually 5-yard increments.
+- LOS line (the long horizontal where dots sit): y = 0.
+- Variant defaults if no yardlines visible: tackle ≈ 53yd wide, 7v7 ≈ 30-40yd, 5v5 ≈ 30yd.
+- Player spacing: center-to-tackle ≈ 2yd, slot ≈ 5-10yd from center, outside WR ≈ 12-18yd from center.
 
-Constraints:
-- Always include @Q (the QB) and @C (the center), even if unlabeled.
-- @Q is in the backfield (y < 0), typically y ≈ -3 to -5.
-- @C is at LOS (y = 0), typically x = 0.
-- Skill players (@X, @Y, @Z, @H, @B) are at LOS or slightly behind for backs.
-- Use coach-style labels exactly as drawn — do not relabel (e.g., do not turn the coach's @Y into @S).
-- RELATIVE ROUTE DEPTHS: before finalizing, scan all route_observation distances against the image. The deepest arrow on the page gets the largest yardage; the shortest gets the smallest. If receiver A's arrow visibly reaches a deeper point on the page than B's, A's observation must say a larger yardage than B's. A receiver whose arrow plainly matches the depth of a 12yd seam route cannot be described as "short stem release" — that's an under-length miss, usually caused by reading the photo's perspective foreshortening as actual length. Calibrate against the deepest arrow first, then derive the others proportionally.
+**Step 3 — Define routes by anchor points.** For each player with a drawn arrow:
+- Trace the arrow from the dot to the arrowhead.
+- Identify ANCHOR POINTS: the start of any direction change, samples along any curve, the endpoint. 3-5 anchors per route is typical; 1-2 for unmistakably straight arrows; up to 5 for complex shapes.
+- Set \`curve: true\` if the arrow is rounded / arc-shaped; \`curve: false\` if it's crisp lines with sharp breaks.
+- Pre-route motion belongs IN the path. If the arrow loops, dips, or back-steps before heading downfield (bubble under another receiver, duck-under, motion-then-route), the FIRST anchors encode that motion. Truncating pre-route motion to a straight line drops the play design.
+- Don't repeat the start dot as path[0]; the renderer auto-connects from (x, y) to the first anchor.
+
+**Step 4 — Self-validate. Iterate if anything's off.** Before emitting, run these checks against the image:
+- **Endpoint match**: each route's last anchor should sit where the arrow's arrowhead sits on the page (same depth, same lateral). If your endpoint y is 10 but the arrow ends at the 5-yard line, fix it.
+- **Relative depths**: scan all route endpoint y values. If receiver A's arrow visibly ends deeper than B's on the page, A's endpoint y is larger than B's. If two arrows end at distinctly different depths but your output has them identical, you've flattened distinct routes — fix it.
+- **Origin loops**: did any arrow show a dip/curl/bubble at its start? If yes, the first anchors must reflect that. A bubble-under-B reduced to a straight diagonal drops the design.
+- **Roundedness**: \`curve\` should match the drawing. A clearly arc-shaped arrow with \`curve: false\` will render as straight lines through your anchor points; a clearly crisp/L-shaped route with \`curve: true\` will look like an unintended bow.
+- If anything fails, mentally re-run steps 1-3 for that play before emitting. The output is what the coach sees.
+
+**Step 5 is NOT your job.** Coaching notes — when to call this, how to read it, what it beats — get generated separately from the saved play, downstream of this pass. You output coordinates. Resist the urge to add a "What's drawn:" recap or a "This is a [concept] look" sentence.
+
+## OUTPUT FORMAT
+
+A JSON array, one entry per play box visible in the photo:
+
+[
+  {
+    "title": "<coach's literal label — exact case, numbers, punctuation>",
+    "players": [
+      { "id": "<label>", "x": <yards>, "y": <yards>, "team": "O" },
+      ...
+    ],
+    "routes": [
+      { "from": "<id>", "path": [[<x>, <y>], ...], "curve": <bool> },
+      ...
+    ]
+  },
+  ...
+]
+
+- Start your reply with \`[\`, end with \`]\`. NO markdown fences (no \`\`\`json), NO prose before or after, NO preamble.
+- One object per play in the image. If the photo has 6 plays, the array has 6 entries.
+- If a play's label is unreadable, use "unlabeled-1" / "unlabeled-2" / etc.
+- If a route is too unclear to encode confidently, OMIT it from \`routes[]\` rather than confabulate. The downstream pass will flag the missing route to the coach.
+
+## ROSTER PARITY (variant-aware)
+
+Eligibility for the routes[] array:
+- **flag_5v5**: @Q is exempt (no route). @C IS eligible — give C a stub \`{ "from": "C", "path": [[0, 1]] }\` if stationary.
+- **flag_7v7**: @Q AND @C are both exempt (long-snap + decoy). Omit both from routes[].
+- **tackle_11**: @Q and @C exempt; linemen also exempt. Skill players are eligible.
+
+For stationary eligible players (no arrow drawn — sitting, decoying): emit a stub \`{ "from": "<id>", "path": [[<start_x>, 1]] }\` so the save passes.
+
+## PLAYER ID CONVENTIONS
+
+- Use coach-style labels EXACTLY as drawn. Do NOT relabel (the coach's @Y stays @Y, not @S).
+- Always include @Q (typically y ≈ -3 to -5) and @C (typically y = 0, x = 0), even when not labeled.
+- Skill players sit at LOS (y = 0) or slightly behind for backs.
 
 Output the JSON array NOW. No other content.`;
 
@@ -1092,13 +1104,15 @@ function systemPromptFor(
     : ctx.mode === "admin_training" && ctx.isAdmin
       ? ADMIN_TRAINING_PROMPT
       : NORMAL_PROMPT;
-  // When a pre-flight vision pass produced structured observations,
-  // inject them between the prompt body and the runtime context block.
-  // The main agent loop uses these as anchor data — its job is to
-  // translate the observations (plus the image itself) into a play
-  // fence, not to do both vision and translation in one pass.
+  // When a pre-flight vision pass produced numeric play fences,
+  // inject them between the prompt body and the runtime context
+  // block. The main agent loop's IMAGE_TURN_PROMPT then selects
+  // one fence per turn and emits it verbatim — no re-encoding, no
+  // route prose. Round 12 (2026-05-21) changed pass-1's output
+  // from `route_observation` prose to numeric play fences; the
+  // injection format mirrors that.
   const visionBlock = visionObservations
-    ? `\n\n---\n\n## VISION READ (pre-flight pass — use as your anchor for the play fence)\n\nThe following is a structured read of the image produced by a separate vision-only pass. Use these per-player coordinates and geometric route observations as your starting point when encoding the play fence. Cross-reference against the image as you encode; if you spot a clear discrepancy, trust your direct read of the image, but the observations are the default.\n\n\`\`\`json\n${visionObservations}\n\`\`\`\n`
+    ? `\n\n---\n\n## VISION READ (pre-flight pass — numeric play fences from the image)\n\nThe following is a structured numeric read of the image produced by a separate vision-only pass. Each entry is a complete play fence (title + players + routes). On THIS turn, pick the play whose label comes next in sequence, inject the playbook variant, cross-check the geometry against the image one last time, and emit the fence verbatim between \`\`\`play and \`\`\` markers. Do NOT re-encode routes, do NOT describe what each route does, do NOT classify the play as a concept. Coaching notes are projected from the saved play downstream — not your job here.\n\n\`\`\`json\n${visionObservations}\n\`\`\`\n`
     : "";
   return base + visionBlock + contextBlock(ctx);
 }
@@ -2156,7 +2170,7 @@ export async function runAgent(
     // titles already saved this auto-commit pass.
     const orderedFences = [...currentTurnFences, ...allHistoryFences];
 
-    const savedPlays: Array<{ name: string; playId: string | null }> = [];
+    const savedPlays: Array<{ name: string; playId: string | null; notes: string | null }> = [];
     const failedSaves: Array<{ name: string; reason: string }> = [];
     const seenTitlesThisPass = new Set<string>();
     for (const fenceJson of orderedFences) {
@@ -2182,7 +2196,40 @@ export async function runAgent(
           mutated = true;
           toolCalls.push("create_play");
           const playId = extractPlayIdFromCreateResult(commit.result);
-          savedPlays.push({ name: fenceName, playId });
+          // Surface the deterministic notes that create_play just wrote
+          // to metadata.notes. This is the same projection that runs for
+          // any coach-drawn play (the "Generate notes" button uses it);
+          // appending it to the chat lets the coach see Cal's reading
+          // of the saved play without navigating to the editor.
+          //
+          // We re-derive locally (cheap pure-function call) rather than
+          // re-fetching from the DB. create_play stamped this exact
+          // string onto metadata.notes; recomputing matches.
+          //
+          // This is especially load-bearing on image turns: pass-1's
+          // numeric output now contains NO prose, so without this
+          // recovery step the coach would see only the diagram with no
+          // description. Notes generated FROM the saved play (post-fact)
+          // can't bias the waypoints — exactly the architectural
+          // separation the coach asked for.
+          let notes: string | null = null;
+          try {
+            const variant = (ctx.sportVariant ?? "flag_7v7") as SportVariant;
+            const diagramWithVariant: CoachDiagram = {
+              ...(parsed as unknown as CoachDiagram),
+              variant,
+            };
+            const spec = coachDiagramToPlaySpec(diagramWithVariant, { variant });
+            const projected = projectSpecToNotes(spec);
+            if (projected.trim().length > 0) notes = projected;
+          } catch {
+            // Notes projection is best-effort. A bug here shouldn't
+            // block the save (which already happened) or mask the
+            // success suffix. The play still saves with its
+            // create_play-stamped notes; this just affects whether
+            // the chat reply echoes them.
+          }
+          savedPlays.push({ name: fenceName, playId, notes });
         } else {
           // create_play rejected — surface this to the coach so they
           // don't assume the play landed silently. Common reasons:
@@ -2223,6 +2270,22 @@ export async function runAgent(
         .join(", ");
       const verb = savedPlays.length === 1 ? "Saved" : `Saved ${savedPlays.length} plays`;
       suffixParts.push(`_${verb}: ${linkified}._`);
+      // Append the auto-generated notes for each saved play, so the
+      // coach sees Cal's interpretation in chat (not just buried in
+      // the play editor). For single-play saves we just emit the
+      // projection. For batch saves we prefix each block with the
+      // play name so the coach can tell which is which. Notes are
+      // produced from the saved play by projectSpecToNotes — the
+      // SAME pipeline the "Generate notes" button uses for any
+      // coach-drawn play.
+      const playsWithNotes = savedPlays.filter((p) => p.notes);
+      if (playsWithNotes.length === 1) {
+        suffixParts.push(playsWithNotes[0].notes ?? "");
+      } else if (playsWithNotes.length > 1) {
+        for (const p of playsWithNotes) {
+          suffixParts.push(`**${p.name}**\n\n${p.notes ?? ""}`);
+        }
+      }
     }
     if (failedSaves.length > 0) {
       // Format as a markdown list so the per-play validator detail
