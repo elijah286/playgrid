@@ -180,19 +180,55 @@ describe("NORMAL_PROMPT — Rule 9b (hand-drawn image translation)", () => {
     expect(NORMAL_PROMPT).toMatch(/kept making this play over and over/i);
   });
 
-  it("walks through the 6-step image workflow in order", () => {
-    const step1 = NORMAL_PROMPT.indexOf("Step 1 — Enumerate");
+  it("walks through the 7-step image workflow in order", () => {
+    const step1 = NORMAL_PROMPT.indexOf("Step 1 — Enumerate what's LITERALLY on the page");
     const step2 = NORMAL_PROMPT.indexOf("Step 2 — For ONE play at a time");
     const step3 = NORMAL_PROMPT.indexOf("Step 3 — Build the route map");
     const step4 = NORMAL_PROMPT.indexOf("Step 4 — NOW pick the catalog concept");
     const step5 = NORMAL_PROMPT.indexOf("Step 5 — Use `overrides`");
-    const step6 = NORMAL_PROMPT.indexOf("Step 6 — Confirm BEFORE composing");
+    const step6 = NORMAL_PROMPT.indexOf("Step 6 — Save with the COACH'S LITERAL LABEL");
+    const step7 = NORMAL_PROMPT.indexOf("Step 7 — Confirm BEFORE composing");
     expect(step1).toBeGreaterThan(-1);
     expect(step2).toBeGreaterThan(step1);
     expect(step3).toBeGreaterThan(step2);
     expect(step4).toBeGreaterThan(step3);
     expect(step5).toBeGreaterThan(step4);
     expect(step6).toBeGreaterThan(step5);
+    expect(step7).toBeGreaterThan(step6);
+  });
+
+  it("forbids inventing play names from prompt scaffolding or training data", () => {
+    // Surfaced 2026-05-21: the previous prompt contained literal example
+    // labels ("Noah / 67 / King / Vert Under / Money / Drive Pass") that
+    // Cal recited as if they were in the current image. The CRITICAL
+    // guard is the new rule that placeholders are not real labels.
+    expect(NORMAL_PROMPT).toMatch(/DO NOT INVENT PLAY NAMES/);
+    expect(NORMAL_PROMPT).toMatch(/PROMPT SCAFFOLDING, not real labels/);
+    expect(NORMAL_PROMPT).toMatch(/only source of labels is the actual image/i);
+  });
+
+  it("does not bake specific team-named labels into the prompt as templates", () => {
+    // The exact labels coaches use vary by team. The prompt must NOT
+    // contain literal example play names that Cal could mistake for
+    // labels in any given image. Specifically the labels that leaked
+    // before — keep them out of the prompt body (the regression-
+    // history note is the only place they're allowed, and even there
+    // we no longer list them verbatim).
+    //
+    // Strip any line that says "labeled X, Y, Z, ..." with multiple
+    // proper-noun-shaped labels — that's the scaffolding pattern that
+    // taught Cal to recite them.
+    expect(NORMAL_PROMPT).not.toMatch(/labeled Noah, 67, King, Vert Under, Money, Drive Pass/);
+    expect(NORMAL_PROMPT).not.toMatch(/"Money"|"Drive Pass"|"Trips Plus"/);
+  });
+
+  it("explicitly requires saving under the coach's literal label, not the catalog name", () => {
+    // Surfaced 2026-05-21: Cal composed a catalog concept for a play
+    // labeled with the coach's team-specific name, then saved it
+    // under the catalog name. Coach can't find their play by the
+    // team's name. Step 6 must call this out.
+    expect(NORMAL_PROMPT).toMatch(/Save with the COACH'S LITERAL LABEL, never the catalog concept name/i);
+    expect(NORMAL_PROMPT).toMatch(/NEVER under the catalog concept name/);
   });
 
   it("gives a hand-drawn shape → route family vocabulary", () => {
@@ -216,11 +252,11 @@ describe("NORMAL_PROMPT — Rule 9b (hand-drawn image translation)", () => {
     expect(NORMAL_PROMPT).toMatch(/set_depth_yds: 2/);
   });
 
-  it("instructs Cal to use the COACH'S name, not the catalog concept name", () => {
-    // The coach's "Vert Under" must be saved as "Vert Under", not as
-    // "Four Verticals". The team-specific name is how the coach will
-    // find the play later.
-    expect(NORMAL_PROMPT).toMatch(/save with the coach's NAME/i);
+  it("instructs Cal to use the COACH'S label, not the catalog concept name", () => {
+    // The coach's team-specific label must be the saved title, not
+    // the catalog concept Cal composed from. The team-specific name
+    // is how the coach will find the play later.
+    expect(NORMAL_PROMPT).toMatch(/COACH'S LITERAL LABEL/);
   });
 
   it("requires Cal to ASK when no catalog concept fits cleanly", () => {
