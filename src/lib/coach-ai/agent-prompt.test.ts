@@ -322,93 +322,79 @@ describe("NORMAL_PROMPT — Rule 9b (image input, waypoint mode)", () => {
   });
 });
 
-describe("IMAGE_TURN_PROMPT — focused image-only system prompt", () => {
-  // Surfaced 2026-05-21 round 10: coach's hypothesis — Cal can SEE
-  // the hand-drawn routes correctly (Opus 4.7 confirmed in a parallel
-  // chat) but the JSON output is pattern-matched to "play-shaped"
-  // generic geometry. Likely cause: prompt-context dilution — the
-  // model's attention splits across hundreds of unrelated Cal rules
-  // (KB, scheduling, defense composition, color rules, etc.) when
-  // generating waypoints, leaving little focus for the vision task.
+describe("IMAGE_TURN_PROMPT — fence-only emit on image turns (round 12)", () => {
+  // Surfaced 2026-05-21 round 12: even with the focused IMAGE_TURN_PROMPT
+  // (round 10) + numeric pass-1 (round 11), Cal still pattern-matched
+  // routes ("3-vertical look") because pass-2 generated PROSE about
+  // the routes alongside the fence. Prose-shaped output triggered
+  // catalog priors that biased the fence's waypoints.
   //
-  // Fix: a separate, focused system prompt used ONLY on image-upload
-  // turns. ~80 lines vs the normal ~700+. Strips everything that
-  // doesn't apply to image-tracing. Text-only turns are untouched —
-  // they keep using NORMAL_PROMPT.
+  // Round-12 fix: pass-2 emits ONLY the fence. No "What's drawn"
+  // bullets, no concept names, no coaching paragraph. Coaching notes
+  // come from the saved play via projectSpecToNotes — the SAME
+  // pipeline the "Generate notes" button uses for any coach-drawn
+  // play. Cal in the image turn is a fence-router, not a coach-writer.
 
-  it("is dramatically shorter than NORMAL_PROMPT (frees attention for vision)", () => {
-    // If the focused prompt grows back toward NORMAL_PROMPT's size,
-    // the whole point of this fix is defeated.
+  it("is dramatically shorter than NORMAL_PROMPT (frees attention for the image)", () => {
     expect(IMAGE_TURN_PROMPT.length).toBeLessThan(NORMAL_PROMPT.length / 4);
   });
 
-  it("opens with identity scoped to the image task", () => {
-    expect(IMAGE_TURN_PROMPT).toMatch(/^You are Coach Cal helping a football coach digitize a hand-drawn play sheet/);
-    expect(IMAGE_TURN_PROMPT).toMatch(/This is your ONE job this turn/);
+  it("opens by establishing pass-2 as a fence-selector, not a route-describer", () => {
+    expect(IMAGE_TURN_PROMPT).toMatch(/walking a coach through plays/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/A separate vision pass has ALREADY translated/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/SELECT one of those fences and EMIT it verbatim/);
   });
 
-  it("includes the no-narration rule", () => {
-    expect(IMAGE_TURN_PROMPT).toMatch(/NEVER NARRATE THE WORKFLOW/);
-    expect(IMAGE_TURN_PROMPT).toMatch(/TEST THE FIRST SENTENCE/);
+  it("explicitly forbids route-describing prose and concept naming", () => {
+    // The bug round 12 fixes: Cal emitted "What's drawn: X arcs inside
+    // and up to 6yd... This is a 3-vertical look..." alongside the
+    // fence. The prose biased the fence's waypoints (Z stretched to
+    // match the "3-vertical" mental model). New rule: no route prose
+    // in the image turn, period.
+    expect(IMAGE_TURN_PROMPT).toMatch(/You do NOT describe routes/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/You do NOT write "What's drawn:" bullets/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/You do NOT(:[\s\S]+?)?[\s\S]*?Classify the play as a known concept/);
+    // Spot-check that common concept names are explicitly called out as
+    // forbidden — these are the priors that bias the waypoints.
+    expect(IMAGE_TURN_PROMPT).toMatch(/"3-vert", "Mesh", "Smash", "Y-stick"/);
   });
 
-  it("includes the no-prose-categorization rule (direct image → coordinates)", () => {
-    expect(IMAGE_TURN_PROMPT).toMatch(/Skip prose categorization/);
-    expect(IMAGE_TURN_PROMPT).toMatch(/Do NOT classify routes as catalog families/);
+  it("delegates coaching notes to the post-save projection pipeline", () => {
+    // The architectural separation the coach asked for: routes come
+    // FROM the image; prose comes FROM the saved play. The prompt
+    // must say this explicitly so Cal doesn't sneak coaching
+    // paragraphs back in.
+    expect(IMAGE_TURN_PROMPT).toMatch(/generated DOWNSTREAM from the saved play/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/auto-save will project coaching notes from the saved play/);
   });
 
-  it("includes the 3-5 waypoint fidelity rule", () => {
-    expect(IMAGE_TURN_PROMPT).toMatch(/Use 3-5 waypoints by default/);
-    expect(IMAGE_TURN_PROMPT).toMatch(/Hard cap: 5 waypoints per route/);
+  it("specifies the exact reply shape (intro line + fence + Ready prompt)", () => {
+    // Pass-2's job is now structural: one fence per turn, with a
+    // minimal intro/outro. The shape is explicit so Cal can't drift
+    // toward longer descriptive replies.
+    expect(IMAGE_TURN_PROMPT).toMatch(/REPLY SHAPE/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/Walking through them one at a time/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/Here's \[label\]/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/Ready for \[next label\]\?/);
   });
 
-  it("includes the pre-route-motion rule (bubble / duck-under / mesh)", () => {
-    // Surfaced 2026-05-21 (Noah play): X had a bubble-under-B at the
-    // start of its route, but Cal traced only the main cross. The rule
-    // tells Cal to encode loops/dips/back-steps as the FIRST waypoints
-    // of the path, not truncate them away.
-    expect(IMAGE_TURN_PROMPT).toMatch(/Pre-route motion belongs IN the path/);
-    expect(IMAGE_TURN_PROMPT).toMatch(/bubble under another receiver/);
-    // The Self-Check section repeats the rule as a final scan trigger.
-    expect(IMAGE_TURN_PROMPT).toMatch(/Origin loops/);
-  });
-
-  it("includes the relative-route-depths self-check", () => {
-    // Surfaced 2026-05-21 (Noah play): Z's route was encoded as a
-    // 3-yard stub when its arrow plainly matched the depth of Y's
-    // 12-yard seam. The rule tells Cal to compare endpoints across
-    // routes before sending, not encode each route in isolation.
-    expect(IMAGE_TURN_PROMPT).toMatch(/Relative route depths/);
-    expect(IMAGE_TURN_PROMPT).toMatch(/Calibrate against the deepest route/);
-  });
-
-  it("includes the variant-aware roster-parity gate", () => {
-    expect(IMAGE_TURN_PROMPT).toMatch(/ROSTER ↔ ROUTES PARITY/);
-    expect(IMAGE_TURN_PROMPT).toMatch(/stub release/);
-    // Eligibility is variant-aware: C is eligible in 5v5, not in 7v7 or tackle_11.
-    // Mirrors validateCenterEligibility in play-content-validate.ts.
-    expect(IMAGE_TURN_PROMPT).toMatch(/flag_5v5[^\n]*@C IS eligible/);
-    expect(IMAGE_TURN_PROMPT).toMatch(/flag_7v7[^\n]*@Q and @C are both NOT eligible/);
+  it("preserves the one-play-per-turn cap and variant-aware roster parity", () => {
+    expect(IMAGE_TURN_PROMPT).toMatch(/ONE PLAY PER TURN/);
+    // Variant eligibility mirrors validateCenterEligibility in
+    // play-content-validate.ts: C eligible in 5v5 only.
+    expect(IMAGE_TURN_PROMPT).toMatch(/flag_5v5: Q exempt; C eligible/);
+    expect(IMAGE_TURN_PROMPT).toMatch(/flag_7v7 \/ tackle_11: both Q and C exempt/);
   });
 
   it("does NOT tell Cal to add a stub route for the center in 7v7", () => {
     // Surfaced 2026-05-21: prior prompt said "Center in 7v7: often
-    // stationary in the drawing — give it the stub", which contradicts
-    // the validator's centerIsEligible:false default for 7v7. The
-    // validator correctly rejects 7v7 plays with a C stub, so the
-    // prompt instruction would have generated rejections — except
-    // Cal correctly ignored the bad instruction. Either way, the
-    // prompt and validator must agree.
+    // stationary in the drawing — give it the stub", contradicting
+    // the validator's centerIsEligible:false default for 7v7.
     expect(IMAGE_TURN_PROMPT).not.toMatch(/Center in 7v7.*give it the stub/);
   });
 
-  it("includes the one-play-per-turn cap", () => {
-    expect(IMAGE_TURN_PROMPT).toMatch(/ONE PLAY PER TURN/);
-    expect(IMAGE_TURN_PROMPT).toMatch(/exactly 1 play fence per reply/);
-  });
-
-  it("forbids compose_play / place_offense / get_route_template / propose_plan", () => {
-    expect(IMAGE_TURN_PROMPT).toMatch(/FORBIDDEN ON IMAGE TURNS/);
+  it("forbids compose_play / place_offense / get_route_template / propose_plan on image turns", () => {
+    expect(IMAGE_TURN_PROMPT).toMatch(/FORBIDDEN TOOLS ON IMAGE TURNS/);
     expect(IMAGE_TURN_PROMPT).toMatch(/`compose_play`, `place_offense`, `get_route_template`, `get_concept_skeleton`, `propose_plan`/);
   });
 
@@ -417,10 +403,6 @@ describe("IMAGE_TURN_PROMPT — focused image-only system prompt", () => {
   });
 
   it("does NOT contain unrelated Cal rules (KB curation, scheduling, defense, plans)", () => {
-    // The whole point of the focused prompt is to strip these. If
-    // they sneak back in, the context-dilution fix is defeated.
-    // (propose_plan is mentioned ONCE in the FORBIDDEN tools list — that's fine.
-    //  The hazard is workflow rules about these tools, not naming them as forbidden.)
     expect(IMAGE_TURN_PROMPT).not.toMatch(/edit_kb_entry|add_kb_entry|retire_kb_entry/);
     expect(IMAGE_TURN_PROMPT).not.toMatch(/create_event|create_practice_plan/);
     expect(IMAGE_TURN_PROMPT).not.toMatch(/compose_defense|place_defense/);
@@ -429,103 +411,159 @@ describe("IMAGE_TURN_PROMPT — focused image-only system prompt", () => {
   });
 
   it("does NOT contain specific team-named labels (regression from rounds 4-5)", () => {
-    // Same hazard as NORMAL_PROMPT — example labels Cal could
-    // mistakenly recite as if they were in the current image.
     expect(IMAGE_TURN_PROMPT).not.toMatch(/labeled Noah, 67, King, Vert Under, Money, Drive Pass/);
     expect(IMAGE_TURN_PROMPT).not.toMatch(/"Money"|"Drive Pass"|"Trips Plus"/);
   });
 
-  it("documents the VISION READ anchor when the pre-flight pass produces observations", () => {
-    // Pass 1 (VISION_PASS_PROMPT) runs separately and produces a
-    // structured per-player observation list. The main agent's
-    // IMAGE_TURN_PROMPT must know how to use those observations as
-    // anchor data — otherwise pass 1 is wasted work.
-    expect(IMAGE_TURN_PROMPT).toMatch(/VISION READ ANCHOR/);
-    expect(IMAGE_TURN_PROMPT).toMatch(/use it as your ANCHOR for waypoint encoding/);
-    expect(IMAGE_TURN_PROMPT).toMatch(/When VISION READ is absent: fall back to reading the image directly/);
+  it("does NOT include round-11 prose route-description rules (moved to pass-1 numeric)", () => {
+    // Round 11 had IMAGE_TURN_PROMPT doing waypoint encoding itself
+    // (3-5 waypoints, pre-route motion as first waypoints, etc.).
+    // Round 12 moves that to pass-1's numeric output; pass-2 just
+    // emits the result. If these old rules creep back in, pass-2
+    // starts re-encoding and the prose-bias regression returns.
+    expect(IMAGE_TURN_PROMPT).not.toMatch(/Use 3-5 waypoints by default/);
+    expect(IMAGE_TURN_PROMPT).not.toMatch(/Pre-route motion belongs IN the path/);
+    expect(IMAGE_TURN_PROMPT).not.toMatch(/Skip prose categorization/);
   });
 });
 
-describe("VISION_PASS_PROMPT — pre-flight vision-only system prompt", () => {
-  // Surfaced 2026-05-21 round 11: even the focused IMAGE_TURN_PROMPT
-  // (round 10) wasn't enough — Cal still produced pattern-matched
-  // routes because vision + reasoning + JSON happens in one forward
-  // pass. Coach's framing: it's a translation error between
-  // understanding and generating. Pass 1 separates the two: a
-  // separate LLM call with just the image and a tiny prompt does
-  // vision ONLY; the main loop then has anchor data to translate
-  // into the fence.
+describe("VISION_PASS_PROMPT — numeric image-to-fence translation (round 12)", () => {
+  // Round 12 (2026-05-21): pass-1 now produces COMPLETE play fences
+  // with numeric routes (path: [[x,y],...] + curve flag) directly
+  // from the image. The previous shape (route_observation: prose)
+  // re-introduced categorical thinking downstream — words like
+  // "shallow arc" or "stem release" invoke catalog priors even when
+  // accurate, so the downstream pass collapsed distinct routes into
+  // matching concept-shaped geometry. The new shape gives the model
+  // nothing to pattern-match against.
+  //
+  // The coach's prescribed 5-step flow is embedded in the prompt:
+  //   1. Place players (numeric x/y)
+  //   2. Estimate field scale (visual anchors)
+  //   3. Define routes by anchor points (paths + curve flag)
+  //   4. Self-validate (iterate if anything's off)
+  //   5. NOTES ARE NOT THIS PASS'S JOB (downstream from saved play)
 
-  it("declares the single task: structured JSON observation, nothing else", () => {
-    expect(VISION_PASS_PROMPT).toMatch(/SINGLE TASK this turn: look at the image and output a structured JSON array/);
+  it("declares the single task: numeric fence emission, nothing else", () => {
+    expect(VISION_PASS_PROMPT).toMatch(/translating a hand-drawn football play sheet photo into structured numeric data/);
+    expect(VISION_PASS_PROMPT).toMatch(/This is your ONLY job/);
+    expect(VISION_PASS_PROMPT).toMatch(/Numbers only\. No prose about the routes/);
   });
 
-  it("forbids prose, categorization, and play-name guessing in the vision read", () => {
-    expect(VISION_PASS_PROMPT).toMatch(/NO prose narration/);
+  it("forbids prose route descriptions, concept names, and family names", () => {
+    expect(VISION_PASS_PROMPT).toMatch(/NO coaching notes/);
     expect(VISION_PASS_PROMPT).toMatch(/NO catalog play names/);
     expect(VISION_PASS_PROMPT).toMatch(/NO route family names/);
-    // Spot-check that common family names are explicitly banned.
-    expect(VISION_PASS_PROMPT).toMatch(/curl \/ slant \/ post/);
+    // Spot-check that the priors are explicitly named so the model
+    // can pattern-match its own forbidden output.
+    expect(VISION_PASS_PROMPT).toMatch(/Mesh \/ Smash \/ Snag \/ 3-vertical/);
+    expect(VISION_PASS_PROMPT).toMatch(/curl \/ slant \/ post \/ dig \/ out \/ in \/ drag \/ corner/);
   });
 
-  it("requires geometric route observations (direction / distance / turns)", () => {
-    expect(VISION_PASS_PROMPT).toMatch(/GEOMETRIC description of the arrow/);
-    expect(VISION_PASS_PROMPT).toMatch(/direction \(up \/ left \/ right \/ diagonal\)/);
-    expect(VISION_PASS_PROMPT).toMatch(/distance \(in yards\)/);
+  it("walks through the 5-step translation flow", () => {
+    expect(VISION_PASS_PROMPT).toMatch(/Step 1 — Place the players/);
+    expect(VISION_PASS_PROMPT).toMatch(/Step 2 — Estimate field scale/);
+    expect(VISION_PASS_PROMPT).toMatch(/Step 3 — Define routes by anchor points/);
+    expect(VISION_PASS_PROMPT).toMatch(/Step 4 — Self-validate/);
+    // Step 5 explicitly says notes are NOT this pass's job.
+    expect(VISION_PASS_PROMPT).toMatch(/Step 5 is NOT your job/);
+    expect(VISION_PASS_PROMPT).toMatch(/Coaching notes.*get generated separately/);
   });
 
-  it("requires pre-route motion (bubbles / dips / duck-unders) in the observation", () => {
+  it("specifies how to encode routes (anchor points, curve flag, no start-dot repeat)", () => {
+    // Anchor-based encoding is the new core: every direction change
+    // + curve samples + endpoint. 3-5 anchors typical, 1-2 for
+    // straight arrows, up to 5 for complex shapes.
+    expect(VISION_PASS_PROMPT).toMatch(/ANCHOR POINTS/);
+    expect(VISION_PASS_PROMPT).toMatch(/curve: true.*rounded \/ arc-shaped/);
+    expect(VISION_PASS_PROMPT).toMatch(/Don't repeat the start dot as path\[0\]/);
+  });
+
+  it("requires pre-route motion (bubbles / dips / duck-unders) in the path", () => {
     // Surfaced 2026-05-21 (Noah play): X had a bubble-under-B at the
-    // start of its route, but pass 1 truncated to just the cross. If
-    // pass 1 doesn't observe pre-route motion, pass 2 has no anchor
-    // for it. The rule tells pass 1 to describe origin loops/dips
-    // FIRST in the observation string.
-    expect(VISION_PASS_PROMPT).toMatch(/PRE-ROUTE MOTION/);
-    expect(VISION_PASS_PROMPT).toMatch(/bubbling\/ducking under another/);
+    // start, but the encoding collapsed it to a straight diagonal.
+    // Pre-route motion lives in the FIRST anchors, not as separate
+    // prose. If the arrow loops at its start, the first path entries
+    // encode the loop.
+    expect(VISION_PASS_PROMPT).toMatch(/Pre-route motion belongs IN the path/);
+    expect(VISION_PASS_PROMPT).toMatch(/bubble under another receiver/);
+    expect(VISION_PASS_PROMPT).toMatch(/Truncating pre-route motion/);
   });
 
-  it("requires cross-checking relative route depths before finalizing", () => {
-    // Surfaced 2026-05-21 (Noah play): Z's route was observed as a
-    // "short stem release" when its arrow plainly matched the depth
-    // of Y's seam. Pass 1 must compare arrow lengths across the play
-    // and calibrate against the deepest, not encode each in isolation.
-    expect(VISION_PASS_PROMPT).toMatch(/RELATIVE ROUTE DEPTHS/);
-    expect(VISION_PASS_PROMPT).toMatch(/Calibrate against the deepest arrow/);
+  it("requires self-validation against the image before emitting", () => {
+    // Step 4 of the coach's prescribed flow: don't emit until you've
+    // checked endpoint match, relative depths, origin loops, and
+    // curve flag against the image. Iterate if anything's off.
+    expect(VISION_PASS_PROMPT).toMatch(/Endpoint match/);
+    expect(VISION_PASS_PROMPT).toMatch(/Relative depths/);
+    expect(VISION_PASS_PROMPT).toMatch(/Origin loops/);
+    expect(VISION_PASS_PROMPT).toMatch(/If anything fails, mentally re-run steps 1-3/);
   });
 
-  it("documents UNCLEAR as the answer when the model can't read confidently", () => {
-    // The whole point of pass 1 is to catch confabulation BEFORE
-    // it becomes structured output. The "UNCLEAR" escape hatch
-    // lets the model honestly say "I can't see this" instead of
-    // making something up.
-    expect(VISION_PASS_PROMPT).toMatch(/UNCLEAR/);
-    expect(VISION_PASS_PROMPT).toMatch(/silent confabulation/i);
+  it("describes relative-depth checking without prescribing 'calibrate to deepest'", () => {
+    // Round 11's rule said "Calibrate against the deepest arrow,
+    // then derive everything else's depth proportionally to it" —
+    // which over-corrected and caused Cal to flatten distinct
+    // routes (Z stretched to match Y's seam). Round 12's softer
+    // wording: preserve observed ordering, don't flatten distinct
+    // routes into identical paths.
+    expect(VISION_PASS_PROMPT).not.toMatch(/Calibrate against the deepest arrow/);
+    expect(VISION_PASS_PROMPT).toMatch(/If two arrows end at distinctly different depths but your output has them identical, you've flattened/);
   });
 
-  it("requires the output to start with `[` (parseable JSON array)", () => {
-    // performImageVisionPass uses this prefix as a sanity check —
-    // if the model emits prose despite instructions, we skip the
-    // injection rather than feed garbage into the system prompt.
-    expect(VISION_PASS_PROMPT).toMatch(/Start your reply with \[ and end with \]/);
+  it("requires the output to be a JSON array starting with `[` (parseable)", () => {
+    expect(VISION_PASS_PROMPT).toMatch(/Start your reply with `\[`, end with `\]`/);
+    expect(VISION_PASS_PROMPT).toMatch(/NO markdown fences/);
+    expect(VISION_PASS_PROMPT).toMatch(/NO prose before or after/);
   });
 
-  it("requires Q (the QB) and C (the center) to always be included", () => {
-    // These are often unlabeled in the drawing but the main agent's
-    // roster-parity gate expects them in players[].
-    expect(VISION_PASS_PROMPT).toMatch(/Always include @Q \(the QB\) and @C \(the center\), even if unlabeled/);
+  it("specifies the fence shape with players[] and routes[] arrays", () => {
+    // The numeric output IS a play fence — title + players + routes.
+    // No `route_observation`, no `position_anchor`, no `scale_note`
+    // — those were the prose fields that re-introduced bias.
+    expect(VISION_PASS_PROMPT).toMatch(/"title":\s*"<coach's literal label/);
+    expect(VISION_PASS_PROMPT).toMatch(/"players":\s*\[/);
+    expect(VISION_PASS_PROMPT).toMatch(/"routes":\s*\[/);
+    expect(VISION_PASS_PROMPT).toMatch(/"path":\s*\[\[<x>,\s*<y>\]/);
+    expect(VISION_PASS_PROMPT).toMatch(/"curve":\s*<bool>/);
+  });
+
+  it("does NOT include the round-11 prose route_observation field", () => {
+    // The whole point of round 12: kill the prose intermediate. If
+    // route_observation creeps back in, the bias regression returns.
+    expect(VISION_PASS_PROMPT).not.toMatch(/route_observation/);
+    expect(VISION_PASS_PROMPT).not.toMatch(/GEOMETRIC description of the arrow/);
+    expect(VISION_PASS_PROMPT).not.toMatch(/position_anchor/);
+    expect(VISION_PASS_PROMPT).not.toMatch(/scale_note/);
+  });
+
+  it("includes variant-aware roster parity (Q always exempt; C in 5v5 only)", () => {
+    // Pass-1 produces a fence that will hit the save-time roster-
+    // parity validator. The prompt must agree with the validator's
+    // centerIsEligible:false default for 7v7 / tackle_11.
+    expect(VISION_PASS_PROMPT).toMatch(/flag_5v5.*@Q is exempt.*@C IS eligible/);
+    expect(VISION_PASS_PROMPT).toMatch(/flag_7v7.*@Q AND @C are both exempt/);
+  });
+
+  it("requires Q (the QB) and C (the center) to always be in players[]", () => {
+    expect(VISION_PASS_PROMPT).toMatch(/Always include @Q \(typically y ≈ -3 to -5\) and @C/);
   });
 
   it("forbids relabeling players (Y stays Y, not S)", () => {
-    // Failure mode from earlier rounds: Cal silently turned the
-    // coach's @Y into @S in its own roster. Pass 1 must preserve
-    // the labels from the drawing.
-    expect(VISION_PASS_PROMPT).toMatch(/do not relabel/);
+    expect(VISION_PASS_PROMPT).toMatch(/Do NOT relabel/);
   });
 
-  it("is dramatically shorter than NORMAL_PROMPT and even shorter than IMAGE_TURN_PROMPT", () => {
-    // Pass 1's whole value is attentional focus on the image. The
-    // prompt must stay tight.
-    expect(VISION_PASS_PROMPT.length).toBeLessThan(IMAGE_TURN_PROMPT.length);
-    expect(VISION_PASS_PROMPT.length).toBeLessThan(NORMAL_PROMPT.length / 8);
+  it("provides an explicit escape hatch for unclear routes (omit, don't confabulate)", () => {
+    // Round-11 prompt used "UNCLEAR" sentinels in route_observation.
+    // Round-12 numeric output omits the route entry entirely if
+    // the arrow can't be read; the downstream save flow surfaces
+    // missing routes to the coach for manual fix.
+    expect(VISION_PASS_PROMPT).toMatch(/OMIT it from `routes\[\]` rather than confabulate/);
+  });
+
+  it("stays smaller than NORMAL_PROMPT/3 (attention focus is the whole point)", () => {
+    // Pass-1's value is undivided attention on the image. The 5-step
+    // flow adds bulk vs round 11 — soft cap is /3 rather than /8.
+    expect(VISION_PASS_PROMPT.length).toBeLessThan(NORMAL_PROMPT.length / 3);
   });
 });
