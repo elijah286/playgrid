@@ -2196,38 +2196,40 @@ export async function runAgent(
           mutated = true;
           toolCalls.push("create_play");
           const playId = extractPlayIdFromCreateResult(commit.result);
-          // Surface the deterministic notes that create_play just wrote
-          // to metadata.notes. This is the same projection that runs for
-          // any coach-drawn play (the "Generate notes" button uses it);
-          // appending it to the chat lets the coach see Cal's reading
-          // of the saved play without navigating to the editor.
+          // On IMAGE turns ONLY: re-derive the deterministic notes
+          // that create_play just wrote to metadata.notes, so we can
+          // append them to the chat reply. Image-turn pass-2 emits
+          // NO prose by design (round 12) — without this recovery,
+          // the coach would see only the diagram with no
+          // description. Notes generated FROM the saved play
+          // (post-fact) can't bias the waypoints — exactly the
+          // architectural separation the coach asked for.
           //
-          // We re-derive locally (cheap pure-function call) rather than
-          // re-fetching from the DB. create_play stamped this exact
-          // string onto metadata.notes; recomputing matches.
+          // Skipped on text turns: Cal already writes its own
+          // coaching prose alongside the fence there, and a
+          // duplicate would be visually noisy.
           //
-          // This is especially load-bearing on image turns: pass-1's
-          // numeric output now contains NO prose, so without this
-          // recovery step the coach would see only the diagram with no
-          // description. Notes generated FROM the saved play (post-fact)
-          // can't bias the waypoints — exactly the architectural
-          // separation the coach asked for.
+          // We re-derive locally (cheap pure-function call) rather
+          // than re-fetching from the DB. create_play stamped this
+          // exact string onto metadata.notes; recomputing matches.
           let notes: string | null = null;
-          try {
-            const variant = (ctx.sportVariant ?? "flag_7v7") as SportVariant;
-            const diagramWithVariant: CoachDiagram = {
-              ...(parsed as unknown as CoachDiagram),
-              variant,
-            };
-            const spec = coachDiagramToPlaySpec(diagramWithVariant, { variant });
-            const projected = projectSpecToNotes(spec);
-            if (projected.trim().length > 0) notes = projected;
-          } catch {
-            // Notes projection is best-effort. A bug here shouldn't
-            // block the save (which already happened) or mask the
-            // success suffix. The play still saves with its
-            // create_play-stamped notes; this just affects whether
-            // the chat reply echoes them.
+          if (currentUserTurnHadImage) {
+            try {
+              const variant = (ctx.sportVariant ?? "flag_7v7") as SportVariant;
+              const diagramWithVariant: CoachDiagram = {
+                ...(parsed as unknown as CoachDiagram),
+                variant,
+              };
+              const spec = coachDiagramToPlaySpec(diagramWithVariant, { variant });
+              const projected = projectSpecToNotes(spec);
+              if (projected.trim().length > 0) notes = projected;
+            } catch {
+              // Notes projection is best-effort. A bug here shouldn't
+              // block the save (which already happened) or mask the
+              // success suffix. The play still saves with its
+              // create_play-stamped notes; this just affects whether
+              // the chat reply echoes them.
+            }
           }
           savedPlays.push({ name: fenceName, playId, notes });
         } else {
@@ -2270,20 +2272,22 @@ export async function runAgent(
         .join(", ");
       const verb = savedPlays.length === 1 ? "Saved" : `Saved ${savedPlays.length} plays`;
       suffixParts.push(`_${verb}: ${linkified}._`);
-      // Append the auto-generated notes for each saved play, so the
-      // coach sees Cal's interpretation in chat (not just buried in
-      // the play editor). For single-play saves we just emit the
-      // projection. For batch saves we prefix each block with the
-      // play name so the coach can tell which is which. Notes are
-      // produced from the saved play by projectSpecToNotes — the
-      // SAME pipeline the "Generate notes" button uses for any
-      // coach-drawn play.
-      const playsWithNotes = savedPlays.filter((p) => p.notes);
-      if (playsWithNotes.length === 1) {
-        suffixParts.push(playsWithNotes[0].notes ?? "");
-      } else if (playsWithNotes.length > 1) {
-        for (const p of playsWithNotes) {
-          suffixParts.push(`**${p.name}**\n\n${p.notes ?? ""}`);
+      // SCOPE: only append projected notes on IMAGE turns. On text
+      // turns Cal already writes its own coaching prose alongside
+      // the fence (the auto-projected notes would be a duplicate
+      // and visually noisy). On image turns Cal emits NO prose by
+      // design — the projected notes are the only description the
+      // coach sees inline, so we surface them here. Notes are
+      // produced from the saved play by projectSpecToNotes (same
+      // pipeline as the "Generate notes" button).
+      if (currentUserTurnHadImage) {
+        const playsWithNotes = savedPlays.filter((p) => p.notes);
+        if (playsWithNotes.length === 1) {
+          suffixParts.push(playsWithNotes[0].notes ?? "");
+        } else if (playsWithNotes.length > 1) {
+          for (const p of playsWithNotes) {
+            suffixParts.push(`**${p.name}**\n\n${p.notes ?? ""}`);
+          }
         }
       }
     }
