@@ -711,6 +711,39 @@ describe("PER_CROP_VISION_PROMPT — per-crop single-play translation (round 13)
     expect(PER_CROP_VISION_PROMPT).toMatch(/Origin loops/);
   });
 
+  it("has hard format rules at the top of Step 3 with wrong/correct examples", () => {
+    // Round-13 evening regression: after the generalization refactor,
+    // Cal was emitting routes with the player's own position as the
+    // first anchor (e.g. X at (-10,0) emitted path [[-10,0],[-8,5],...]).
+    // The "don't repeat start dot" rule existed but was buried in the
+    // middle of Step 3. Fix: surface the structural rules at the TOP
+    // of Step 3 with concrete wrong/correct JSON examples. These
+    // examples are about FORMAT, not specific route shapes, so no
+    // over-fit risk.
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Hard format rules/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/RULE 1.*path.*does NOT include the player's starting position/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/✗ WRONG/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/✓ CORRECT/);
+  });
+
+  it("emphasizes EVERY non-QB gets a route, even backfield receivers (RULE 2)", () => {
+    // Same regression: Cal omitted @B from routes[] when B was placed
+    // in the backfield (y < 0). Validator rejected 3 plays. RULE 2
+    // makes the eligibility crystal clear: only @Q (and @C in 7v7/
+    // tackle_11) are exempt. Backfield position doesn't change that.
+    expect(PER_CROP_VISION_PROMPT).toMatch(/RULE 2.*Every non-QB player gets a `routes\[\]` entry/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/no exceptions for backfield position/);
+  });
+
+  it("guides the curve flag toward true for 3+ anchor routes (RULE 3)", () => {
+    // Same regression: Cal was emitting curve:false for almost
+    // every route, even ones with 3+ anchors that should be smooth.
+    // false renders polygonal segments between anchors. Guide Cal
+    // to prefer true when in doubt with 3+ anchors.
+    expect(PER_CROP_VISION_PROMPT).toMatch(/RULE 3.*curve/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/When in doubt with 3\+ anchors, prefer `true`/);
+  });
+
   it("teaches dashed lines = pre-snap motion (round 13 bbox-tuning fix)", () => {
     // The Noah play's X has a dashed motion line going behind B
     // pre-snap. Round-13 per-crop failed to capture this as part
@@ -772,8 +805,8 @@ describe("PER_CROP_VISION_PROMPT — per-crop single-play translation (round 13)
     // converts "I can't read this" into "this player is stationary",
     // which is misleading. The rule: ANY visible arrow → route
     // entry, partial trace ok, never stub.
-    expect(PER_CROP_VISION_PROMPT).toMatch(/A player with ANY arrow drawn — solid or dashed — gets a route entry/);
-    expect(PER_CROP_VISION_PROMPT).toMatch(/Do NOT emit a stub/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Any visible arrow → a route entry/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Never stub a player who clearly has lines drawn/);
     expect(PER_CROP_VISION_PROMPT).toMatch(/Stub-check/);
   });
 

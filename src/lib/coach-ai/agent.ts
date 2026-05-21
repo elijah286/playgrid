@@ -1171,13 +1171,32 @@ The drawing is the truth. Words about routes — even your own words — bias th
 - Player spacing: center-to-tackle ≈ 2yd, slot ≈ 5-10yd from center, outside WR ≈ 12-18yd from center.
 
 **Step 3 — Define routes by anchor points.** For each player with a drawn arrow:
-- Trace the arrow from the dot to the arrowhead.
-- Identify ANCHOR POINTS: the start of any direction change, samples along any curve, the endpoint. 3-5 anchors per route is typical; 1-2 for unmistakably straight arrows; up to 5 for complex shapes.
-- Set \`curve: true\` if the arrow is rounded / arc-shaped; \`curve: false\` if it's crisp lines with sharp breaks.
-- Pre-route motion belongs IN the path. If the arrow loops, dips, or back-steps before heading downfield (bubble under another receiver, duck-under, motion-then-route), the FIRST anchors encode that motion. Truncating pre-route motion to a straight line drops the play design.
-- **Dashed lines = pre-snap motion.** A dashed arrow (not solid) from a player shows where that player MOVES before the snap. The dashed segment is part of the route — encode it as the FIRST anchors, then the route continues solid from the motion's endpoint. Common shape: dashed arrow goes laterally behind another player (motion), then a solid line continues downfield as the actual route. NEVER drop a dashed line just because it's different from the solid arrows; it's load-bearing.
-- **A player with ANY arrow drawn — solid or dashed — gets a route entry.** Do NOT emit a stub (\`[[<x>, 1]]\`) for a player who clearly has a drawn arrow. Stubs are only for players with NO arrow at all (stationary, blocking, decoying). If you see lines from a player and can't fully trace them, encode the partial trace rather than dropping the route.
-- Don't repeat the start dot as path[0]; the renderer auto-connects from (x, y) to the first anchor.
+
+### Hard format rules (apply to every route, regardless of shape)
+
+These are about the JSON shape, not what's drawn. Violations cause silent rendering bugs or save rejections — get them right first, before worrying about the route's geometry.
+
+**RULE 1: \`path\` does NOT include the player's starting position.** The renderer auto-connects from the player's (x, y) to the FIRST anchor in \`path\`. Including the start dot wastes an anchor and bends the rendered line oddly through it.
+
+\`\`\`
+✗ WRONG — player X at (-10, 0), path repeats the start:
+{ "from": "X", "path": [[-10, 0], [-8, 5], [-7, 10]] }
+
+✓ CORRECT — path starts AFTER the player:
+{ "from": "X", "path": [[-8, 5], [-7, 10]] }
+\`\`\`
+
+**RULE 2: Every non-QB player gets a \`routes[]\` entry — no exceptions for backfield position.** Flag 7v7: only @Q (and @C in 7v7/tackle_11) are exempt. A receiver in the backfield (y < 0) is still an eligible offensive player — they get a route, even if it's a stub for stationary players or a motion-then-route for movers. If you see ANY arrow from a player, they get a route with the trace; if there's no arrow at all AND they're stationary, give them a stub \`{ from: "<id>", path: [[<x>, 1]] }\`.
+
+**RULE 3: For curved/rounded arrows, set \`curve: true\`. For sharp L-shapes, set \`curve: false\`.** When in doubt with 3+ anchors, prefer \`true\` — \`false\` renders straight line segments between anchors, which gives polygonal-looking routes. Most hand-drawn arrows have natural rounding at direction changes; \`true\` interpolates a smooth curve through your anchors.
+
+### Tracing the arrow
+
+- Find the start of the arrow (touches the player dot) and the arrowhead (the tip).
+- Identify ANCHOR POINTS along the path: each direction change, samples along any curve, and the endpoint. 3-5 anchors is typical; 1-2 for unmistakably straight arrows; up to 5 for complex shapes.
+- Pre-route motion belongs IN the path. If the arrow loops, dips, or back-steps before heading downfield (bubble, duck-under, motion-then-route), the FIRST anchors encode that motion. If the motion drops below the LOS line at any point, at least one anchor must have y < 0 to capture that dip.
+- **Dashed lines = pre-snap motion.** A dashed segment from a player shows where they MOVE before the snap. The dashed segment is part of the route — encode it as the FIRST anchors, then the route continues solid from the motion's endpoint. NEVER drop a dashed line just because it's different from the solid arrows; it's load-bearing.
+- **Any visible arrow → a route entry with a partial or full trace.** Never stub a player who clearly has lines drawn from them. If you can only confidently trace part of the arrow, encode the partial trace.
 
 ### Route shape taxonomy — encoding rules, not coordinates
 
