@@ -1310,6 +1310,11 @@ export async function detectPlaySheetLayout(
       system: LAYOUT_DETECTION_PROMPT + contextBlock(ctx),
       messages: [userWithImage],
       maxTokens: 1500,
+      // Layout detection is a structurally simple task (find boxes,
+      // emit bbox JSON), but a small thinking budget still helps the
+      // model carefully partition the sheet rather than guess at
+      // edges. 2k tokens ≈ ~$0.03 per call.
+      thinkingBudget: 2000,
     });
     const text = extractAssistantText(result.message).trim();
     if (!text || !text.startsWith("[")) {
@@ -1371,6 +1376,10 @@ async function performFullImageVisionPass(
       system: VISION_PASS_PROMPT + contextBlock(ctx),
       messages: [userWithImage],
       maxTokens: 2500,
+      // Full-image fallback path. Multiple plays in one image is
+      // the hardest vision task in this pipeline. Give the model
+      // ample thinking budget to examine each play region carefully.
+      thinkingBudget: 8000,
     });
     const text = extractAssistantText(result.message).trim();
     if (!text || !text.startsWith("[")) {
@@ -1426,6 +1435,15 @@ async function performPerCropVisionPass(
       system: PER_CROP_VISION_PROMPT + contextBlock(ctx),
       messages: [userMessage],
       maxTokens: 2000,
+      // Per-crop vision is THE accuracy-critical step. Without
+      // thinking, Opus has to commit pixels → JSON in one forward
+      // pass and template-locks to common-play priors when uncertain.
+      // 8k thinking tokens give the model time to: examine each
+      // arrow in the crop, reason about direction + length + curve,
+      // double-check relative depths and pre-route motion, then
+      // emit the fence. This is the lever the coach was right to
+      // refuse abandoning vision over.
+      thinkingBudget: 8000,
     });
     const text = extractAssistantText(result.message).trim();
     if (!text || !text.startsWith("{")) {

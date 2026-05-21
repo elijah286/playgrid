@@ -97,6 +97,29 @@ export type ChatOptions = {
   messages: ChatMessage[];
   tools?: ToolDef[];
   maxTokens?: number;
+  /**
+   * Extended thinking budget in tokens (Claude only; ignored by OpenAI).
+   * When set, enables Anthropic's `thinking` parameter — the model gets
+   * up to `thinkingBudget` tokens of private reasoning before producing
+   * visible output. For tasks where one-shot generation drops accuracy
+   * (hand-drawn route tracing, multi-step reasoning, careful structured
+   * output) this is the single biggest lever after prompt design.
+   *
+   * Round 13 (2026-05-21): added to unblock per-play vision accuracy.
+   * Without thinking, Opus had to commit pixels → JSON in one forward
+   * pass and template-locked to common-play priors when uncertain. With
+   * a 4-8k token budget, the model can examine each arrow, reason about
+   * direction/length, then emit the fence.
+   *
+   * Cost: thinking tokens bill as OUTPUT tokens. At Opus 4.7 pricing,
+   * 8k thinking = ~$0.12 per call. Image turns are rare + gated; the
+   * absolute spend bump is modest for the accuracy gain.
+   *
+   * Streaming + thinking together: not yet supported in this codebase.
+   * If onTextDelta is also set, thinking is silently ignored (the
+   * non-streaming path supports it; per-crop vision uses non-streaming).
+   */
+  thinkingBudget?: number;
   /** Called for each streamed text token (Claude only; ignored by OpenAI path). */
   onTextDelta?: (text: string) => void;
 };
@@ -142,13 +165,27 @@ async function chatClaude(opts: ChatOptions): Promise<ChatResult> {
       }))
     : undefined;
   const selectedModel = pickClaudeModel(opts.messages);
+  // Extended thinking: enabled on non-streaming calls with thinkingBudget
+  // set. Anthropic requires `max_tokens` >= `thinking.budget_tokens + 1`,
+  // so we bump max_tokens up if the caller's budget would underflow.
+  // Streaming + thinking together isn't wired here (per-crop vision uses
+  // non-streaming, which is where we want thinking the most).
+  const useThinking =
+    typeof opts.thinkingBudget === "number" && opts.thinkingBudget > 0 && !opts.onTextDelta;
+  const requestedMaxTokens = opts.maxTokens ?? 1024;
+  const effectiveMaxTokens = useThinking
+    ? Math.max(requestedMaxTokens, (opts.thinkingBudget ?? 0) + 1024)
+    : requestedMaxTokens;
   const body = {
     model: selectedModel,
-    max_tokens: opts.maxTokens ?? 1024,
+    max_tokens: effectiveMaxTokens,
     system: [{ type: "text" as const, text: opts.system, cache_control: { type: "ephemeral" as const } }],
     messages: opts.messages.map(toClaudeMessage),
     stream: opts.onTextDelta ? true : undefined,
     ...(tools ? { tools } : {}),
+    ...(useThinking
+      ? { thinking: { type: "enabled" as const, budget_tokens: opts.thinkingBudget } }
+      : {}),
   };
   const res = await fetchWithRetry("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -168,9 +205,22 @@ async function chatClaude(opts: ChatOptions): Promise<ChatResult> {
   // Non-streaming path (no onTextDelta callback)
   if (!opts.onTextDelta) {
     const text = await res.text();
-    const json = JSON.parse(text) as { content: ContentBlock[]; stop_reason: string; model: string };
+    // The API may return `thinking` (and `redacted_thinking`) blocks
+    // when extended thinking is enabled. We strip those before
+    // returning — downstream code (agent loop, validators, etc.)
+    // expects only text and tool_use. The thinking is private
+    // reasoning; the visible output is what matters.
+    const json = JSON.parse(text) as {
+      content: Array<ContentBlock | { type: "thinking" | "redacted_thinking" }>;
+      stop_reason: string;
+      model: string;
+    };
     const cleaned = ensureNonEmptyAssistantContent(
-      json.content.filter((b) => b.type !== "text" || b.text.length > 0),
+      json.content.filter((b): b is ContentBlock => {
+        if (b.type === "thinking" || b.type === "redacted_thinking") return false;
+        if (b.type === "text" && b.text.length === 0) return false;
+        return true;
+      }),
     );
     return {
       message: { role: "assistant", content: cleaned },
