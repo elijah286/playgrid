@@ -60,6 +60,38 @@ export type CroppedPlay = {
 };
 
 /**
+ * Expand a bbox by `marginPct` on each side, clamped to image
+ * bounds. A marginPct of 0.05 grows the box by 5% of the image's
+ * width/height in each direction (so the box gets ~10% wider AND
+ * ~10% taller total). Clamping prevents overrun past [0, 1].
+ *
+ * Round-13 surface: tight bboxes from layout detection clipped
+ * pre-snap motion lines and arrowheads that extend slightly past
+ * the visual play box. Cal then saw a "play" with no route from
+ * the affected player and emitted a stub. Programmatic expansion
+ * after detection (regardless of how strict the model is) makes
+ * the crop forgiving enough to capture those details.
+ *
+ * Why not just instruct the layout LLM to be loose: LLMs aren't
+ * great at consistent margin sizing. Stricter prompt language
+ * helps but doesn't fully solve it. A small deterministic
+ * post-process ensures the margin is always applied uniformly.
+ */
+export function expandBBox(bbox: NormalizedBBox, marginPct: number): NormalizedBBox {
+  if (marginPct <= 0) return bbox;
+  const marginX = bbox.w * marginPct;
+  const marginY = bbox.h * marginPct;
+  const x = Math.max(0, bbox.x - marginX);
+  const y = Math.max(0, bbox.y - marginY);
+  // After shifting x/y down by margin, the box can grow by 2x the
+  // margin (one side on each direction). Clamp w/h so we don't
+  // run past image bounds.
+  const w = Math.min(1 - x, bbox.w + 2 * marginX);
+  const h = Math.min(1 - y, bbox.h + 2 * marginY);
+  return { x, y, w, h };
+}
+
+/**
  * Validate a bbox: all components in [0, 1], no overrun.
  * Returns an error string when invalid, null when ok.
  */
