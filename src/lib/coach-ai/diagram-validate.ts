@@ -1212,33 +1212,28 @@ export function validateDiagrams(opts: {
         // the coach can see each rendered play and correct via
         // revise_play if something's off before moving on.
         //
-        // Counts ALL fences (not just catalog-concept) because Rule 9b
-        // switched to waypoint mode for image input: Cal hand-authors
-        // the play fence with raw player positions + route waypoints,
-        // bypassing compose_play / place_offense entirely. The
-        // catalog-concept counter (`catalogConceptFencesSeen`) would
-        // miss these. Using the fence loop index (`i > 0`) catches
-        // both modes.
+        // Image-turn fence cap REMOVED in round 13 (2026-05-21
+        // evening) — the cap was originally added so the coach could
+        // review each play before saving, but in practice it created
+        // a worse failure mode: turns 2-N of the walkthrough fell
+        // back to NORMAL_PROMPT (no image in current turn → no
+        // IMAGE_TURN_PROMPT, no per-crop vision context), and Cal
+        // regenerated each play from chat history instead of the
+        // original drawing. Plays converged toward a "spread-default
+        // template" as the walkthrough progressed; the harness's
+        // "Saved: X" suffix duplicated with Cal's own NORMAL_PROMPT
+        // claim.
         //
-        // Surfaced 2026-05-21 (three rounds):
-        //   round 1 — Cal batched 6 compose_play calls.
-        //   round 2 — tightened to "1 catalog-concept fence max" but
-        //     coach still got wrong reads on the upload turn.
-        //   round 3 — coach pushed back on per-route review; we
-        //     switched to waypoint mode + Opus 4.7 vision. The cap
-        //     stays at 1 so the conversational walk-through works,
-        //     but it now applies to any fence type.
-        if (
-          opts.currentUserTurnHadImage === true &&
-          i > 0 &&
-          !surgicalBypass
-        ) {
-          errors.push(
-            `${tag}this reply has ${fences.length} play fences, but image-input turns are capped at 1 fence per reply. ` +
-            `When the coach uploads a play sheet, walk through plays ONE AT A TIME — the coach's "yes" / "next" between plays is how they catch mis-reads via revise_play before you move on. ` +
-            `For THIS turn: keep the FIRST fence only, drop the rest, end your reply with "Saved '<label>'. Ready for play <N+1>?" and wait for the coach's response.`,
-          );
-        }
+        // New model: emit ALL fences in turn 1 (the one that ran
+        // per-crop vision). Coach reviews everything in one screen,
+        // revises individual plays via revise_play. This is the
+        // same path coach-drawn plays already use for review.
+        //
+        // Surfaced 2026-05-21 (round 3): batched 6 compose_play
+        // calls were the original problem — those are CATALOG-
+        // concept fences, still capped by MAX_CATALOG_CONCEPT_FENCES_PER_REPLY.
+        // The image-turn fences are WAYPOINT mode (hand-authored
+        // from the drawing) and don't share that failure mode.
 
         if (
           isFullCatalogConceptFence &&
