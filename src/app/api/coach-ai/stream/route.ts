@@ -278,8 +278,9 @@ export async function POST(req: Request): Promise<Response> {
 
   // Separate cap on image uploads — images cost more in vision tokens and
   // the dial moves independently of text turns. Only checked when an image
-  // is attached; text-only turns skip this entirely.
-  if (userImage) {
+  // is attached; text-only turns skip this entirely. Site admins bypass
+  // the cap (usage is still recorded downstream for analytics).
+  if (userImage && !gate.isAdmin) {
     const imageCap = await getCoachCalImageCapState(gate.userId);
     if (imageCap.exceeded) {
       return new Response(
