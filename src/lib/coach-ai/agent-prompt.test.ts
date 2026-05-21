@@ -720,26 +720,50 @@ describe("PER_CROP_VISION_PROMPT — per-crop single-play translation (round 13)
     expect(PER_CROP_VISION_PROMPT).toMatch(/NEVER drop a dashed line/);
   });
 
-  it("includes a worked example for bubble-under-then-drag (Noah reference)", () => {
-    // Coach shared a hand-drawn reference of what Noah's X route
-    // SHOULD look like (2026-05-21 evening). The bubble + drag
-    // ends just INSIDE B's position (~x=-3) at 5yd depth, NOT
-    // crossing the entire formation. Earlier worked-example had
-    // X drag continuing to x=+3 which read as a full crosser
-    // (different route entirely). Tightened to match the coach's
-    // reference.
-    expect(PER_CROP_VISION_PROMPT).toMatch(/Worked example: bubble-under-B then short drag/);
-    // The example references the specific anchor pattern matching
-    // the coach's reference drawing.
-    expect(PER_CROP_VISION_PROMPT).toMatch(/\[\[-10, -1\], \[-7, 0\], \[-5, 2\], \[-3, 5\]\]/);
-    // Negative-y first anchor: critical for the bubble portion.
-    expect(PER_CROP_VISION_PROMPT).toMatch(/y < 0 = behind LOS/);
-    // Common mistakes spelled out so the model can pattern-match
-    // its own forbidden output.
-    expect(PER_CROP_VISION_PROMPT).toMatch(/Stubbing the route/);
-    expect(PER_CROP_VISION_PROMPT).toMatch(/Encoding X as a deep arc/);
-    expect(PER_CROP_VISION_PROMPT).toMatch(/Endpoint too far right/);
-    expect(PER_CROP_VISION_PROMPT).toMatch(/Missing the dip below LOS/);
+  it("uses a SHAPE-CATEGORY taxonomy (not specific coordinates) for arrow encoding", () => {
+    // 2026-05-21 evening: coach pushed back on Noah-specific
+    // coordinate examples — "I want robustness, not a one-play
+    // fix." The earlier worked example pinned specific waypoints
+    // [[-10,-1],[-7,0],[-5,2],[-3,5]] for Noah's X bubble + drag.
+    // Risk: model anchors to those exact coordinates for ANY
+    // bubble-style route, regardless of where the actual arrow
+    // ends in the image. Refactored to abstract shape categories
+    // with encoding rules (anchor count + curve flag), no
+    // specific coordinates. The (x, y) numbers come from the
+    // image, not from these categories.
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Route shape taxonomy/);
+    // Categories cover the common shapes Cal will encounter.
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Straight line, one direction/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Single sharp break/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Continuous rounded curve/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Multi-segment with 2\+ direction changes/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Pre-snap motion \+ main route/);
+  });
+
+  it("explicitly forbids substituting catalog shapes / training-memory depths", () => {
+    // The core anti-over-fit rule. Cal must read coordinates from
+    // the image, not substitute "standard" depths or laterals
+    // from its training memory of common routes.
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Coordinates come from the image, not from these categories/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Do not substitute a "typical" depth or lateral/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Substituting a catalog shape/);
+  });
+
+  it("does NOT contain Noah-specific coordinates that risk over-fitting", () => {
+    // The earlier worked example had hardcoded waypoints from
+    // Noah's X route. With those gone, Cal can't pattern-match
+    // a new bubble route to "the Noah numbers".
+    expect(PER_CROP_VISION_PROMPT).not.toMatch(/\[-10, -1\], \[-7, 0\], \[-5, 2\], \[-3, 5\]/);
+    expect(PER_CROP_VISION_PROMPT).not.toMatch(/Worked example: bubble-under-B/);
+  });
+
+  it("Step 4 includes a coordinate-provenance check (no training-memory substitution)", () => {
+    // The strongest single self-check against over-fitting:
+    // every coordinate must be traceable to a specific arrow
+    // segment in the image. Guesses and priors fail this gate.
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Coordinate provenance/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/point to the specific arrow segment that determined each anchor/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Catalog-substitution check/);
   });
 
   it("forbids stub-when-confused (the #1 round-13 failure mode)", () => {
