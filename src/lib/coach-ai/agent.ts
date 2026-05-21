@@ -1179,27 +1179,29 @@ The drawing is the truth. Words about routes — even your own words — bias th
 - **A player with ANY arrow drawn — solid or dashed — gets a route entry.** Do NOT emit a stub (\`[[<x>, 1]]\`) for a player who clearly has a drawn arrow. Stubs are only for players with NO arrow at all (stationary, blocking, decoying). If you see lines from a player and can't fully trace them, encode the partial trace rather than dropping the route.
 - Don't repeat the start dot as path[0]; the renderer auto-connects from (x, y) to the first anchor.
 
-### Worked example: bubble-under-B then 5yd drag
+### Worked example: bubble-under-B then short drag (Noah-style)
 
-A very common youth flag concept: receiver X (leftmost, at x=-12) has a SHORT DASHED arrow going right toward B's position (at x=-7), and a SOLID arrow continuing right across the field at shallow depth (~3-5 yards). This is "X motions to behind B pre-snap, then runs a 5-yard drag across the field."
+A very common youth flag concept: receiver X (leftmost, e.g. at x=-12) has an arrow that DIPS BACK slightly behind itself, CURVES RIGHT under B's position (e.g. B at x=-7), then continues right at shallow depth — ending NOT all the way across the field, but at about the inside of B (x ≈ -3) at ~5 yards of depth. The whole shape is one continuous curved line.
 
 Correct encoding for X's path:
 \`\`\`
-{ "from": "X", "path": [[-10, -0.5], [-7, 0.5], [-3, 3], [3, 4]], "curve": true }
+{ "from": "X", "path": [[-10, -1], [-7, 0], [-5, 2], [-3, 5]], "curve": true }
 \`\`\`
 
-Reading the anchors:
-- (-10, -0.5): X moves laterally right + slightly back (the dashed motion behind B's position)
-- (-7, 0.5): X arrives behind B, transitions to the route
-- (-3, 3): drag picks up depth as it crosses the middle
-- (3, 4): drag continues across the formation at 4 yards
+Reading the anchors against the drawing:
+- (-10, -1): X dips slightly back (toward QB) — this is the "bubble" portion. y < 0 = behind LOS.
+- (-7, 0): X arrives at B's lateral position, back at LOS depth. The bubble has carried X under B.
+- (-5, 2): drag is gaining depth, still curving right.
+- (-3, 5): endpoint — just inside B's position, 5 yards downfield. The drag terminates HERE, not at x=+3 (opposite-side sideline).
 
-Why this matters: the dashed motion is part of the play's design. Dropping it (encoding just the cross as \`[[3, 4]]\`) means the saved play loses the motion call entirely. A 4-anchor curved path captures both the motion AND the route shape.
+Why this exact shape matters: the bubble (dip back) is a 1-2 yard backward motion that lets X cross behind B without colliding. The drag is SHORT — across the inside half of the formation only, ending around the inside slot's lateral position (NOT all the way to the opposite sideline). Encoding the endpoint at +3 or +5 yards (right of center) misreads the drag as a full crosser, which is a different route entirely.
 
-Common mistakes to avoid on this pattern:
-- Encoding X as a stub because "the main arrow is short" — the dashed motion + solid drag combined IS the route.
-- Encoding X as a deep route (12+ yards downfield) — the drag is SHALLOW (~3-5 yards), not deep.
-- Setting \`curve: false\` — a motion-then-route always curves at the transition; use \`true\`.
+Common mistakes on this pattern (caught in earlier rounds):
+- **Stubbing the route** because "the main arrow looks short" — the bubble + drag combined IS the route; never emit \`[[<x>, 1]]\` for a player with any visible arrow.
+- **Encoding X as a deep arc** (12+ yards downfield) — the drag is SHALLOW (3-6 yards), not deep. A "12-yard in" reading is wrong by 2-3×.
+- **Setting \`curve: false\`** — the bubble + drag always reads as ONE continuous curve; use \`true\`.
+- **Endpoint too far right** (x=+3 or +5) — the drag ends at the inside slot's lateral (~x=-3), not on the opposite sideline.
+- **Missing the dip below LOS** — the bubble starts with a brief negative-y. If the first anchor's y is 0 or positive, the bubble is gone and X reads as a flat drag (different route).
 
 **Step 4 — Self-validate. Iterate if anything's off.** Before emitting, run these checks against the cropped image:
 - **Endpoint match**: each route's last anchor should sit where the arrow's arrowhead sits on the page (same depth, same lateral).

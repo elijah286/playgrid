@@ -720,18 +720,26 @@ describe("PER_CROP_VISION_PROMPT — per-crop single-play translation (round 13)
     expect(PER_CROP_VISION_PROMPT).toMatch(/NEVER drop a dashed line/);
   });
 
-  it("includes a worked example for bubble-under-then-drag (round 13 evening)", () => {
-    // Even with the dashed-lines rule, Cal kept missing the X
-    // bubble on Noah. The few-shot example anchors the model to
-    // a concrete encoding: dashed motion → behind-other-player
-    // transition → drag continuation. 4 anchors, curve:true.
-    expect(PER_CROP_VISION_PROMPT).toMatch(/Worked example: bubble-under-B then 5yd drag/);
-    // The example references the specific anchor pattern.
-    expect(PER_CROP_VISION_PROMPT).toMatch(/\[\[-10, -0\.5\], \[-7, 0\.5\], \[-3, 3\], \[3, 4\]\]/);
+  it("includes a worked example for bubble-under-then-drag (Noah reference)", () => {
+    // Coach shared a hand-drawn reference of what Noah's X route
+    // SHOULD look like (2026-05-21 evening). The bubble + drag
+    // ends just INSIDE B's position (~x=-3) at 5yd depth, NOT
+    // crossing the entire formation. Earlier worked-example had
+    // X drag continuing to x=+3 which read as a full crosser
+    // (different route entirely). Tightened to match the coach's
+    // reference.
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Worked example: bubble-under-B then short drag/);
+    // The example references the specific anchor pattern matching
+    // the coach's reference drawing.
+    expect(PER_CROP_VISION_PROMPT).toMatch(/\[\[-10, -1\], \[-7, 0\], \[-5, 2\], \[-3, 5\]\]/);
+    // Negative-y first anchor: critical for the bubble portion.
+    expect(PER_CROP_VISION_PROMPT).toMatch(/y < 0 = behind LOS/);
     // Common mistakes spelled out so the model can pattern-match
     // its own forbidden output.
-    expect(PER_CROP_VISION_PROMPT).toMatch(/Encoding X as a stub because "the main arrow is short"/);
-    expect(PER_CROP_VISION_PROMPT).toMatch(/Encoding X as a deep route/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Stubbing the route/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Encoding X as a deep arc/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Endpoint too far right/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Missing the dip below LOS/);
   });
 
   it("forbids stub-when-confused (the #1 round-13 failure mode)", () => {
