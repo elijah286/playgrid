@@ -186,48 +186,37 @@ describe("NORMAL_PROMPT — Rule 9b (image input, waypoint mode)", () => {
     expect(NORMAL_PROMPT).toMatch(/WHY WAYPOINT MODE/);
   });
 
-  it("walks through the 6-step waypoint workflow in order", () => {
+  it("walks through the 5-step waypoint workflow in order", () => {
     const step1 = NORMAL_PROMPT.indexOf("Step 1 — Enumerate plays");
     const step2 = NORMAL_PROMPT.indexOf("Step 2 — CALIBRATE SCALE");
-    const step3 = NORMAL_PROMPT.indexOf("Step 3 — ANCHORED OBSERVATION PASS");
-    const step4 = NORMAL_PROMPT.indexOf("Step 4 — Translate the observation list into the JSON fence");
+    const step3 = NORMAL_PROMPT.indexOf("Step 3 — Output structured coordinates directly");
     const step5 = NORMAL_PROMPT.indexOf("Step 5 — Emit the hand-authored play fence");
     const step6 = NORMAL_PROMPT.indexOf("Step 6 — Move to the next play");
     expect(step1).toBeGreaterThan(-1);
     expect(step2).toBeGreaterThan(step1);
     expect(step3).toBeGreaterThan(step2);
-    expect(step4).toBeGreaterThan(step3);
-    expect(step5).toBeGreaterThan(step4);
+    expect(step5).toBeGreaterThan(step3);
     expect(step6).toBeGreaterThan(step5);
   });
 
-  it("Step 3 requires anchored observation (player + route lists) before JSON encoding", () => {
-    // The fix for the hallucination failure mode (Cal making up
-    // "play-shaped output" that doesn't match the drawing). Forcing
-    // explicit anchored observations against image landmarks gives
-    // the vision model a chance to verify what it actually sees
-    // before committing to waypoints.
-    expect(NORMAL_PROMPT).toMatch(/ANCHORED OBSERVATION PASS/);
-    expect(NORMAL_PROMPT).toMatch(/3a — Player anchor list/);
-    expect(NORMAL_PROMPT).toMatch(/3b — Route observation list/);
-    expect(NORMAL_PROMPT).toMatch(/3c — Cross-check with the play label/);
-    expect(NORMAL_PROMPT).toMatch(/3d — Hallucination guard/);
+  it("forbids prose categorization before encoding (no curl/slant/post intermediate)", () => {
+    // Surfaced 2026-05-21 round 7: the prior anchored-observation
+    // prose layer became a hallucination amplifier — Cal pattern-
+    // matched to a concept, wrote prose for it, encoded waypoints
+    // from the prose. Both the prose and the diagram diverged from
+    // the drawing in a self-consistent way. The fix: skip prose
+    // entirely; go from image directly to structured coordinates.
+    expect(NORMAL_PROMPT).toMatch(/NO PROSE INTERMEDIATE/);
+    expect(NORMAL_PROMPT).toMatch(/skip the prose layer/i);
+    expect(NORMAL_PROMPT).toMatch(/NEVER characterize routes as concepts before emitting/);
   });
 
-  it("Step 3b requires per-route Direction + Distance + Endpoint observations", () => {
-    // The three things Cal must verbalize per route. Without all
-    // three, the encoding step has nothing to ground against.
-    expect(NORMAL_PROMPT).toMatch(/Direction \(FIRST move\)/);
-    expect(NORMAL_PROMPT).toMatch(/Distance \/ depth/);
-    expect(NORMAL_PROMPT).toMatch(/Endpoint \/ breaks/);
-  });
-
-  it("Step 4 ties prose accuracy to waypoint accuracy explicitly", () => {
-    // The encoding step must MATCH the observation prose. If prose
-    // says "short curl" and waypoints encode a deep out, the
-    // encoding is wrong — not a free-form re-interpretation.
-    expect(NORMAL_PROMPT).toMatch(/route prose AND the waypoints MUST match/);
-    expect(NORMAL_PROMPT).toMatch(/The fence is a mechanical encoding of the observation list/);
+  it("Step 3 outputs structured coordinates (3a player list, 3b route list)", () => {
+    // The new Step 3 splits into 3a (player coordinate list) and
+    // 3b (route waypoint list) — both emitted as structured JSON
+    // objects, not prose.
+    expect(NORMAL_PROMPT).toMatch(/3a — Player coordinate list/);
+    expect(NORMAL_PROMPT).toMatch(/3b — Route waypoint list/);
   });
 
   it("Step 2 requires scale calibration from yardlines / LOS / variant defaults", () => {
@@ -243,10 +232,8 @@ describe("NORMAL_PROMPT — Rule 9b (image input, waypoint mode)", () => {
   it("instructs Cal to hand-author player positions in yards (not call place_offense)", () => {
     // Coach's drawing IS the formation — no canonical formation
     // lookup needed. The validator's place_offense mandatory gate
-    // is bypassed when an image is attached. Cal anchors each
-    // player to image landmarks in Step 3a, then converts to (x, y)
-    // in Step 4 — without going through place_offense.
-    expect(NORMAL_PROMPT).toMatch(/Player anchor list/);
+    // is bypassed when an image is attached.
+    expect(NORMAL_PROMPT).toMatch(/Player coordinate list/);
     expect(NORMAL_PROMPT).toMatch(/DO NOT CALL THESE TOOLS ON IMAGE TURNS/);
     expect(NORMAL_PROMPT).toMatch(/`compose_play`, `place_offense`/);
   });
@@ -256,42 +243,28 @@ describe("NORMAL_PROMPT — Rule 9b (image input, waypoint mode)", () => {
     // authored fence uses pure custom_path routes — no family, no
     // route_kind. Without these guardrails Cal reverts to its
     // default route schema with family/depth.
-    expect(NORMAL_PROMPT).toMatch(/from: "<id>", path: \[\[x1, y1\], \[x2, y2\], \.\.\.\], curve: <bool>/);
+    expect(NORMAL_PROMPT).toMatch(/"from": "<id>", "path": \[\[x1, y1\], \[x2, y2\], \.\.\.\], "curve": <bool>/);
     expect(NORMAL_PROMPT).toMatch(/No `family`, no `route_kind`/);
   });
 
-  it("includes waypoint patterns for non-vertical routes (lateral encoding)", () => {
-    // Surfaced 2026-05-21 round 4: Cal's prose said "Y breaks inside
-    // at 8 yards (dig)" but emitted path: [[6, 8]] — a vertical, no
-    // inside-break waypoint. The rendered play looked nothing like
-    // the drawing because every route collapsed to a vertical. The
-    // fix: explicit examples for in / dig / out / corner / post /
-    // drag / flat / curl / comeback that show the lateral waypoint.
-    expect(NORMAL_PROMPT).toMatch(/paths encode BOTH lateral \(x\) and depth \(y\) movement/i);
-    // Spot-check the most failure-prone routes get concrete examples.
-    expect(NORMAL_PROMPT).toMatch(/Drag[\s\S]*?\[\[12, 3\]\]/);     // lateral across the field
-    expect(NORMAL_PROMPT).toMatch(/Flat[\s\S]*?\[\[-15, 2\]\]/);    // lateral to sideline
-    expect(NORMAL_PROMPT).toMatch(/Dig[\s\S]*?\[\[-12, 10\], \[-3, 10\]\]/);  // vertical then in
-    expect(NORMAL_PROMPT).toMatch(/Corner[\s\S]*?\[\[12, 10\], \[18, 16\]\]/); // vertical then out-up
-    expect(NORMAL_PROMPT).toMatch(/Post[\s\S]*?\[\[12, 10\], \[4, 16\]\]/);    // vertical then in-up
+  it("Step 3b enforces lateral component for non-vertical arrows", () => {
+    // The collapse-to-vertical failure mode: Cal encoded all routes
+    // as path: [[start_x, depth]] (vertical only) even when the
+    // drawn arrow bent. The rule must explicitly require x change
+    // when the arrow has lateral movement.
+    expect(NORMAL_PROMPT).toMatch(/Lateral component MUST match the drawing/);
+    expect(NORMAL_PROMPT).toMatch(/x change \(≥3yd between adjacent waypoints\) at the bend/);
   });
 
-  it("includes a mirror rule for left-vs-right starting positions", () => {
-    // Players on the left run inside-breaks toward POSITIVE x;
-    // players on the right toward NEGATIVE x. The mirror rule
-    // prevents Cal from emitting a left-side dig that breaks the
-    // wrong direction.
-    expect(NORMAL_PROMPT).toMatch(/Mirror rule/);
-    expect(NORMAL_PROMPT).toMatch(/positive x → break has NEGATIVE x change/);
-  });
-
-  it("includes a self-check that prevents lateral-component collapse", () => {
-    // The post-emit self-check Cal runs before emitting: "does this
-    // path have a meaningful x change for any non-vertical route?"
-    // Catches the prose-says-dig-but-fence-shows-vertical failure
-    // mode.
+  it("includes a self-check that catches collapse-to-vertical + pattern-matching bugs", () => {
+    // The pre-emit self-check Cal runs: does the path have lateral
+    // movement matching the arrow? Does it have enough waypoints
+    // for the visible breaks? Do distinct arrows have distinct
+    // paths?
     expect(NORMAL_PROMPT).toMatch(/Self-check before emitting/);
-    expect(NORMAL_PROMPT).toMatch(/lateral component.*does my path have a waypoint where x changes/i);
+    expect(NORMAL_PROMPT).toMatch(/collapse-to-vertical bug/);
+    expect(NORMAL_PROMPT).toMatch(/missing-break bug/);
+    expect(NORMAL_PROMPT).toMatch(/pattern-match-to-concept bug/);
   });
 
   it("forbids compose_play / place_offense / get_route_template / propose_plan on image turns", () => {
