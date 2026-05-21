@@ -744,6 +744,28 @@ describe("PER_CROP_VISION_PROMPT — per-crop single-play translation (round 13)
     expect(PER_CROP_VISION_PROMPT).toMatch(/When in doubt with 3\+ anchors, prefer `true`/);
   });
 
+  it("encourages MORE waypoints per route (typical 5-8, up to 12 for complex)", () => {
+    // Surfaced 2026-05-21: Cal encoded most routes with 2-3
+    // anchors, which collapsed curves into straight segments.
+    // Coach feedback: "we need more points on the routes to ensure
+    // they are accurate." Updated guidance: 5-8 typical (not 3-5),
+    // up to 12 for complex shapes (not 5), with explicit "more is
+    // almost always better than fewer" framing.
+    expect(PER_CROP_VISION_PROMPT).toMatch(/5-8 anchors is typical/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/up to 12 for complex multi-segment shapes/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/More anchors are almost always better than fewer/);
+  });
+
+  it("Step 4 includes a render check (mentally re-render and verify)", () => {
+    // The highest-leverage self-validate: imagine the route rendered
+    // (straight segments for curve:false, spline for curve:true) and
+    // check that the result reproduces the drawn arrow. If it
+    // doesn't match, add more anchors at the problem spots.
+    expect(PER_CROP_VISION_PROMPT).toMatch(/Render check/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/mentally render its path the way the diagram will display it/);
+    expect(PER_CROP_VISION_PROMPT).toMatch(/you need MORE ANCHORS/);
+  });
+
   it("teaches dashed lines = pre-snap motion (round 13 bbox-tuning fix)", () => {
     // The Noah play's X has a dashed motion line going behind B
     // pre-snap. Round-13 per-crop failed to capture this as part
