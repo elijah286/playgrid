@@ -169,14 +169,25 @@ export async function cropPlaysFromSheet(
     const width = Math.max(1, Math.min(rawWidth, sourceWidth - left));
     const height = Math.max(1, Math.min(rawHeight, sourceHeight - top));
 
+    // Sharp's default output for JPEG input is quality ~80, which is a
+    // lossy re-encode of an already-encoded JPEG — two compression
+    // generations stack and the pencil-arrow detail blurs. Explicit
+    // quality 95 + mozjpeg gets us close to lossless on the second
+    // encode while keeping files small enough to send through the
+    // chat API. For PNG sources we still output JPEG (smaller, the
+    // model doesn't need transparency).
     const croppedBuffer = await sharp(sourceBuffer)
       .extract({ left, top, width, height })
+      .jpeg({ quality: 95, mozjpeg: true })
       .toBuffer();
 
+    // Output is always JPEG (regardless of input format) since we re-
+    // encoded above. Per-crop downstream consumers don't care about
+    // format match with the source — they just need a base64 image.
     crops.push({
       label: entry.label,
       base64: croppedBuffer.toString("base64"),
-      mediaType,
+      mediaType: "image/jpeg",
       width,
       height,
     });

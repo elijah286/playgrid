@@ -123,16 +123,24 @@ function saveLastPlayId(storageKey: string, playId: string | null): void {
 // ~213px per play box — too small + too JPEG-compressed for the vision model
 // to read the route shape reliably.
 //
-// New defaults:
-//   - 2400px max edge — well above Anthropic's 1568 ceiling, so they do the
-//     final downsample with their better algorithm instead of us.
+// Round-13 (2026-05-21) bump to 4000px:
+//   The per-play cropping pipeline takes the source image and slices it
+//   into N per-play crops. With a 2400px source and ~31% crop width per play
+//   (6-play sheet at 2 columns), each crop landed at ~586px — well UNDER
+//   Anthropic's 1568px processing ceiling for individual images. Pushing the
+//   source to 4000px raises each crop to ~970px, much closer to the ceiling
+//   so the model uses its full processing resolution per play.
+//
+// Defaults:
+//   - 4000px max edge — well above the 1568 per-image ceiling AND large
+//     enough that per-play crops on a 6-play sheet exceed 800px each.
 //   - 0.92 JPEG quality — close to lossless on natural images; preserves the
-//     fine line detail in pencil arrows. A 2400×1800 JPEG at q=0.92 typically
-//     lands at 1-2MB, well under the 5MB binary cap.
+//     fine line detail in pencil arrows. A 4000×3000 JPEG at q=0.92 typically
+//     lands at 3-5MB, near the 5MB binary cap.
 //   - Passthrough threshold raised to 4.5MB (under the 5MB cap, with margin
 //     for base64 expansion) so small files are forwarded verbatim — no
 //     re-encoding loss for photos that already fit.
-const MAX_IMAGE_EDGE_PX = 2400;
+const MAX_IMAGE_EDGE_PX = 4000;
 const IMAGE_JPEG_QUALITY = 0.92;
 const PASSTHROUGH_MAX_BYTES = 4_500_000;
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);

@@ -102,19 +102,37 @@ describe("cropPlaysFromSheet — geometric correctness", () => {
       expect(c.height).toBe(200);
     }
 
-    // Each crop should carry the expected dominant color.
+    // Each crop should carry the expected dominant color. JPEG q=95
+    // re-encoding shifts solid RGB values by ±2 units at worst (lossy
+    // even at high quality), so we assert "close to" instead of
+    // exact match. The geometric correctness — which crop carries
+    // which color — is what we're actually testing here.
     const tl = await dominantColor(crops[0].base64);
     const tr = await dominantColor(crops[1].base64);
     const bl = await dominantColor(crops[2].base64);
     const br = await dominantColor(crops[3].base64);
 
-    expect(tl).toMatchObject({ r: 255, g: 0, b: 0 }); // red
-    expect(tr).toMatchObject({ r: 0, g: 255, b: 0 }); // green
-    expect(bl).toMatchObject({ r: 0, g: 0, b: 255 }); // blue
-    expect(br).toMatchObject({ r: 255, g: 255, b: 0 }); // yellow
+    const closeTo = (
+      actual: { r: number; g: number; b: number },
+      target: { r: number; g: number; b: number },
+      tolerance = 3,
+    ) => {
+      expect(Math.abs(actual.r - target.r)).toBeLessThanOrEqual(tolerance);
+      expect(Math.abs(actual.g - target.g)).toBeLessThanOrEqual(tolerance);
+      expect(Math.abs(actual.b - target.b)).toBeLessThanOrEqual(tolerance);
+    };
+    closeTo(tl, { r: 255, g: 0, b: 0 }); // red
+    closeTo(tr, { r: 0, g: 255, b: 0 }); // green
+    closeTo(bl, { r: 0, g: 0, b: 255 }); // blue
+    closeTo(br, { r: 255, g: 255, b: 0 }); // yellow
   });
 
-  it("preserves labels and media type on each crop", async () => {
+  it("preserves labels and always outputs JPEG (re-encoded q=95)", async () => {
+    // Round-13 fix: explicit JPEG q=95 output regardless of source
+    // format. Avoids the default sharp behavior of re-encoding at
+    // q≈80 which blurs pencil-arrow detail. JPEG is also smaller
+    // than the corresponding PNG so per-crop calls fit comfortably
+    // under the API's per-image cap.
     const sourceB64 = await makeQuadrantImage();
     const crops = await cropPlaysFromSheet(sourceB64, "image/png", [
       { label: "Noah", bbox: { x: 0, y: 0, w: 0.5, h: 0.5 } },
@@ -122,7 +140,8 @@ describe("cropPlaysFromSheet — geometric correctness", () => {
     ]);
     expect(crops.map((c) => c.label)).toEqual(["Noah", "67"]);
     for (const c of crops) {
-      expect(c.mediaType).toBe("image/png");
+      // Output is always image/jpeg regardless of source format.
+      expect(c.mediaType).toBe("image/jpeg");
       expect(c.base64.length).toBeGreaterThan(0);
     }
   });
