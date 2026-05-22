@@ -28,6 +28,8 @@ import {
   extractPlayIdFromCreateResult,
   formatAutoSaveReason,
   extractLastUserText,
+  shouldEmitLobbyOrphanWarning,
+  shouldSkipFenceInCreateAutoCommit,
   SAVE_INTENT_DEFENSE_RE,
 } from "./agent";
 import type { ChatMessage } from "./llm";
@@ -470,5 +472,139 @@ describe("SAVE_INTENT_DEFENSE_RE — pins the defense auto-commit decision bound
   it("is case-insensitive", () => {
     expect(SAVE_INTENT_DEFENSE_RE.test("INSTALL TAMPA 2")).toBe(true);
     expect(SAVE_INTENT_DEFENSE_RE.test("Save This Defense")).toBe(true);
+  });
+});
+
+describe("shouldEmitLobbyOrphanWarning — pins the play-page anchor bug fix", () => {
+  // Surfaced 2026-05-21: coach was viewing "7v7 Zone Tampa 2" in the editor
+  // and asked "now show how the defenders should shift to cover this Smash
+  // Right play". Cal emitted a defense-only fence (exploration, no save
+  // verb). The create-auto-commit skipped (ctx.playId set), the defense-
+  // overlay branch skipped (no save-intent), and the else fell through to
+  // the "Coach Cal isn't anchored to a playbook right now" warning — even
+  // though the chat header still read "Anchored to 14u 7v7 Spring 2026 ·
+  // 7v7 Zone Tampa 2". The warning must ONLY fire in TRUE lobby mode (no
+  // playbookId at all).
+
+  it("fires in true lobby mode (no playbookId, has orphan, Cal didn't save)", () => {
+    expect(
+      shouldEmitLobbyOrphanWarning({
+        playbookId: null,
+        calCalledCreatePlay: false,
+        hasOrphanedFences: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("stays silent on play-page mode (playbookId set) — the 2026-05-21 bug case", () => {
+    expect(
+      shouldEmitLobbyOrphanWarning({
+        playbookId: "pb-uuid-123",
+        calCalledCreatePlay: false,
+        hasOrphanedFences: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("stays silent when Cal called create_play explicitly (Cal handled the save)", () => {
+    expect(
+      shouldEmitLobbyOrphanWarning({
+        playbookId: null,
+        calCalledCreatePlay: true,
+        hasOrphanedFences: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("stays silent when there are no orphaned fences to warn about", () => {
+    expect(
+      shouldEmitLobbyOrphanWarning({
+        playbookId: null,
+        calCalledCreatePlay: false,
+        hasOrphanedFences: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("treats undefined playbookId the same as null (true lobby)", () => {
+    expect(
+      shouldEmitLobbyOrphanWarning({
+        playbookId: undefined,
+        calCalledCreatePlay: false,
+        hasOrphanedFences: true,
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("shouldSkipFenceInCreateAutoCommit — pins the play-page defense-save recovery", () => {
+  // Surfaced 2026-05-21: coach was viewing "7v7 Zone Tampa 2" in the
+  // editor and typed "install tampa two". Cal violated the prompt rule
+  // ("call compose_defense WITH on_play OR propose_save_defense_play")
+  // by emitting a defense-only fence + hallucinating a save claim. The
+  // create-auto-commit was skipped (ctx.playId set), the overlay branch
+  // was skipped (no offense in fence), and the coach saw a phantom
+  // success. The recovery: let defense-only fences with save-intent
+  // break through the play-page guard so create_play saves them as
+  // standalone defense plays.
+
+  it("skips defense-only fences without save-intent (exploration: 'show me Tampa 2')", () => {
+    expect(
+      shouldSkipFenceInCreateAutoCommit({
+        onPlayPage: false,
+        fenceIsDefenseOnly: true,
+        hasDefenseSaveIntent: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("saves defense-only fences with save-intent on a play page (the 2026-05-21 bug case)", () => {
+    expect(
+      shouldSkipFenceInCreateAutoCommit({
+        onPlayPage: true,
+        fenceIsDefenseOnly: true,
+        hasDefenseSaveIntent: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("saves defense-only fences with save-intent OFF a play page (existing flow)", () => {
+    expect(
+      shouldSkipFenceInCreateAutoCommit({
+        onPlayPage: false,
+        fenceIsDefenseOnly: true,
+        hasDefenseSaveIntent: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("skips offense fences on a play page (handled by Auto-commit guard / update_play)", () => {
+    expect(
+      shouldSkipFenceInCreateAutoCommit({
+        onPlayPage: true,
+        fenceIsDefenseOnly: false,
+        hasDefenseSaveIntent: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("skips offense fences on a play page EVEN WITH save-intent (the prompt-rule-skip stays — would double-create with update_play)", () => {
+    expect(
+      shouldSkipFenceInCreateAutoCommit({
+        onPlayPage: true,
+        fenceIsDefenseOnly: false,
+        hasDefenseSaveIntent: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("saves offense fences off a play page (the lobby + playbook-overview flow)", () => {
+    expect(
+      shouldSkipFenceInCreateAutoCommit({
+        onPlayPage: false,
+        fenceIsDefenseOnly: false,
+        hasDefenseSaveIntent: false,
+      }),
+    ).toBe(false);
   });
 });

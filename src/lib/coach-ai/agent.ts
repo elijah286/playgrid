@@ -1869,6 +1869,66 @@ export function extractLastUserText(history: ChatMessage[]): string {
 export const SAVE_INTENT_DEFENSE_RE =
   /\b(install|save|add|create|build|make|keep|store|stick|lock\s+in|set\s+up|put\s+in|wire\s+up)\b/i;
 
+/** Decide whether create-auto-commit should skip a fence based on side
+ *  (offense vs defense-only) and the coach's save-intent.
+ *
+ *  Two skip rules:
+ *  (a) Defense-only fence WITHOUT save-intent → skip. Cal often emits a
+ *      defense-only fence for exploration ("show me Tampa 2"); auto-saving
+ *      those pollutes the playbook. SAVE_INTENT_DEFENSE_RE is the gate.
+ *  (b) Offense fence on a play page → skip. The Auto-commit guard above
+ *      handles edits to the current play via update_play; saving the same
+ *      fence as a NEW play here would double-create. If the coach asked
+ *      for a NEW offense play from a play page, they can navigate out or
+ *      say "save those" — but the implicit path stays defense-only.
+ *
+ *  The asymmetry is intentional: defense-only fences with save-intent must
+ *  break through the play-page guard. Cal sometimes calls compose_defense
+ *  WITHOUT on_play even when the coach says "install Tampa 2" — letting
+ *  that fence reach create_play (with play_type="defense") recovers the
+ *  save instead of leaving Cal's hallucinated "saved" claim un-backed.
+ *  Surfaced 2026-05-21: coach on a play page typed "install tampa two",
+ *  Cal emitted a defense-only fence + hallucinated save, no save actually
+ *  landed.
+ */
+export function shouldSkipFenceInCreateAutoCommit(args: {
+  onPlayPage: boolean;
+  fenceIsDefenseOnly: boolean;
+  hasDefenseSaveIntent: boolean;
+}): boolean {
+  if (args.fenceIsDefenseOnly && !args.hasDefenseSaveIntent) return true;
+  if (args.onPlayPage && !args.fenceIsDefenseOnly) return true;
+  return false;
+}
+
+/** Decide whether to surface the "Coach Cal isn't anchored to a playbook"
+ *  warning when the auto-commit if-branch is skipped. The warning is correct
+ *  for TRUE lobby mode (no playbookId at all) — but the else branch ALSO
+ *  catches play-page mode (playbookId set, playId set), where the chat IS
+ *  anchored and the warning text is misleading.
+ *
+ *  Surfaced 2026-05-21: coach was viewing "7v7 Zone Tampa 2" in the editor
+ *  and asked "now show how the defenders should shift to cover this Smash
+ *  Right play". Cal emitted a defense-only fence (exploration intent, no
+ *  save verb). The create-auto-commit skipped (ctx.playId set), the defense-
+ *  overlay branch skipped (no save-intent), and the else branch wrongly
+ *  fired "Coach Cal isn't anchored to a playbook right now" — even though
+ *  the chat header still read "Anchored to 14u 7v7 Spring 2026 · 7v7 Zone
+ *  Tampa 2". When anchored to a playbook, the auto-commit guard handles
+ *  edits to the current play, the defense-overlay branch handles save-
+ *  intent defenses, and exploration fences are visualizations the coach
+ *  can ask to save explicitly — stay silent. */
+export function shouldEmitLobbyOrphanWarning(args: {
+  playbookId: string | null | undefined;
+  calCalledCreatePlay: boolean;
+  hasOrphanedFences: boolean;
+}): boolean {
+  if (args.calCalledCreatePlay) return false;
+  if (!args.hasOrphanedFences) return false;
+  if (args.playbookId) return false;
+  return true;
+}
+
 /** Does this fence look like a full-roster play (worth auto-saving) rather than
  *  a single-element demo (rule 9a)? Decision rule: count the players on the
  *  most-populated side (offense vs defense vs unspecified). If the larger side
@@ -2813,26 +2873,6 @@ export async function runAgent(
     }
   }
 
-  // Hallucination warning: Cal claimed "Saved defense play" earlier in
-  // the reply but the auto-commit didn't actually save anything. Replace
-  // the (already-stripped) false claim with a coach-readable explanation
-  // of why so the coach can react instead of trusting a phantom success.
-  if (calHallucinatedDefenseSave && !defenseAutoCommitSucceeded) {
-    let reason: string;
-    if (!defenseAutoCommitAttempted) {
-      reason =
-        "the request didn't read as a clear save (or the defense fence didn't include both offense + defenders). " +
-        "Try \"install Tampa 2 on Smash Right\" (naming the offense play explicitly) — or click into the play first, then ask me.";
-    } else {
-      reason =
-        "I couldn't resolve which offense play to attach the defense to. " +
-        "Try \"install Tampa 2 on [PlayName]\" (naming the offense play explicitly), or open the play in the editor first.";
-    }
-    const suffix = `\n\n_⚠️ I said I saved a defense play, but I didn't — ${reason}_`;
-    finalText = finalText + suffix;
-    onEvent?.({ type: "text_delta", text: suffix });
-  }
-
   // ── Create auto-commit (save-by-default, walk-all-history) ──────────
   // Save every full-roster ```play fence the coach has seen in this chat
   // that isn't already in the playbook. This is the PRIMARY save
@@ -2864,8 +2904,10 @@ export async function runAgent(
   // Safety:
   //   - Scoped to playbook-anchor + editable (we know the playbook and
   //     have permission)
-  //   - Skipped when `ctx.playId` is set (editor anchor; update
-  //     auto-commit handles that path)
+  //   - Per-fence skip: offense fences on a play page are handled by the
+  //     Auto-commit guard above (update_play); defense-only fences need
+  //     explicit save-intent. See shouldSkipFenceInCreateAutoCommit for
+  //     the decision logic — the loop calls it once per fence.
   //   - Roster-count gate: only saves fences whose largest side
   //     (offense / defense / untagged) meets the variant's roster
   //     count. Single-element demos per rule 9a stay exploratory.
@@ -2874,8 +2916,7 @@ export async function runAgent(
   //     other 5. Dedup handles the overlap.
   if (
     ctx.playbookId &&
-    ctx.canEditPlaybook &&
-    !ctx.playId
+    ctx.canEditPlaybook
   ) {
     const existingNames = await fetchExistingPlaybookPlayNames(ctx.playbookId);
     const currentTurnFences = extractPlayFencesFromText(finalText);
@@ -2918,7 +2959,15 @@ export async function runAgent(
         const fenceIsDefenseOnly =
           parsed.focus === "D" ||
           (players.length > 0 && players.every((p) => p.team === "D"));
-        if (fenceIsDefenseOnly && !hasDefenseSaveIntent) continue;
+        if (
+          shouldSkipFenceInCreateAutoCommit({
+            onPlayPage: !!ctx.playId,
+            fenceIsDefenseOnly,
+            hasDefenseSaveIntent,
+          })
+        ) {
+          continue;
+        }
         fenceName =
           typeof parsed.title === "string" && parsed.title.trim()
             ? parsed.title.trim().slice(0, 80)
@@ -2938,6 +2987,17 @@ export async function runAgent(
         if (commit.ok) {
           mutated = true;
           toolCalls.push("create_play");
+          // Suppress the hallucinated-defense-save warning below when the
+          // create-auto-commit actually saved a defense fence this turn.
+          // Without this, the warning fires even though the save happened —
+          // surfaced 2026-05-21 when the coach typed "install tampa two"
+          // on a play page, Cal emitted a defense-only fence + claimed
+          // "saved" in prose, the harness DID save it via this branch,
+          // and the warning then fired anyway because it only looked at
+          // the overlay branch's flag.
+          if (fenceIsDefenseOnly) {
+            defenseAutoCommitSucceeded = true;
+          }
           const playId = extractPlayIdFromCreateResult(commit.result);
           // On IMAGE turns ONLY: re-derive the deterministic notes
           // that create_play just wrote to metadata.notes, so we can
@@ -3057,49 +3117,88 @@ export async function runAgent(
       onEvent?.({ type: "text_delta", text: suffix });
     }
   } else {
-    // Lobby mode (no anchored playbook). The auto-commit above is
-    // skipped because there's no target playbook to save into. But
-    // if Cal emitted full-roster play fences in this turn, the coach
-    // expects them to land somewhere — without a suffix here, Cal's
-    // narrated "Saved Play 2" reads as success while the play
-    // silently vanishes. Surface the failure explicitly so the
-    // coach knows to anchor a playbook before continuing.
+    // Two cases land here:
+    //   1. TRUE lobby mode (no anchored playbook). If Cal emitted full-
+    //      roster fences this turn, the coach expects them to land
+    //      somewhere — without a suffix, Cal's narrated "Saved Play 2"
+    //      reads as success while the play silently vanishes. Surface
+    //      the failure so the coach knows to anchor a playbook first.
+    //      Surfaced 2026-05-20: dashboard chat, 6 ```play fences emitted,
+    //      playbook count stayed at 0 because nothing actually saved.
+    //   2. Play-page mode (playbookId AND playId set). The if-branch
+    //      skipped on purpose — the editor's auto-commit guard above
+    //      handles offense edits to the current play, and the defense-
+    //      overlay auto-commit handles save-intent defenses. Exploration
+    //      fences ("show how the defenders shift to cover this") are
+    //      visualizations the coach can ask to save explicitly.
+    //      Surfaced 2026-05-21: coach viewing "7v7 Zone Tampa 2" asked
+    //      "now show how the defenders should shift to cover this Smash
+    //      Right play". Cal emitted a defense-only fence, this else
+    //      branch wrongly fired "Coach Cal isn't anchored to a playbook"
+    //      even though the header clearly said "Anchored to ...".
     //
     // Skipped when an explicit create_play(playbook_id: X) tool call
-    // succeeded this turn — Cal handled the lobby-mode save manually
-    // via the "narrow case" rule and the suffix would be misleading.
-    // Surfaced 2026-05-20 when a coach chatted with Cal from the
-    // dashboard (no playbook open), Cal emitted 6 ```play fences,
-    // and the playbook count stayed at 0 because nothing actually
-    // saved.
+    // succeeded this turn — Cal handled the save manually via the
+    // "narrow case" rule and the suffix would be misleading.
     const calCalledCreatePlay = toolCalls.includes("create_play");
-    if (!calCalledCreatePlay) {
-      const currentTurnFences = extractPlayFencesFromText(finalText);
-      const orphanedFences: string[] = [];
-      for (const fenceJson of currentTurnFences) {
-        try {
-          const parsed = JSON.parse(fenceJson) as Record<string, unknown>;
-          if (!fenceIsFullRosterPlay(parsed, ctx.sportVariant)) continue;
-          const name =
-            typeof parsed.title === "string" && parsed.title.trim()
-              ? parsed.title.trim().slice(0, 80)
-              : "Cal-generated play";
-          orphanedFences.push(name);
-        } catch {
-          // Malformed fence — skip silently (other validators surface it).
-        }
-      }
-      if (orphanedFences.length > 0) {
-        const list = orphanedFences.map((n) => `"${n}"`).join(", ");
-        const verb = orphanedFences.length === 1 ? "1 play" : `${orphanedFences.length} plays`;
-        const suffix =
-          `\n\n_⚠️ Couldn't save ${verb} — Coach Cal isn't anchored to a playbook right now, so the auto-save has no target. ` +
-          `Open the playbook you want these in from your dashboard, then come back here and ask Cal to "save those" — the fences are still in this chat and the harness will save them once anchored._\n\n` +
-          `_Unsaved: ${list}_`;
-        finalText = finalText + suffix;
-        onEvent?.({ type: "text_delta", text: suffix });
+    const currentTurnFences = extractPlayFencesFromText(finalText);
+    const orphanedFences: string[] = [];
+    for (const fenceJson of currentTurnFences) {
+      try {
+        const parsed = JSON.parse(fenceJson) as Record<string, unknown>;
+        if (!fenceIsFullRosterPlay(parsed, ctx.sportVariant)) continue;
+        const name =
+          typeof parsed.title === "string" && parsed.title.trim()
+            ? parsed.title.trim().slice(0, 80)
+            : "Cal-generated play";
+        orphanedFences.push(name);
+      } catch {
+        // Malformed fence — skip silently (other validators surface it).
       }
     }
+    if (
+      shouldEmitLobbyOrphanWarning({
+        playbookId: ctx.playbookId,
+        calCalledCreatePlay,
+        hasOrphanedFences: orphanedFences.length > 0,
+      })
+    ) {
+      const list = orphanedFences.map((n) => `"${n}"`).join(", ");
+      const verb = orphanedFences.length === 1 ? "1 play" : `${orphanedFences.length} plays`;
+      const suffix =
+        `\n\n_⚠️ Couldn't save ${verb} — Coach Cal isn't anchored to a playbook right now, so the auto-save has no target. ` +
+        `Open the playbook you want these in from your dashboard, then come back here and ask Cal to "save those" — the fences are still in this chat and the harness will save them once anchored._\n\n` +
+        `_Unsaved: ${list}_`;
+      finalText = finalText + suffix;
+      onEvent?.({ type: "text_delta", text: suffix });
+    }
+  }
+
+  // Hallucination warning: Cal claimed "Saved defense play" earlier in
+  // the reply but no auto-commit actually saved a defense this turn.
+  // Replace the (already-stripped) false claim with a coach-readable
+  // explanation so the coach can react instead of trusting a phantom
+  // success.
+  //
+  // Why this runs LAST (after both auto-commit branches): the create-
+  // auto-commit can save a defense-only fence when save-intent is clear
+  // and ctx.playId is set — that recovery path also flips
+  // defenseAutoCommitSucceeded. Without seeing that flag, this warning
+  // would mis-fire on a save that actually landed (surfaced 2026-05-21).
+  if (calHallucinatedDefenseSave && !defenseAutoCommitSucceeded) {
+    let reason: string;
+    if (!defenseAutoCommitAttempted) {
+      reason =
+        "the request didn't read as a clear save (or the defense fence didn't include both offense + defenders). " +
+        "Try \"install Tampa 2 on Smash Right\" (naming the offense play explicitly) — or click into the play first, then ask me.";
+    } else {
+      reason =
+        "I couldn't resolve which offense play to attach the defense to. " +
+        "Try \"install Tampa 2 on [PlayName]\" (naming the offense play explicitly), or open the play in the editor first.";
+    }
+    const suffix = `\n\n_⚠️ I said I saved a defense play, but I didn't — ${reason}_`;
+    finalText = finalText + suffix;
+    onEvent?.({ type: "text_delta", text: suffix });
   }
 
   return {
