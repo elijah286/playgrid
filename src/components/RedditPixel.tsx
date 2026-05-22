@@ -6,6 +6,7 @@ import {
   readConsentCookie,
   shouldSuppressTracking,
 } from "@/lib/attribution/consent";
+import { getStoredRedditPixelId } from "@/lib/site/reddit-pixel-config";
 
 // Reddit Ads conversion pixel. Loads the rdt.js library, fires PageVisit
 // on every page, and exposes window.rdt() for downstream SignUp /
@@ -15,14 +16,13 @@ import {
 // haven't accepted. Non-EU treated as implicitly consented under the
 // US-only product posture (documented in /privacy).
 //
-// Configuration: NEXT_PUBLIC_REDDIT_PIXEL_ID must be set at build time
-// (the value is inlined into the client bundle by Next). Without it,
-// the component is a clean no-op so dev/preview environments don't
-// fire pixel calls.
-
-const PIXEL_ID = process.env.NEXT_PUBLIC_REDDIT_PIXEL_ID;
+// Configuration: pixel ID is set by the site admin in Site admin →
+// Integrations (stored in site_settings.reddit_pixel_id, cached
+// in-memory for 60s by getStoredRedditPixelId). No deploy needed to
+// rotate. Without an ID the component renders nothing.
 
 export default async function RedditPixel() {
+  const PIXEL_ID = await getStoredRedditPixelId();
   if (!PIXEL_ID) return null;
 
   const consent = await readConsentCookie();

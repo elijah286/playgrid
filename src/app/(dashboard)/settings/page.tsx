@@ -10,6 +10,7 @@ import {
 import { getResendStatusAction } from "@/app/actions/admin-resend";
 import { getGoogleMapsStatusAction } from "@/app/actions/admin-google-maps";
 import { getMaxMindStatusAction } from "@/app/actions/admin-maxmind";
+import { getRedditPixelStatusAction } from "@/app/actions/admin-reddit-pixel";
 import {
   getFeedbackWidgetEnabledAction,
   listFeedbackForAdminAction,
@@ -68,6 +69,7 @@ export default async function SettingsPage() {
     resendRes,
     googleMapsRes,
     maxmindRes,
+    redditPixelRes,
     feedbackRes,
     invitesRes,
     feedbackWidgetRes,
@@ -105,6 +107,7 @@ export default async function SettingsPage() {
     getResendStatusAction(),
     getGoogleMapsStatusAction(),
     getMaxMindStatusAction(),
+    getRedditPixelStatusAction(),
     listFeedbackForAdminAction(),
     listCoachInvitationsAction(),
     getFeedbackWidgetEnabledAction(),
@@ -206,6 +209,15 @@ export default async function SettingsPage() {
                 downloadedAt: maxmindRes.downloadedAt,
               }
             : { ok: false, error: maxmindRes.error }
+        }
+        redditPixel={
+          redditPixelRes.ok
+            ? {
+                ok: true,
+                configured: redditPixelRes.configured,
+                statusLabel: redditPixelRes.statusLabel,
+              }
+            : { ok: false, error: redditPixelRes.error }
         }
         initialFeedback={feedbackRes.ok ? feedbackRes.items : []}
         feedbackError={feedbackRes.ok ? null : feedbackRes.error}
