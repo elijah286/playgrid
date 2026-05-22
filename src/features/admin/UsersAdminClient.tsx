@@ -23,7 +23,11 @@ import {
   type AdminUserActivity,
   type AdminUserStats,
 } from "@/app/actions/admin-users";
-import { grantCompAction, revokeCompAction } from "@/app/actions/admin-billing";
+import {
+  cancelStripeSubscriptionAction,
+  grantCompAction,
+  revokeCompAction,
+} from "@/app/actions/admin-billing";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
 import { Modal } from "@/components/ui";
 
@@ -694,6 +698,7 @@ function PlanDialog({
   const [expiresAt, setExpiresAt] = useState<string>(defaultExpiry);
   const [noExpiry, setNoExpiry] = useState<boolean>(false);
   const [note, setNote] = useState<string>("");
+  const [refundOnCancel, setRefundOnCancel] = useState<boolean>(true);
   const [pending, startTransition] = useTransition();
 
   const isStripe = user.entitlementSource === "stripe";
@@ -773,9 +778,55 @@ function PlanDialog({
         </div>
 
         {isStripe && (
-          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-950 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-50 dark:ring-amber-800">
-            This user has an active Stripe subscription. Manage billing in Stripe directly; grants here will be overridden by the paid subscription.
-          </p>
+          <div className="space-y-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-950 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-50 dark:ring-amber-800">
+            <p>
+              This user has an active Stripe subscription. Grants here will be
+              overridden by the paid subscription. Manage billing in Stripe, or
+              cancel directly below.
+            </p>
+            <label className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={refundOnCancel}
+                onChange={(e) => setRefundOnCancel(e.target.checked)}
+              />
+              Also refund the last payment in full
+            </label>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => {
+                const msg = refundOnCancel
+                  ? `Cancel Stripe subscription for ${user.email} AND refund the last payment?`
+                  : `Cancel Stripe subscription for ${user.email}? (no refund will be issued)`;
+                if (!confirm(msg)) return;
+                startTransition(async () => {
+                  const res = await cancelStripeSubscriptionAction({
+                    userId: user.id,
+                    refundLastPayment: refundOnCancel,
+                  });
+                  if (!res.ok) {
+                    onError(res.error);
+                    return;
+                  }
+                  const parts: string[] = [`Canceled Stripe subscription for ${user.email}.`];
+                  if (refundOnCancel) {
+                    if (res.refundedCents != null) {
+                      const amt = (res.refundedCents / 100).toFixed(2);
+                      const cur = (res.refundedCurrency ?? "usd").toUpperCase();
+                      parts.push(`Refunded ${amt} ${cur}.`);
+                    } else if (res.refundError) {
+                      parts.push(`Refund did NOT go through: ${res.refundError}`);
+                    }
+                  }
+                  onDone(parts.join(" "));
+                });
+              }}
+              className="rounded-lg border border-danger/30 bg-surface px-3 py-1 text-xs font-medium text-danger hover:bg-danger/10 disabled:opacity-40"
+            >
+              {pending ? "Working…" : "Cancel subscription now"}
+            </button>
+          </div>
         )}
 
         <Field label="Tier">

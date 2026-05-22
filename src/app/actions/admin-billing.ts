@@ -7,6 +7,7 @@ import { hasSupabaseEnv } from "@/lib/supabase/config";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
 import { getStripeConfigStatus, type StripeConfigStatus } from "@/lib/site/stripe-config";
 import { setCoachAiTierEnabled } from "@/lib/site/pricing-config";
+import { getStripeClient } from "@/lib/billing/stripe";
 
 const SITE_ROW_ID = "default";
 
@@ -120,6 +121,138 @@ export async function revokeCompAction(compGrantId: string) {
   if (error) return { ok: false as const, error: error.message };
   revalidatePath("/settings");
   return { ok: true as const };
+}
+
+/**
+ * Cancel a user's active Stripe subscription immediately, with an optional
+ * full refund of the most recent paid invoice. Intended for admin reset of
+ * test accounts and exceptional support cases — coaches self-serve via the
+ * Stripe portal in normal flow.
+ *
+ * Steps:
+ *  1. Resolve the active subscription row for the user.
+ *  2. (Optional) Refund the latest paid invoice's PaymentIntent. Refund
+ *     failure does NOT block cancellation; we report it back so the admin
+ *     can retry in Stripe directly.
+ *  3. Call `stripe.subscriptions.cancel(...)` (immediate, not period-end).
+ *  4. Mirror the resulting status into our `subscriptions` row so the
+ *     admin UI reflects the change without waiting for the webhook to fire.
+ */
+export async function cancelStripeSubscriptionAction(input: {
+  userId: string;
+  refundLastPayment: boolean;
+}): Promise<
+  | {
+      ok: true;
+      refundedCents: number | null;
+      refundedCurrency: string | null;
+      refundError: string | null;
+    }
+  | { ok: false; error: string }
+> {
+  const gate = await assertAdmin();
+  if (!gate.ok) return { ok: false, error: gate.error };
+
+  const admin = createServiceRoleClient();
+  const { data: sub, error: subErr } = await admin
+    .from("subscriptions")
+    .select("stripe_subscription_id, status")
+    .eq("user_id", input.userId)
+    .in("status", ["active", "trialing", "past_due"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (subErr) return { ok: false, error: subErr.message };
+  if (!sub?.stripe_subscription_id) {
+    return { ok: false, error: "No active Stripe subscription found for this user." };
+  }
+
+  let stripe;
+  try {
+    ({ stripe } = await getStripeClient());
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Stripe not configured." };
+  }
+
+  let refundedCents: number | null = null;
+  let refundedCurrency: string | null = null;
+  let refundError: string | null = null;
+
+  if (input.refundLastPayment) {
+    try {
+      // Stripe SDK v22 removed `Invoice.payment_intent`; we now expand the
+      // nested `payments` list and pull the PaymentIntent off the first
+      // succeeded payment on the most recent paid invoice.
+      const invoices = await stripe.invoices.list({
+        subscription: sub.stripe_subscription_id,
+        limit: 10,
+        expand: ["data.payments"],
+      });
+      const paid = invoices.data.find(
+        (i) => i.status === "paid" && (i.amount_paid ?? 0) > 0,
+      );
+      const paymentRecord = paid?.payments?.data.find(
+        (p) =>
+          p.status === "paid" &&
+          p.payment?.type === "payment_intent" &&
+          p.payment.payment_intent,
+      );
+      const paymentIntentRef = paymentRecord?.payment?.payment_intent ?? null;
+      const paymentIntentId =
+        typeof paymentIntentRef === "string"
+          ? paymentIntentRef
+          : (paymentIntentRef?.id ?? null);
+      if (!paymentIntentId) {
+        refundError = "No paid PaymentIntent found on recent invoices.";
+      } else {
+        const refund = await stripe.refunds.create({
+          payment_intent: paymentIntentId,
+        });
+        refundedCents = refund.amount ?? null;
+        refundedCurrency = refund.currency ?? null;
+      }
+    } catch (e) {
+      refundError =
+        e instanceof Error
+          ? e.message
+          : "Refund failed for an unknown reason.";
+    }
+  }
+
+  let canceledStatus: string;
+  let canceledAtIso: string | null;
+  try {
+    const canceled = await stripe.subscriptions.cancel(sub.stripe_subscription_id);
+    canceledStatus = canceled.status;
+    canceledAtIso = canceled.canceled_at
+      ? new Date(canceled.canceled_at * 1000).toISOString()
+      : new Date().toISOString();
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Stripe cancel call failed.",
+    };
+  }
+
+  // Mirror the new status immediately so the admin UI updates without
+  // waiting on the webhook. The webhook will overwrite with the full
+  // payload when it arrives, which is fine — fields agree.
+  await admin
+    .from("subscriptions")
+    .update({
+      status: canceledStatus,
+      cancel_at: canceledAtIso,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("stripe_subscription_id", sub.stripe_subscription_id);
+
+  revalidatePath("/settings");
+  return {
+    ok: true,
+    refundedCents,
+    refundedCurrency,
+    refundError,
+  };
 }
 
 export type GiftCodeRow = {
