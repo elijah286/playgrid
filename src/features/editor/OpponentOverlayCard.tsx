@@ -7,6 +7,7 @@ import type { PlaybookPlayNavItem } from "@/domain/print/playbookPrint";
 import type { SavedFormation } from "@/app/actions/formations";
 import { getPlayForEditorAction } from "@/app/actions/plays";
 import { useToast } from "@/components/ui";
+import { notifyTutorialAction } from "@/features/tutorials/engine/notify";
 
 type Props = {
   currentPlayId: string;
@@ -175,6 +176,7 @@ export function OpponentOverlayCard({
     setPickedHasRoutes(false);
     onChange(f.players);
     onChangeRoutes?.(null);
+    notifyTutorialAction("opponent-picked");
   };
 
   const pickPlay = (p: PlaybookPlayNavItem) => {
@@ -208,6 +210,7 @@ export function OpponentOverlayCard({
       // Surface the picked play's routes so the parent can optionally render
       // them as ghost arrows (see `showRoutes`).
       onChangeRoutes?.(routes);
+      notifyTutorialAction("opponent-picked");
     });
   };
 
@@ -239,6 +242,7 @@ export function OpponentOverlayCard({
     startCustomPending(async () => {
       await onCreateCustom();
       setSelection({ kind: "custom" });
+      notifyTutorialAction("opponent-custom-created");
     });
   };
 
@@ -253,6 +257,7 @@ export function OpponentOverlayCard({
       await onSaveCustomAsPlay(name);
       setSaveOpen(false);
       setSaveName("");
+      notifyTutorialAction("opponent-saved-as-defense");
     });
   };
 
@@ -309,6 +314,7 @@ export function OpponentOverlayCard({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search formations and plays…"
+            data-tutor="opponent-picker-search"
             className="w-full rounded-md border border-border bg-surface-raised py-1.5 pl-7 pr-2 text-xs text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
           />
         </div>
@@ -353,6 +359,7 @@ export function OpponentOverlayCard({
                   setSaveName("");
                   setSaveOpen(true);
                 }}
+                data-tutor="opponent-save-as-defense"
                 className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
               >
                 <Save className="size-3" />
@@ -412,6 +419,7 @@ export function OpponentOverlayCard({
           </div>
           {selection.kind === "play" && onShowRoutesChange && (
             <label
+              data-tutor="opponent-show-offense-toggle"
               className={`flex select-none items-center gap-1.5 text-[11px] ${
                 pickedHasRoutes
                   ? "cursor-pointer text-muted"
@@ -459,6 +467,7 @@ export function OpponentOverlayCard({
               type="button"
               disabled={customPending}
               onClick={pickCustom}
+              data-tutor="opponent-custom-create"
               className="flex w-full items-center gap-2 rounded-md border border-dashed border-amber-400/50 bg-amber-400/5 px-2 py-2 text-left text-xs text-foreground transition-colors hover:bg-amber-400/10 disabled:opacity-60"
             >
               <Pencil className="size-3.5 text-amber-500" />

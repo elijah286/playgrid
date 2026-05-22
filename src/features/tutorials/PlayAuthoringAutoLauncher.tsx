@@ -7,7 +7,8 @@ import type { SportVariant } from "@/domain/play/types";
 import { getTutorialProgressAction } from "@/app/actions/tutorials";
 import { useToast } from "@/components/ui";
 import { useTutorial } from "./engine/TutorialProvider";
-import { PLAY_AUTHORING_TUTORIAL } from "./tutorials/playAuthoring";
+import { TUTORIALS } from "./tutorials";
+import type { TutorialId } from "./engine/types";
 import { launchPlayAuthoringTour } from "./launch";
 
 const VISIT_KEY = "xo:editor-visits";
@@ -68,15 +69,20 @@ export function PlayAuthoringAutoLauncher({
   const [launching, setLaunching] = useState(false);
   const checkedRef = useRef(false);
 
-  // Deep-link from Learning Center: `?tour=play_authoring_v1` force-starts
-  // the tour on mount, regardless of visit count or prior dismissal. We
-  // strip the query param after triggering so a refresh doesn't re-start.
+  // Deep-link from Learning Center: `?tour=<id>` force-starts the matching
+  // tour on mount, regardless of visit count or prior dismissal. We strip
+  // the query param after triggering so a refresh doesn't re-start. Any
+  // tutorial registered in TUTORIALS that supports the play editor surface
+  // is dispatchable from here.
   useEffect(() => {
-    const tourParam = searchParams.get("tour");
-    if (tourParam !== "play_authoring_v1") return;
+    const tourParam = searchParams.get("tour") as TutorialId | null;
+    if (!tourParam) return;
+    const def = TUTORIALS[tourParam];
+    if (!def) return;
     if (!variant || !isSupportedVariant(variant)) return;
+    if (!def.supportedVariants.includes(variant)) return;
     if (active) return;
-    start(PLAY_AUTHORING_TUTORIAL, variant);
+    start(def, variant);
     // Drop the query param. Router-level replace keeps history clean.
     const params = new URLSearchParams(searchParams.toString());
     params.delete("tour");
@@ -90,9 +96,9 @@ export function PlayAuthoringAutoLauncher({
     if (checkedRef.current) return;
     checkedRef.current = true;
     if (!variant || !isSupportedVariant(variant)) return;
-    // Skip the visit-count toast path when arriving from a deep-link —
-    // the effect above already started the tour.
-    if (searchParams.get("tour") === "play_authoring_v1") return;
+    // Skip the visit-count toast path when arriving from ANY deep-link —
+    // the effect above already started the requested tour.
+    if (searchParams.get("tour")) return;
 
     const visits = bumpVisitCount();
     if (visits < 2) return;

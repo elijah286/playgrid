@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { ChevronDown, Plus, Sparkles } from "lucide-react";
 import { SPORT_VARIANT_LABELS } from "@/domain/playbook/settings";
-import type { TutorialStatus } from "@/features/tutorials/engine/types";
+import type { TutorialId, TutorialStatus } from "@/features/tutorials/engine/types";
 import type { getTutorialLaunchOptions } from "@/lib/data/tutorial-launch";
 import { LaunchTutorialButton } from "./LaunchTutorialButton";
 
@@ -39,7 +39,7 @@ export function LessonCard({
   summary,
   status,
   defaultOpen = false,
-  launchPlayAuthoring,
+  launchTutorialId,
   launchOptions,
   comingSoon = false,
 }: {
@@ -47,9 +47,10 @@ export function LessonCard({
   summary: string;
   status: TutorialStatus;
   defaultOpen?: boolean;
-  /** When true, render the launch section pointed at the play
-   *  authoring tour (currently the only tutorial with a launcher). */
-  launchPlayAuthoring?: boolean;
+  /** When set, expanding the card reveals per-playbook launch buttons
+   *  that kick off this tutorial. Omit to render a "Coming soon"
+   *  placeholder (or pass comingSoon for the same effect). */
+  launchTutorialId?: TutorialId;
   launchOptions?: LaunchOptions;
   /** When true, the card is a placeholder for a future tutorial.
    *  Renders a muted "Coming soon" message instead of a launcher. */
@@ -86,8 +87,11 @@ export function LessonCard({
         <div className="border-t border-border-light px-4 pb-4 pt-3">
           {comingSoon ? (
             <ComingSoonBody />
-          ) : launchPlayAuthoring && launchOptions ? (
-            <LaunchSection launchOptions={launchOptions} />
+          ) : launchTutorialId && launchOptions ? (
+            <LaunchSection
+              tutorialId={launchTutorialId}
+              launchOptions={launchOptions}
+            />
           ) : null}
         </div>
       )}
@@ -103,7 +107,13 @@ function ComingSoonBody() {
   );
 }
 
-function LaunchSection({ launchOptions }: { launchOptions: LaunchOptions }) {
+function LaunchSection({
+  tutorialId,
+  launchOptions,
+}: {
+  tutorialId: TutorialId;
+  launchOptions: LaunchOptions;
+}) {
   return (
     <div className="rounded-lg border border-border bg-surface-inset/40 p-3">
       <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">
@@ -119,6 +129,7 @@ function LaunchSection({ launchOptions }: { launchOptions: LaunchOptions }) {
           {launchOptions.map((p) => (
             <li key={p.id}>
               <LaunchTutorialButton
+                tutorialId={tutorialId}
                 playbookId={p.id}
                 playbookName={p.name}
                 variantLabel={p.variant ? SPORT_VARIANT_LABELS[p.variant] : null}

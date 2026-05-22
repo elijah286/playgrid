@@ -4,16 +4,19 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui";
-import { launchPlayAuthoringTour } from "@/features/tutorials/launch";
+import { launchEditorTutorial } from "@/features/tutorials/launch";
+import type { TutorialId } from "@/features/tutorials/engine/types";
 
-/** Per-playbook button on the Learning Center that kicks off the Play
- *  Authoring tour. Always creates a brand-new play under the given
- *  playbook so the coach starts on a clean slate. */
+/** Per-playbook button on the Learning Center that kicks off a tutorial
+ *  in the play editor. Always creates a brand-new tutorial play under
+ *  the given playbook so the coach starts on a clean slate. */
 export function LaunchTutorialButton({
+  tutorialId,
   playbookId,
   playbookName,
   variantLabel,
 }: {
+  tutorialId: TutorialId;
   playbookId: string;
   playbookName: string;
   variantLabel: string | null;
@@ -28,7 +31,7 @@ export function LaunchTutorialButton({
       disabled={pending}
       onClick={() =>
         startTransition(async () => {
-          const res = await launchPlayAuthoringTour(playbookId, router);
+          const res = await launchEditorTutorial(tutorialId, playbookId, router);
           if (!res.ok) {
             toast(res.error ?? "Could not start the tutorial.", "error");
           }

@@ -55,7 +55,7 @@ export default async function LearningCenterPage() {
               summary={t.summary}
               status={status}
               defaultOpen={t.id === firstInProgressId}
-              launchPlayAuthoring={t.id === "play_authoring_v1"}
+              launchTutorialId={t.id}
               launchOptions={launchOptions}
             />
           );
@@ -66,12 +66,6 @@ export default async function LearningCenterPage() {
             Learning Center as the catalog grows. Each lands as a full
             interactive lesson when ready — drop `comingSoon` and add
             it to TUTORIAL_LIST. */}
-        <LessonCard
-          title="Build a defense"
-          summary="Install a defensive call, set the coverage shells, and tag the post-snap movement your defenders take."
-          status="not_started"
-          comingSoon
-        />
         <LessonCard
           title="Use formations"
           summary="Pick a saved formation to drop players into a preset arrangement, or save the current layout as a formation you can reuse across every play in the playbook."

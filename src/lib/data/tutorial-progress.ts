@@ -14,7 +14,10 @@ import type {
  * safe to require from API routes on Next 16 / Turbopack.
  */
 
-const ALL_TUTORIAL_IDS: ReadonlyArray<TutorialId> = ["play_authoring_v1"];
+const ALL_TUTORIAL_IDS: ReadonlyArray<TutorialId> = [
+  "play_authoring_v1",
+  "defense_v1",
+];
 
 export async function listTutorialProgress(): Promise<TutorialProgressRow[]> {
   const supabase = await createClient();
