@@ -318,6 +318,21 @@ export function AuthFlow({
     window.location.assign(to);
   }
 
+  // Tack the rdt_signup marker onto a path so RedditPixel fires SignUp on
+  // the next page load. Mirrors the marker the /auth/callback route adds
+  // after OAuth. Both flows funnel into one client-side rdt('track')
+  // call so the conversion is attributed to the originating click.
+  function withRedditSignupMarker(to: string): string {
+    try {
+      const u = new URL(to, window.location.origin);
+      u.searchParams.set("rdt_signup", "1");
+      return u.pathname + u.search + u.hash;
+    } catch {
+      const sep = to.includes("?") ? "&" : "?";
+      return `${to}${sep}rdt_signup=1`;
+    }
+  }
+
   async function completeNewUserProfile() {
     if (submittingRef.current) return;
     const trimmedName = name.trim();
@@ -353,7 +368,10 @@ export function AuthFlow({
         // user appears by email until they edit their account.
       });
       toast("Welcome to XO Gridmaker!", "success");
-      hardNavigate(safeNext);
+      // Fresh signup — append the marker so RedditPixel fires SignUp on
+      // the next page load. The OAuth callback adds this marker
+      // server-side; the email-OTP path adds it here.
+      hardNavigate(withRedditSignupMarker(safeNext));
       return; // keep pending=true through navigation to block double-clicks
     } catch (e: unknown) {
       setFormError(e instanceof Error ? e.message : "Could not finish sign-up.");

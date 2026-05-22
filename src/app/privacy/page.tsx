@@ -214,6 +214,14 @@ export default function PrivacyPage() {
             <li>Stripe — payment processing for paid plans</li>
             <li>Sentry — browser and server error reporting (web only)</li>
             <li>
+              Reddit — when we run ads on Reddit, the Reddit Ads pixel
+              loads on our site to count page visits and signups from
+              ad clicks. This lets us see which ads work without
+              uploading any personally identifying information. The
+              pixel is suppressed for EU/UK visitors who have not
+              accepted tracking.
+            </li>
+            <li>
               Apple — if you choose &ldquo;Sign in with Apple,&rdquo; Apple
               authenticates you and shares your email and name with us
             </li>
