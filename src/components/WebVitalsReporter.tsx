@@ -29,17 +29,25 @@ function readConnection(): EffectiveConnection | null {
   }
 }
 
+// Sample rate for web_vital writes. Set to 0.1 (10%) on 2026-05-22 — at
+// unsampled volume web_vital was ~35k rows in 60 days (~25% of all
+// ui_events). Per-route p75/p95 distributions remain accurate at 10%
+// because vitals fire many times per session; sample size per
+// (route, metric, day) is still well above the 30-sample floor needed
+// for stable percentiles on a site this size.
+const WEB_VITAL_SAMPLE_RATE = 0.1;
+
 /**
  * Streams Core Web Vitals (LCP, INP, CLS, FCP, TTFB) to the ui_events
  * table so the admin analytics views can slice perf by route, device,
- * and connection. Sentry already captures vitals on its 10% trace
- * sample; this gives us 100% coverage in our own DB for the queries we
- * care about (e.g. "p75 LCP on /playbooks/[id] over the last week").
+ * and connection. Sampled at 10% — see WEB_VITAL_SAMPLE_RATE above.
+ * Sentry already captures vitals on its own trace sample.
  */
 export default function WebVitalsReporter() {
   useReportWebVitals((metric) => {
     if (typeof window === "undefined") return;
     if (isNativeApp()) return;
+    if (Math.random() >= WEB_VITAL_SAMPLE_RATE) return;
 
     const path =
       typeof window !== "undefined" ? window.location.pathname : null;
@@ -58,6 +66,9 @@ export default function WebVitalsReporter() {
         id: metric.id,
         navigationType: metric.navigationType,
         connection: conn,
+        // Recorded so analytics queries can extrapolate true volume:
+        // count(*) * (1 / sample_rate).
+        sample_rate: WEB_VITAL_SAMPLE_RATE,
       },
     });
   });

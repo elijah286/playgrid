@@ -59,6 +59,13 @@ export async function timed<T>(
   }
 }
 
+// Sample rate for non-slow perf_event writes. Set to 0.1 (10%) on
+// 2026-05-22 — at unsampled volume perf_event was ~70% of all ui_events
+// rows (~3.5k/day) while contributing diminishing analytical value past
+// a few hundred samples per label per day. slow_action is NEVER sampled
+// because it's the rare-event signal we actually act on.
+const PERF_EVENT_SAMPLE_RATE = 0.1;
+
 function recordPerfToDb(
   label: string,
   durationMs: number,
@@ -66,6 +73,9 @@ function recordPerfToDb(
 ): void {
   // Skip in environments without Supabase (tests, local without env).
   if (!hasSupabaseEnv()) return;
+  // Sample perf_event (frequent, low-value individually). slow_action
+  // always writes — it's rare and load-bearing for the perf punch list.
+  if (!isSlow && Math.random() >= PERF_EVENT_SAMPLE_RATE) return;
   try {
     const admin = createServiceRoleClient();
     admin
@@ -77,6 +87,9 @@ function recordPerfToDb(
         metadata: {
           duration_ms: Math.round(durationMs),
           slow: isSlow,
+          // Recorded so analytics queries can extrapolate true volume:
+          // count(*) * (1 / sample_rate). slow_action stays at 1.0.
+          sample_rate: isSlow ? 1 : PERF_EVENT_SAMPLE_RATE,
         },
       })
       .then(
