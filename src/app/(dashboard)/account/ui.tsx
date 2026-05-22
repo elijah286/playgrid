@@ -15,9 +15,11 @@ import {
 } from "@/app/actions/account";
 import {
   cancelScheduledDowngradeAction,
+  cancelSubscriptionAction,
   createBillingPortalSessionAction,
   setSeatQuantityAction,
 } from "@/app/actions/billing";
+import { Modal } from "@/components/ui";
 import { SEAT_PRICE_USD_PER_MONTH } from "@/lib/billing/seats-config";
 import type { Entitlement, SubscriptionTier } from "@/lib/billing/entitlement";
 import {
@@ -426,6 +428,7 @@ function PlanCard({
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const [cancelingDowngrade, startCancelDowngrade] = useTransition();
+  const [cancelOpen, setCancelOpen] = useState(false);
   const tier = entitlement?.tier ?? "free";
   const source = entitlement?.source ?? "free";
   const isPaid = source === "stripe";
@@ -521,6 +524,15 @@ function PlanCard({
               >
                 {pending ? "Opening…" : "Manage billing"}
               </button>
+              {!pendingChange ? (
+                <button
+                  type="button"
+                  onClick={() => setCancelOpen(true)}
+                  className="rounded-lg px-2 py-1.5 text-xs font-medium text-muted hover:text-danger"
+                >
+                  Cancel subscription
+                </button>
+              ) : null}
             </div>
           ) : (
             <Link
@@ -544,7 +556,224 @@ function PlanCard({
 
         {err ? <p className="text-xs text-red-700">{err}</p> : null}
       </div>
+      <CancelSubscriptionDialog
+        open={cancelOpen}
+        onClose={() => setCancelOpen(false)}
+        tierLabel={TIER_LABEL[tier]}
+        renewsAt={entitlement?.expiresAt ?? null}
+      />
     </Card>
+  );
+}
+
+const CANCEL_REASONS: { key: string; label: string }[] = [
+  { key: "too_expensive", label: "Too expensive" },
+  { key: "not_using", label: "Not using it enough" },
+  { key: "missing_features", label: "Missing features I need" },
+  { key: "switching", label: "Switching to another tool" },
+  { key: "trying", label: "Just trying it out" },
+  { key: "other", label: "Something else" },
+];
+
+function CancelSubscriptionDialog({
+  open,
+  onClose,
+  tierLabel,
+  renewsAt,
+}: {
+  open: boolean;
+  onClose: () => void;
+  tierLabel: string;
+  renewsAt: string | null;
+}) {
+  const [reasonKey, setReasonKey] = useState<string>("");
+  const [freeText, setFreeText] = useState("");
+  const [pending, startTransition] = useTransition();
+  const [err, setErr] = useState<string | null>(null);
+  const [doneAt, setDoneAt] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setReasonKey("");
+      setFreeText("");
+      setErr(null);
+      setDoneAt(null);
+    }
+  }, [open]);
+
+  const selected = CANCEL_REASONS.find((r) => r.key === reasonKey) ?? null;
+  const otherRequiresText = reasonKey === "other";
+  const canSubmit =
+    !!selected &&
+    !pending &&
+    (!otherRequiresText || freeText.trim().length > 0) &&
+    freeText.length <= 4000;
+
+  function submit() {
+    if (!selected) return;
+    setErr(null);
+    startTransition(async () => {
+      const res = await cancelSubscriptionAction({
+        reasonKey: selected.key,
+        reasonLabel: selected.label,
+        freeText: freeText.trim(),
+      });
+      if (!res.ok) {
+        setErr(res.error);
+        return;
+      }
+      setDoneAt(res.effectiveAt);
+    });
+  }
+
+  if (doneAt) {
+    const ends = new Date(doneAt).toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+    return (
+      <Modal
+        open={open}
+        onClose={() => {
+          onClose();
+          window.location.reload();
+        }}
+        title="Subscription canceled"
+        footer={
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              window.location.reload();
+            }}
+            className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-hover"
+          >
+            Done
+          </button>
+        }
+      >
+        <div className="space-y-3 text-sm">
+          <p className="text-foreground">
+            Your {tierLabel} subscription will end on{" "}
+            <span className="font-semibold">{ends}</span>. You&rsquo;ll keep access
+            until then — no further charges.
+          </p>
+          <p className="text-xs text-muted">
+            Thanks for the feedback. If you change your mind, you can resubscribe
+            anytime from the pricing page.
+          </p>
+        </div>
+      </Modal>
+    );
+  }
+
+  const renews = renewsAt
+    ? new Date(renewsAt).toLocaleDateString("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      })
+    : null;
+
+  return (
+    <Modal
+      open={open}
+      onClose={pending ? () => {} : onClose}
+      title="Cancel your subscription"
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={pending}
+            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted hover:text-foreground disabled:opacity-50"
+          >
+            Never mind
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={!canSubmit}
+            className="rounded-lg bg-danger px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
+          >
+            {pending ? "Canceling…" : "Cancel subscription"}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div className="rounded-lg bg-surface px-3 py-2 text-xs text-muted ring-1 ring-border">
+          You&rsquo;ll keep {tierLabel} access
+          {renews ? (
+            <>
+              {" "}
+              until <span className="font-medium text-foreground">{renews}</span>
+            </>
+          ) : null}
+          . No further charges after that.
+        </div>
+        <div>
+          <p className="text-xs font-medium text-foreground">
+            What&rsquo;s the main reason?
+          </p>
+          <p className="mt-0.5 text-xs text-muted">
+            Honest feedback helps us fix what&rsquo;s missing.
+          </p>
+          <div className="mt-2 space-y-1.5">
+            {CANCEL_REASONS.map((r) => {
+              const active = reasonKey === r.key;
+              return (
+                <label
+                  key={r.key}
+                  className={cn(
+                    "flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm",
+                    active
+                      ? "border-primary bg-primary/5 text-foreground"
+                      : "border-border text-foreground hover:bg-surface",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="cancel-reason"
+                    value={r.key}
+                    checked={active}
+                    onChange={() => setReasonKey(r.key)}
+                    className="accent-primary"
+                  />
+                  <span>{r.label}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs">
+            <span className="font-medium text-foreground">
+              Anything else?{" "}
+              {otherRequiresText ? (
+                <span className="text-danger">Required</span>
+              ) : (
+                <span className="text-muted">(optional)</span>
+              )}
+            </span>
+            <textarea
+              value={freeText}
+              onChange={(e) => setFreeText(e.target.value)}
+              rows={3}
+              maxLength={4000}
+              placeholder="Tell us a bit more — what would have kept you on?"
+              className="mt-1 w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+            />
+          </label>
+        </div>
+        {err ? (
+          <p className="rounded-md bg-danger-light px-3 py-2 text-xs text-danger ring-1 ring-danger/30">
+            {err}
+          </p>
+        ) : null}
+      </div>
+    </Modal>
   );
 }
 

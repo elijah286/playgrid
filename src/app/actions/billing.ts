@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { Resend } from "resend";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
@@ -9,6 +10,7 @@ import { hasUsedCoachProTrial, type SubscriptionTier } from "@/lib/billing/entit
 import { getStripeClient, priceIdFor, seatPriceIdFor, isSeatPriceId, type BillingInterval } from "@/lib/billing/stripe";
 import { getSeatUsage, ensureOwnerSeatGrantRow } from "@/lib/billing/seats";
 import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
+import { getStoredResendConfig } from "@/lib/site/resend-config";
 import {
   getActivePaidSubscriptions,
   previewSubscriptionChange,
@@ -535,4 +537,193 @@ export async function redeemGiftCodeAction(rawCode: string): Promise<
   revalidatePath("/account");
   revalidatePath("/pricing");
   return { ok: true, tier: gc.tier as SubscriptionTier, expiresAt };
+}
+
+const CANCELLATION_ADMIN_RECIPIENT = "admin@xogridmaker.com";
+
+/**
+ * In-app subscription cancellation. Schedules the Stripe sub for end-of-period
+ * cancellation (the coach keeps access through what they've already paid for),
+ * records the reason + free-text in `subscription_cancellation_feedback`, and
+ * emails the admin so the churn signal isn't buried in a dashboard tab. The
+ * webhook reconciles cancel_at_period_end on the subscriptions row; we mirror
+ * it here so /account reflects the new state immediately on reload.
+ */
+export async function cancelSubscriptionAction(input: {
+  reasonKey: string;
+  reasonLabel: string;
+  freeText: string;
+}): Promise<{ ok: true; effectiveAt: string } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const reasonKey = String(input.reasonKey ?? "").trim();
+  const reasonLabel = String(input.reasonLabel ?? "").trim();
+  const freeText = String(input.freeText ?? "").trim();
+  if (!reasonKey || !reasonLabel) {
+    return { ok: false, error: "Please pick a reason." };
+  }
+  if (reasonKey === "other" && freeText.length === 0) {
+    return { ok: false, error: "Tell us a little more so we can do better." };
+  }
+  if (freeText.length > 4000) {
+    return { ok: false, error: "Comment is too long (max 4000 characters)." };
+  }
+
+  const admin = createServiceRoleClient();
+  const { data: sub, error: subErr } = await admin
+    .from("subscriptions")
+    .select(
+      "id, stripe_subscription_id, tier, status, current_period_end, cancel_at_period_end",
+    )
+    .eq("user_id", user.id)
+    .not("stripe_subscription_id", "is", null)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (subErr) return { ok: false, error: subErr.message };
+  if (!sub?.stripe_subscription_id) {
+    return { ok: false, error: "No active subscription to cancel." };
+  }
+  if (
+    sub.status !== "active" &&
+    sub.status !== "trialing" &&
+    sub.status !== "past_due"
+  ) {
+    return { ok: false, error: "Subscription is not active." };
+  }
+  if (sub.cancel_at_period_end) {
+    return { ok: false, error: "Your subscription is already set to end." };
+  }
+
+  let effectiveAt: string;
+  try {
+    const { stripe } = await getStripeClient();
+    const canceled = await stripe.subscriptions.update(sub.stripe_subscription_id, {
+      cancel_at_period_end: true,
+    });
+    // Stripe SDK v22 moved `current_period_end` from the subscription onto
+    // each item; read either, prefer the subscription-level value.
+    type WithPeriodEnd = { current_period_end?: number | null };
+    let periodEndUnix: number | null =
+      (canceled as unknown as WithPeriodEnd).current_period_end ?? null;
+    if (periodEndUnix == null) {
+      for (const item of canceled.items.data) {
+        const onItem = (item as unknown as WithPeriodEnd).current_period_end;
+        if (typeof onItem === "number") {
+          periodEndUnix = onItem;
+          break;
+        }
+      }
+    }
+    effectiveAt = periodEndUnix
+      ? new Date(periodEndUnix * 1000).toISOString()
+      : (sub.current_period_end ?? new Date().toISOString());
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Stripe could not cancel the subscription.",
+    };
+  }
+
+  await admin
+    .from("subscriptions")
+    .update({ cancel_at_period_end: true, cancel_at: effectiveAt })
+    .eq("id", sub.id);
+
+  const tier = (sub.tier as string | null) ?? "unknown";
+  const message = freeText.length > 0 ? `${reasonLabel}\n\n${freeText}` : reasonLabel;
+  await admin.from("subscription_cancellation_feedback").insert({
+    user_id: user.id,
+    message,
+    stripe_subscription_id: sub.stripe_subscription_id,
+  });
+
+  await sendCancellationAdminEmail({
+    userEmail: user.email ?? "(no email)",
+    tier,
+    reasonLabel,
+    freeText,
+    effectiveAt,
+  });
+
+  revalidatePath("/account");
+  return { ok: true, effectiveAt };
+}
+
+async function sendCancellationAdminEmail(args: {
+  userEmail: string;
+  tier: string;
+  reasonLabel: string;
+  freeText: string;
+  effectiveAt: string;
+}): Promise<void> {
+  try {
+    const cfg = await getStoredResendConfig().catch(() => ({
+      apiKey: null as string | null,
+      fromEmail: null as string | null,
+      contactToEmail: null as string | null,
+    }));
+    const apiKey = cfg.apiKey ?? process.env.RESEND_API_KEY ?? null;
+    const fromEmail =
+      cfg.fromEmail ??
+      process.env.RESEND_FROM_EMAIL ??
+      "XO Gridmaker <hello@xogridmaker.com>";
+    if (!apiKey) return;
+
+    const escape = (s: string) =>
+      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const effective = new Date(args.effectiveAt).toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+    const commentBlock = args.freeText
+      ? `<p style="margin:16px 0 8px;color:#475569;font-size:13px"><strong>What they said:</strong></p>
+         <blockquote style="margin:0;padding:12px 16px;background:#f8fafc;border-left:3px solid #cbd5e1;color:#0f172a;font-size:14px;white-space:pre-wrap">${escape(args.freeText)}</blockquote>`
+      : `<p style="margin:16px 0 0;color:#64748b;font-size:13px">No additional comment.</p>`;
+
+    const subject = `Cancellation: ${args.userEmail} (${args.tier})`;
+    const text = [
+      `A coach cancelled their subscription.`,
+      ``,
+      `User: ${args.userEmail}`,
+      `Plan: ${args.tier}`,
+      `Reason: ${args.reasonLabel}`,
+      `Ends on: ${effective}`,
+      ``,
+      args.freeText || "(no additional comment)",
+    ].join("\n");
+    const html = `<!doctype html>
+<html><body style="font-family:ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif;background:#f8fafc;margin:0;padding:24px">
+  <table role="presentation" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
+    <tr><td style="padding:24px">
+      <h1 style="margin:0 0 8px;font-size:18px;color:#0f172a">Subscription cancellation</h1>
+      <p style="margin:0 0 16px;color:#475569;font-size:14px;line-height:1.5">A coach cancelled their plan. They keep access until the end of the paid period.</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0;font-size:13px;color:#334155">
+        <tr><td style="padding:3px 16px 3px 0;color:#64748b">User</td><td style="padding:3px 0">${escape(args.userEmail)}</td></tr>
+        <tr><td style="padding:3px 16px 3px 0;color:#64748b">Plan</td><td style="padding:3px 0">${escape(args.tier)}</td></tr>
+        <tr><td style="padding:3px 16px 3px 0;color:#64748b">Reason</td><td style="padding:3px 0"><strong>${escape(args.reasonLabel)}</strong></td></tr>
+        <tr><td style="padding:3px 16px 3px 0;color:#64748b">Ends on</td><td style="padding:3px 0">${escape(effective)}</td></tr>
+      </table>
+      ${commentBlock}
+    </td></tr>
+  </table>
+</body></html>`;
+
+    const resend = new Resend(apiKey);
+    await resend.emails.send({
+      from: fromEmail,
+      to: CANCELLATION_ADMIN_RECIPIENT,
+      subject,
+      text,
+      html,
+    });
+  } catch {
+    // Best-effort — never fail the cancellation just because email failed.
+  }
 }
