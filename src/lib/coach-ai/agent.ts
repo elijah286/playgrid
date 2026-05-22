@@ -2889,11 +2889,36 @@ export async function runAgent(
     const savedPlays: Array<{ name: string; playId: string | null; notes: string | null }> = [];
     const failedSaves: Array<{ name: string; reason: string }> = [];
     const seenTitlesThisPass = new Set<string>();
+    // Compute save-intent for the most-recent user message ONCE per turn
+    // — used by the defense-only branch below to gate auto-commit on
+    // exploration prompts like "show me Tampa 2". Same regex as the
+    // defense overlay branch above, so behavior is consistent.
+    const lastUserTextForIntent = extractLastUserText(history);
+    const hasDefenseSaveIntent = lastUserTextForIntent
+      ? SAVE_INTENT_DEFENSE_RE.test(lastUserTextForIntent)
+      : false;
     for (const fenceJson of orderedFences) {
       let fenceName = "Cal-generated play";
       try {
         const parsed = JSON.parse(fenceJson) as Record<string, unknown>;
         if (!fenceIsFullRosterPlay(parsed, ctx.sportVariant)) continue;
+        // Detect defense-only fences (compose_defense WITHOUT on_play —
+        // e.g. "show me Tampa 2"). Two signals:
+        //   - focus: "D" set by compose_defense's standalone branch
+        //   - players array has only team:"D" entries (no offense)
+        // For these, the create-auto-commit must (a) skip on exploration
+        // intent (avoid polluting the playbook with every "show me X" the
+        // coach asks), and (b) pass play_type="defense" when it does save
+        // (otherwise create_play defaults to offense and the validator
+        // rejects the fence as missing 5 offensive players' actions —
+        // surfaced 2026-05-21 on "show me a Tampa two read defense").
+        const players = Array.isArray(parsed.players)
+          ? (parsed.players as Array<Record<string, unknown>>)
+          : [];
+        const fenceIsDefenseOnly =
+          parsed.focus === "D" ||
+          (players.length > 0 && players.every((p) => p.team === "D"));
+        if (fenceIsDefenseOnly && !hasDefenseSaveIntent) continue;
         fenceName =
           typeof parsed.title === "string" && parsed.title.trim()
             ? parsed.title.trim().slice(0, 80)
@@ -2905,7 +2930,9 @@ export async function runAgent(
 
         const commit = await runTool(
           "create_play",
-          { name: fenceName, diagram: parsed },
+          fenceIsDefenseOnly
+            ? { name: fenceName, diagram: parsed, play_type: "defense" }
+            : { name: fenceName, diagram: parsed },
           ctx,
         );
         if (commit.ok) {

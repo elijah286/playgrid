@@ -451,6 +451,7 @@ describe("SAVE_INTENT_DEFENSE_RE — pins the defense auto-commit decision bound
   it("does NOT match exploration phrasing — preserves the 'show me' / 'how does X' UX", () => {
     const negatives = [
       "show me Tampa 2",
+      "show me a Tampa two read defense",  // exact phrasing from 2026-05-21 round 2 bug
       "how does Cover 3 play this",
       "what does a 4-3 look like",
       "walk me through Tampa 2",
