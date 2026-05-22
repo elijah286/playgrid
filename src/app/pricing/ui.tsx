@@ -225,8 +225,17 @@ export function PricingClient({
         setUpgradeModal((cur) => (cur ? { ...cur, confirming: false, error: res.error } : cur));
         return;
       }
-      // Hard reload to pick up the new entitlement everywhere.
-      window.location.href = "/account?upgrade=success";
+      // Hard reload to pick up the new entitlement everywhere. Land on /home
+      // with the welcome marker so first-time Coach Pro upgrades get the
+      // celebration dialog + Cal-starter-prompts experience (the marker is
+      // server-validated against actual entitlement so paste-the-URL won't
+      // trigger it). Non-Pro upgrades (e.g. coach → coach with new interval)
+      // land on /home without the marker — same destination, just no party.
+      const dest =
+        targetTier === "coach_ai"
+          ? "/home?welcome=coach_pro"
+          : "/home";
+      window.location.href = dest;
     })();
   }
 

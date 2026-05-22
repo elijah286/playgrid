@@ -456,6 +456,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-04-28",
   },
   {
+    id: "coach-pro-welcome-celebration",
+    name: "Coach Pro upgrade celebration + Cal starter prompts",
+    description:
+      "After a successful Coach Pro upgrade (whether from free or from Team Coach), the coach lands on /home with a celebration dialog instead of the silent account page. The dialog confirms the upgrade went through, summarises what Coach Pro includes, and surfaces four hand-picked starter prompts — clicking one opens Coach Cal with the prompt pre-loaded and auto-submitted so the coach experiences the AI value on their first interaction instead of staring at an empty chat. The welcome marker is server-validated against the user's actual entitlement so pasting the URL on a free account doesn't trigger a fake celebration, and the dialog strips itself from the URL on mount so a refresh / back-navigation can't replay it. Same commit also fixes the previous \"upgrade looks broken\" bug where the post-upgrade page rendered the old tier because the local subscriptions row was waiting for the Stripe webhook — the upgrade action now mirrors the new tier into our DB optimistically right after the Stripe API call returns.",
+    category: "Billing & accounts",
+    status: "ga",
+    addedDate: "2026-05-22",
+  },
+  {
     id: "coach-pro-7-day-trial",
     name: "Coach Pro 7-day free trial actually wired up",
     description:

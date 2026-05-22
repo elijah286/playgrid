@@ -224,7 +224,7 @@ export async function executeSubscriptionUpgrade(
     return { ok: false, error: "Subscription has no recognizable tier item." };
   }
 
-  await stripe.subscriptions.update(current.stripeSubscriptionId, {
+  const updatedSub = await stripe.subscriptions.update(current.stripeSubscriptionId, {
     items: [{ id: tierItem.id, price: newPriceId }],
     proration_behavior: "create_prorations",
     metadata: {
@@ -233,6 +233,34 @@ export async function executeSubscriptionUpgrade(
       interval: targetInterval,
     },
   });
+
+  // Optimistic local mirror. Stripe's webhook (`customer.subscription.updated`)
+  // is authoritative and will overwrite this row with the same payload when
+  // it arrives — but on Cloud Run cold starts the webhook can lag several
+  // seconds behind the API response. Without this write, the page redirect
+  // that follows (e.g. `/home?welcome=coach_pro`) reads `user_entitlements`
+  // (a view over `subscriptions.tier`) and sees the OLD tier — the coach
+  // sees "Team Coach" on the account page and has to refresh to discover
+  // the upgrade actually went through. Write the fields the webhook would
+  // write so the view derives the right tier immediately.
+  const newTierItem =
+    updatedSub.items.data.find((i) => i.id === tierItem.id) ?? null;
+  const newPeriodEnd =
+    newTierItem?.current_period_end ?? tierItem.current_period_end ?? null;
+  const admin = createServiceRoleClient();
+  await admin
+    .from("subscriptions")
+    .update({
+      tier: targetTier,
+      status: updatedSub.status,
+      stripe_price_id: newPriceId,
+      billing_interval: targetInterval,
+      current_period_end: newPeriodEnd
+        ? new Date(newPeriodEnd * 1000).toISOString()
+        : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("stripe_subscription_id", current.stripeSubscriptionId);
 
   return { ok: true, stripeSubscriptionId: current.stripeSubscriptionId };
 }

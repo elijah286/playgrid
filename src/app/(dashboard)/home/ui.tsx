@@ -71,6 +71,7 @@ import type { InboxAlert } from "@/app/actions/inbox";
 import type { ActivityEntry } from "@/app/actions/activity";
 import { useIsNativeApp } from "@/lib/native/useIsNativeApp";
 import { useOfflineState } from "@/lib/offline/useOfflineState";
+import { WelcomeCoachProDialog } from "@/features/coach-ai/WelcomeCoachProDialog";
 
 const DEFAULT_COLORS = ["#F26522", "#3B82F6", "#22C55E", "#EF4444", "#A855F7", "#EAB308"];
 
@@ -1125,6 +1126,7 @@ export function DashboardClient({
   initialTab = "playbooks",
   coachAiAvailable = false,
   showCoachCalPromo = false,
+  showCoachProWelcome = false,
 }: {
   data: DashboardSummary;
   hideAnimation?: boolean;
@@ -1136,6 +1138,14 @@ export function DashboardClient({
   initialTab?: HomeTab;
   coachAiAvailable?: boolean;
   showCoachCalPromo?: boolean;
+  /**
+   * True when the user just landed via the upgrade-success redirect
+   * (`/home?welcome=coach_pro`) AND the server confirmed their
+   * entitlement is actually `coach_ai`. Renders the WelcomeCoachPro
+   * celebration dialog — single-fire, the dialog strips the URL param
+   * on mount so refresh / back-nav can't replay it.
+   */
+  showCoachProWelcome?: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1560,6 +1570,13 @@ export function DashboardClient({
 
   return (
     <div className={`pb-20 sm:pb-0 ${pending ? "cursor-wait" : ""}`}>
+      {/* First-mount celebration for a freshly-upgraded Coach Pro user.
+          Server validated `?welcome=coach_pro` against actual entitlement
+          before passing showCoachProWelcome=true (anti-spoof). The
+          dialog strips the URL param itself so refresh / back-nav can't
+          replay it. */}
+      {showCoachProWelcome && <WelcomeCoachProDialog />}
+
       {showTabNav && (
         <div className="hidden sm:block">
           <HomeTabNav
