@@ -1,4 +1,11 @@
-import { FIRST_TOUCH_COOKIE, FIRST_TOUCH_MAX_AGE_SECONDS, type FirstTouchPayload } from "./first-touch";
+// Import from -shared (no next/headers) so this file is bundle-clean for
+// client components. Importing from ./first-touch would drag next/headers
+// into the client bundle and Turbopack will refuse to build.
+import {
+  FIRST_TOUCH_COOKIE,
+  FIRST_TOUCH_MAX_AGE_SECONDS,
+  type FirstTouchPayload,
+} from "./first-touch-shared";
 
 // Client-side mirror of setFirstTouchCookieIfMissing. We write the cookie
 // in the browser before the recordPageViewAction server call fires so the
