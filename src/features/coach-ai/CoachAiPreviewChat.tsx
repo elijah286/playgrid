@@ -7,6 +7,7 @@ import { CoachAiIcon } from "./CoachAiIcon";
 import { ENTRY_POINTS, previewCtaLabel, type CoachCalEntryPointId } from "./entry-points";
 import { track } from "@/lib/analytics/track";
 import { createCheckoutSessionAction } from "@/app/actions/billing";
+import { CheckoutLoadingOverlay } from "@/features/billing/CheckoutLoadingOverlay";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
 
 const GRADIENT = "linear-gradient(135deg, #dbeafe 0%, #ede9fe 100%)";
@@ -73,6 +74,9 @@ export function CoachAiPreviewChat({
       : `Get the full Coach Cal experience with a ${evalDays}-day free trial — no charge today.`;
   return (
     <div className="relative flex h-full min-h-0 flex-col">
+      {/* Pending → fullscreen overlay so the click registers instantly
+          even when Cal closes / Stripe round-trip takes 1-3s. */}
+      <CheckoutLoadingOverlay open={pending} />
       <div className="flex-1 space-y-3 overflow-y-auto px-3 py-3">
         <div className="flex justify-end">
           <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-3 py-2 text-sm leading-snug text-white">

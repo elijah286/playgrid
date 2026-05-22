@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { track } from "@/lib/analytics/track";
 import { createCheckoutSessionAction } from "@/app/actions/billing";
+import { CheckoutLoadingOverlay } from "@/features/billing/CheckoutLoadingOverlay";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
 
 const STORAGE_KEY = "coach-cal:playbook-cta-dismissed";
@@ -102,7 +103,15 @@ export function CoachCalPlaybookCta({
     });
   }
 
-  if (!visible || chatOpen || suppressedByCustomize) return null;
+  // Card-hidden cases: the card itself doesn't render, but we still need
+  // the overlay to be reachable in case the user clicked the CTA (which
+  // sets visible=false instantly). Return the overlay-only branch so
+  // pending=true still paints something on screen during the Stripe
+  // round-trip; without this, the click vanishes the card with no
+  // replacement and the coach is left staring at the unchanged page.
+  if (!visible || chatOpen || suppressedByCustomize) {
+    return <CheckoutLoadingOverlay open={pending} />;
+  }
 
   const upgradeOnly = userTier === "coach";
   const trialUsed = !upgradeOnly && coachProTrialUsed;
@@ -118,13 +127,18 @@ export function CoachCalPlaybookCta({
       : "No charge today · cancel anytime";
 
   return (
-    <div
-      role="dialog"
-      aria-label="Try Coach Cal"
-      className="fixed bottom-6 left-6 z-40 hidden sm:flex w-80 flex-col rounded-2xl border border-border bg-surface-raised shadow-xl"
-    >
-      {/* Gradient accent bar */}
-      <div className="h-1 w-full rounded-t-2xl" style={{ background: GRADIENT }} />
+    <>
+      {/* Pending → fullscreen overlay so the click registers instantly
+          even after we setVisible(false) above. Lives outside the card
+          so it survives the card vanishing on click. */}
+      <CheckoutLoadingOverlay open={pending} />
+      <div
+        role="dialog"
+        aria-label="Try Coach Cal"
+        className="fixed bottom-6 left-6 z-40 hidden sm:flex w-80 flex-col rounded-2xl border border-border bg-surface-raised shadow-xl"
+      >
+        {/* Gradient accent bar */}
+        <div className="h-1 w-full rounded-t-2xl" style={{ background: GRADIENT }} />
 
       <div className="p-4">
         <div className="flex items-start justify-between gap-2">
@@ -202,7 +216,8 @@ export function CoachCalPlaybookCta({
         {err ? (
           <p className="mt-1 text-center text-[10px] text-red-700">{err}</p>
         ) : null}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
