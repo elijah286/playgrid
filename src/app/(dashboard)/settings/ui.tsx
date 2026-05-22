@@ -26,6 +26,7 @@ import type { LlmProvider } from "@/lib/site/llm-provider";
 import { ResendSettingsClient } from "@/features/admin/ResendSettingsClient";
 import { GoogleMapsSettingsClient } from "@/features/admin/GoogleMapsSettingsClient";
 import { MaxMindSettingsClient } from "@/features/admin/MaxMindSettingsClient";
+import { RedditPixelSettingsClient } from "@/features/admin/RedditPixelSettingsClient";
 import { FeedbackAdminClient } from "@/features/admin/FeedbackAdminClient";
 import { CoachAiFeedbackTabs } from "@/features/admin/CoachAiFeedbackTabs";
 import type { KbMissRow } from "@/app/actions/coach-ai-feedback";
@@ -90,6 +91,10 @@ type MaxMindProps =
   | { ok: true; configured: boolean; statusLabel: string; downloadedAt: string | null }
   | { ok: false; error: string };
 
+type RedditPixelProps =
+  | { ok: true; configured: boolean; statusLabel: string }
+  | { ok: false; error: string };
+
 type AdminKeyProps = { configured: boolean; statusLabel: string };
 
 type Tab =
@@ -115,6 +120,7 @@ export function SettingsClient({
   resend,
   googleMaps,
   maxmind,
+  redditPixel,
   initialFeedback,
   feedbackError,
   initialFeedbackWidgetEnabled,
@@ -166,6 +172,7 @@ export function SettingsClient({
   resend: ResendProps;
   googleMaps: GoogleMapsProps;
   maxmind: MaxMindProps;
+  redditPixel: RedditPixelProps;
   initialFeedback: FeedbackRow[];
   feedbackError: string | null;
   initialFeedbackWidgetEnabled: boolean;
@@ -518,6 +525,17 @@ export function SettingsClient({
             />
           ) : (
             <p className="text-sm text-red-700 dark:text-red-300">{maxmind.error}</p>
+          )}
+
+          {redditPixel.ok ? (
+            <RedditPixelSettingsClient
+              initial={{
+                configured: redditPixel.configured,
+                statusLabel: redditPixel.statusLabel,
+              }}
+            />
+          ) : (
+            <p className="text-sm text-red-700 dark:text-red-300">{redditPixel.error}</p>
           )}
         </div>
       )}

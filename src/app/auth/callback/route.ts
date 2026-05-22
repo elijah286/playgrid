@@ -38,9 +38,21 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // Detect fresh signup (within the same 5-min grace window the snapshot
+  // uses) so we can fire Reddit's SignUp conversion event in the browser
+  // after redirect. Without this, Reddit only sees the PageVisit and
+  // can't attribute conversions to the originating click.
+  let isFreshSignup = false;
   if (data?.user?.id) {
+    if (data.user.created_at) {
+      const createdMs = new Date(data.user.created_at).getTime();
+      isFreshSignup =
+        Number.isFinite(createdMs) && Date.now() - createdMs < 5 * 60 * 1000;
+    }
     await snapshotFirstTouchToProfile(data.user.id, data.user.created_at);
   }
 
-  return NextResponse.redirect(`${origin}${safeNext}`);
+  const dest = new URL(`${origin}${safeNext}`);
+  if (isFreshSignup) dest.searchParams.set("rdt_signup", "1");
+  return NextResponse.redirect(dest.toString());
 }
