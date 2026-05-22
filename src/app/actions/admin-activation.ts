@@ -14,6 +14,10 @@ export type ActivationFunnel = {
   totalUsers: number;
   playbookCreators: number;
   playCreators: number;
+  playCreators1Plus: number;
+  playCreators5Plus: number;
+  playCreators10Plus: number;
+  playCreators13Plus: number;
   playCreators16Plus: number;
   coachAiUsers: number;
 };
@@ -207,6 +211,10 @@ export async function getActivationSummaryAction(
     }
 
     const playCreators = Object.keys(playsByOwner).length;
+    const playCreators1Plus = playCounts.filter((n) => n >= 1).length;
+    const playCreators5Plus = playCounts.filter((n) => n >= 5).length;
+    const playCreators10Plus = playCounts.filter((n) => n >= 10).length;
+    const playCreators13Plus = playCounts.filter((n) => n >= 13).length;
     const playCreators16Plus = playCounts.filter((n) => n >= 16).length;
 
     const totalVariants = Object.values(sportVariantCounts).reduce((a, b) => a + b, 0);
@@ -231,6 +239,10 @@ export async function getActivationSummaryAction(
           totalUsers,
           playbookCreators: playbookOwners.size,
           playCreators,
+          playCreators1Plus,
+          playCreators5Plus,
+          playCreators10Plus,
+          playCreators13Plus,
           playCreators16Plus,
           coachAiUsers,
         },

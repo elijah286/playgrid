@@ -84,6 +84,7 @@ type SortKey =
   | "timeOnSite"
   | "createdAt"
   | "playsCreated"
+  | "attributedSignups"
   | null;
 type SortDir = "asc" | "desc";
 
@@ -112,6 +113,7 @@ export type AdminUserRow = {
   subscriptionId: string | null;
   totalSecondsOnSite: number | null;
   playsCreated: number;
+  attributedSignups: number;
   signupSource: {
     kind:
       | "copy_link"
@@ -236,6 +238,9 @@ export function UsersAdminClient({
       if (sortKey === "playsCreated") {
         return (a.playsCreated - b.playsCreated) * sign;
       }
+      if (sortKey === "attributedSignups") {
+        return (a.attributedSignups - b.attributedSignups) * sign;
+      }
       const av = a.totalSecondsOnSite ?? null;
       const bv = b.totalSecondsOnSite ?? null;
       if (av == null && bv == null) return 0;
@@ -311,6 +316,12 @@ export function UsersAdminClient({
                 onClick={() => toggleSort("playsCreated")}
               />
               <SortableHeader
+                label="Brought in"
+                active={sortKey === "attributedSignups"}
+                dir={sortDir}
+                onClick={() => toggleSort("attributedSignups")}
+              />
+              <SortableHeader
                 label="Created"
                 active={sortKey === "createdAt"}
                 dir={sortDir}
@@ -340,7 +351,7 @@ export function UsersAdminClient({
           <tbody className="divide-y divide-border">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-4 py-8 text-center text-sm text-muted">
+                <td colSpan={11} className="px-4 py-8 text-center text-sm text-muted">
                   No users match that search.
                 </td>
               </tr>
@@ -416,6 +427,24 @@ export function UsersAdminClient({
                     )}
                   </td>
                   <td
+                    className="px-4 py-3 align-middle text-xs tabular-nums"
+                    title={
+                      u.attributedSignups > 0
+                        ? `${u.attributedSignups} new ${
+                            u.attributedSignups === 1 ? "user" : "users"
+                          } attributed to a share this user sent (last-touch)`
+                        : "No signups attributed to this user yet"
+                    }
+                  >
+                    {u.attributedSignups > 0 ? (
+                      <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                        +{u.attributedSignups}
+                      </span>
+                    ) : (
+                      <span className="text-muted-light">—</span>
+                    )}
+                  </td>
+                  <td
                     className="px-4 py-3 align-middle text-xs text-muted"
                     title={u.createdAt ? new Date(u.createdAt).toLocaleString() : ""}
                   >
@@ -471,7 +500,7 @@ export function UsersAdminClient({
                 </tr>
                 {isOpen && (
                   <tr className="bg-surface-inset/30">
-                    <td colSpan={10} className="px-4 py-4">
+                    <td colSpan={11} className="px-4 py-4">
                       <UserStatsPanel userId={u.id} />
                     </td>
                   </tr>

@@ -66,7 +66,10 @@ import {
   OverviewAdminClient,
   deriveOverviewProps,
   type OverviewJumpTarget,
+  type OverviewWindow,
 } from "@/features/admin/OverviewAdminClient";
+import type { BillingSummary } from "@/app/actions/admin-billing";
+import type { ShareLifetimeSummary } from "@/app/actions/admin-traffic-insights";
 
 type IntegrationProps =
   | { ok: true; configured: boolean; statusLabel: string; updatedAt: string | null }
@@ -194,6 +197,11 @@ export function SettingsClient({
   initialCoachAiEvalDays,
   initialCancellationFeedback,
   cancellationFeedbackError,
+  overviewWindow,
+  initialBillingSummary,
+  billingSummaryError,
+  initialShareLifetime,
+  shareLifetimeError: _shareLifetimeError,
 }: {
   currentUserId: string;
   initialUsers: AdminUserRow[];
@@ -246,6 +254,11 @@ export function SettingsClient({
   initialCoachAiEvalDays: number;
   initialCancellationFeedback: CancellationFeedbackRow[];
   cancellationFeedbackError: string | null;
+  overviewWindow: OverviewWindow;
+  initialBillingSummary: BillingSummary | null;
+  billingSummaryError: string | null;
+  initialShareLifetime: ShareLifetimeSummary | null;
+  shareLifetimeError: string | null;
 }) {
   const [tab, setTab] = useState<Tab>("overview");
   const [analyticsSubTab, setAnalyticsSubTab] = useState<
@@ -284,6 +297,11 @@ export function SettingsClient({
     kbMisses: initialCoachAiKbMisses,
     giftCodes: initialGiftCodes,
     stripeMode: stripeStatus.mode,
+    billing: initialBillingSummary,
+    billingError: billingSummaryError,
+    activation: initialActivationSummary,
+    shareLifetime: initialShareLifetime,
+    window: overviewWindow,
   });
 
   const navGroups: AdminNavGroup<Tab>[] = [

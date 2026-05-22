@@ -16,6 +16,7 @@ import {
   extractSignupShareToken,
   type SignupSourceKind,
 } from "@/lib/analytics/signup-source";
+import { getAttributedSignupsByUserAction } from "./admin-traffic-insights";
 
 export type AdminUserRowData = {
   id: string;
@@ -36,6 +37,9 @@ export type AdminUserRowData = {
   totalSecondsOnSite: number | null;
   /** Distinct plays the user has authored at least one version of. */
   playsCreated: number;
+  /** Lifetime count of new-user signups attributed to a share this user
+   *  sent (last-touch model). 0 for users who've never sent a share. */
+  attributedSignups: number;
   /** Glanceable "how did this user enter the site" classification for
    *  the users list. Derived from the first-touch columns on profiles. */
   signupSource: {
@@ -84,6 +88,7 @@ export async function listUsersForAdminAction() {
     { data: profiles },
     { data: entitlements },
     { data: playCountRows },
+    attributionRes,
   ] = await Promise.all([
     admin
       .from("profiles")
@@ -96,7 +101,9 @@ export async function listUsersForAdminAction() {
         "user_id, tier, source, expires_at, comp_grant_id, subscription_id",
       ),
     admin.rpc("admin_play_counts_by_user"),
+    getAttributedSignupsByUserAction(),
   ]);
+  const attributionByUser = attributionRes.ok ? attributionRes.counts : {};
 
   const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
   const entMap = new Map((entitlements ?? []).map((e) => [e.user_id, e]));
@@ -149,6 +156,7 @@ export async function listUsersForAdminAction() {
           ? (pr.total_seconds_on_site as number)
           : null,
       playsCreated: playsByUser.get(u.id) ?? 0,
+      attributedSignups: attributionByUser[u.id] ?? 0,
       signupSource: { kind: cls.kind, label: cls.label, detail: cls.detail },
     };
   });

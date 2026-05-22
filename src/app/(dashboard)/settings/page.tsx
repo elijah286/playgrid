@@ -17,6 +17,7 @@ import {
 } from "@/app/actions/feedback";
 import { listCoachInvitationsAction } from "@/app/actions/coach-invitations";
 import {
+  getBillingSummaryForOverviewAction,
   getStripeConfigStatusAction,
   listCancellationFeedbackForAdminAction,
   listGiftCodesAction,
@@ -38,6 +39,7 @@ import { getBetaFeatures } from "@/lib/site/beta-features-config";
 import { getTrafficSummaryAction } from "@/app/actions/admin-traffic";
 import { getGeoSummaryAction } from "@/app/actions/admin-geography";
 import { getActivationSummaryAction } from "@/app/actions/admin-activation";
+import { getShareLifetimeSummaryAction } from "@/app/actions/admin-traffic-insights";
 import { getAnalyticsExcludedEmails } from "@/lib/site/analytics-exclusions-config";
 import { listSeedFormationsAction } from "@/app/actions/formations";
 import { listCoachAiKbMissesAction } from "@/app/actions/coach-ai-feedback";
@@ -56,10 +58,38 @@ function currentMonthYM(): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-export default async function SettingsPage() {
+export type OverviewWindow = "7d" | "30d" | "90d" | "all";
+
+function resolveOverviewWindow(raw: string | string[] | undefined): OverviewWindow {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (value === "7d" || value === "30d" || value === "90d" || value === "all") {
+    return value;
+  }
+  return "30d";
+}
+
+/** Days to query for the Overview window — capped so the "all" view doesn't
+ *  blow up the aggregators. UI computes deltas vs the prior equal period from
+ *  byDay, so we ask for 2× the chosen window. */
+function windowDaysFor(window: OverviewWindow): number {
+  if (window === "7d") return 14;
+  if (window === "30d") return 60;
+  if (window === "90d") return 180;
+  return 365;
+}
+
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const { user, profile } = await getCurrentUserProfile();
   if (!user) redirect("/login");
   if (profile?.role !== "admin") redirect("/home");
+
+  const resolvedParams = (await searchParams) ?? {};
+  const overviewWindow = resolveOverviewWindow(resolvedParams.overview_window);
+  const overviewWindowDays = windowDaysFor(overviewWindow);
 
   const opexPeriod = currentMonthYM();
   const [
@@ -100,6 +130,8 @@ export default async function SettingsPage() {
     coachCalUpgradeBannerEnabled,
     coachAiEvalDays,
     cancellationFeedbackRes,
+    billingSummaryRes,
+    shareLifetimeRes,
   ] = await Promise.all([
     listUsersForAdminAction(),
     getOpenAIIntegrationStatusAction(),
@@ -117,8 +149,8 @@ export default async function SettingsPage() {
     getHideLobbyAnimation(),
     getExamplesPageEnabled(),
     getFreeMaxPlaysPerPlaybook(),
-    getTrafficSummaryAction(30),
-    getGeoSummaryAction(30),
+    getTrafficSummaryAction(overviewWindowDays),
+    getGeoSummaryAction(overviewWindowDays),
     getActivationSummaryAction(),
     listSeedFormationsAction(),
     getMobileEditingEnabled(),
@@ -138,6 +170,8 @@ export default async function SettingsPage() {
     getCoachCalUpgradeBannerEnabled(),
     getCoachAiEvalDays(),
     listCancellationFeedbackForAdminAction(),
+    getBillingSummaryForOverviewAction(),
+    getShareLifetimeSummaryAction(),
   ]);
 
   return (
@@ -340,6 +374,11 @@ export default async function SettingsPage() {
         cancellationFeedbackError={
           cancellationFeedbackRes.ok ? null : cancellationFeedbackRes.error
         }
+        overviewWindow={overviewWindow}
+        initialBillingSummary={billingSummaryRes.ok ? billingSummaryRes.summary : null}
+        billingSummaryError={billingSummaryRes.ok ? null : billingSummaryRes.error}
+        initialShareLifetime={shareLifetimeRes.ok ? shareLifetimeRes.summary : null}
+        shareLifetimeError={shareLifetimeRes.ok ? null : shareLifetimeRes.error}
       />
     </div>
   );

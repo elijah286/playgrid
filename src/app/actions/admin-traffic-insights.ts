@@ -879,3 +879,184 @@ export async function getViralitySummaryOrEmpty(
   const r = await getViralitySummaryAction(windowDays);
   return r.ok ? r.summary : emptyVirality(windowDays);
 }
+
+export type ShareLifetimeSummary = {
+  distinctSharers: number;
+  totalShares: number;
+};
+
+export type AttributedSignupsByUser = Record<string, number>;
+
+/** Cache attribution since the join is moderately expensive and the data
+ *  doesn't shift minute-to-minute. 15min is plenty for an admin tile. */
+let attributionCache: { ts: number; data: AttributedSignupsByUser } | null = null;
+const ATTRIBUTION_TTL_MS = 15 * 60 * 1000;
+
+/** For each user who has ever sent a share, count distinct new-profile
+ *  signups attributed to them via last-touch: the most recent share_token a
+ *  signup session visited before the profile was created wins. Admins are
+ *  excluded from both the attribution numerator and as recipients. */
+export async function getAttributedSignupsByUserAction(): Promise<
+  { ok: true; counts: AttributedSignupsByUser } | { ok: false; error: string }
+> {
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate;
+
+  if (attributionCache && Date.now() - attributionCache.ts < ATTRIBUTION_TTL_MS) {
+    return { ok: true, counts: attributionCache.data };
+  }
+
+  try {
+    const admin = createServiceRoleClient();
+
+    const { data: adminProfiles } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("role", "admin")
+      .limit(1000);
+    const adminIds = new Set<string>((adminProfiles ?? []).map((p) => p.id as string));
+
+    const { data: profileRows } = await admin
+      .from("profiles")
+      .select("id, created_at, role")
+      .limit(200000);
+    const profileCreatedAt = new Map<string, number>();
+    for (const row of (profileRows ?? []) as Array<{
+      id: string;
+      created_at: string | null;
+      role: string | null;
+    }>) {
+      if (row.role === "admin" || !row.created_at) continue;
+      const ts = Date.parse(row.created_at);
+      if (Number.isFinite(ts)) profileCreatedAt.set(row.id, ts);
+    }
+
+    const { data: shareRows } = await admin
+      .from("share_events")
+      .select("share_token, actor_user_id, created_at")
+      .not("share_token", "is", null)
+      .not("actor_user_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(200000);
+    // Keep the most recent owner per token (first occurrence in the desc list).
+    const tokenOwner = new Map<string, string>();
+    for (const row of (shareRows ?? []) as Array<{
+      share_token: string;
+      actor_user_id: string;
+    }>) {
+      if (!tokenOwner.has(row.share_token)) {
+        tokenOwner.set(row.share_token, row.actor_user_id);
+      }
+    }
+
+    // Sessions whose user_id resolves to a non-admin profile we've seen.
+    const { data: userViewRows } = await admin
+      .from("page_views")
+      .select("session_id, user_id")
+      .not("user_id", "is", null)
+      .limit(500000);
+    const profileBySession = new Map<string, string>();
+    for (const v of (userViewRows ?? []) as Array<{
+      session_id: string;
+      user_id: string;
+    }>) {
+      if (!profileCreatedAt.has(v.user_id)) continue;
+      if (!profileBySession.has(v.session_id)) {
+        profileBySession.set(v.session_id, v.user_id);
+      }
+    }
+
+    // Token visits — anonymous and authed — grouped by session.
+    const { data: tokenViewRows } = await admin
+      .from("page_views")
+      .select("session_id, share_token, created_at")
+      .not("share_token", "is", null)
+      .limit(500000);
+
+    type Visit = { token: string; ts: number };
+    const visitsBySession = new Map<string, Visit[]>();
+    for (const v of (tokenViewRows ?? []) as Array<{
+      session_id: string;
+      share_token: string;
+      created_at: string | null;
+    }>) {
+      if (!profileBySession.has(v.session_id)) continue;
+      const ts = v.created_at ? Date.parse(v.created_at) : NaN;
+      if (!Number.isFinite(ts)) continue;
+      const arr = visitsBySession.get(v.session_id) ?? [];
+      arr.push({ token: v.share_token, ts });
+      visitsBySession.set(v.session_id, arr);
+    }
+
+    const counts: AttributedSignupsByUser = {};
+    const creditedProfiles = new Set<string>();
+    for (const [sessionId, visits] of visitsBySession) {
+      const profileId = profileBySession.get(sessionId);
+      if (!profileId) continue;
+      // A user only counts once across all their sessions — pick the latest
+      // touch they ever had, period.
+      if (creditedProfiles.has(profileId)) continue;
+      const profileTs = profileCreatedAt.get(profileId);
+      if (profileTs === undefined) continue;
+      const eligible = visits.filter((v) => v.ts <= profileTs);
+      if (eligible.length === 0) continue;
+      eligible.sort((a, b) => b.ts - a.ts);
+      const winner = eligible[0];
+      const ownerId = tokenOwner.get(winner.token);
+      if (!ownerId || adminIds.has(ownerId) || ownerId === profileId) continue;
+      counts[ownerId] = (counts[ownerId] ?? 0) + 1;
+      creditedProfiles.add(profileId);
+    }
+
+    attributionCache = { ts: Date.now(), data: counts };
+    return { ok: true, counts };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Failed to compute attribution.",
+    };
+  }
+}
+
+/** Lifetime distinct-sharer count for the Overview tile. Excludes admins so
+ *  that test shares don't inflate the number. */
+export async function getShareLifetimeSummaryAction(): Promise<
+  { ok: true; summary: ShareLifetimeSummary } | { ok: false; error: string }
+> {
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate;
+
+  try {
+    const admin = createServiceRoleClient();
+    const { data: adminProfiles } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("role", "admin")
+      .limit(1000);
+    const adminIds = new Set<string>((adminProfiles ?? []).map((p) => p.id as string));
+
+    const { data: shareRaw } = await admin
+      .from("share_events")
+      .select("actor_user_id")
+      .not("actor_user_id", "is", null)
+      .limit(200000);
+    const distinct = new Set<string>();
+    let total = 0;
+    for (const row of (shareRaw ?? []) as Array<{ actor_user_id: string | null }>) {
+      const uid = row.actor_user_id;
+      if (!uid || adminIds.has(uid)) continue;
+      distinct.add(uid);
+      total += 1;
+    }
+
+    return {
+      ok: true,
+      summary: { distinctSharers: distinct.size, totalShares: total },
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Failed to load share summary.",
+    };
+  }
+}

@@ -854,3 +854,100 @@ export async function listCancellationFeedbackForAdminAction(): Promise<
   rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return { ok: true, rows };
 }
+
+export type BillingSummary = {
+  paidUsers: number;
+  trialingUsers: number;
+  mrr: number;
+  lifetimeRevenue: number;
+  asOf: string;
+};
+
+// In-memory cache so per-render dashboard hits don't hammer the Stripe API.
+// Stripe data doesn't change minute-to-minute for an overview tile; 1h is
+// plenty.
+let billingSummaryCache: { ts: number; data: BillingSummary } | null = null;
+const BILLING_SUMMARY_TTL_MS = 60 * 60 * 1000;
+
+export async function getBillingSummaryForOverviewAction(): Promise<
+  | { ok: true; summary: BillingSummary; cached: boolean }
+  | { ok: false; error: string }
+> {
+  const gate = await assertAdmin();
+  if (!gate.ok) return { ok: false, error: gate.error };
+
+  if (billingSummaryCache && Date.now() - billingSummaryCache.ts < BILLING_SUMMARY_TTL_MS) {
+    return { ok: true, summary: billingSummaryCache.data, cached: true };
+  }
+
+  try {
+    const { stripe } = await getStripeClient();
+
+    let paidUsers = 0;
+    let trialingUsers = 0;
+    let mrrCents = 0;
+
+    for (const status of ["active", "trialing"] as const) {
+      let cursor: string | undefined;
+      while (true) {
+        const page: Awaited<ReturnType<typeof stripe.subscriptions.list>> =
+          await stripe.subscriptions.list({
+            status,
+            limit: 100,
+            starting_after: cursor,
+            expand: ["data.items.data.price"],
+          });
+        for (const sub of page.data) {
+          if (status === "active") paidUsers += 1;
+          else trialingUsers += 1;
+          for (const item of sub.items.data) {
+            const price = item.price;
+            const unitAmount = price?.unit_amount ?? 0;
+            const qty = item.quantity ?? 1;
+            const interval = price?.recurring?.interval;
+            if (!unitAmount || !interval) continue;
+            const amount = unitAmount * qty;
+            if (interval === "month") mrrCents += amount;
+            else if (interval === "year") mrrCents += Math.round(amount / 12);
+          }
+        }
+        if (!page.has_more) break;
+        cursor = page.data[page.data.length - 1]?.id;
+        if (!cursor) break;
+      }
+    }
+
+    let lifetimeNetCents = 0;
+    let chargeCursor: string | undefined;
+    let pages = 0;
+    const MAX_PAGES = 100;
+    while (pages < MAX_PAGES) {
+      const page: Awaited<ReturnType<typeof stripe.charges.list>> =
+        await stripe.charges.list({
+          limit: 100,
+          starting_after: chargeCursor,
+        });
+      for (const ch of page.data) {
+        if (!ch.paid) continue;
+        lifetimeNetCents += (ch.amount_captured ?? 0) - (ch.amount_refunded ?? 0);
+      }
+      pages += 1;
+      if (!page.has_more) break;
+      chargeCursor = page.data[page.data.length - 1]?.id;
+      if (!chargeCursor) break;
+    }
+
+    const summary: BillingSummary = {
+      paidUsers,
+      trialingUsers,
+      mrr: mrrCents / 100,
+      lifetimeRevenue: lifetimeNetCents / 100,
+      asOf: new Date().toISOString(),
+    };
+    billingSummaryCache = { ts: Date.now(), data: summary };
+    return { ok: true, summary, cached: false };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return { ok: false, error: msg };
+  }
+}

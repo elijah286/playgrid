@@ -1123,6 +1123,33 @@ export const FEATURES: FeatureEntry[] = [
 
   // ── Admin tools ────────────────────────────────────────────────
   {
+    id: "admin-overview-dashboard",
+    name: "Site admin Overview dashboard",
+    description:
+      "Site Admin → Overview shows top-line health on a single page: total users, paid users, MRR, active users, lifetime revenue (hero strip), a 6-step activation funnel (signed up → playbook → 1/5/10/13+ plays) with drop-off % between steps, a daily traffic sparkline with views/signups/sessions and prior-period deltas, top 5 referrers, a geography snapshot, and an engagement card showing Coach Cal triers and distinct sharers. A 7d/30d/90d/all-time selector scopes the windowed metrics. MRR + lifetime revenue come live from Stripe with a 60-min cache.",
+    category: "Admin tools",
+    status: "internal",
+    addedDate: "2026-05-22",
+  },
+  {
+    id: "admin-attributed-signups",
+    name: "Attributed signups per user",
+    description:
+      "Site Admin → Users adds a sortable \"Brought in\" column counting how many new signups each user attracted via a share link (last-touch attribution across their lifetime). Helps spot the highest-influence users at a glance.",
+    category: "Admin tools",
+    status: "internal",
+    addedDate: "2026-05-22",
+  },
+  {
+    id: "admin-sidebar-nav",
+    name: "Site admin sidebar navigation",
+    description:
+      "Site Admin moves from a horizontal segmented control to a grouped sidebar (Insights / Users & growth / Operations / Configuration), with a mobile drawer and persisted active tab via localStorage so admins land back where they left off.",
+    category: "Admin tools",
+    status: "internal",
+    addedDate: "2026-05-22",
+  },
+  {
     id: "admin-geography",
     name: "Geography dashboard",
     description:
