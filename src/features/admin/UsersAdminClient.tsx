@@ -26,6 +26,7 @@ import {
 import {
   cancelStripeSubscriptionAction,
   grantCompAction,
+  resetUserBillingAction,
   revokeCompAction,
 } from "@/app/actions/admin-billing";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
@@ -699,10 +700,14 @@ function PlanDialog({
   const [noExpiry, setNoExpiry] = useState<boolean>(false);
   const [note, setNote] = useState<string>("");
   const [refundOnCancel, setRefundOnCancel] = useState<boolean>(true);
+  const [resetRefund, setResetRefund] = useState<boolean>(true);
+  const [resetConfirm, setResetConfirm] = useState<string>("");
   const [pending, startTransition] = useTransition();
 
   const isStripe = user.entitlementSource === "stripe";
   const isComp = user.entitlementSource === "comp" && user.compGrantId;
+  const resetConfirmTarget = `reset ${user.email}`;
+  const resetReady = resetConfirm.trim().toLowerCase() === resetConfirmTarget.toLowerCase();
 
   return (
     <Modal
@@ -876,6 +881,87 @@ function PlanDialog({
             className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </Field>
+
+        <details className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-xs">
+          <summary className="cursor-pointer select-none font-semibold text-danger">
+            Danger zone — full reset
+          </summary>
+          <div className="mt-3 space-y-2 text-foreground">
+            <p>
+              Wipes every billing trace for this user so the next checkout
+              behaves like a brand-new visitor. Use this to re-evaluate the
+              first-time-buyer experience on a test account.
+            </p>
+            <ul className="list-disc space-y-0.5 pl-4 text-muted">
+              <li>Cancels every active Stripe subscription</li>
+              <li>Deletes every <code>subscriptions</code> row (clears the trial-eligibility gate)</li>
+              <li>Revokes every active comp grant</li>
+              <li>Optionally refunds every paid invoice on the customer</li>
+            </ul>
+            <label className="flex items-center gap-1.5 pt-1">
+              <input
+                type="checkbox"
+                checked={resetRefund}
+                onChange={(e) => setResetRefund(e.target.checked)}
+              />
+              Also refund every paid invoice in full
+            </label>
+            <div className="pt-1">
+              <label className="block text-[11px] font-medium text-muted">
+                Type{" "}
+                <code className="rounded bg-surface-inset px-1 py-0.5 text-foreground">
+                  {resetConfirmTarget}
+                </code>{" "}
+                to confirm
+              </label>
+              <input
+                type="text"
+                value={resetConfirm}
+                onChange={(e) => setResetConfirm(e.target.value)}
+                placeholder={resetConfirmTarget}
+                className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground focus:border-danger focus:outline-none focus:ring-1 focus:ring-danger"
+              />
+            </div>
+            <button
+              type="button"
+              disabled={pending || !resetReady}
+              onClick={() => {
+                startTransition(async () => {
+                  const res = await resetUserBillingAction({
+                    userId: user.id,
+                    refundAllPayments: resetRefund,
+                  });
+                  if (!res.ok) {
+                    onError(res.error);
+                    return;
+                  }
+                  const parts: string[] = [`Reset ${user.email}.`];
+                  parts.push(
+                    `${res.subscriptionsCanceled} sub${res.subscriptionsCanceled === 1 ? "" : "s"} canceled`,
+                  );
+                  parts.push(
+                    `${res.subscriptionRowsDeleted} DB row${res.subscriptionRowsDeleted === 1 ? "" : "s"} deleted`,
+                  );
+                  if (res.compGrantsRevoked > 0) {
+                    parts.push(`${res.compGrantsRevoked} comp grant${res.compGrantsRevoked === 1 ? "" : "s"} revoked`);
+                  }
+                  if (resetRefund && res.invoicesRefunded > 0) {
+                    parts.push(
+                      `refunded ${(res.refundedTotalCents / 100).toFixed(2)} USD across ${res.invoicesRefunded} invoice${res.invoicesRefunded === 1 ? "" : "s"}`,
+                    );
+                  }
+                  if (res.errors.length > 0) {
+                    parts.push(`(${res.errors.length} non-fatal error${res.errors.length === 1 ? "" : "s"}: ${res.errors[0]})`);
+                  }
+                  onDone(parts.join(" · "));
+                });
+              }}
+              className="mt-2 w-full rounded-lg bg-danger px-3 py-1.5 text-xs font-semibold text-white hover:bg-danger/90 disabled:opacity-40"
+            >
+              {pending ? "Resetting…" : "Reset everything for this user"}
+            </button>
+          </div>
+        </details>
       </div>
     </Modal>
   );

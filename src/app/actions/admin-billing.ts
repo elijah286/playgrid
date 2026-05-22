@@ -255,6 +255,188 @@ export async function cancelStripeSubscriptionAction(input: {
   };
 }
 
+/**
+ * Full billing reset for a user — wipes every trace of paid history so
+ * the next checkout behaves as if they're a brand-new visitor (trial
+ * granted, no prior coach_ai row, no comp). Intended for admin reset of
+ * test accounts (so we can re-evaluate the first-time-buyer experience),
+ * NOT for support / refund cases — use cancelStripeSubscriptionAction
+ * for those.
+ *
+ * Steps (in order, each best-effort with errors accumulated):
+ *  1. Cancel every non-terminal Stripe subscription for the user's
+ *     customer(s). Already-canceled subs are skipped.
+ *  2. (Optional) Refund every paid invoice on those customers. The
+ *     `payment_intent` is pulled off the expanded `payments` collection
+ *     (Stripe SDK v22 removed top-level `Invoice.payment_intent`).
+ *  3. Delete every `subscriptions` row for the user. This is what
+ *     clears the trial-eligibility gate — the gate disqualifies on any
+ *     historical `tier='coach_ai'` row regardless of status. Webhooks
+ *     that arrive after the deletes will re-insert canceled rows; the
+ *     admin can re-reset if that happens.
+ *  4. Revoke every active `comp_grants` row for the user (so a stale
+ *     grant doesn't keep entitling them).
+ *
+ * The user_entitlements view is derived from subscriptions ∪ comp_grants
+ * so the user automatically drops to `free` once both are clean.
+ */
+export async function resetUserBillingAction(input: {
+  userId: string;
+  refundAllPayments: boolean;
+}): Promise<
+  | {
+      ok: true;
+      subscriptionsCanceled: number;
+      invoicesRefunded: number;
+      refundedTotalCents: number;
+      subscriptionRowsDeleted: number;
+      compGrantsRevoked: number;
+      errors: string[];
+    }
+  | { ok: false; error: string }
+> {
+  const gate = await assertAdmin();
+  if (!gate.ok) return { ok: false, error: gate.error };
+
+  const admin = createServiceRoleClient();
+  const errors: string[] = [];
+
+  // Collect every Stripe customer this user has touched, via the
+  // `subscriptions` mirror. Falls back to an auth-email lookup so we
+  // also catch customers created out-of-band (e.g. a Checkout that
+  // never produced a subscription, or rows previously hard-deleted).
+  const customerIds = new Set<string>();
+  const { data: subRows, error: subErr } = await admin
+    .from("subscriptions")
+    .select("stripe_customer_id")
+    .eq("user_id", input.userId)
+    .not("stripe_customer_id", "is", null);
+  if (subErr) errors.push(`subscriptions lookup: ${subErr.message}`);
+  for (const row of subRows ?? []) {
+    if (row.stripe_customer_id) customerIds.add(row.stripe_customer_id as string);
+  }
+
+  let stripe;
+  try {
+    ({ stripe } = await getStripeClient());
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Stripe not configured." };
+  }
+
+  // Email-based fallback: any Stripe customer with this user's email,
+  // even if we never recorded a subscriptions row for them, gets the
+  // same treatment so a half-completed checkout doesn't leave a trial-
+  // disqualifying ghost customer behind.
+  try {
+    const { data: authUser } = await admin.auth.admin.getUserById(input.userId);
+    const email = authUser?.user?.email ?? null;
+    if (email) {
+      const list = await stripe.customers.list({ email, limit: 20 });
+      for (const c of list.data) customerIds.add(c.id);
+    }
+  } catch (e) {
+    errors.push(`customer email lookup: ${e instanceof Error ? e.message : "unknown"}`);
+  }
+
+  // Step 1 + 2: cancel subs + refund invoices per customer.
+  let subscriptionsCanceled = 0;
+  let invoicesRefunded = 0;
+  let refundedTotalCents = 0;
+
+  for (const customerId of customerIds) {
+    let allSubs: Awaited<ReturnType<typeof stripe.subscriptions.list>>["data"] = [];
+    try {
+      const resp = await stripe.subscriptions.list({
+        customer: customerId,
+        status: "all",
+        limit: 100,
+      });
+      allSubs = resp.data;
+    } catch (e) {
+      errors.push(`list subs for ${customerId}: ${e instanceof Error ? e.message : "unknown"}`);
+    }
+
+    for (const sub of allSubs) {
+      if (sub.status === "canceled" || sub.status === "incomplete_expired") continue;
+      try {
+        await stripe.subscriptions.cancel(sub.id);
+        subscriptionsCanceled++;
+      } catch (e) {
+        errors.push(`cancel ${sub.id}: ${e instanceof Error ? e.message : "unknown"}`);
+      }
+    }
+
+    if (input.refundAllPayments) {
+      try {
+        const invoices = await stripe.invoices.list({
+          customer: customerId,
+          limit: 100,
+          expand: ["data.payments"],
+        });
+        for (const inv of invoices.data) {
+          if (inv.status !== "paid" || (inv.amount_paid ?? 0) <= 0) continue;
+          const paymentRecord = inv.payments?.data.find(
+            (p) =>
+              p.status === "paid" &&
+              p.payment?.type === "payment_intent" &&
+              p.payment.payment_intent,
+          );
+          const piRef = paymentRecord?.payment?.payment_intent ?? null;
+          const piId = typeof piRef === "string" ? piRef : (piRef?.id ?? null);
+          if (!piId) continue;
+          try {
+            const refund = await stripe.refunds.create({ payment_intent: piId });
+            invoicesRefunded++;
+            refundedTotalCents += refund.amount ?? 0;
+          } catch (e) {
+            // "charge_already_refunded" is expected if an admin already
+            // refunded manually — skip silently rather than counting it
+            // as an error the operator needs to act on.
+            const msg = e instanceof Error ? e.message : "unknown";
+            if (!/already.*refunded|amount=0/i.test(msg)) {
+              errors.push(`refund invoice ${inv.id}: ${msg}`);
+            }
+          }
+        }
+      } catch (e) {
+        errors.push(`list invoices for ${customerId}: ${e instanceof Error ? e.message : "unknown"}`);
+      }
+    }
+  }
+
+  // Step 3: delete every subscriptions row for the user.
+  let subscriptionRowsDeleted = 0;
+  const { data: deletedSubs, error: delErr } = await admin
+    .from("subscriptions")
+    .delete()
+    .eq("user_id", input.userId)
+    .select("id");
+  if (delErr) errors.push(`subscriptions delete: ${delErr.message}`);
+  else subscriptionRowsDeleted = (deletedSubs ?? []).length;
+
+  // Step 4: revoke active comp_grants.
+  let compGrantsRevoked = 0;
+  const { data: revokedGrants, error: revErr } = await admin
+    .from("comp_grants")
+    .update({ revoked_at: new Date().toISOString(), revoked_by: gate.userId })
+    .eq("user_id", input.userId)
+    .is("revoked_at", null)
+    .select("id");
+  if (revErr) errors.push(`comp_grants revoke: ${revErr.message}`);
+  else compGrantsRevoked = (revokedGrants ?? []).length;
+
+  revalidatePath("/settings");
+  return {
+    ok: true,
+    subscriptionsCanceled,
+    invoicesRefunded,
+    refundedTotalCents,
+    subscriptionRowsDeleted,
+    compGrantsRevoked,
+    errors,
+  };
+}
+
 export type GiftCodeRow = {
   id: string;
   code: string;
