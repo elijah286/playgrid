@@ -105,12 +105,60 @@ export function CoachAiHeaderPreview({
     : trialUsed
       ? "Coach Cal is included with Coach Pro — $25/month gets you 200 messages plus everything in Team Coach."
       : `Get the full Coach Cal experience with a ${evalDays}-day free trial — no charge today.`;
+  function handleCtaClick() {
+    const action = upgradeOnly ? "upgrade" : trialUsed ? "subscribe" : "start_trial";
+    track({
+      event: "coach_cal_cta_click",
+      target: "header_chat_trial",
+      metadata: { surface: "header_chat", action, path: pathname ?? null },
+    });
+    // Paid Team Coach users must go through /pricing — the upgrade
+    // path needs the proration modal, and the direct checkout action
+    // refuses for users with an active sub.
+    if (upgradeOnly) {
+      onCtaClick?.();
+      router.push("/pricing");
+      return;
+    }
+    // Free + Coach Pro intent is unambiguous (the coach just clicked
+    // "Start trial" / "Subscribe"). Skip the /pricing comparison shop
+    // and jump straight to Stripe Checkout — one less click, no
+    // second-guessing the decision.
+    setErr(null);
+    startTransition(async () => {
+      const res = await createCheckoutSessionAction({
+        tier: "coach_ai",
+        interval: "month",
+      });
+      if (!res.ok) {
+        // Fall back to /pricing on any error (e.g. the active-sub
+        // guard fires because of an out-of-band sub the UI didn't
+        // know about). The coach lands on the comparison page with
+        // the error surfaced so they can react.
+        setErr(res.error);
+        onCtaClick?.();
+        router.push("/pricing");
+        return;
+      }
+      onCtaClick?.();
+      window.location.href = res.url;
+    });
+  }
+
   return (
     <div className="relative flex h-full min-h-0 flex-col">
       {/* Pending → fullscreen overlay so the click registers instantly
           even when Cal closes / Stripe round-trip takes 1-3s. */}
       <CheckoutLoadingOverlay open={pending} />
+      {/* Conversation surface — laid out as a real Cal chat so the
+          preview reads as "this is what Coach Cal looks like" rather
+          than a card-inside-a-card marketing surface. The greeting is
+          one chat bubble, the demo strip below is rendered as actual
+          user/Cal turns (not nested inside another card), and the
+          trial CTA sits below the conversation as a clear action
+          instead of being crammed inside Cal's bubble. */}
       <div className="flex-1 space-y-3 overflow-y-auto px-3 py-3">
+        {/* Cal greeting bubble */}
         <div className="flex items-start gap-2">
           <div
             className="flex size-7 shrink-0 items-center justify-center rounded-lg"
@@ -118,71 +166,43 @@ export function CoachAiHeaderPreview({
           >
             <CoachAiIcon className="size-5 text-primary" bare />
           </div>
-          <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-surface-raised px-3 py-2.5 text-sm text-foreground ring-1 ring-border">
-            <p className="leading-snug">Coach Cal can {leadForPath(pathname)}</p>
-
-            <CoachCalDemoStrip />
-
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => {
-                const action = upgradeOnly ? "upgrade" : trialUsed ? "subscribe" : "start_trial";
-                track({
-                  event: "coach_cal_cta_click",
-                  target: "header_chat_trial",
-                  metadata: { surface: "header_chat", action, path: pathname ?? null },
-                });
-                // Paid Team Coach users must go through /pricing — the
-                // upgrade path needs the proration modal, and the direct
-                // checkout action refuses for users with an active sub.
-                if (upgradeOnly) {
-                  onCtaClick?.();
-                  router.push("/pricing");
-                  return;
-                }
-                // Free + Coach Pro intent is unambiguous (the coach just
-                // clicked "Start trial" / "Subscribe"). Skip the /pricing
-                // comparison shop and jump straight to Stripe Checkout —
-                // one less click, no second-guessing the decision.
-                setErr(null);
-                startTransition(async () => {
-                  const res = await createCheckoutSessionAction({
-                    tier: "coach_ai",
-                    interval: "month",
-                  });
-                  if (!res.ok) {
-                    // Fall back to /pricing on any error (e.g. the
-                    // active-sub guard fires because of an out-of-band
-                    // sub the UI didn't know about). The coach lands on
-                    // the comparison page with the error surfaced so
-                    // they can react.
-                    setErr(res.error);
-                    onCtaClick?.();
-                    router.push("/pricing");
-                    return;
-                  }
-                  onCtaClick?.();
-                  window.location.href = res.url;
-                });
-              }}
-              className="mt-3 inline-flex w-full items-center justify-center rounded-xl py-2.5 text-sm font-semibold text-white shadow transition hover:opacity-90 disabled:opacity-60"
-              style={{ background: TRIAL_GRADIENT }}
-            >
-              {pending ? "Opening checkout…" : ctaLabel}
-            </button>
-            <p className="mt-1.5 text-center text-[10px] text-muted">
-              {ctaSubtitle}
-            </p>
-            {err ? (
-              <p className="mt-1 text-center text-[10px] text-red-700">{err}</p>
-            ) : null}
+          <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-surface-raised px-3 py-2 text-sm leading-snug text-foreground ring-1 ring-border">
+            Coach Cal can {leadForPath(pathname)}
           </div>
         </div>
+
+        {/* Cycling demo conversation — rendered as a real user→Cal
+            exchange. Each cycle, the user "asks" something and Cal
+            "answers" so coaches see what natural Cal interactions
+            look like. The bubbles are styled identically to real
+            chat bubbles (no wrapping card) so it reads as a
+            continuation of the conversation, not a separate widget. */}
+        <CoachCalDemoStrip />
       </div>
 
-      <div className="border-t border-border bg-surface-raised px-3 pb-3 pt-2">
-        <div className="relative">
+      {/* Footer band: trial CTA up top (the obvious next step), the
+          disabled "input" below as a quieter reinforcement that
+          chatting is gated. One band, one divider — replaces the
+          two stacked bands the older layout had, which looked like
+          another "window within the window". */}
+      <div className="border-t border-border bg-surface-raised px-3 pb-3 pt-3">
+        <button
+          type="button"
+          disabled={pending}
+          onClick={handleCtaClick}
+          className="inline-flex w-full items-center justify-center rounded-xl py-2.5 text-sm font-semibold text-white shadow transition hover:opacity-90 disabled:opacity-60"
+          style={{ background: TRIAL_GRADIENT }}
+        >
+          {pending ? "Opening checkout…" : ctaLabel}
+        </button>
+        <p className="mt-1.5 text-center text-[10px] text-muted">
+          {ctaSubtitle}
+        </p>
+        {err ? (
+          <p className="mt-1 text-center text-[10px] text-red-700">{err}</p>
+        ) : null}
+
+        <div className="relative mt-3">
           <textarea
             rows={2}
             disabled
@@ -201,6 +221,14 @@ export function CoachAiHeaderPreview({
   );
 }
 
+/**
+ * Cycling user→Cal exchange shown beneath the greeting in the preview
+ * chat. Renders as real chat bubbles at the same scale as everything
+ * else in the panel (NOT inside a wrapping card) so the conversation
+ * reads as one continuous Cal session instead of "a marketing widget
+ * mounted inside the chat". The fade-in keys off the demo index so
+ * each rotation feels like a new message landing.
+ */
 function CoachCalDemoStrip() {
   const [idx, setIdx] = useState(0);
   useEffect(() => {
@@ -211,25 +239,31 @@ function CoachCalDemoStrip() {
   }, []);
   const demo = COACH_CAL_DEMOS[idx];
   return (
-    <div
-      key={idx}
-      className="mt-3 space-y-1.5 rounded-xl bg-surface-inset/60 p-2.5 [animation:fadein_400ms_ease-out]"
-    >
-      <style>{`@keyframes fadein { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }`}</style>
-      <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-2.5 py-1.5 text-[11px] leading-snug text-white">
+    <>
+      <style>{`@keyframes calDemoFade { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }`}</style>
+      <div
+        key={`${idx}-u`}
+        className="flex justify-end [animation:calDemoFade_400ms_ease-out]"
+      >
+        <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-3 py-2 text-sm leading-snug text-white">
           {demo.user}
         </div>
       </div>
-      <div className="flex items-end gap-1.5">
-        <div className="flex size-5 shrink-0 items-center justify-center rounded-lg" style={{ background: GRADIENT }}>
-          <CoachAiIcon className="size-3 text-primary" bare />
+      <div
+        key={`${idx}-c`}
+        className="flex items-start gap-2 [animation:calDemoFade_400ms_ease-out]"
+      >
+        <div
+          className="flex size-7 shrink-0 items-center justify-center rounded-lg"
+          style={{ background: GRADIENT }}
+        >
+          <CoachAiIcon className="size-5 text-primary" bare />
         </div>
-        <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-surface-raised px-2.5 py-1.5 text-[11px] leading-snug text-foreground ring-1 ring-border">
+        <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-surface-raised px-3 py-2 text-sm leading-snug text-foreground ring-1 ring-border">
           {demo.cal}
         </div>
       </div>
-      <div className="flex justify-center gap-1 pt-0.5">
+      <div className="flex justify-center gap-1 pt-1">
         {COACH_CAL_DEMOS.map((_, i) => (
           <span
             key={i}
@@ -240,6 +274,6 @@ function CoachCalDemoStrip() {
           />
         ))}
       </div>
-    </div>
+    </>
   );
 }

@@ -72,18 +72,59 @@ export function CoachAiPreviewChat({
     : trialUsed
       ? "Coach Cal is included with Coach Pro — $25/month gets you 200 messages plus everything in Team Coach."
       : `Get the full Coach Cal experience with a ${evalDays}-day free trial — no charge today.`;
+  function handleCtaClick() {
+    const action = upgradeOnly ? "upgrade" : trialUsed ? "subscribe" : "start_trial";
+    track({
+      event: "coach_cal_cta_click",
+      target: "preview_chat_trial",
+      metadata: { surface: "preview_chat", entry_point: entryPoint, action },
+    });
+    if (upgradeOnly) {
+      // Paid Team Coach: must go through /pricing for the
+      // proration upgrade modal — direct checkout refuses.
+      onCtaClick?.();
+      router.push("/pricing");
+      return;
+    }
+    // Free user with clear Coach Pro intent: skip /pricing
+    // and jump straight to Stripe Checkout.
+    setErr(null);
+    startTransition(async () => {
+      const res = await createCheckoutSessionAction({
+        tier: "coach_ai",
+        interval: "month",
+      });
+      if (!res.ok) {
+        setErr(res.error);
+        onCtaClick?.();
+        router.push("/pricing");
+        return;
+      }
+      onCtaClick?.();
+      window.location.href = res.url;
+    });
+  }
+
   return (
     <div className="relative flex h-full min-h-0 flex-col">
       {/* Pending → fullscreen overlay so the click registers instantly
           even when Cal closes / Stripe round-trip takes 1-3s. */}
       <CheckoutLoadingOverlay open={pending} />
+      {/* Conversation surface — laid out as a real Cal chat. The user
+          "asks" the entry-point prompt, Cal "answers" with the
+          tailored upsell lead-in, then sends a follow-up listing the
+          other things it can do. Each piece is a separate chat bubble
+          (NOT a card-in-card) so the preview reads as a real Cal
+          session instead of a marketing widget mounted inside Cal. */}
       <div className="flex-1 space-y-3 overflow-y-auto px-3 py-3">
+        {/* User's "asked" prompt */}
         <div className="flex justify-end">
           <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-3 py-2 text-sm leading-snug text-white">
             {prompt}
           </div>
         </div>
 
+        {/* Cal's lead-in response */}
         <div className="flex items-start gap-2">
           <div
             className="flex size-7 shrink-0 items-center justify-center rounded-lg"
@@ -91,9 +132,21 @@ export function CoachAiPreviewChat({
           >
             <CoachAiIcon className="size-5 text-primary" bare />
           </div>
-          <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-surface-raised px-3 py-2.5 text-sm text-foreground ring-1 ring-border">
-            <p className="leading-snug">{config.preview.leadIn}</p>
-            <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-surface-raised px-3 py-2 text-sm leading-snug text-foreground ring-1 ring-border">
+            {config.preview.leadIn}
+          </div>
+        </div>
+
+        {/* Cal's follow-up "here's what else I can do" — second
+            bubble in the same chat thread, with a smaller leading
+            avatar so it visually reads as a continuation. */}
+        <div className="flex items-start gap-2">
+          <div
+            className="flex size-7 shrink-0 items-center justify-center rounded-lg opacity-0"
+            aria-hidden
+          />
+          <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-surface-raised px-3 py-2 text-sm leading-snug text-foreground ring-1 ring-border">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
               Other things Coach Cal can do
             </p>
             <ul className="mt-1.5 list-disc space-y-1 pl-5 leading-snug">
@@ -101,58 +154,32 @@ export function CoachAiPreviewChat({
                 <li key={cap}>{cap}</li>
               ))}
             </ul>
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => {
-                const action = upgradeOnly ? "upgrade" : trialUsed ? "subscribe" : "start_trial";
-                track({
-                  event: "coach_cal_cta_click",
-                  target: "preview_chat_trial",
-                  metadata: { surface: "preview_chat", entry_point: entryPoint, action },
-                });
-                if (upgradeOnly) {
-                  // Paid Team Coach: must go through /pricing for the
-                  // proration upgrade modal — direct checkout refuses.
-                  onCtaClick?.();
-                  router.push("/pricing");
-                  return;
-                }
-                // Free user with clear Coach Pro intent: skip /pricing
-                // and jump straight to Stripe Checkout.
-                setErr(null);
-                startTransition(async () => {
-                  const res = await createCheckoutSessionAction({
-                    tier: "coach_ai",
-                    interval: "month",
-                  });
-                  if (!res.ok) {
-                    setErr(res.error);
-                    onCtaClick?.();
-                    router.push("/pricing");
-                    return;
-                  }
-                  onCtaClick?.();
-                  window.location.href = res.url;
-                });
-              }}
-              className="mt-3 inline-flex w-full items-center justify-center rounded-xl py-2.5 text-sm font-semibold text-white shadow transition hover:opacity-90 disabled:opacity-60"
-              style={{ background: TRIAL_GRADIENT }}
-            >
-              {pending ? "Opening checkout…" : ctaLabel}
-            </button>
-            <p className="mt-1.5 text-center text-[10px] text-muted">
-              {ctaSubtitle}
-            </p>
-            {err ? (
-              <p className="mt-1 text-center text-[10px] text-red-700">{err}</p>
-            ) : null}
           </div>
         </div>
       </div>
 
-      <div className="border-t border-border bg-surface-raised px-3 pb-3 pt-2">
-        <div className="relative">
+      {/* Footer band: trial CTA up top (the obvious next step), the
+          disabled "input" below as a quieter reinforcement that
+          chatting is gated. One band, one divider — replaces the
+          two stacked bands the older layout had. */}
+      <div className="border-t border-border bg-surface-raised px-3 pb-3 pt-3">
+        <button
+          type="button"
+          disabled={pending}
+          onClick={handleCtaClick}
+          className="inline-flex w-full items-center justify-center rounded-xl py-2.5 text-sm font-semibold text-white shadow transition hover:opacity-90 disabled:opacity-60"
+          style={{ background: TRIAL_GRADIENT }}
+        >
+          {pending ? "Opening checkout…" : ctaLabel}
+        </button>
+        <p className="mt-1.5 text-center text-[10px] text-muted">
+          {ctaSubtitle}
+        </p>
+        {err ? (
+          <p className="mt-1 text-center text-[10px] text-red-700">{err}</p>
+        ) : null}
+
+        <div className="relative mt-3">
           <textarea
             rows={2}
             disabled
