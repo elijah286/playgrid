@@ -867,7 +867,7 @@ export type BillingSummary = {
   asOf: string;
 };
 
-export type RevenueTierKey = "coach" | "coach_ai" | "other";
+export type RevenueTierKey = "coach" | "coach_ai" | "pack" | "other";
 
 export type RevenueBreakdown = {
   asOf: string;
@@ -899,10 +899,21 @@ type StripeAggregate = {
   trialingCount: number;
   /** Last-12-months revenue by year-month. */
   byMonth: Record<string, { totalCents: number }>;
-  /** Lifetime spend keyed by Stripe customer.id with whatever email we
-   *  observed on a charge for matching back to a user. */
-  byCustomer: Record<string, { totalCents: number; email: string | null }>;
-  /** Per-customer tier as seen on their most recent active subscription. */
+  /** Lifetime spend keyed by canonical buyer key — email-first so one-time
+   *  Coach Cal pack purchases (which lack a Stripe customer.id) still
+   *  aggregate per buyer. Falls back to `cust:${customerId}` when no email
+   *  is on the charge. */
+  byCustomer: Record<
+    string,
+    {
+      totalCents: number;
+      email: string | null;
+      customerId: string | null;
+    }
+  >;
+  /** Per-buyer tier — uses email as the key when matchable to an active
+   *  sub's customer email, else customer.id. Buyers with no active sub but
+   *  with one-time charges land in "pack". */
   tierByCustomer: Record<string, RevenueTierKey>;
   lifetimeNetCents: number;
 };
@@ -938,6 +949,11 @@ async function buildStripeAggregate(): Promise<StripeAggregate> {
     lifetimeNetCents: 0,
   };
 
+  // Map Stripe customer.id -> email so we can canonicalize tier lookups by
+  // email later. Populated as we walk active subs (we expand the customer
+  // so we get .email cheaply).
+  const customerIdToEmail = new Map<string, string>();
+
   for (const status of ["active", "trialing"] as const) {
     let cursor: string | undefined;
     while (true) {
@@ -946,15 +962,24 @@ async function buildStripeAggregate(): Promise<StripeAggregate> {
           status,
           limit: 100,
           starting_after: cursor,
-          expand: ["data.items.data.price"],
+          expand: ["data.items.data.price", "data.customer"],
         });
       for (const sub of page.data) {
         if (status === "trialing") {
           aggregate.trialingCount += 1;
           continue;
         }
+        const customerObj =
+          typeof sub.customer === "string" ? null : sub.customer;
         const customerId =
           typeof sub.customer === "string" ? sub.customer : sub.customer?.id ?? "";
+        const customerEmail =
+          customerObj && "email" in customerObj
+            ? (customerObj.email ?? null)?.toLowerCase() ?? null
+            : null;
+        if (customerId && customerEmail) {
+          customerIdToEmail.set(customerId, customerEmail);
+        }
         let mrrCents = 0;
         let tier: RevenueTierKey = "other";
         let interval: BillingInterval | null = null;
@@ -977,7 +1002,10 @@ async function buildStripeAggregate(): Promise<StripeAggregate> {
           }
         }
         aggregate.activeSubs.push({ customerId, tier, interval, mrrCents });
-        if (customerId) aggregate.tierByCustomer[customerId] = tier;
+        // Key tier by email when available — that way pack charges (which
+        // only carry an email, no customer.id) can still resolve a tier.
+        const tierKey = customerEmail ?? (customerId ? `cust:${customerId}` : null);
+        if (tierKey) aggregate.tierByCustomer[tierKey] = tier;
       }
       if (!page.has_more) break;
       cursor = page.data[page.data.length - 1]?.id;
@@ -1008,18 +1036,35 @@ async function buildStripeAggregate(): Promise<StripeAggregate> {
 
       const customerId =
         typeof ch.customer === "string" ? ch.customer : ch.customer?.id ?? "";
-      if (customerId) {
-        const slot = aggregate.byCustomer[customerId] ?? {
+      // Coach Cal pack purchases lack a Stripe customer; their buyer email
+      // is stuffed into description by the checkout flow. Pull whichever
+      // signal we have, normalize, and use as the canonical aggregation
+      // key so multiple pack purchases by the same buyer add up.
+      const descEmail =
+        ch.description && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ch.description.trim())
+          ? ch.description.trim().toLowerCase()
+          : null;
+      const billingEmail = ch.billing_details?.email?.toLowerCase() ?? null;
+      const receiptEmail = ch.receipt_email?.toLowerCase() ?? null;
+      const subEmail = customerId
+        ? customerIdToEmail.get(customerId) ?? null
+        : null;
+      const email = subEmail ?? descEmail ?? billingEmail ?? receiptEmail;
+      const key = email
+        ? `email:${email}`
+        : customerId
+          ? `cust:${customerId}`
+          : null;
+      if (key) {
+        const slot = aggregate.byCustomer[key] ?? {
           totalCents: 0,
           email: null,
+          customerId: null,
         };
         slot.totalCents += net;
-        if (!slot.email) {
-          const fromBilling = ch.billing_details?.email ?? null;
-          const fromReceipt = ch.receipt_email ?? null;
-          slot.email = fromBilling ?? fromReceipt;
-        }
-        aggregate.byCustomer[customerId] = slot;
+        if (!slot.email && email) slot.email = email;
+        if (!slot.customerId && customerId) slot.customerId = customerId;
+        aggregate.byCustomer[key] = slot;
       }
 
       const createdMs = (ch.created ?? 0) * 1000;
@@ -1099,6 +1144,7 @@ export async function getRevenueBreakdownAction(): Promise<
     const tierTotals: Record<RevenueTierKey, { count: number; mrrCents: number }> = {
       coach: { count: 0, mrrCents: 0 },
       coach_ai: { count: 0, mrrCents: 0 },
+      pack: { count: 0, mrrCents: 0 },
       other: { count: 0, mrrCents: 0 },
     };
     for (const sub of agg.activeSubs) {
@@ -1106,7 +1152,7 @@ export async function getRevenueBreakdownAction(): Promise<
       tierTotals[sub.tier].mrrCents += sub.mrrCents;
     }
     const byTier: RevenueBreakdown["byTier"] = (
-      ["coach", "coach_ai", "other"] as RevenueTierKey[]
+      ["coach", "coach_ai", "pack", "other"] as RevenueTierKey[]
     )
       .map((tier) => ({
         tier,
@@ -1122,7 +1168,7 @@ export async function getRevenueBreakdownAction(): Promise<
     });
 
     const customerEntries = Object.entries(agg.byCustomer)
-      .map(([customerId, info]) => ({ customerId, ...info }))
+      .map(([key, info]) => ({ key, ...info }))
       .filter((c) => c.totalCents > 0)
       .sort((a, b) => b.totalCents - a.totalCents)
       .slice(0, 20);
@@ -1150,12 +1196,21 @@ export async function getRevenueBreakdownAction(): Promise<
         const userId = email
           ? emailToUserId.get(email.toLowerCase()) ?? null
           : null;
+        // Tier resolution: by email first (covers pack buyers who match a
+        // subscriber), then by customer ID, else label as "pack" when we
+        // have at least an email (i.e. one-time pack buyer), else null.
+        const tierByEmail = email ? agg.tierByCustomer[email] : undefined;
+        const tierByCust = c.customerId
+          ? agg.tierByCustomer[`cust:${c.customerId}`]
+          : undefined;
+        const tier =
+          tierByEmail ?? tierByCust ?? (email ? "pack" : null);
         return {
-          customerId: c.customerId,
+          customerId: c.customerId ?? "",
           userId,
           email,
           displayName: userId ? displayNameById.get(userId) ?? null : null,
-          tier: agg.tierByCustomer[c.customerId] ?? null,
+          tier,
           lifetimeSpend: c.totalCents / 100,
         };
       },

@@ -21,6 +21,7 @@ type Props = {
 const TIER_LABEL: Record<RevenueTierKey, string> = {
   coach: "Coach",
   coach_ai: "Coach Pro",
+  pack: "Pack",
   other: "Other",
 };
 
