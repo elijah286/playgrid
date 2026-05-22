@@ -225,7 +225,11 @@ export default async function PlayEditPage({ params }: Props) {
         playId={res.play.id}
         playName={(res.play.name as string | null) ?? null}
       />
-      <CoachCalPlaybookCta show={showCoachCalCta} evalDays={coachAiEvalDays} />
+      <CoachCalPlaybookCta
+        show={showCoachCalCta}
+        evalDays={coachAiEvalDays}
+        userTier={editorEntitlement?.tier ?? "free"}
+      />
       <PlayEditorClient
       playId={res.play.id}
       playbookId={res.play.playbook_id}

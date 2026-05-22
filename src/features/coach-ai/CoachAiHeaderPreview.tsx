@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { Lock } from "lucide-react";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { track } from "@/lib/analytics/track";
+import type { SubscriptionTier } from "@/lib/billing/entitlement";
 import { cn } from "@/lib/utils";
 
 const GRADIENT = "linear-gradient(135deg, #dbeafe 0%, #ede9fe 100%)";
@@ -59,8 +60,33 @@ function leadForPath(pathname: string | null): string {
  * preview shell — Cal greeting bubble, demo strip, trial CTA, disabled
  * input — but with general path-aware copy instead of a tailored upsell.
  */
-export function CoachAiHeaderPreview({ evalDays, onCtaClick }: { evalDays: number; onCtaClick?: () => void }) {
+export function CoachAiHeaderPreview({
+  evalDays,
+  userTier = null,
+  onCtaClick,
+}: {
+  evalDays: number;
+  userTier?: SubscriptionTier | null;
+  onCtaClick?: () => void;
+}) {
   const pathname = usePathname();
+  // Paid Team Coach users can't get a trial — Stripe restricts trials to
+  // first-time subscribers, and the upgrade flow charges proration today.
+  // Show "Upgrade" copy so they aren't misled into expecting a free window.
+  const upgradeOnly = userTier === "coach";
+  const ctaLabel = upgradeOnly
+    ? "Upgrade to Coach Pro"
+    : `Start ${evalDays}-day free trial`;
+  const ctaSubtitle = upgradeOnly
+    ? "Prorated for this billing period · cancel anytime"
+    : "No charge today · cancel anytime";
+  const inputPlaceholder = upgradeOnly
+    ? "Upgrade to Coach Pro to chat with Coach Cal"
+    : "Start your free trial to chat with Coach Cal";
+  const lockBadge = upgradeOnly ? "Coach Pro required" : "Trial required";
+  const footnote = upgradeOnly
+    ? "Coach Cal is included with Coach Pro — upgrade from your current Team Coach plan to unlock it."
+    : `Get the full Coach Cal experience with a ${evalDays}-day free trial — no charge today.`;
   return (
     <div className="relative flex h-full min-h-0 flex-col">
       <div className="flex-1 space-y-3 overflow-y-auto px-3 py-3">
@@ -84,7 +110,7 @@ export function CoachAiHeaderPreview({ evalDays, onCtaClick }: { evalDays: numbe
                   target: "header_chat_trial",
                   metadata: {
                     surface: "header_chat",
-                    action: "start_trial",
+                    action: upgradeOnly ? "upgrade" : "start_trial",
                     path: pathname ?? null,
                   },
                 });
@@ -93,10 +119,10 @@ export function CoachAiHeaderPreview({ evalDays, onCtaClick }: { evalDays: numbe
               className="mt-3 inline-flex w-full items-center justify-center rounded-xl py-2.5 text-sm font-semibold text-white shadow transition hover:opacity-90"
               style={{ background: TRIAL_GRADIENT }}
             >
-              Start {evalDays}-day free trial
+              {ctaLabel}
             </Link>
             <p className="mt-1.5 text-center text-[10px] text-muted">
-              No charge today · cancel anytime
+              {ctaSubtitle}
             </p>
           </div>
         </div>
@@ -107,15 +133,15 @@ export function CoachAiHeaderPreview({ evalDays, onCtaClick }: { evalDays: numbe
           <textarea
             rows={2}
             disabled
-            placeholder="Start your free trial to chat with Coach Cal"
+            placeholder={inputPlaceholder}
             className="w-full cursor-not-allowed resize-none rounded-xl bg-surface-inset px-3 py-2 pr-24 text-sm text-foreground/40 ring-1 ring-inset ring-black/5"
           />
           <div className="pointer-events-none absolute right-2 top-2 inline-flex items-center gap-1 rounded-md bg-surface-raised/70 px-1.5 py-0.5 text-[10px] text-muted ring-1 ring-border">
-            <Lock className="size-3" /> Trial required
+            <Lock className="size-3" /> {lockBadge}
           </div>
         </div>
         <p className="mt-2 text-[11px] leading-snug text-muted">
-          Get the full Coach Cal experience with a {evalDays}-day free trial — no charge today.
+          {footnote}
         </p>
       </div>
     </div>

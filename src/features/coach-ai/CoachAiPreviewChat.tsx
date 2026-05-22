@@ -5,6 +5,7 @@ import { Lock } from "lucide-react";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { ENTRY_POINTS, previewCtaLabel, type CoachCalEntryPointId } from "./entry-points";
 import { track } from "@/lib/analytics/track";
+import type { SubscriptionTier } from "@/lib/billing/entitlement";
 
 const GRADIENT = "linear-gradient(135deg, #dbeafe 0%, #ede9fe 100%)";
 // Bold trial-CTA gradient — the brand pastel + white text reads as faded;
@@ -25,15 +26,32 @@ export function CoachAiPreviewChat({
   entryPoint,
   prompt,
   evalDays,
+  userTier = null,
   onCtaClick,
 }: {
   entryPoint: CoachCalEntryPointId;
   prompt: string;
   evalDays: number;
+  userTier?: SubscriptionTier | null;
   onCtaClick?: () => void;
 }) {
   const config = ENTRY_POINTS[entryPoint];
-  const ctaLabel = previewCtaLabel(config, evalDays);
+  // Paid Team Coach users can't get a trial — Stripe restricts trials to
+  // first-time subscribers, and the upgrade flow charges proration today.
+  const upgradeOnly = userTier === "coach";
+  const ctaLabel = upgradeOnly
+    ? "Upgrade to Coach Pro"
+    : previewCtaLabel(config, evalDays);
+  const ctaSubtitle = upgradeOnly
+    ? "Prorated for this billing period · cancel anytime"
+    : "No charge today · cancel anytime";
+  const inputPlaceholder = upgradeOnly
+    ? "Upgrade to Coach Pro to chat with Coach Cal"
+    : "Start your free trial to chat with Coach Cal";
+  const lockBadge = upgradeOnly ? "Coach Pro required" : "Trial required";
+  const footnote = upgradeOnly
+    ? "Coach Cal is included with Coach Pro — upgrade from your current Team Coach plan to unlock it."
+    : `Get the full Coach Cal experience with a ${evalDays}-day free trial — no charge today.`;
   return (
     <div className="relative flex h-full min-h-0 flex-col">
       <div className="flex-1 space-y-3 overflow-y-auto px-3 py-3">
@@ -69,7 +87,7 @@ export function CoachAiPreviewChat({
                   metadata: {
                     surface: "preview_chat",
                     entry_point: entryPoint,
-                    action: "start_trial",
+                    action: upgradeOnly ? "upgrade" : "start_trial",
                   },
                 });
                 onCtaClick?.();
@@ -80,7 +98,7 @@ export function CoachAiPreviewChat({
               {ctaLabel}
             </Link>
             <p className="mt-1.5 text-center text-[10px] text-muted">
-              No charge today · cancel anytime
+              {ctaSubtitle}
             </p>
           </div>
         </div>
@@ -91,15 +109,15 @@ export function CoachAiPreviewChat({
           <textarea
             rows={2}
             disabled
-            placeholder="Start your free trial to chat with Coach Cal"
+            placeholder={inputPlaceholder}
             className="w-full cursor-not-allowed resize-none rounded-xl bg-surface-inset px-3 py-2 pr-24 text-sm text-foreground/40 ring-1 ring-inset ring-black/5"
           />
           <div className="pointer-events-none absolute right-2 top-2 inline-flex items-center gap-1 rounded-md bg-surface-raised/70 px-1.5 py-0.5 text-[10px] text-muted ring-1 ring-border">
-            <Lock className="size-3" /> Trial required
+            <Lock className="size-3" /> {lockBadge}
           </div>
         </div>
         <p className="mt-2 text-[11px] leading-snug text-muted">
-          Get the full Coach Cal experience with a {evalDays}-day free trial — no charge today.
+          {footnote}
         </p>
       </div>
     </div>

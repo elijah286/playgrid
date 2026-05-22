@@ -453,7 +453,11 @@ export default async function PlaybookDetailPage({ params }: Props) {
 
   return (
     <>
-      <CoachCalPlaybookCta show={showCoachCalCta} evalDays={coachAiEvalDays} />
+      <CoachCalPlaybookCta
+        show={showCoachCalCta}
+        evalDays={coachAiEvalDays}
+        userTier={viewerEntitlement?.tier ?? "free"}
+      />
       {publicExampleJsonLd?.map((ld, i) => (
         <script
           key={i}

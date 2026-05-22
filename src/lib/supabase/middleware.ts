@@ -7,6 +7,7 @@ import {
   touchUserSession,
 } from "@/lib/auth/sessions";
 import { getUserWithTimeout } from "@/lib/supabase/get-user-with-timeout";
+import { cookieDomainForHost } from "@/lib/supabase/cookie-domain";
 
 /**
  * Paths accessible without authentication. Everything else is redirected
@@ -72,6 +73,15 @@ export async function updateSession(request: NextRequest) {
     return supabaseResponse;
   }
 
+  // Scope Supabase auth cookies to `.xogridmaker.com` (apex) so the apex
+  // and www subdomain share a session. Without this, a Stripe success_url
+  // redirect that lands on a different host than the one the user logged
+  // in on silently logs them out. See cookieDomainForHost for why this
+  // is conditional on the request host.
+  const cookieDomain = cookieDomainForHost(
+    request.headers.get("x-forwarded-host") ?? request.headers.get("host"),
+  );
+
   const supabase = createServerClient(url, key, {
     cookies: {
       getAll() {
@@ -85,7 +95,10 @@ export async function updateSession(request: NextRequest) {
           request,
         });
         cookiesToSet.forEach(({ name, value, options }) =>
-          supabaseResponse.cookies.set(name, value, options),
+          supabaseResponse.cookies.set(name, value, {
+            ...options,
+            ...(cookieDomain ? { domain: cookieDomain } : {}),
+          }),
         );
       },
     },

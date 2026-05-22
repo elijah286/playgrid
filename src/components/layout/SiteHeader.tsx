@@ -3,7 +3,7 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getCachedUserRole } from "@/lib/auth/profile-cache";
 import { SiteHeaderShell } from "@/components/layout/SiteHeaderShell";
-import { getCurrentEntitlement } from "@/lib/billing/entitlement";
+import { getCurrentEntitlement, type SubscriptionTier } from "@/lib/billing/entitlement";
 import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
 import {
   getBetaFeatures,
@@ -18,6 +18,7 @@ export async function SiteHeader() {
   let coachAiAvailable = false;
   let showCoachCalPromo = false; // logged-in user without Coach Pro sees the CTA
   let coachAiImageUploadAvailable = false;
+  let userTier: SubscriptionTier | null = null;
   const coachAiEvalDays = await getCoachAiEvalDays();
 
   if (hasSupabaseEnv()) {
@@ -44,7 +45,8 @@ export async function SiteHeader() {
         }
         try {
           const entitlement = await getCurrentEntitlement();
-          const isEntitled = isAdmin || (entitlement?.tier ?? "free") === "coach_ai";
+          userTier = entitlement?.tier ?? "free";
+          const isEntitled = isAdmin || userTier === "coach_ai";
           coachAiAvailable = isEntitled;
           // Logged-in users without a Coach Pro subscription see the promo
           // launcher (upgrade CTA) instead of the chat.
@@ -81,6 +83,7 @@ export async function SiteHeader() {
       showCoachCalPromo={showCoachCalPromo}
       coachAiEvalDays={coachAiEvalDays}
       coachAiImageUploadAvailable={coachAiImageUploadAvailable}
+      userTier={userTier}
     />
   );
 }

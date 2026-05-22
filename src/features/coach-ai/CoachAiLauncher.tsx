@@ -24,6 +24,7 @@ import type { CoachCalOpenDetail } from "./openCoachCal";
 import { usePlaybookAnchor } from "./playbook-anchor";
 import { usePlayAnchor } from "./play-anchor";
 import { listPlaybooksAction, type PlaybookRow } from "@/app/actions/playbooks";
+import type { SubscriptionTier } from "@/lib/billing/entitlement";
 import { cn } from "@/lib/utils";
 import { track } from "@/lib/analytics/track";
 
@@ -84,6 +85,7 @@ export function CoachAiLauncher({
   acceptGlobalCommands = false,
   evalDays,
   imageUploadAvailable = false,
+  userTier = null,
 }: {
   playbookId?: string | null;
   isAdmin?: boolean;
@@ -105,6 +107,12 @@ export function CoachAiLauncher({
    * side via isBetaFeatureAvailable.
    */
   imageUploadAvailable?: boolean;
+  /**
+   * Current user's subscription tier. Lets the preview/upsell surfaces
+   * distinguish `free` (eligible for trial) from `coach`-paid (must
+   * upgrade with proration). Null = unauthenticated.
+   */
+  userTier?: SubscriptionTier | null;
 }) {
   const [open,          setOpen]          = useState(false);
   const [panelMode,     setPanelMode]     = useState<PanelMode>("float");
@@ -285,6 +293,23 @@ export function CoachAiLauncher({
       new CustomEvent("coach-cal:state-change", { detail: { open } }),
     );
   }, [open]);
+
+  // Close the dialog when the route changes. The launcher is mounted
+  // globally in SiteHeaderShell, so it survives navigation — without this,
+  // clicking an in-chat link (e.g. the "Upgrade to Coach Pro" CTA on the
+  // preview surface) leaves the dialog overlaying the destination page.
+  // Skip the first effect run so the sessionStorage restore (which
+  // re-opens after a `router.refresh()` remount) isn't immediately undone.
+  const firstPathnameRef = useRef(true);
+  useEffect(() => {
+    if (firstPathnameRef.current) {
+      firstPathnameRef.current = false;
+      return;
+    }
+    setOpen(false);
+    setInjectedPrompt(null);
+    setPreviewState(null);
+  }, [pathname]);
 
   // Subscribe to the global `coach-cal:open` event. Only the launcher with
   // acceptGlobalCommands handles it, so mounting two launchers (global +
@@ -1037,13 +1062,14 @@ export function CoachAiLauncher({
                   entryPoint={previewState.entryPoint}
                   prompt={previewState.prompt}
                   evalDays={evalDays}
+                  userTier={userTier}
                   onCtaClick={() => setOpen(false)}
                 />
               ) : !entitled ? (
                 // Non-entitled user opened from the header icon (or after
                 // closing a CTA-driven preview) — show the general welcome
                 // surface so the chat is never empty for them.
-                <CoachAiHeaderPreview evalDays={evalDays} onCtaClick={() => setOpen(false)} />
+                <CoachAiHeaderPreview evalDays={evalDays} userTier={userTier} onCtaClick={() => setOpen(false)} />
               ) : playbookPending ? (
                 <CoachAiChatPending />
               ) : (

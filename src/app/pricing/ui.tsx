@@ -462,7 +462,18 @@ export function PricingClient({
                   // for a non-paying user).
                   const isPaidDowngrade =
                     isPaid && t.id !== "free" && TIER_RANK[t.id] < TIER_RANK[currentTier];
-                  const label = isPaidDowngrade ? `Downgrade to ${t.name}` : t.cta;
+                  // Paid users moving up a tier don't get Stripe trials —
+                  // the upgrade flow charges proration today. Don't show
+                  // the "Start X-day free trial" label (which is t.cta for
+                  // Coach Pro), since clicking it actually opens the
+                  // proration preview, not a trial.
+                  const isPaidUpgrade =
+                    isPaid && t.id !== "free" && TIER_RANK[t.id] > TIER_RANK[currentTier];
+                  const label = isPaidDowngrade
+                    ? `Downgrade to ${t.name}`
+                    : isPaidUpgrade
+                      ? `Upgrade to ${t.name}`
+                      : t.cta;
                   // Trial copy only applies to first-time subscribers.
                   const showTrialNote = isProTier && !isPaid;
                   return (

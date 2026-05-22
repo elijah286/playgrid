@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { track } from "@/lib/analytics/track";
+import type { SubscriptionTier } from "@/lib/billing/entitlement";
 
 const STORAGE_KEY = "coach-cal:playbook-cta-dismissed";
 const GRADIENT = "linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)";
@@ -17,9 +18,13 @@ const GRADIENT = "linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)";
 export function CoachCalPlaybookCta({
   show,
   evalDays,
+  userTier = null,
 }: {
   show: boolean;
   evalDays: number;
+  /** Lets the CTA switch between trial copy (free users) and upgrade copy
+   *  (existing paid `coach` users who can't get a Stripe trial). */
+  userTier?: SubscriptionTier | null;
 }) {
   const [visible, setVisible] = useState(false);
   const [chatOpen, setChatOpen] = useState(() => {
@@ -89,6 +94,14 @@ export function CoachCalPlaybookCta({
 
   if (!visible || chatOpen || suppressedByCustomize) return null;
 
+  const upgradeOnly = userTier === "coach";
+  const ctaLabel = upgradeOnly
+    ? "Upgrade to Coach Pro"
+    : `Start ${evalDays}-day free trial`;
+  const ctaSubtitle = upgradeOnly
+    ? "Prorated for this billing period · cancel anytime"
+    : "No charge today · cancel anytime";
+
   return (
     <div
       role="dialog"
@@ -135,7 +148,7 @@ export function CoachCalPlaybookCta({
               target: "playbook_floating_card",
               metadata: {
                 surface: "playbook_floating_card",
-                action: "start_trial",
+                action: upgradeOnly ? "upgrade" : "start_trial",
               },
             });
             // Persist the dismissal so they don't see it again, but
@@ -147,10 +160,10 @@ export function CoachCalPlaybookCta({
           className="mt-3 flex w-full items-center justify-center rounded-xl py-2 text-sm font-semibold text-white shadow transition hover:opacity-90"
           style={{ background: GRADIENT }}
         >
-          Start {evalDays}-day free trial
+          {ctaLabel}
         </a>
         <p className="mt-1.5 text-center text-[10px] text-muted">
-          No charge today · cancel anytime
+          {ctaSubtitle}
         </p>
       </div>
     </div>

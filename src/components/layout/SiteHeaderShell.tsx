@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { UserMenu } from "@/components/layout/UserMenu";
 import { CoachAiLauncher } from "@/features/coach-ai/CoachAiLauncher";
 import { ShareButton } from "@/components/share/ShareButton";
+import type { SubscriptionTier } from "@/lib/billing/entitlement";
 
 type Props = {
   user: { id: string; email: string | null } | null;
@@ -22,6 +23,13 @@ type Props = {
    * sets "me" via the beta-features admin tab for self-only testing.
    */
   coachAiImageUploadAvailable?: boolean;
+  /**
+   * The user's current subscription tier. Lets non-entitled surfaces (the
+   * Cal preview / upsell) distinguish a `free` user (eligible for a trial)
+   * from a `coach`-paid user (must upgrade with proration, no trial). Null
+   * when unauthenticated.
+   */
+  userTier?: SubscriptionTier | null;
 };
 
 // Routes where the playbook banner takes over the top of the screen on
@@ -29,7 +37,7 @@ type Props = {
 // stacked headers. Desktop always shows both.
 const PLAYBOOK_DETAIL_RE = /^\/playbooks\/[^/]+(?:\/.*)?$/;
 
-export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAiAvailable, showCoachCalPromo, coachAiEvalDays, coachAiImageUploadAvailable }: Props) {
+export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAiAvailable, showCoachCalPromo, coachAiEvalDays, coachAiImageUploadAvailable, userTier }: Props) {
   const pathname = usePathname();
   const hideOnMobile = PLAYBOOK_DETAIL_RE.test(pathname);
   // Pricing link is a landing-page-only nav affordance. Everywhere else
@@ -94,6 +102,7 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
                   acceptGlobalCommands
                   evalDays={coachAiEvalDays}
                   imageUploadAvailable={coachAiImageUploadAvailable ?? false}
+                  userTier={userTier ?? null}
                 />
               </div>
             )}
