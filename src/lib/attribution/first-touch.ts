@@ -1,25 +1,16 @@
 import { cookies } from "next/headers";
-import type { ClickIds } from "./click-ids";
+import {
+  FIRST_TOUCH_COOKIE,
+  FIRST_TOUCH_MAX_AGE_SECONDS,
+  type FirstTouchPayload,
+} from "./first-touch-shared";
 
-// Cookie holding the first-ever attribution payload for this browser.
-// Persists across sessions for the industry-default 30-day window so we can
-// stamp it onto profiles.first_* when the user eventually signs up.
-export const FIRST_TOUCH_COOKIE = "pg_first_touch";
-export const FIRST_TOUCH_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
-
-export type FirstTouchPayload = {
-  ts: string;
-  utm_source: string | null;
-  utm_medium: string | null;
-  utm_campaign: string | null;
-  utm_content: string | null;
-  utm_term: string | null;
-  referrer: string | null;
-  landing_path: string | null;
-  country: string | null;
-  region: string | null;
-  city: string | null;
-} & ClickIds;
+// Re-export so existing server-side imports keep working without changes.
+export {
+  FIRST_TOUCH_COOKIE,
+  FIRST_TOUCH_MAX_AGE_SECONDS,
+  type FirstTouchPayload,
+};
 
 function isMeaningful(p: Omit<FirstTouchPayload, "ts">): boolean {
   return Object.values(p).some((v) => v !== null && v !== undefined && v !== "");
