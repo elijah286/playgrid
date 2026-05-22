@@ -1028,51 +1028,53 @@ async function buildStripeAggregate(): Promise<StripeAggregate> {
       await stripe.charges.list({
         limit: 100,
         starting_after: chargeCursor,
+        expand: ["data.customer"],
       });
     for (const ch of page.data) {
       if (!ch.paid) continue;
+
+      // Only count charges that are tied to an XOGridmaker product. XOGM's
+      // checkout flows (subscriptions + Coach Cal packs) always attach a
+      // Stripe customer; charges from any other business sharing this
+      // Stripe account (e.g. Payment Links) have `customer: null` and are
+      // skipped here so they don't pollute the revenue dashboard.
+      const customerObj =
+        typeof ch.customer === "string" || !ch.customer ? null : ch.customer;
+      const customerId =
+        typeof ch.customer === "string"
+          ? ch.customer
+          : ch.customer?.id ?? "";
+      if (!customerId) continue;
+
       const net = (ch.amount_captured ?? 0) - (ch.amount_refunded ?? 0);
       aggregate.lifetimeNetCents += net;
 
-      const customerId =
-        typeof ch.customer === "string" ? ch.customer : ch.customer?.id ?? "";
-      // Coach Cal pack purchases lack a Stripe customer; their buyer email
-      // is stuffed into description by the checkout flow. Pull whichever
-      // signal we have, normalize, and use as the canonical aggregation
-      // key so multiple pack purchases by the same buyer add up.
-      const descEmail =
-        ch.description && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ch.description.trim())
-          ? ch.description.trim().toLowerCase()
+      // Prefer the customer's email (from the expanded object, falling back
+      // to whatever we cached when we walked active subs); else use the
+      // customer ID itself so per-charge totals still aggregate.
+      const expandedEmail =
+        customerObj && "email" in customerObj
+          ? (customerObj.email ?? null)?.toLowerCase() ?? null
           : null;
-      const billingEmail = ch.billing_details?.email?.toLowerCase() ?? null;
-      const receiptEmail = ch.receipt_email?.toLowerCase() ?? null;
-      const subEmail = customerId
-        ? customerIdToEmail.get(customerId) ?? null
-        : null;
-      const email = subEmail ?? descEmail ?? billingEmail ?? receiptEmail;
-      const key = email
-        ? `email:${email}`
-        : customerId
-          ? `cust:${customerId}`
-          : null;
-      if (key) {
-        const slot = aggregate.byCustomer[key] ?? {
-          totalCents: 0,
-          email: null,
-          customerId: null,
-        };
-        slot.totalCents += net;
-        if (!slot.email && email) slot.email = email;
-        if (!slot.customerId && customerId) slot.customerId = customerId;
-        aggregate.byCustomer[key] = slot;
-      }
+      const subEmail = customerIdToEmail.get(customerId) ?? null;
+      const email = expandedEmail ?? subEmail;
+      const key = email ? `email:${email}` : `cust:${customerId}`;
+      const slot = aggregate.byCustomer[key] ?? {
+        totalCents: 0,
+        email: null,
+        customerId: null,
+      };
+      slot.totalCents += net;
+      if (!slot.email && email) slot.email = email;
+      if (!slot.customerId) slot.customerId = customerId;
+      aggregate.byCustomer[key] = slot;
 
       const createdMs = (ch.created ?? 0) * 1000;
       if (createdMs >= twelveMonthCutoff) {
-        const key = monthKey(new Date(createdMs));
-        const bucket = aggregate.byMonth[key] ?? { totalCents: 0 };
+        const monthBucketKey = monthKey(new Date(createdMs));
+        const bucket = aggregate.byMonth[monthBucketKey] ?? { totalCents: 0 };
         bucket.totalCents += net;
-        aggregate.byMonth[key] = bucket;
+        aggregate.byMonth[monthBucketKey] = bucket;
       }
     }
     pages += 1;
