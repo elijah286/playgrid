@@ -24,12 +24,6 @@ type FeatureMeta = {
 
 const FEATURES: FeatureMeta[] = [
   {
-    key: "game_mode",
-    label: "Game Mode",
-    description:
-      "Mobile-first in-game flow for coaches: pick plays fast and log outcomes.",
-  },
-  {
     key: "game_results",
     label: "Game Results",
     description:
@@ -52,12 +46,6 @@ const FEATURES: FeatureMeta[] = [
     label: "Version History",
     description:
       "Team coaches can view edit history for plays and playbooks, restore prior versions, and recover deleted plays from a 30-day trash. Snapshots are written for everyone regardless of this flag.",
-  },
-  {
-    key: "practice_plans",
-    label: "Practice Plans",
-    description:
-      "Practice Plans tab inside a playbook. Coaches build reusable practice templates with timed blocks, parallel activities (Skill / Line / Specialists), and drill diagrams using equipment props (cones, ladders, hurdles).",
   },
   {
     key: "team_messaging",

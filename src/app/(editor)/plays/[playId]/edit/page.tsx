@@ -179,10 +179,7 @@ export default async function PlayEditPage({ params }: Props) {
 
   const isAdmin = (selfRoleResp.data?.role as string | null) === "admin";
   const isCoachInPlaybook = canEdit && !isExamplePreview;
-  const gameModeAvailable = isBetaFeatureAvailable(betaFeatures.game_mode, {
-    isAdmin,
-    isEntitled: isCoachInPlaybook,
-  });
+  const gameModeAvailable = isCoachInPlaybook;
   // Drive the editor bottom nav's "More" sheet — same per-playbook
   // beta-feature flags the playbook page uses to decide which tabs to
   // show. We expose only the flags relevant to navigation; the editor
@@ -199,10 +196,7 @@ export default async function PlayEditPage({ params }: Props) {
     betaFeatures.game_results,
     { isAdmin, isEntitled: isCoachInPlaybook },
   );
-  const practicePlansAvailable = isBetaFeatureAvailable(
-    betaFeatures.practice_plans,
-    { isAdmin, isEntitled: isCoachInPlaybook },
-  );
+  const practicePlansAvailable = isCoachInPlaybook;
   const viewerCanUseGameMode = isAdmin || canUseGameMode(editorEntitlement);
   const coachAiAvailable =
     isAdmin || (editorEntitlement?.tier ?? "free") === "coach_ai";

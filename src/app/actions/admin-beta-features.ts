@@ -15,13 +15,11 @@ import {
 } from "@/lib/site/beta-features-config";
 
 const DEFAULTS: BetaFeatures = {
-  game_mode: "off",
   game_results: "off",
   marketing_content: "off",
   team_calendar: "off",
   play_comments: "off",
   version_history: "off",
-  practice_plans: "off",
   team_messaging: "off",
   coach_ai_image_upload: "off",
 };

@@ -37,7 +37,7 @@ The site has real users. The default workflow optimizes for not breaking product
 - If a diff includes a secret, stop and flag it before committing.
 
 ### Feature flags
-- Risky user-facing changes ship behind a beta gate (existing pattern: Coach AI, Practice Plans). Enable for self first, then expand.
+- Risky user-facing changes ship behind a beta gate (existing pattern: Coach AI). Enable for self first, then expand.
 
 ### Rollback
 - If a push breaks production, the default move is to revert the breaking commit (`git revert <sha>`) and push the revert. Forward-fix only if the diagnosis is fast and confident.

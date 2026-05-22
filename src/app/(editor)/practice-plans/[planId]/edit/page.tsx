@@ -1,6 +1,5 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getBetaFeatures, isBetaFeatureAvailable } from "@/lib/site/beta-features-config";
 import { getPracticePlanAction } from "@/app/actions/practice-plans";
 import { PracticePlanEditorClient } from "@/features/practice-plans/PracticePlanEditorClient";
 
@@ -17,15 +16,6 @@ export default async function PracticePlanEditPage({
   const user = userRes.user;
   if (!user) redirect("/login");
 
-  const { data: profile } = await sb
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-  const isAdmin = profile?.role === "admin";
-
-  // Fetch plan first so we can check playbook membership for the beta gate,
-  // matching the same isEntitled logic as the playbook page's tab visibility.
   const res = await getPracticePlanAction(planId);
   if (!res.ok) notFound();
 
@@ -37,13 +27,7 @@ export default async function PracticePlanEditPage({
     .maybeSingle();
   const memberRole = membership?.role as string | null;
   const isCoachInPlaybook = memberRole === "owner" || memberRole === "editor";
-
-  const beta = await getBetaFeatures();
-  const allowed = isBetaFeatureAvailable(beta.practice_plans, {
-    isAdmin,
-    isEntitled: isCoachInPlaybook,
-  });
-  if (!allowed) notFound();
+  if (!isCoachInPlaybook) notFound();
 
   return (
     <PracticePlanEditorClient

@@ -374,7 +374,7 @@ function PlaybookDetailClientInner({
   teamCalendarAvailable?: boolean;
   /** When true, expose the Trash + History coach-only UIs (version_history beta). */
   versionHistoryAvailable?: boolean;
-  /** When true, show the "Practice Plans" tab (practice_plans beta). */
+  /** When true, show the "Practice Plans" tab — coach-only. */
   practicePlansAvailable?: boolean;
   /** When true, show the "Messages" tab (team_messaging beta). */
   teamMessagingAvailable?: boolean;

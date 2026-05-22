@@ -1,6 +1,5 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getBetaFeatures, isBetaFeatureAvailable } from "@/lib/site/beta-features-config";
 import { getPracticePlanAction } from "@/app/actions/practice-plans";
 import { PracticePlanPrintView } from "@/features/practice-plans/PracticePlanPrintView";
 
@@ -20,13 +19,6 @@ export default async function PracticePlanPrintPage({
   const user = userRes.user;
   if (!user) redirect("/login");
 
-  const { data: profile } = await sb
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-  const isAdmin = profile?.role === "admin";
-
   const res = await getPracticePlanAction(planId);
   if (!res.ok) notFound();
 
@@ -38,13 +30,7 @@ export default async function PracticePlanPrintPage({
     .maybeSingle();
   const memberRole = membership?.role as string | null;
   const isCoachInPlaybook = memberRole === "owner" || memberRole === "editor";
-
-  const beta = await getBetaFeatures();
-  const allowed = isBetaFeatureAvailable(beta.practice_plans, {
-    isAdmin,
-    isEntitled: isCoachInPlaybook,
-  });
-  if (!allowed) notFound();
+  if (!isCoachInPlaybook) notFound();
 
   return (
     <PracticePlanPrintView

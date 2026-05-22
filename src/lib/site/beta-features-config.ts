@@ -5,13 +5,11 @@ const SITE_ROW_ID = "default";
 const CACHE_TAG = "site-beta-features";
 
 export type BetaFeatureKey =
-  | "game_mode"
   | "game_results"
   | "marketing_content"
   | "team_calendar"
   | "play_comments"
   | "version_history"
-  | "practice_plans"
   | "team_messaging"
   | "coach_ai_image_upload";
 export type BetaFeatureScope = "off" | "me" | "all" | "custom";
@@ -19,13 +17,11 @@ export type BetaFeatureScope = "off" | "me" | "all" | "custom";
 export type BetaFeatures = Record<BetaFeatureKey, BetaFeatureScope>;
 
 const DEFAULTS: BetaFeatures = {
-  game_mode: "off",
   game_results: "off",
   marketing_content: "off",
   team_calendar: "off",
   play_comments: "off",
   version_history: "off",
-  practice_plans: "off",
   team_messaging: "off",
   // Coach Cal photo/file upload. 2026-05-21: pulled back from
   // general availability while the hand-drawn play-sheet vision

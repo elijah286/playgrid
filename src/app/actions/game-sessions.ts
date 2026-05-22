@@ -2,10 +2,6 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import {
-  getBetaFeatures,
-  isBetaFeatureAvailable,
-} from "@/lib/site/beta-features-config";
 
 // Historical legacy save (kept for the offline-only save-at-end path, if any
 // lingering caller uses it). New flow is: start -> record per call -> end.
@@ -160,26 +156,16 @@ async function assertCoachOfPlaybook(playbookId: string) {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
 
-  const [{ data: membership }, { data: profile }, betaFeatures] =
-    await Promise.all([
-      supabase
-        .from("playbook_members")
-        .select("role")
-        .eq("playbook_id", playbookId)
-        .eq("user_id", user.id)
-        .maybeSingle(),
-      supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
-      getBetaFeatures(),
-    ]);
+  const { data: membership } = await supabase
+    .from("playbook_members")
+    .select("role")
+    .eq("playbook_id", playbookId)
+    .eq("user_id", user.id)
+    .maybeSingle();
 
   const role = (membership?.role as string | null) ?? null;
   const isCoachInPlaybook = role === "owner" || role === "editor";
-  const isAdmin = (profile?.role as string | null) === "admin";
-  const allowed = isBetaFeatureAvailable(betaFeatures.game_mode, {
-    isAdmin,
-    isEntitled: isCoachInPlaybook,
-  });
-  if (!allowed) return { ok: false as const, error: "Forbidden." };
+  if (!isCoachInPlaybook) return { ok: false as const, error: "Forbidden." };
 
   return { ok: true as const, supabase, user };
 }
@@ -709,26 +695,16 @@ export async function saveGameSessionAction(input: SaveInput) {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
 
-  const [{ data: membership }, { data: profile }, betaFeatures] =
-    await Promise.all([
-      supabase
-        .from("playbook_members")
-        .select("role")
-        .eq("playbook_id", input.playbookId)
-        .eq("user_id", user.id)
-        .maybeSingle(),
-      supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
-      getBetaFeatures(),
-    ]);
+  const { data: membership } = await supabase
+    .from("playbook_members")
+    .select("role")
+    .eq("playbook_id", input.playbookId)
+    .eq("user_id", user.id)
+    .maybeSingle();
 
   const role = (membership?.role as string | null) ?? null;
   const isCoachInPlaybook = role === "owner" || role === "editor";
-  const isAdmin = (profile?.role as string | null) === "admin";
-  const allowed = isBetaFeatureAvailable(betaFeatures.game_mode, {
-    isAdmin,
-    isEntitled: isCoachInPlaybook,
-  });
-  if (!allowed) return { ok: false as const, error: "Forbidden." };
+  if (!isCoachInPlaybook) return { ok: false as const, error: "Forbidden." };
 
   const { data: session, error: sessionErr } = await supabase
     .from("game_sessions")

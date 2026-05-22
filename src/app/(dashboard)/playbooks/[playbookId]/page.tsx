@@ -311,15 +311,10 @@ export default async function PlaybookDetailPage({ params }: Props) {
   );
   const isCoachInPlaybook =
     effectiveRole === "owner" || effectiveRole === "editor";
-  // Examples always expose Game Mode so visitors can experience the full
-  // end-to-end flow. The /game route renders a preview client for example
-  // visitors that keeps everything in local state — nothing persists.
-  const gameModeAvailable =
-    isExamplePreview ||
-    isBetaFeatureAvailable(betaFeatures.game_mode, {
-      isAdmin,
-      isEntitled: isCoachInPlaybook,
-    });
+  // Game Mode: example previewers and any coach in the playbook can use it.
+  // The /game route renders a preview client for example visitors that keeps
+  // everything in local state — nothing persists.
+  const gameModeAvailable = isExamplePreview || isCoachInPlaybook;
   const gameResultsAvailable =
     !isExamplePreview &&
     isBetaFeatureAvailable(betaFeatures.game_results, {
@@ -341,14 +336,8 @@ export default async function PlaybookDetailPage({ params }: Props) {
       isAdmin,
       isEntitled: isCoachInPlaybook,
     });
-  // Practice Plans tab is coach-only and behind a beta gate. Currently
-  // scoped "me" so only site admins see it while the UX is iterated.
-  const practicePlansAvailable =
-    !isExamplePreview &&
-    isBetaFeatureAvailable(betaFeatures.practice_plans, {
-      isAdmin,
-      isEntitled: isCoachInPlaybook,
-    });
+  // Practice Plans tab is coach-only.
+  const practicePlansAvailable = !isExamplePreview && isCoachInPlaybook;
   // Team messaging is available to anyone who can view the playbook once
   // the beta is enabled. Example-preview viewers (non-members of an
   // example playbook) see a CTA instead of the chat — `messagingExamplePreview`

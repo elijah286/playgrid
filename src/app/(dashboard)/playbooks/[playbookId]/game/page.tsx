@@ -2,10 +2,6 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import {
-  getBetaFeatures,
-  isBetaFeatureAvailable,
-} from "@/lib/site/beta-features-config";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { canUseGameMode } from "@/lib/billing/features";
 import { listPlaysAction } from "@/app/actions/plays";
@@ -89,20 +85,15 @@ export default async function GameModePage({ params, searchParams }: Props) {
   // Authed, full Game Mode path.
   if (!user) redirect(`/playbooks/${playbookId}`);
 
-  const [{ data: profile }, betaFeatures, listed] = await Promise.all([
+  const [{ data: profile }, listed] = await Promise.all([
     supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
-    getBetaFeatures(),
     listPlaysAction(playbookId),
   ]);
 
   const isCoachInPlaybook = isMember; // owner or editor role already implies member
   const isAdmin = (profile?.role as string | null) === "admin";
 
-  const allowed = isBetaFeatureAvailable(betaFeatures.game_mode, {
-    isAdmin,
-    isEntitled: isCoachInPlaybook,
-  });
-  if (!allowed) redirect(`/playbooks/${playbookId}`);
+  if (!isCoachInPlaybook) redirect(`/playbooks/${playbookId}`);
 
   // Tier gate: Game Mode is a Team Coach feature. Admins bypass so they can
   // QA without a paid seat. Non-entitled users hitting the URL directly land
