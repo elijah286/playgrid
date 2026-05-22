@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import type { SubscriptionTier } from "@/lib/billing/entitlement";
+import { hasUsedCoachProTrial, type SubscriptionTier } from "@/lib/billing/entitlement";
 import { getStripeClient, priceIdFor, seatPriceIdFor, isSeatPriceId, type BillingInterval } from "@/lib/billing/stripe";
 import { getSeatUsage, ensureOwnerSeatGrantRow } from "@/lib/billing/seats";
 import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
@@ -88,26 +88,17 @@ export async function createCheckoutSessionAction(input: {
     const customerId = await getCustomerIdForUser(user.id, user.email ?? "");
     const origin = await siteOrigin();
 
-    // Coach Pro gets a free trial — but only the first time. Pricing
-    // copy promises "no charge today" for new subscribers; we don't want a
-    // user to cancel and re-sub repeatedly to keep the trial. Look up any
-    // historical coach_ai subscription row for this user; if present, no
-    // trial. The subscriptions table includes terminal states
-    // (canceled / incomplete_expired / unpaid), so a single row is
-    // disqualifying regardless of current status. The window length is
-    // configurable in Site admin; Stripe stamps current_period_end at
-    // checkout so changing the value never shrinks an existing trial.
+    // Coach Pro gets a free trial — but only the first time. See
+    // hasUsedCoachProTrial for the gate semantics (any historical
+    // `coach_ai` row disqualifies, regardless of status). The window
+    // length is configurable in Site admin; Stripe stamps
+    // current_period_end at checkout so changing the value never shrinks
+    // an existing trial. The trial-CTA UI mirrors this gate so we don't
+    // promise "no charge today" to a user who'd be billed in full.
     let trialPeriodDays: number | undefined;
     if (input.tier === "coach_ai") {
-      const admin = createServiceRoleClient();
-      const { data: priorCoachAi } = await admin
-        .from("subscriptions")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("tier", "coach_ai")
-        .limit(1)
-        .maybeSingle();
-      if (!priorCoachAi) trialPeriodDays = await getCoachAiEvalDays();
+      const trialUsed = await hasUsedCoachProTrial(user.id);
+      if (!trialUsed) trialPeriodDays = await getCoachAiEvalDays();
     }
 
     const session = await stripe.checkout.sessions.create({

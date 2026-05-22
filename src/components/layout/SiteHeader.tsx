@@ -3,7 +3,7 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getCachedUserRole } from "@/lib/auth/profile-cache";
 import { SiteHeaderShell } from "@/components/layout/SiteHeaderShell";
-import { getCurrentEntitlement, type SubscriptionTier } from "@/lib/billing/entitlement";
+import { getCurrentEntitlement, hasUsedCoachProTrial, type SubscriptionTier } from "@/lib/billing/entitlement";
 import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
 import {
   getBetaFeatures,
@@ -19,6 +19,7 @@ export async function SiteHeader() {
   let showCoachCalPromo = false; // logged-in user without Coach Pro sees the CTA
   let coachAiImageUploadAvailable = false;
   let userTier: SubscriptionTier | null = null;
+  let coachProTrialUsed = false;
   const coachAiEvalDays = await getCoachAiEvalDays();
 
   if (hasSupabaseEnv()) {
@@ -51,6 +52,15 @@ export async function SiteHeader() {
           // Logged-in users without a Coach Pro subscription see the promo
           // launcher (upgrade CTA) instead of the chat.
           showCoachCalPromo = !coachAiAvailable;
+          // For non-entitled users, also check if they've already burned
+          // the Coach Pro trial. If so, the preview surface suppresses
+          // trial copy ("Start X-day free trial / no charge today") and
+          // shows subscribe copy instead — Stripe would refuse the trial
+          // at checkout anyway, so promising it is misleading. Skip the
+          // query for entitled / paid users where it can't apply.
+          if (!isEntitled && userTier !== "coach") {
+            coachProTrialUsed = await hasUsedCoachProTrial(authUser.id);
+          }
         } catch {
           /* best effort */
         }
@@ -84,6 +94,7 @@ export async function SiteHeader() {
       coachAiEvalDays={coachAiEvalDays}
       coachAiImageUploadAvailable={coachAiImageUploadAvailable}
       userTier={userTier}
+      coachProTrialUsed={coachProTrialUsed}
     />
   );
 }

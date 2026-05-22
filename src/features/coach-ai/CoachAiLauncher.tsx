@@ -86,6 +86,7 @@ export function CoachAiLauncher({
   evalDays,
   imageUploadAvailable = false,
   userTier = null,
+  coachProTrialUsed = false,
 }: {
   playbookId?: string | null;
   isAdmin?: boolean;
@@ -113,6 +114,12 @@ export function CoachAiLauncher({
    * upgrade with proration). Null = unauthenticated.
    */
   userTier?: SubscriptionTier | null;
+  /**
+   * True iff this user already used the Coach Pro trial. Suppresses
+   * trial-promise copy on preview surfaces — Stripe won't grant a
+   * second trial so we don't promise one.
+   */
+  coachProTrialUsed?: boolean;
 }) {
   const [open,          setOpen]          = useState(false);
   const [panelMode,     setPanelMode]     = useState<PanelMode>("float");
@@ -1063,13 +1070,14 @@ export function CoachAiLauncher({
                   prompt={previewState.prompt}
                   evalDays={evalDays}
                   userTier={userTier}
+                  coachProTrialUsed={coachProTrialUsed}
                   onCtaClick={() => setOpen(false)}
                 />
               ) : !entitled ? (
                 // Non-entitled user opened from the header icon (or after
                 // closing a CTA-driven preview) — show the general welcome
                 // surface so the chat is never empty for them.
-                <CoachAiHeaderPreview evalDays={evalDays} userTier={userTier} onCtaClick={() => setOpen(false)} />
+                <CoachAiHeaderPreview evalDays={evalDays} userTier={userTier} coachProTrialUsed={coachProTrialUsed} onCtaClick={() => setOpen(false)} />
               ) : playbookPending ? (
                 <CoachAiChatPending />
               ) : (

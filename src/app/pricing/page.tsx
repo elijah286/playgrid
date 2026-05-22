@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { getCurrentEntitlement } from "@/lib/billing/entitlement";
+import { getCurrentEntitlement, hasUsedCoachProTrial } from "@/lib/billing/entitlement";
 import { getCoachAiTierEnabled } from "@/lib/site/pricing-config";
 import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
 import { getSeatDefaults } from "@/lib/site/seat-defaults-config";
@@ -54,6 +54,13 @@ export default async function PricingPage() {
     getCoachAiEvalDays(),
   ]);
   const isAuthed = user !== null;
+  // Mirror the billing.ts trial gate so the Coach Pro CTA copy matches
+  // what Stripe will actually do at checkout — if the user already used
+  // the trial, label the button "Subscribe" not "Start free trial".
+  const coachProTrialUsed =
+    user && (entitlement?.tier ?? "free") === "free"
+      ? await hasUsedCoachProTrial(user.id)
+      : false;
 
   const breadcrumbLd = {
     "@context": "https://schema.org",
@@ -114,6 +121,7 @@ export default async function PricingPage() {
           freeMaxPlays={freeMaxPlays}
           seatDefaults={seatDefaults}
           coachAiEvalDays={coachAiEvalDays}
+          coachProTrialUsed={coachProTrialUsed}
         />
       </div>
     </div>

@@ -63,30 +63,44 @@ function leadForPath(pathname: string | null): string {
 export function CoachAiHeaderPreview({
   evalDays,
   userTier = null,
+  coachProTrialUsed = false,
   onCtaClick,
 }: {
   evalDays: number;
   userTier?: SubscriptionTier | null;
+  coachProTrialUsed?: boolean;
   onCtaClick?: () => void;
 }) {
   const pathname = usePathname();
-  // Paid Team Coach users can't get a trial — Stripe restricts trials to
-  // first-time subscribers, and the upgrade flow charges proration today.
-  // Show "Upgrade" copy so they aren't misled into expecting a free window.
+  // Three states for the CTA copy:
+  //   - Paid Team Coach (`coach`)        → Upgrade (proration applies, no trial)
+  //   - Free + trial already used        → Subscribe (Stripe refuses a 2nd trial)
+  //   - Free + trial available           → Start trial (no charge today)
+  // The middle state mirrors the billing.ts gate so we don't promise "no
+  // charge today" to someone who'd be billed $25 at checkout.
   const upgradeOnly = userTier === "coach";
+  const trialUsed = !upgradeOnly && coachProTrialUsed;
   const ctaLabel = upgradeOnly
     ? "Upgrade to Coach Pro"
-    : `Start ${evalDays}-day free trial`;
+    : trialUsed
+      ? "Subscribe to Coach Pro"
+      : `Start ${evalDays}-day free trial`;
   const ctaSubtitle = upgradeOnly
     ? "Prorated for this billing period · cancel anytime"
-    : "No charge today · cancel anytime";
+    : trialUsed
+      ? "$25/month · cancel anytime"
+      : "No charge today · cancel anytime";
   const inputPlaceholder = upgradeOnly
     ? "Upgrade to Coach Pro to chat with Coach Cal"
-    : "Start your free trial to chat with Coach Cal";
-  const lockBadge = upgradeOnly ? "Coach Pro required" : "Trial required";
+    : trialUsed
+      ? "Subscribe to Coach Pro to chat with Coach Cal"
+      : "Start your free trial to chat with Coach Cal";
+  const lockBadge = upgradeOnly || trialUsed ? "Coach Pro required" : "Trial required";
   const footnote = upgradeOnly
     ? "Coach Cal is included with Coach Pro — upgrade from your current Team Coach plan to unlock it."
-    : `Get the full Coach Cal experience with a ${evalDays}-day free trial — no charge today.`;
+    : trialUsed
+      ? "Coach Cal is included with Coach Pro — $25/month gets you 200 messages plus everything in Team Coach."
+      : `Get the full Coach Cal experience with a ${evalDays}-day free trial — no charge today.`;
   return (
     <div className="relative flex h-full min-h-0 flex-col">
       <div className="flex-1 space-y-3 overflow-y-auto px-3 py-3">
@@ -110,7 +124,7 @@ export function CoachAiHeaderPreview({
                   target: "header_chat_trial",
                   metadata: {
                     surface: "header_chat",
-                    action: upgradeOnly ? "upgrade" : "start_trial",
+                    action: upgradeOnly ? "upgrade" : trialUsed ? "subscribe" : "start_trial",
                     path: pathname ?? null,
                   },
                 });

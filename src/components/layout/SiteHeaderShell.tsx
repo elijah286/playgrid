@@ -30,6 +30,13 @@ type Props = {
    * when unauthenticated.
    */
   userTier?: SubscriptionTier | null;
+  /**
+   * True iff this user has ever held a Coach Pro subscription (any
+   * status). Stripe refuses to grant a second trial; the preview /
+   * pricing surfaces suppress trial copy when this is set so we don't
+   * promise "no charge today" to someone who'd be billed immediately.
+   */
+  coachProTrialUsed?: boolean;
 };
 
 // Routes where the playbook banner takes over the top of the screen on
@@ -37,7 +44,7 @@ type Props = {
 // stacked headers. Desktop always shows both.
 const PLAYBOOK_DETAIL_RE = /^\/playbooks\/[^/]+(?:\/.*)?$/;
 
-export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAiAvailable, showCoachCalPromo, coachAiEvalDays, coachAiImageUploadAvailable, userTier }: Props) {
+export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAiAvailable, showCoachCalPromo, coachAiEvalDays, coachAiImageUploadAvailable, userTier, coachProTrialUsed }: Props) {
   const pathname = usePathname();
   const hideOnMobile = PLAYBOOK_DETAIL_RE.test(pathname);
   // Pricing link is a landing-page-only nav affordance. Everywhere else
@@ -103,6 +110,7 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
                   evalDays={coachAiEvalDays}
                   imageUploadAvailable={coachAiImageUploadAvailable ?? false}
                   userTier={userTier ?? null}
+                  coachProTrialUsed={coachProTrialUsed ?? false}
                 />
               </div>
             )}

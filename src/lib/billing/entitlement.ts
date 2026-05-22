@@ -56,3 +56,33 @@ export async function getUserEntitlement(userId: string): Promise<Entitlement> {
     .maybeSingle();
   return fromRow(userId, data);
 }
+
+/**
+ * True iff this user has ever had a `coach_ai` Stripe subscription (any
+ * status — `active`, `canceled`, `trialing`, `incomplete_expired`, etc.).
+ *
+ * This is the same gate `createCheckoutSessionAction` uses to decide
+ * whether to grant the Coach Pro free trial — once you've held the
+ * subscription once you can't get the trial again. Pulled out so the
+ * UI can mirror the gate and hide trial CTAs / "no charge today"
+ * footnotes from users who'd be billed in full at checkout.
+ *
+ * Returns false on any error so we err on the side of *showing* trial
+ * copy — Stripe will still refuse to grant the trial server-side, but
+ * the UI won't have over-promised.
+ */
+export async function hasUsedCoachProTrial(userId: string): Promise<boolean> {
+  try {
+    const admin = createServiceRoleClient();
+    const { data } = await admin
+      .from("subscriptions")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("tier", "coach_ai")
+      .limit(1)
+      .maybeSingle();
+    return Boolean(data);
+  } catch {
+    return false;
+  }
+}

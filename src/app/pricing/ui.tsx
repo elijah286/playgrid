@@ -156,6 +156,7 @@ export function PricingClient({
   freeMaxPlays,
   seatDefaults,
   coachAiEvalDays,
+  coachProTrialUsed = false,
 }: {
   entitlement: Entitlement | null;
   showCoachAi: boolean;
@@ -163,6 +164,10 @@ export function PricingClient({
   freeMaxPlays: number;
   seatDefaults: SeatDefaults;
   coachAiEvalDays: number;
+  /** True iff this user already used the Coach Pro trial — Stripe won't
+   *  grant a second one, so the CTA copy switches to "Subscribe" and the
+   *  "no charge today" footnote is suppressed. */
+  coachProTrialUsed?: boolean;
 }) {
   const allTiers = buildTiers(freeMaxPlays, seatDefaults, coachAiEvalDays);
   const tiers = showCoachAi ? allTiers : allTiers.filter((t) => t.id !== "coach_ai");
@@ -478,13 +483,22 @@ export function PricingClient({
                   // proration preview, not a trial.
                   const isPaidUpgrade =
                     isPaid && t.id !== "free" && TIER_RANK[t.id] > TIER_RANK[currentTier];
+                  // Free user who already used the Coach Pro trial:
+                  // Stripe will refuse a second trial and bill them in
+                  // full at checkout. Replace the trial CTA with
+                  // "Subscribe" so we don't promise a free window.
+                  const isTrialUsedSubscribe =
+                    !isPaid && isProTier && coachProTrialUsed;
                   const label = isPaidDowngrade
                     ? `Downgrade to ${t.name}`
                     : isPaidUpgrade
                       ? `Upgrade to ${t.name}`
-                      : t.cta;
-                  // Trial copy only applies to first-time subscribers.
-                  const showTrialNote = isProTier && !isPaid;
+                      : isTrialUsedSubscribe
+                        ? `Subscribe to ${t.name}`
+                        : t.cta;
+                  // Trial copy only applies to first-time subscribers
+                  // who haven't already burned the eligibility.
+                  const showTrialNote = isProTier && !isPaid && !coachProTrialUsed;
                   return (
                     <>
                       <button

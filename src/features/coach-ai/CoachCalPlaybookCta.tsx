@@ -19,12 +19,17 @@ export function CoachCalPlaybookCta({
   show,
   evalDays,
   userTier = null,
+  coachProTrialUsed = false,
 }: {
   show: boolean;
   evalDays: number;
   /** Lets the CTA switch between trial copy (free users) and upgrade copy
    *  (existing paid `coach` users who can't get a Stripe trial). */
   userTier?: SubscriptionTier | null;
+  /** True iff this user already used the Coach Pro trial. Suppresses trial
+   *  copy on the floating CTA — see CoachAiHeaderPreview for the same
+   *  tri-state logic. */
+  coachProTrialUsed?: boolean;
 }) {
   const [visible, setVisible] = useState(false);
   const [chatOpen, setChatOpen] = useState(() => {
@@ -95,12 +100,17 @@ export function CoachCalPlaybookCta({
   if (!visible || chatOpen || suppressedByCustomize) return null;
 
   const upgradeOnly = userTier === "coach";
+  const trialUsed = !upgradeOnly && coachProTrialUsed;
   const ctaLabel = upgradeOnly
     ? "Upgrade to Coach Pro"
-    : `Start ${evalDays}-day free trial`;
+    : trialUsed
+      ? "Subscribe to Coach Pro"
+      : `Start ${evalDays}-day free trial`;
   const ctaSubtitle = upgradeOnly
     ? "Prorated for this billing period · cancel anytime"
-    : "No charge today · cancel anytime";
+    : trialUsed
+      ? "$25/month · cancel anytime"
+      : "No charge today · cancel anytime";
 
   return (
     <div
@@ -148,7 +158,7 @@ export function CoachCalPlaybookCta({
               target: "playbook_floating_card",
               metadata: {
                 surface: "playbook_floating_card",
-                action: upgradeOnly ? "upgrade" : "start_trial",
+                action: upgradeOnly ? "upgrade" : trialUsed ? "subscribe" : "start_trial",
               },
             });
             // Persist the dismissal so they don't see it again, but

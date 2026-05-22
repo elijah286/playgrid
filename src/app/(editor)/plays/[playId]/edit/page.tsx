@@ -8,7 +8,7 @@ import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
 import { getMobileEditingEnabled } from "@/lib/site/mobile-editing-config";
 import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
-import { getCurrentEntitlement } from "@/lib/billing/entitlement";
+import { getCurrentEntitlement, hasUsedCoachProTrial } from "@/lib/billing/entitlement";
 import { canUseGameMode } from "@/lib/billing/features";
 import {
   getBetaFeatures,
@@ -213,6 +213,13 @@ export default async function PlayEditPage({ params }: Props) {
   // Cal launcher promo: only logged-in users without entitlement see the
   // upgrade preview. Anonymous example viewers don't see Cal at all.
   const showCoachCalPromo = user !== null && !coachAiAvailable;
+  // Trial-eligibility for the floating CTA copy. Only matters for free
+  // users showing the CTA; paid `coach` users already get upgrade copy
+  // and entitled users don't see the CTA at all.
+  const coachProTrialUsed =
+    showCoachCalCta && (editorEntitlement?.tier ?? "free") === "free" && user
+      ? await hasUsedCoachProTrial(user.id)
+      : false;
 
   return (
     <>
@@ -229,6 +236,7 @@ export default async function PlayEditPage({ params }: Props) {
         show={showCoachCalCta}
         evalDays={coachAiEvalDays}
         userTier={editorEntitlement?.tier ?? "free"}
+        coachProTrialUsed={coachProTrialUsed}
       />
       <PlayEditorClient
       playId={res.play.id}

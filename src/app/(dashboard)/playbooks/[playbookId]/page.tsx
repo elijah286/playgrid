@@ -21,7 +21,7 @@ import { getCalendarRsvpPendingCountAction } from "@/app/actions/calendar";
 import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { SportVariant } from "@/domain/play/types";
 import { normalizePlaybookSettings } from "@/domain/playbook/settings";
-import { getCurrentEntitlement } from "@/lib/billing/entitlement";
+import { getCurrentEntitlement, hasUsedCoachProTrial } from "@/lib/billing/entitlement";
 import { canUseGameMode, tierAtLeast } from "@/lib/billing/features";
 import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
 import {
@@ -457,6 +457,13 @@ export default async function PlaybookDetailPage({ params }: Props) {
         show={showCoachCalCta}
         evalDays={coachAiEvalDays}
         userTier={viewerEntitlement?.tier ?? "free"}
+        coachProTrialUsed={
+          showCoachCalCta &&
+          (viewerEntitlement?.tier ?? "free") === "free" &&
+          user
+            ? await hasUsedCoachProTrial(user.id)
+            : false
+        }
       />
       {publicExampleJsonLd?.map((ld, i) => (
         <script
