@@ -30,6 +30,7 @@ export default async function AccountPage() {
   let seatCollaborators: SeatCollaborator[] = [];
   let pendingCoachInvites: PendingCoachInvite[] = [];
   let pendingChange: { targetTier: SubscriptionTier; effectiveAt: string } | null = null;
+  let pendingCancellation: { effectiveAt: string } | null = null;
   try {
     const admin = createServiceRoleClient();
     const [profileResult, sessionsResult] = await Promise.all([
@@ -66,19 +67,28 @@ export default async function AccountPage() {
 
   try {
     const admin = createServiceRoleClient();
-    const { data: pendingRow } = await admin
+    const { data: subRow } = await admin
       .from("subscriptions")
-      .select("pending_change_tier, pending_change_effective_at")
+      .select(
+        "pending_change_tier, pending_change_effective_at, cancel_at_period_end, cancel_at, current_period_end",
+      )
       .eq("user_id", user.id)
-      .not("pending_change_tier", "is", null)
+      .not("stripe_subscription_id", "is", null)
       .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (pendingRow?.pending_change_tier && pendingRow.pending_change_effective_at) {
+    if (subRow?.pending_change_tier && subRow.pending_change_effective_at) {
       pendingChange = {
-        targetTier: pendingRow.pending_change_tier as SubscriptionTier,
-        effectiveAt: pendingRow.pending_change_effective_at as string,
+        targetTier: subRow.pending_change_tier as SubscriptionTier,
+        effectiveAt: subRow.pending_change_effective_at as string,
       };
+    }
+    if (subRow?.cancel_at_period_end) {
+      const effectiveAt =
+        (subRow.cancel_at as string | null) ??
+        (subRow.current_period_end as string | null) ??
+        null;
+      if (effectiveAt) pendingCancellation = { effectiveAt };
     }
   } catch {
     /* best effort — banner just won't render */
@@ -126,6 +136,7 @@ export default async function AccountPage() {
         pendingCoachInvites={pendingCoachInvites}
         aiFeedbackStatus={aiFeedbackStatus}
         pendingChange={pendingChange}
+        pendingCancellation={pendingCancellation}
       />
     </div>
   );

@@ -17,6 +17,7 @@ import {
   cancelScheduledDowngradeAction,
   cancelSubscriptionAction,
   createBillingPortalSessionAction,
+  resumeSubscriptionAction,
   setSeatQuantityAction,
 } from "@/app/actions/billing";
 import { Modal } from "@/components/ui";
@@ -68,6 +69,7 @@ export function AccountClient({
   pendingCoachInvites,
   aiFeedbackStatus,
   pendingChange,
+  pendingCancellation,
 }: {
   email: string;
   displayName: string | null;
@@ -79,6 +81,7 @@ export function AccountClient({
   pendingCoachInvites: PendingCoachInvite[];
   aiFeedbackStatus: "consenting" | "declined" | "unanswered";
   pendingChange: { targetTier: SubscriptionTier; effectiveAt: string } | null;
+  pendingCancellation: { effectiveAt: string } | null;
 }) {
   // Stripe redirects back here with ?checkout=success or ?checkout=cancel
   // after a checkout attempt. Record both as ui_events so the engagement
@@ -118,7 +121,11 @@ export function AccountClient({
         description="Your plan, billing, and the coaches you've granted access to."
       >
         <div className="space-y-4">
-          <PlanCard entitlement={entitlement} pendingChange={pendingChange} />
+          <PlanCard
+            entitlement={entitlement}
+            pendingChange={pendingChange}
+            pendingCancellation={pendingCancellation}
+          />
           {seatUsage ? (
             <SeatsCard
               usage={seatUsage}
@@ -421,23 +428,39 @@ function PasswordCard() {
 function PlanCard({
   entitlement,
   pendingChange,
+  pendingCancellation,
 }: {
   entitlement: Entitlement | null;
   pendingChange: { targetTier: SubscriptionTier; effectiveAt: string } | null;
+  pendingCancellation: { effectiveAt: string } | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const [cancelingDowngrade, startCancelDowngrade] = useTransition();
+  const [resuming, startResume] = useTransition();
   const [cancelOpen, setCancelOpen] = useState(false);
   const tier = entitlement?.tier ?? "free";
   const source = entitlement?.source ?? "free";
   const isPaid = source === "stripe";
   const isComp = source === "comp";
+  const isCanceling = isPaid && !!pendingCancellation;
 
   function cancelPendingDowngrade() {
     setErr(null);
     startCancelDowngrade(async () => {
       const res = await cancelScheduledDowngradeAction();
+      if (!res.ok) {
+        setErr(res.error);
+        return;
+      }
+      window.location.reload();
+    });
+  }
+
+  function resumeSubscription() {
+    setErr(null);
+    startResume(async () => {
+      const res = await resumeSubscriptionAction();
       if (!res.ok) {
         setErr(res.error);
         return;
@@ -457,6 +480,14 @@ function PlanCard({
       window.location.href = res.url;
     });
   }
+
+  const cancellationEnds = pendingCancellation
+    ? new Date(pendingCancellation.effectiveAt).toLocaleDateString("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      })
+    : null;
 
   return (
     <Card icon={CreditCard} title="Plan" description="Your subscription and billing.">
@@ -486,17 +517,45 @@ function PlanCard({
             </button>
           </div>
         ) : null}
+        {isCanceling && cancellationEnds ? (
+          <div className="flex flex-col gap-3 rounded-lg bg-amber-50 px-3 py-3 text-sm text-amber-900 ring-1 ring-amber-200 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="font-semibold">
+                Your {TIER_LABEL[tier]} subscription won&rsquo;t renew.
+              </p>
+              <p className="mt-0.5 text-xs">
+                You&rsquo;ll lose access on{" "}
+                <span className="font-semibold">{cancellationEnds}</span>. Change
+                your mind? Keep your plan to stay subscribed — no new charge
+                until {cancellationEnds}.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={resumeSubscription}
+              disabled={resuming}
+              className="shrink-0 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-60"
+            >
+              {resuming ? "Reactivating…" : "Keep my plan"}
+            </button>
+          </div>
+        ) : null}
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-sm font-medium text-foreground">
               {TIER_LABEL[tier]}
               {isComp ? " · complimentary" : null}
-              {isPaid ? " · paid" : null}
+              {isPaid && isCanceling ? " · canceling" : null}
+              {isPaid && !isCanceling ? " · paid" : null}
             </p>
             {entitlement?.expiresAt ? (
               <p className="mt-1 text-xs text-muted">
-                {isComp ? "Expires" : "Renews / ends"}:{" "}
-                {new Date(entitlement.expiresAt).toLocaleDateString()}
+                {isComp
+                  ? "Expires"
+                  : isCanceling
+                    ? "Access ends"
+                    : "Renews"}
+                : {new Date(entitlement.expiresAt).toLocaleDateString()}
               </p>
             ) : null}
           </div>
@@ -508,7 +567,7 @@ function PlanCard({
                   upsell or by remembering /pricing exists. Navigates
                   to /pricing?upgrade=coach_ai so the proration modal
                   auto-opens on arrival (one click, not two). */}
-              {tier === "coach" ? (
+              {tier === "coach" && !isCanceling ? (
                 <Link
                   href="/pricing?upgrade=coach_ai"
                   className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-hover"
@@ -524,7 +583,7 @@ function PlanCard({
               >
                 {pending ? "Opening…" : "Manage billing"}
               </button>
-              {!pendingChange ? (
+              {!pendingChange && !isCanceling ? (
                 <button
                   type="button"
                   onClick={() => setCancelOpen(true)}

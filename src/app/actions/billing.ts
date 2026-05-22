@@ -655,6 +655,70 @@ export async function cancelSubscriptionAction(input: {
   return { ok: true, effectiveAt };
 }
 
+/**
+ * Reverse a pending cancellation — flips cancel_at_period_end back to false
+ * on Stripe and clears our mirror columns. Only valid while the sub is still
+ * inside its paid period (i.e. status is active/trialing/past_due and our
+ * mirror shows cancel_at_period_end=true).
+ */
+export async function resumeSubscriptionAction(): Promise<
+  { ok: true } | { ok: false; error: string }
+> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const admin = createServiceRoleClient();
+  const { data: sub, error: subErr } = await admin
+    .from("subscriptions")
+    .select("id, stripe_subscription_id, status, cancel_at_period_end")
+    .eq("user_id", user.id)
+    .not("stripe_subscription_id", "is", null)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (subErr) return { ok: false, error: subErr.message };
+  if (!sub?.stripe_subscription_id) {
+    return { ok: false, error: "No subscription on file." };
+  }
+  if (!sub.cancel_at_period_end) {
+    return { ok: false, error: "Your subscription isn't set to cancel." };
+  }
+  if (
+    sub.status !== "active" &&
+    sub.status !== "trialing" &&
+    sub.status !== "past_due"
+  ) {
+    return {
+      ok: false,
+      error: "Your subscription has already ended — resubscribe from the pricing page.",
+    };
+  }
+
+  try {
+    const { stripe } = await getStripeClient();
+    await stripe.subscriptions.update(sub.stripe_subscription_id, {
+      cancel_at_period_end: false,
+    });
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Stripe could not resume the subscription.",
+    };
+  }
+
+  await admin
+    .from("subscriptions")
+    .update({ cancel_at_period_end: false, cancel_at: null })
+    .eq("id", sub.id);
+
+  revalidatePath("/account");
+  return { ok: true };
+}
+
 async function sendCancellationAdminEmail(args: {
   userEmail: string;
   tier: string;
