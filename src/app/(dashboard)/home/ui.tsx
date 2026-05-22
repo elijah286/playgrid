@@ -72,6 +72,7 @@ import type { ActivityEntry } from "@/app/actions/activity";
 import { useIsNativeApp } from "@/lib/native/useIsNativeApp";
 import { useOfflineState } from "@/lib/offline/useOfflineState";
 import { WelcomeCoachProDialog } from "@/features/coach-ai/WelcomeCoachProDialog";
+import { TeamCoachWelcomeDialog } from "@/features/billing/TeamCoachWelcomeDialog";
 
 const DEFAULT_COLORS = ["#F26522", "#3B82F6", "#22C55E", "#EF4444", "#A855F7", "#EAB308"];
 
@@ -1127,6 +1128,7 @@ export function DashboardClient({
   coachAiAvailable = false,
   showCoachCalPromo = false,
   showCoachProWelcome = false,
+  showTeamCoachWelcome = false,
 }: {
   data: DashboardSummary;
   hideAnimation?: boolean;
@@ -1146,6 +1148,14 @@ export function DashboardClient({
    * on mount so refresh / back-nav can't replay it.
    */
   showCoachProWelcome?: boolean;
+  /**
+   * Same shape as showCoachProWelcome but for first-time Team Coach
+   * subscribers. Renders the TeamCoachWelcomeDialog instead — same
+   * sparkle + checklist + starter cards pattern, but the starter
+   * cards route to non-AI actions (create playbook, invite assistant,
+   * set up calendar) since Team Coach doesn't include Cal.
+   */
+  showTeamCoachWelcome?: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1576,6 +1586,8 @@ export function DashboardClient({
           dialog strips the URL param itself so refresh / back-nav can't
           replay it. */}
       {showCoachProWelcome && <WelcomeCoachProDialog />}
+      {/* Same pattern for first-time Team Coach subscribers. */}
+      {showTeamCoachWelcome && <TeamCoachWelcomeDialog />}
 
       {showTabNav && (
         <div className="hidden sm:block">

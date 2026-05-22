@@ -498,15 +498,30 @@ function PlanCard({
             ) : null}
           </div>
           {isPaid ? (
-            <button
-              type="button"
-              onClick={goToPortal}
-              disabled={pending}
-              data-web-only
-              className="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-surface disabled:opacity-50"
-            >
-              {pending ? "Opening…" : "Manage billing"}
-            </button>
+            <div className="flex flex-wrap items-center gap-2" data-web-only>
+              {/* Paid Team Coach users get a primary in-app upgrade
+                  path to Coach Pro right alongside Manage billing —
+                  previously the only upgrade route was via Coach Cal's
+                  upsell or by remembering /pricing exists. Navigates
+                  to /pricing?upgrade=coach_ai so the proration modal
+                  auto-opens on arrival (one click, not two). */}
+              {tier === "coach" ? (
+                <Link
+                  href="/pricing?upgrade=coach_ai"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-hover"
+                >
+                  Upgrade to Coach Pro
+                </Link>
+              ) : null}
+              <button
+                type="button"
+                onClick={goToPortal}
+                disabled={pending}
+                className="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-surface disabled:opacity-50"
+              >
+                {pending ? "Opening…" : "Manage billing"}
+              </button>
+            </div>
           ) : (
             <Link
               href="/pricing"

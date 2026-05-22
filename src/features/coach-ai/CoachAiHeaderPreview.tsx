@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useEffect, useState, useTransition } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { Lock } from "lucide-react";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { track } from "@/lib/analytics/track";
+import { createCheckoutSessionAction } from "@/app/actions/billing";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
 import { cn } from "@/lib/utils";
 
@@ -72,6 +72,9 @@ export function CoachAiHeaderPreview({
   onCtaClick?: () => void;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [err, setErr] = useState<string | null>(null);
   // Three states for the CTA copy:
   //   - Paid Team Coach (`coach`)        → Upgrade (proration applies, no trial)
   //   - Free + trial already used        → Subscribe (Stripe refuses a 2nd trial)
@@ -116,28 +119,60 @@ export function CoachAiHeaderPreview({
 
             <CoachCalDemoStrip />
 
-            <Link
-              href="/pricing"
+            <button
+              type="button"
+              disabled={pending}
               onClick={() => {
+                const action = upgradeOnly ? "upgrade" : trialUsed ? "subscribe" : "start_trial";
                 track({
                   event: "coach_cal_cta_click",
                   target: "header_chat_trial",
-                  metadata: {
-                    surface: "header_chat",
-                    action: upgradeOnly ? "upgrade" : trialUsed ? "subscribe" : "start_trial",
-                    path: pathname ?? null,
-                  },
+                  metadata: { surface: "header_chat", action, path: pathname ?? null },
                 });
-                onCtaClick?.();
+                // Paid Team Coach users must go through /pricing — the
+                // upgrade path needs the proration modal, and the direct
+                // checkout action refuses for users with an active sub.
+                if (upgradeOnly) {
+                  onCtaClick?.();
+                  router.push("/pricing");
+                  return;
+                }
+                // Free + Coach Pro intent is unambiguous (the coach just
+                // clicked "Start trial" / "Subscribe"). Skip the /pricing
+                // comparison shop and jump straight to Stripe Checkout —
+                // one less click, no second-guessing the decision.
+                setErr(null);
+                startTransition(async () => {
+                  const res = await createCheckoutSessionAction({
+                    tier: "coach_ai",
+                    interval: "month",
+                  });
+                  if (!res.ok) {
+                    // Fall back to /pricing on any error (e.g. the
+                    // active-sub guard fires because of an out-of-band
+                    // sub the UI didn't know about). The coach lands on
+                    // the comparison page with the error surfaced so
+                    // they can react.
+                    setErr(res.error);
+                    onCtaClick?.();
+                    router.push("/pricing");
+                    return;
+                  }
+                  onCtaClick?.();
+                  window.location.href = res.url;
+                });
               }}
-              className="mt-3 inline-flex w-full items-center justify-center rounded-xl py-2.5 text-sm font-semibold text-white shadow transition hover:opacity-90"
+              className="mt-3 inline-flex w-full items-center justify-center rounded-xl py-2.5 text-sm font-semibold text-white shadow transition hover:opacity-90 disabled:opacity-60"
               style={{ background: TRIAL_GRADIENT }}
             >
-              {ctaLabel}
-            </Link>
+              {pending ? "Opening checkout…" : ctaLabel}
+            </button>
             <p className="mt-1.5 text-center text-[10px] text-muted">
               {ctaSubtitle}
             </p>
+            {err ? (
+              <p className="mt-1 text-center text-[10px] text-red-700">{err}</p>
+            ) : null}
           </div>
         </div>
       </div>

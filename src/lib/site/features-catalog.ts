@@ -456,6 +456,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-04-28",
   },
   {
+    id: "billing-purchase-flow-overhaul",
+    name: "Seamless purchase + post-purchase celebration across plans",
+    description:
+      "Three coordinated changes so the purchase flow doesn't lose the coach between intent and value. (1) Coach Cal preview CTAs now go straight to Stripe Checkout for free users instead of bouncing through the /pricing comparison page — the click already declared Coach Pro intent. (2) Team Coach subscribers now get the same celebration treatment Coach Pro users do (welcome dialog on /home, sparkle header, feature checklist), but with action-oriented starter cards (create playbook, invite assistant, set up team calendar, build a practice plan) instead of AI starter prompts since Team Coach doesn't include Cal. (3) Paid Team Coach users get a primary \"Upgrade to Coach Pro\" button on the Account → Plan card alongside Manage billing; clicking it deep-links to /pricing?upgrade=coach_ai which auto-opens the proration modal on arrival. Previously the only in-app upgrade path from Team Coach was via Coach Cal's upsell.",
+    category: "Billing & accounts",
+    status: "ga",
+    addedDate: "2026-05-22",
+  },
+  {
     id: "coach-pro-welcome-celebration",
     name: "Coach Pro upgrade celebration + Cal starter prompts",
     description:

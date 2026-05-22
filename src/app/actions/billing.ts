@@ -101,17 +101,16 @@ export async function createCheckoutSessionAction(input: {
       if (!trialUsed) trialPeriodDays = await getCoachAiEvalDays();
     }
 
-    // Coach Pro first-time signups land on /home with the welcome marker
-    // so they get the celebration dialog + Cal starter prompts (matches
-    // the in-app upgrade path's destination). Team Coach checkout keeps
-    // landing on /account where the Plan card is the relevant surface.
-    // `&from=checkout` lets the welcome dialog fire the `checkout_completed`
-    // analytics event so the marketing funnel doesn't lose data when we
-    // skip /account.
-    const successUrl =
-      input.tier === "coach_ai"
-        ? `${origin}/home?welcome=coach_pro&from=checkout`
-        : `${origin}/account?checkout=success`;
+    // Both paid tiers now land on /home with a tier-specific welcome
+    // marker so coaches get a celebration + action-oriented next steps
+    // instead of the silent account page. The marker is server-validated
+    // against actual entitlement (see HomePage) so pasting the URL on a
+    // free account doesn't trigger a fake celebration. `&from=checkout`
+    // lets the welcome dialog fire the `checkout_completed` analytics
+    // event so the marketing funnel doesn't lose data when we skip
+    // /account.
+    const welcomeKey = input.tier === "coach_ai" ? "coach_pro" : "team_coach";
+    const successUrl = `${origin}/home?welcome=${welcomeKey}&from=checkout`;
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",

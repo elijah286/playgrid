@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { track } from "@/lib/analytics/track";
+import { createCheckoutSessionAction } from "@/app/actions/billing";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
 
 const STORAGE_KEY = "coach-cal:playbook-cta-dismissed";
@@ -31,6 +33,9 @@ export function CoachCalPlaybookCta({
    *  tri-state logic. */
   coachProTrialUsed?: boolean;
 }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [err, setErr] = useState<string | null>(null);
   const [visible, setVisible] = useState(false);
   const [chatOpen, setChatOpen] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -150,31 +155,53 @@ export function CoachCalPlaybookCta({
           strategy feedback vs. specific defenses — all from a single chat.
         </p>
 
-        <a
-          href="/pricing"
+        <button
+          type="button"
+          disabled={pending}
           onClick={() => {
+            const action = upgradeOnly ? "upgrade" : trialUsed ? "subscribe" : "start_trial";
             track({
               event: "coach_cal_cta_click",
               target: "playbook_floating_card",
-              metadata: {
-                surface: "playbook_floating_card",
-                action: upgradeOnly ? "upgrade" : trialUsed ? "subscribe" : "start_trial",
-              },
+              metadata: { surface: "playbook_floating_card", action },
             });
             // Persist the dismissal so they don't see it again, but
             // skip the dismiss event — clicking through is its own
             // outcome and shouldn't double-count as a rejection.
             setVisible(false);
             try { window.localStorage.setItem(STORAGE_KEY, "1"); } catch { /* ignore */ }
+            if (upgradeOnly) {
+              // Paid Team Coach: proration upgrade modal lives on /pricing.
+              router.push("/pricing");
+              return;
+            }
+            // Free user: skip /pricing comparison and jump straight to
+            // Stripe Checkout — they already declared Coach Pro intent.
+            setErr(null);
+            startTransition(async () => {
+              const res = await createCheckoutSessionAction({
+                tier: "coach_ai",
+                interval: "month",
+              });
+              if (!res.ok) {
+                setErr(res.error);
+                router.push("/pricing");
+                return;
+              }
+              window.location.href = res.url;
+            });
           }}
-          className="mt-3 flex w-full items-center justify-center rounded-xl py-2 text-sm font-semibold text-white shadow transition hover:opacity-90"
+          className="mt-3 flex w-full items-center justify-center rounded-xl py-2 text-sm font-semibold text-white shadow transition hover:opacity-90 disabled:opacity-60"
           style={{ background: GRADIENT }}
         >
-          {ctaLabel}
-        </a>
+          {pending ? "Opening checkout…" : ctaLabel}
+        </button>
         <p className="mt-1.5 text-center text-[10px] text-muted">
           {ctaSubtitle}
         </p>
+        {err ? (
+          <p className="mt-1 text-center text-[10px] text-red-700">{err}</p>
+        ) : null}
       </div>
     </div>
   );

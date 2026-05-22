@@ -67,14 +67,16 @@ export default async function HomePage({ searchParams }: Props) {
   // Logged-in users without Coach Pro see the promo CTA — same logic as
   // SiteHeader uses to decide whether to render the Cal launcher button.
   const showCoachCalPromo = !coachAiAvailable;
-  // Coach Pro welcome dialog: only show when the upgrade-success redirect
-  // landed us here AND the user's actual entitlement now matches. The
-  // entitlement check is the anti-spoof — pasting the URL on a free
-  // account won't trigger a fake celebration. The client component strips
-  // the ?welcome= param after the dialog mounts so a refresh / back-nav
-  // can't re-trigger it.
+  // Welcome dialogs: only fire when the upgrade-success / checkout-success
+  // redirect landed us here AND the user's actual entitlement matches the
+  // celebrated tier. The entitlement check is the anti-spoof — pasting
+  // either URL on a free account won't trigger a fake celebration. Each
+  // dialog strips the `?welcome=` param after mount so a refresh /
+  // back-nav can't re-trigger it.
   const showCoachProWelcome =
     welcome === "coach_pro" && entitlement?.tier === "coach_ai";
+  const showTeamCoachWelcome =
+    welcome === "team_coach" && entitlement?.tier === "coach";
   const inboxAlerts = inbox.ok ? inbox.alerts : [];
   const activityEntries = activity.ok ? activity.entries : [];
   const initialTab: "playbooks" | "calendar" | "inbox" =
@@ -107,6 +109,7 @@ export default async function HomePage({ searchParams }: Props) {
           coachAiAvailable={coachAiAvailable}
           showCoachCalPromo={showCoachCalPromo}
           showCoachProWelcome={showCoachProWelcome}
+          showTeamCoachWelcome={showTeamCoachWelcome}
         />
       )}
     </div>

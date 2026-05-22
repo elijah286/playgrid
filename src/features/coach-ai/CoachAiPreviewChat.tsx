@@ -1,10 +1,12 @@
 "use client";
 
-import Link from "next/link";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Lock } from "lucide-react";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { ENTRY_POINTS, previewCtaLabel, type CoachCalEntryPointId } from "./entry-points";
 import { track } from "@/lib/analytics/track";
+import { createCheckoutSessionAction } from "@/app/actions/billing";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
 
 const GRADIENT = "linear-gradient(135deg, #dbeafe 0%, #ede9fe 100%)";
@@ -37,6 +39,9 @@ export function CoachAiPreviewChat({
   coachProTrialUsed?: boolean;
   onCtaClick?: () => void;
 }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [err, setErr] = useState<string | null>(null);
   const config = ENTRY_POINTS[entryPoint];
   // Three states for the CTA copy — see CoachAiHeaderPreview for the
   // rationale (paid coach → upgrade; free + trial used → subscribe; free
@@ -92,28 +97,52 @@ export function CoachAiPreviewChat({
                 <li key={cap}>{cap}</li>
               ))}
             </ul>
-            <Link
-              href="/pricing"
+            <button
+              type="button"
+              disabled={pending}
               onClick={() => {
+                const action = upgradeOnly ? "upgrade" : trialUsed ? "subscribe" : "start_trial";
                 track({
                   event: "coach_cal_cta_click",
                   target: "preview_chat_trial",
-                  metadata: {
-                    surface: "preview_chat",
-                    entry_point: entryPoint,
-                    action: upgradeOnly ? "upgrade" : trialUsed ? "subscribe" : "start_trial",
-                  },
+                  metadata: { surface: "preview_chat", entry_point: entryPoint, action },
                 });
-                onCtaClick?.();
+                if (upgradeOnly) {
+                  // Paid Team Coach: must go through /pricing for the
+                  // proration upgrade modal — direct checkout refuses.
+                  onCtaClick?.();
+                  router.push("/pricing");
+                  return;
+                }
+                // Free user with clear Coach Pro intent: skip /pricing
+                // and jump straight to Stripe Checkout.
+                setErr(null);
+                startTransition(async () => {
+                  const res = await createCheckoutSessionAction({
+                    tier: "coach_ai",
+                    interval: "month",
+                  });
+                  if (!res.ok) {
+                    setErr(res.error);
+                    onCtaClick?.();
+                    router.push("/pricing");
+                    return;
+                  }
+                  onCtaClick?.();
+                  window.location.href = res.url;
+                });
               }}
-              className="mt-3 inline-flex w-full items-center justify-center rounded-xl py-2.5 text-sm font-semibold text-white shadow transition hover:opacity-90"
+              className="mt-3 inline-flex w-full items-center justify-center rounded-xl py-2.5 text-sm font-semibold text-white shadow transition hover:opacity-90 disabled:opacity-60"
               style={{ background: TRIAL_GRADIENT }}
             >
-              {ctaLabel}
-            </Link>
+              {pending ? "Opening checkout…" : ctaLabel}
+            </button>
             <p className="mt-1.5 text-center text-[10px] text-muted">
               {ctaSubtitle}
             </p>
+            {err ? (
+              <p className="mt-1 text-center text-[10px] text-red-700">{err}</p>
+            ) : null}
           </div>
         </div>
       </div>

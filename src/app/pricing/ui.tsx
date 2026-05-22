@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Check, Sparkles } from "lucide-react";
 import {
   createBillingPortalSessionAction,
@@ -179,6 +179,39 @@ export function PricingClient({
   const currentTier = entitlement?.tier ?? "free";
   const source = entitlement?.source ?? "free";
   const isPaid = source === "stripe";
+
+  // Auto-open the proration modal when /pricing is hit with
+  // `?upgrade=<tier>`. The /account Plan card sends paid coach users
+  // here with `?upgrade=coach_ai` so the in-app upgrade path is one
+  // click instead of two (account → pricing → click Coach Pro CTA).
+  // Validated: the param tier must exist in the displayed tiers, must
+  // be a paid tier the user doesn't already have, and must be a real
+  // upgrade (not a downgrade — downgrades have their own modal). Fires
+  // once on mount; we don't react to subsequent prop changes because
+  // the URL param is a one-shot intent signal.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!isAuthed || !isPaid) return;
+    const params = new URLSearchParams(window.location.search);
+    const target = params.get("upgrade");
+    if (!target) return;
+    const targetTier = target as SubscriptionTier;
+    if (targetTier === "free") return;
+    if (targetTier === currentTier) return;
+    if (TIER_RANK[targetTier] <= TIER_RANK[currentTier]) return;
+    const tierDef = tiers.find((t) => t.id === targetTier);
+    if (!tierDef) return;
+    // Strip the param so refresh doesn't reopen the modal endlessly.
+    params.delete("upgrade");
+    const qs = params.toString();
+    window.history.replaceState(
+      null,
+      "",
+      window.location.pathname + (qs ? `?${qs}` : "") + window.location.hash,
+    );
+    openUpgradeModal(tierDef);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function openUpgradeModal(t: TierDef) {
     const targetTier = t.id as Exclude<SubscriptionTier, "free">;
