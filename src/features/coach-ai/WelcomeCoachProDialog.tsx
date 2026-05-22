@@ -62,17 +62,25 @@ const FEATURES: string[] = [
  *     Cal auto-runs it, agency on first contact
  */
 export function WelcomeCoachProDialog() {
-  // Strip ?welcome=coach_pro from the URL on first mount so refresh /
-  // back-navigation can't re-trigger the celebration. We keep the dialog
-  // open via `open` state — the URL strip is purely about replay-safety,
-  // not visibility.
+  // Strip ?welcome=coach_pro (and the ?from= companion marker) from the
+  // URL on first mount so refresh / back-navigation can't re-trigger the
+  // celebration. We keep the dialog open via `open` state — the URL strip
+  // is purely about replay-safety, not visibility.
   const [open, setOpen] = useState(true);
   useEffect(() => {
     if (typeof window === "undefined") return;
+    let fromCheckout = false;
     try {
       const url = new URL(window.location.href);
       if (url.searchParams.get("welcome") === "coach_pro") {
+        // If we got here from Stripe Checkout (`from=checkout` set on the
+        // success_url), fire the same `checkout_completed` analytics event
+        // /account fires on `?checkout=success`. We skip /account entirely
+        // for Coach Pro first-time buyers so the funnel would otherwise
+        // lose the conversion event.
+        fromCheckout = url.searchParams.get("from") === "checkout";
         url.searchParams.delete("welcome");
+        url.searchParams.delete("from");
         window.history.replaceState(
           null,
           "",
@@ -82,10 +90,17 @@ export function WelcomeCoachProDialog() {
     } catch {
       /* SSR-safe; URL parse can't actually fail in a real browser */
     }
+    if (fromCheckout) {
+      track({
+        event: "checkout_completed",
+        target: "stripe",
+        metadata: { tier: "coach_ai" },
+      });
+    }
     track({
       event: "coach_pro_welcome_shown",
       target: "welcome_dialog",
-      metadata: null,
+      metadata: { from_checkout: fromCheckout },
     });
   }, []);
 

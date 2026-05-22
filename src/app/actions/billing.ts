@@ -101,11 +101,23 @@ export async function createCheckoutSessionAction(input: {
       if (!trialUsed) trialPeriodDays = await getCoachAiEvalDays();
     }
 
+    // Coach Pro first-time signups land on /home with the welcome marker
+    // so they get the celebration dialog + Cal starter prompts (matches
+    // the in-app upgrade path's destination). Team Coach checkout keeps
+    // landing on /account where the Plan card is the relevant surface.
+    // `&from=checkout` lets the welcome dialog fire the `checkout_completed`
+    // analytics event so the marketing funnel doesn't lose data when we
+    // skip /account.
+    const successUrl =
+      input.tier === "coach_ai"
+        ? `${origin}/home?welcome=coach_pro&from=checkout`
+        : `${origin}/account?checkout=success`;
+
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${origin}/account?checkout=success`,
+      success_url: successUrl,
       cancel_url: `${origin}/account?checkout=cancel`,
       allow_promotion_codes: true,
       client_reference_id: user.id,
