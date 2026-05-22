@@ -26,12 +26,24 @@ export async function createClient() {
       },
       setAll(cookiesToSet) {
         try {
-          cookiesToSet.forEach(({ name, value, options }) =>
+          cookiesToSet.forEach(({ name, value, options }) => {
+            // When scoping to .xogridmaker.com, also evict any pre-existing
+            // host-only cookie of the same name so it can't shadow the
+            // new domain-wide one on the next request. See client.ts
+            // for the matching browser-side eviction and the 2026-05-22
+            // rollout history.
+            if (cookieDomain) {
+              cookieStore.set(name, "", {
+                ...options,
+                domain: undefined,
+                maxAge: 0,
+              });
+            }
             cookieStore.set(name, value, {
               ...options,
               ...(cookieDomain ? { domain: cookieDomain } : {}),
-            }),
-          );
+            });
+          });
         } catch {
           /* Server Component — ignore */
         }

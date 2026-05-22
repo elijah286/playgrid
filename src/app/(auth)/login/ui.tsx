@@ -17,6 +17,7 @@ export function LoginForm({
   const inviteCode = searchParams.get("invite")?.trim().toUpperCase() || undefined;
   const explicitSignup = searchParams.get("mode") === "signup";
   const reason = searchParams.get("reason");
+  const error = searchParams.get("error");
 
   // Claim flows (someone forwarded a copy / example link) almost always
   // bring net-new users — surfacing "Welcome back" makes them think they
@@ -54,6 +55,11 @@ export function LoginForm({
             change your password
           </a>{" "}
           after signing in.
+        </div>
+      ) : null}
+      {error ? (
+        <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-900 ring-1 ring-red-200 dark:bg-red-950/40 dark:text-red-100 dark:ring-red-800">
+          Sign-in didn&rsquo;t finish: {error}
         </div>
       ) : null}
       <AuthFlow
