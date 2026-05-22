@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check } from "lucide-react";
+import { Check, Sparkles } from "lucide-react";
 import {
   createBillingPortalSessionAction,
   createCheckoutSessionAction,
@@ -114,6 +114,7 @@ function buildTiers(
     tagline: "Your AI coaching partner — Coach Cal included.",
     price: { month: 25, year: 250 },
     features: [
+      "Coach Cal AI — generates plays, plans practices, manages your team",
       "Everything in Team Coach",
       `${seatDefaults.coachPro} collaborator seat${seatDefaults.coachPro === 1 ? "" : "s"} included`,
       "Coach Cal AI — ask anything, get instant answers",
@@ -377,7 +378,15 @@ export function PricingClient({
               )}
 
               <div className="mb-4">
-                <h2 className="text-lg font-bold text-foreground">{t.name}</h2>
+                <h2 className="flex items-center gap-2 text-lg font-bold text-foreground">
+                  {t.name}
+                  {isProTier && (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary ring-1 ring-primary/30">
+                      <Sparkles className="size-3" />
+                      AI
+                    </span>
+                  )}
+                </h2>
                 <p className="mt-1 text-xs text-muted">{t.tagline}</p>
               </div>
 
