@@ -238,7 +238,12 @@ export function PlayThumbnail({
             } else if (shape === "diamond") {
               shapeEl = <polygon points={`0,${-R} ${R},0 0,${R} ${-R},0`} {...common} />;
             } else if (shape === "triangle") {
-              shapeEl = <polygon points={`0,${-R} ${R},${R} ${-R},${R}`} {...common} />;
+              // Apex DOWN (toward offense at bottom of field) — matches
+              // EditorCanvas's PlayerShape orientation. Pre-2026-05-21 the
+              // thumbnail rendered apex-UP, which made defense thumbnails
+              // (7v7 Zone Tampa 2 etc.) look like the defenders were
+              // facing the wrong way compared to the editor view.
+              shapeEl = <polygon points={`0,${R} ${R},${-R} ${-R},${-R}`} {...common} />;
             } else if (shape === "star") {
               const outer = R * 1.15;
               const inner = outer * 0.45;

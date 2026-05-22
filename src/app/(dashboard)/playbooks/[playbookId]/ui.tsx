@@ -4683,7 +4683,10 @@ function MiniPlayerDiagram({ players }: { players: Player[] | null }) {
           strokeWidth: 1,
         } as const;
         if (pl.shape === "triangle") {
-          const pts = `${cx},${cy - DOT_R} ${cx - DOT_R},${cy + DOT_R} ${cx + DOT_R},${cy + DOT_R}`;
+          // Apex DOWN (toward offense at bottom) — matches EditorCanvas
+          // and PlayThumbnail orientation. Same flip rationale as 2026-
+          // 05-21 PlayThumbnail fix.
+          const pts = `${cx},${cy + DOT_R} ${cx - DOT_R},${cy - DOT_R} ${cx + DOT_R},${cy - DOT_R}`;
           return <polygon key={pl.id} points={pts} {...common} />;
         }
         if (pl.shape === "square") {
