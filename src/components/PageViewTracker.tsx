@@ -6,6 +6,7 @@ import { recordPageViewAction } from "@/app/actions/page-views";
 import { recordPageDwellAction } from "@/app/actions/ui-events";
 import { isNativeApp } from "@/lib/native/isNativeApp";
 import { CLICK_ID_PARAMS, type ClickIds } from "@/lib/attribution/click-ids";
+import { setFirstTouchCookieClientIfMissing } from "@/lib/attribution/first-touch-client";
 import {
   getSessionId,
   consumeFirstSessionEventFlag,
@@ -85,6 +86,26 @@ export default function PageViewTracker() {
         // ignore
       }
       landingPath = pathname;
+
+      // Write the first-touch cookie client-side BEFORE firing the async
+      // server action. If the user immediately clicks an OAuth button
+      // (window.location redirect to Google/Apple), the in-flight server
+      // request gets cancelled and the cookie never lands. The server's
+      // setFirstTouchCookieIfMissing remains a backup but is now a no-op
+      // in the common case.
+      setFirstTouchCookieClientIfMissing({
+        utm_source: utmSource,
+        utm_medium: utmMedium,
+        utm_campaign: utmCampaign,
+        utm_content: utmContent,
+        utm_term: utmTerm,
+        referrer,
+        landing_path: landingPath,
+        country: null,
+        region: null,
+        city: null,
+        ...(clickIds || {}),
+      });
     }
 
     const device = detectDevice();

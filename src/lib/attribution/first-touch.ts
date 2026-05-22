@@ -47,7 +47,11 @@ export async function setFirstTouchCookieIfMissing(
     path: "/",
     maxAge: FIRST_TOUCH_MAX_AGE_SECONDS,
     sameSite: "lax",
-    httpOnly: true,
+    // httpOnly:false so PageViewTracker can write the cookie client-side
+    // before OAuth redirects cancel in-flight server actions. Server still
+    // writes as backup; whichever lands first wins. Payload is attribution
+    // metadata, not credentials — JS exposure is acceptable.
+    httpOnly: false,
     secure: process.env.NODE_ENV === "production",
   });
 }
