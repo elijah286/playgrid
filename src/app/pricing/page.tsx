@@ -36,6 +36,25 @@ export default async function PricingPage() {
   let user: { id: string } | null = null;
   let entitlement: Entitlement | null = null;
 
+  // Kick off the four site-settings reads immediately — they don't
+  // depend on the user, so they can race the auth + entitlement chain
+  // instead of waterfalling after it. On a cold render this turns
+  // 3 sequential round-trips (auth → entitlement → settings) into 1.
+  const settingsPromise = Promise.all([
+    getCoachAiTierEnabled(),
+    getFreeMaxPlaysPerPlaybook(),
+    getSeatDefaults(),
+    getCoachAiEvalDays(),
+  ]);
+
+  // Trial-used is a single subscriptions lookup; fire it speculatively
+  // as soon as we know the user id (without waiting on entitlement)
+  // and discard the result for non-free users where it doesn't apply.
+  // Shaves another round-trip off the common "upgrade from Cal preview"
+  // path, where the multi-second gap before the page paints made users
+  // think the click hadn't worked.
+  let trialUsedPromise: Promise<boolean> = Promise.resolve(false);
+
   if (hasSupabaseEnv()) {
     const supabase = await createClient();
     const {
@@ -43,23 +62,20 @@ export default async function PricingPage() {
     } = await supabase.auth.getUser();
     if (authUser) {
       user = { id: authUser.id };
+      trialUsedPromise = hasUsedCoachProTrial(authUser.id);
       entitlement = await getCurrentEntitlement();
     }
   }
 
-  const [coachAiEnabled, freeMaxPlays, seatDefaults, coachAiEvalDays] = await Promise.all([
-    getCoachAiTierEnabled(),
-    getFreeMaxPlaysPerPlaybook(),
-    getSeatDefaults(),
-    getCoachAiEvalDays(),
-  ]);
+  const [coachAiEnabled, freeMaxPlays, seatDefaults, coachAiEvalDays] =
+    await settingsPromise;
   const isAuthed = user !== null;
   // Mirror the billing.ts trial gate so the Coach Pro CTA copy matches
   // what Stripe will actually do at checkout — if the user already used
   // the trial, label the button "Subscribe" not "Start free trial".
   const coachProTrialUsed =
     user && (entitlement?.tier ?? "free") === "free"
-      ? await hasUsedCoachProTrial(user.id)
+      ? await trialUsedPromise
       : false;
 
   const breadcrumbLd = {
