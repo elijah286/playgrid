@@ -609,7 +609,9 @@ function MobileEngagementPanel({ data }: { data: MobileEngagementSummary }) {
           <table className="w-full min-w-[760px] text-left text-xs">
             <thead className="text-[11px] font-semibold uppercase tracking-wide text-muted">
               <tr>
-                <th className="pb-2 pr-3">Cohort</th>
+                <th className="sticky left-0 z-10 bg-surface-raised pb-2 pr-3 shadow-[1px_0_0_0_var(--color-border)]">
+                  Cohort
+                </th>
                 <th className="pb-2 pr-3 text-right">Sessions</th>
                 <th className="pb-2 pr-3 text-right">Viewer sessions</th>
                 <th className="pb-2 pr-3 text-right">Viewer bounce</th>
@@ -635,7 +637,7 @@ function MobileEngagementPanel({ data }: { data: MobileEngagementSummary }) {
                 );
                 return (
                   <tr key={cls}>
-                    <td className="py-2 pr-3 text-foreground">
+                    <td className="sticky left-0 z-10 bg-surface-raised py-2 pr-3 text-foreground shadow-[1px_0_0_0_var(--color-border)]">
                       <div className="font-medium capitalize">{cls}</div>
                       <div className="text-[10px] text-muted">
                         {cls === "mobile" ? "phone + tablet" : "desktop only"}

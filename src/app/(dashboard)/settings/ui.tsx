@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   BarChart3,
   Brain,
-  Check,
   CreditCard,
   DollarSign,
   FlaskConical,
+  Gauge,
   Globe,
   KeyRound,
   Menu as MenuIcon,
@@ -50,13 +50,23 @@ import type { BetaFeatures } from "@/lib/site/beta-features-config";
 import type { SavedFormation } from "@/app/actions/formations";
 import type { FeedbackRow } from "@/app/actions/feedback";
 import type { CoachInvitationRow } from "@/app/actions/coach-invitations";
-import type { CancellationFeedbackRow, GiftCodeRow } from "@/app/actions/admin-billing";
+import type {
+  CancellationFeedbackRow,
+  GiftCodeRow,
+} from "@/app/actions/admin-billing";
 import type { StripeConfigStatus } from "@/lib/site/stripe-config";
 import type { TrafficSummary } from "@/app/actions/admin-traffic";
 import type { GeoSummary } from "@/app/actions/admin-geography";
 import type { MonetizationSummary } from "@/app/actions/admin-activation";
-import { SegmentedControl } from "@/components/ui";
-import { cn } from "@/lib/utils";
+import {
+  AdminSidebarNav,
+  type AdminNavGroup,
+} from "@/features/admin/AdminSidebarNav";
+import {
+  OverviewAdminClient,
+  deriveOverviewProps,
+  type OverviewJumpTarget,
+} from "@/features/admin/OverviewAdminClient";
 
 type IntegrationProps =
   | { ok: true; configured: boolean; statusLabel: string; updatedAt: string | null }
@@ -98,18 +108,39 @@ type RedditPixelProps =
 type AdminKeyProps = { configured: boolean; statusLabel: string };
 
 type Tab =
+  | "overview"
   | "users"
   | "analytics"
   | "geography"
+  | "opex"
   | "invites"
   | "payments"
-  | "integrations"
   | "feedback"
   | "ai_feedback"
   | "seeds"
-  | "beta"
-  | "opex"
-  | "site";
+  | "site"
+  | "integrations"
+  | "beta";
+
+const STORAGE_KEY = "site-admin-active-tab";
+
+function isTab(value: string | null | undefined): value is Tab {
+  return (
+    value === "overview" ||
+    value === "users" ||
+    value === "analytics" ||
+    value === "geography" ||
+    value === "opex" ||
+    value === "invites" ||
+    value === "payments" ||
+    value === "feedback" ||
+    value === "ai_feedback" ||
+    value === "seeds" ||
+    value === "site" ||
+    value === "integrations" ||
+    value === "beta"
+  );
+}
 
 export function SettingsClient({
   currentUserId,
@@ -216,135 +247,160 @@ export function SettingsClient({
   initialCancellationFeedback: CancellationFeedbackRow[];
   cancellationFeedbackError: string | null;
 }) {
-  const [tab, setTab] = useState<Tab>("users");
+  const [tab, setTab] = useState<Tab>("overview");
   const [analyticsSubTab, setAnalyticsSubTab] = useState<
     "traffic" | "monetization"
   >("traffic");
   const [usersSubTab, setUsersSubTab] = useState<"list" | "settings">("list");
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const mobileMenuRef = useRef<HTMLDivElement>(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  const tabOptions = [
-    { value: "users" as const, label: "Users", icon: Users },
-    { value: "analytics" as const, label: "Analytics", icon: BarChart3 },
-    { value: "geography" as const, label: "Geography", icon: Globe },
-    { value: "invites" as const, label: "Coach invites", icon: Ticket },
-    { value: "payments" as const, label: "Payments", icon: CreditCard },
-    { value: "integrations" as const, label: "Integrations", icon: KeyRound },
-    { value: "feedback" as const, label: "Feedback", icon: MessageCircle },
-    { value: "ai_feedback" as const, label: "AI Feedback", icon: Brain },
-    { value: "seeds" as const, label: "Playbook seeds", icon: Sparkles },
-    { value: "beta" as const, label: "Beta features", icon: FlaskConical },
-    { value: "opex" as const, label: "Opex", icon: DollarSign },
-    { value: "site" as const, label: "Site", icon: SettingsIcon },
-  ];
-  const activeOption = tabOptions.find((o) => o.value === tab) ?? tabOptions[0];
-  const ActiveIcon = activeOption.icon;
-
+  // Persist last-viewed tab so refreshing the page doesn't lose context.
+  // localStorage is fine here — this is a single-admin tool and the
+  // selection is per-device, not per-user.
   useEffect(() => {
-    if (!mobileMenuOpen) return;
-    function onDocClick(e: MouseEvent) {
-      if (!mobileMenuRef.current?.contains(e.target as Node)) {
-        setMobileMenuOpen(false);
-      }
+    try {
+      const stored = window.localStorage.getItem(STORAGE_KEY);
+      if (isTab(stored)) setTab(stored);
+    } catch {
+      /* private mode / disabled storage — ignore */
     }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setMobileMenuOpen(false);
+  }, []);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, tab);
+    } catch {
+      /* ignore */
     }
-    document.addEventListener("mousedown", onDocClick);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDocClick);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [mobileMenuOpen]);
+  }, [tab]);
+
+  const excludedEmailsCount = initialExcludedEmails.length;
+  const overviewProps = deriveOverviewProps({
+    initialUsersCount: initialUsers.length,
+    excludedEmailsCount,
+    traffic: initialTrafficSummary,
+    geo: initialGeoSummary,
+    invites: initialInvites,
+    feedback: initialFeedback,
+    kbMisses: initialCoachAiKbMisses,
+    giftCodes: initialGiftCodes,
+    stripeMode: stripeStatus.mode,
+  });
+
+  const navGroups: AdminNavGroup<Tab>[] = [
+    {
+      label: "Insights",
+      items: [
+        { value: "overview", label: "Overview", icon: Gauge },
+        { value: "analytics", label: "Analytics", icon: BarChart3 },
+        { value: "geography", label: "Geography", icon: Globe },
+        { value: "opex", label: "Opex", icon: DollarSign },
+      ],
+    },
+    {
+      label: "People",
+      items: [
+        {
+          value: "users",
+          label: "Users",
+          icon: Users,
+          badge: overviewProps.totalUsers,
+        },
+        {
+          value: "invites",
+          label: "Coach invites",
+          icon: Ticket,
+          badge: overviewProps.pendingInvites,
+        },
+      ],
+    },
+    {
+      label: "Revenue",
+      items: [
+        { value: "payments", label: "Payments", icon: CreditCard },
+      ],
+    },
+    {
+      label: "Content",
+      items: [
+        {
+          value: "feedback",
+          label: "Feedback",
+          icon: MessageCircle,
+          badge: overviewProps.recentFeedback,
+        },
+        {
+          value: "ai_feedback",
+          label: "AI Feedback",
+          icon: Brain,
+          badge: overviewProps.unreviewedKbMisses,
+        },
+        { value: "seeds", label: "Playbook seeds", icon: Sparkles },
+      ],
+    },
+    {
+      label: "Configuration",
+      items: [
+        { value: "site", label: "Site", icon: SettingsIcon },
+        { value: "integrations", label: "Integrations", icon: KeyRound },
+        { value: "beta", label: "Beta features", icon: FlaskConical },
+      ],
+    },
+  ];
+
+  const allItems = navGroups.flatMap((g) => g.items);
+  const activeItem = allItems.find((i) => i.value === tab) ?? allItems[0];
+  const ActiveIcon = activeItem.icon;
+
+  function jumpFromOverview(target: OverviewJumpTarget) {
+    setTab(target);
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="sm:hidden" ref={mobileMenuRef}>
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setMobileMenuOpen((v) => !v)}
-            aria-haspopup="menu"
-            aria-expanded={mobileMenuOpen}
-            className="inline-flex w-full items-center justify-between gap-2 rounded-lg bg-surface-inset px-3 py-2 text-sm font-medium text-foreground ring-1 ring-inset ring-black/5"
-          >
-            <span className="inline-flex items-center gap-2">
-              <ActiveIcon className="size-4" />
-              {activeOption.label}
-            </span>
-            <MenuIcon className="size-4 text-muted" />
-          </button>
-          {mobileMenuOpen && (
-            <div
-              role="menu"
-              className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-lg bg-surface-raised py-1 shadow-lg ring-1 ring-black/10"
-            >
-              {tabOptions.map((opt) => {
-                const Icon = opt.icon;
-                const active = opt.value === tab;
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setTab(opt.value);
-                      setMobileMenuOpen(false);
-                    }}
-                    className={cn(
-                      "flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm",
-                      active ? "bg-surface-inset text-foreground" : "text-foreground hover:bg-surface-inset",
-                    )}
-                  >
-                    <span className="inline-flex items-center gap-2">
-                      <Icon className="size-4" />
-                      {opt.label}
-                    </span>
-                    {active && <Check className="size-4 text-muted" />}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <SegmentedControl
-        className="hidden sm:inline-flex"
+    <div className="lg:grid lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-8">
+      <AdminSidebarNav
+        groups={navGroups}
         value={tab}
         onChange={setTab}
-        options={tabOptions}
+        mobileOpen={mobileNavOpen}
+        onMobileOpenChange={setMobileNavOpen}
       />
 
-      {tab === "users" && (
-        <div className="space-y-6">
-          <div className="flex gap-2 border-b border-border">
-            <button
-              onClick={() => setUsersSubTab("list")}
-              className={`px-4 py-2 text-sm font-medium transition-colors ${
-                usersSubTab === "list"
-                  ? "border-b-2 border-primary text-foreground"
-                  : "text-muted hover:text-foreground"
-              }`}
-            >
-              Users
-            </button>
-            <button
-              onClick={() => setUsersSubTab("settings")}
-              className={`px-4 py-2 text-sm font-medium transition-colors ${
-                usersSubTab === "settings"
-                  ? "border-b-2 border-primary text-foreground"
-                  : "text-muted hover:text-foreground"
-              }`}
-            >
-              Settings
-            </button>
-          </div>
-          {usersSubTab === "list" && (
-            <div>
-              {usersError ? (
+      <div className="min-w-0 space-y-6">
+        <div className="lg:hidden">
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen(true)}
+            aria-haspopup="dialog"
+            aria-expanded={mobileNavOpen}
+            className="inline-flex w-full items-center justify-between gap-2 rounded-lg bg-surface-raised px-3 py-2.5 text-sm font-medium text-foreground ring-1 ring-inset ring-border"
+          >
+            <span className="inline-flex items-center gap-2">
+              <ActiveIcon className="size-4 text-muted" aria-hidden="true" />
+              {activeItem.label}
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted">
+              <MenuIcon className="size-4" aria-hidden="true" />
+              Menu
+            </span>
+          </button>
+        </div>
+
+        {tab === "overview" && (
+          <OverviewAdminClient {...overviewProps} onJump={jumpFromOverview} />
+        )}
+
+        {tab === "users" && (
+          <div className="space-y-6">
+            <SubTabBar
+              value={usersSubTab}
+              onChange={setUsersSubTab}
+              items={[
+                { value: "list", label: "Users" },
+                { value: "settings", label: "Settings" },
+              ]}
+            />
+            {usersSubTab === "list" ? (
+              usersError ? (
                 <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-950 ring-1 ring-amber-200">
                   {usersError}
                 </p>
@@ -354,237 +410,259 @@ export function SettingsClient({
                   currentUserId={currentUserId}
                   initialExcludedEmails={initialExcludedEmails}
                 />
-              )}
-            </div>
-          )}
-          {usersSubTab === "settings" && (
-            <AnalyticsExclusionsAdminClient
-              initialEmails={initialExcludedEmails}
-            />
-          )}
-        </div>
-      )}
-
-      {tab === "analytics" && (
-        <div className="space-y-6">
-          <div className="flex gap-2 border-b border-border">
-            <button
-              onClick={() => setAnalyticsSubTab("traffic")}
-              className={`px-4 py-2 text-sm font-medium transition-colors ${
-                analyticsSubTab === "traffic"
-                  ? "border-b-2 border-primary text-foreground"
-                  : "text-muted hover:text-foreground"
-              }`}
-            >
-              Traffic
-            </button>
-            <button
-              onClick={() => setAnalyticsSubTab("monetization")}
-              className={`px-4 py-2 text-sm font-medium transition-colors ${
-                analyticsSubTab === "monetization"
-                  ? "border-b-2 border-primary text-foreground"
-                  : "text-muted hover:text-foreground"
-              }`}
-            >
-              Monetization Health
-            </button>
+              )
+            ) : (
+              <AnalyticsExclusionsAdminClient
+                initialEmails={initialExcludedEmails}
+              />
+            )}
           </div>
-          {analyticsSubTab === "traffic" && (
-            <TrafficAdminClient
-              initialSummary={initialTrafficSummary}
-              initialError={trafficError}
+        )}
+
+        {tab === "analytics" && (
+          <div className="space-y-6">
+            <SubTabBar
+              value={analyticsSubTab}
+              onChange={setAnalyticsSubTab}
+              items={[
+                { value: "traffic", label: "Traffic" },
+                { value: "monetization", label: "Monetization Health" },
+              ]}
             />
-          )}
-          {analyticsSubTab === "monetization" && (
-            <ActivationAdminClient
-              initialSummary={initialActivationSummary}
-              initialError={activationError}
-            />
-          )}
-        </div>
-      )}
-
-      {tab === "geography" && (
-        <GeographyAdminClient
-          initialSummary={initialGeoSummary}
-          initialError={geoError}
-        />
-      )}
-
-      {tab === "invites" && (
-        <CoachInvitationsAdminClient
-          initialItems={initialInvites}
-          initialError={invitesError}
-        />
-      )}
-
-      {tab === "payments" && (
-        <BillingAdminClient
-          initialCodes={initialGiftCodes}
-          initialError={giftCodesError}
-          stripeStatus={stripeStatus}
-          initialCoachAiEnabled={initialCoachAiEnabled}
-          initialCancellationFeedback={initialCancellationFeedback}
-          cancellationFeedbackError={cancellationFeedbackError}
-        />
-      )}
-
-      {tab === "feedback" && (
-        <FeedbackAdminClient
-          initialItems={initialFeedback}
-          initialError={feedbackError}
-          initialWidgetEnabled={initialFeedbackWidgetEnabled}
-          initialWidgetTouchEnabled={initialFeedbackWidgetTouchEnabled}
-        />
-      )}
-
-      {tab === "integrations" && (
-        <div className="space-y-4">
-          <div
-            role="alert"
-            className="rounded-2xl border-2 border-red-500 bg-red-50 p-4 text-sm text-red-800 dark:border-red-500 dark:bg-red-950/40 dark:text-red-200"
-          >
-            <p className="font-semibold">Heads up — production-critical settings</p>
-            <p className="mt-1">
-              Changing or deleting these will break or disable key functionality
-              that impacts all users. Please be very careful when modifying these
-              values.
-            </p>
+            {analyticsSubTab === "traffic" && (
+              <TrafficAdminClient
+                initialSummary={initialTrafficSummary}
+                initialError={trafficError}
+              />
+            )}
+            {analyticsSubTab === "monetization" && (
+              <ActivationAdminClient
+                initialSummary={initialActivationSummary}
+                initialError={activationError}
+              />
+            )}
           </div>
-          {claude.ok && (
-            <LlmProviderToggleClient initial={claude.provider} />
-          )}
+        )}
 
-          <RagEmbeddingsAdminClient />
+        {tab === "geography" && (
+          <GeographyAdminClient
+            initialSummary={initialGeoSummary}
+            initialError={geoError}
+          />
+        )}
 
-          {claude.ok ? (
-            <ClaudeSettingsClient
-              initial={{
-                configured: claude.configured,
-                statusLabel: claude.statusLabel,
-                updatedAt: claude.updatedAt,
-              }}
-              adminInitial={anthropicAdminKey}
-            />
-          ) : (
-            <p className="text-sm text-red-700 dark:text-red-300">{claude.error}</p>
-          )}
+        {tab === "invites" && (
+          <CoachInvitationsAdminClient
+            initialItems={initialInvites}
+            initialError={invitesError}
+          />
+        )}
 
-          {integration.ok ? (
-            <OpenAISettingsClient
-              initial={{
-                configured: integration.configured,
-                statusLabel: integration.statusLabel,
-                updatedAt: integration.updatedAt,
-              }}
-              adminInitial={openaiAdminKey}
-            />
-          ) : (
-            <div className="space-y-2">
-              <p className="text-sm text-red-700 dark:text-red-300">{integration.error}</p>
-              <p className="text-sm text-muted">
-                Saving keys requires <code className="font-mono">SUPABASE_SERVICE_ROLE_KEY</code> on the
-                app server so secrets are not exposed to browsers.
+        {tab === "payments" && (
+          <BillingAdminClient
+            initialCodes={initialGiftCodes}
+            initialError={giftCodesError}
+            stripeStatus={stripeStatus}
+            initialCoachAiEnabled={initialCoachAiEnabled}
+            initialCancellationFeedback={initialCancellationFeedback}
+            cancellationFeedbackError={cancellationFeedbackError}
+          />
+        )}
+
+        {tab === "feedback" && (
+          <FeedbackAdminClient
+            initialItems={initialFeedback}
+            initialError={feedbackError}
+            initialWidgetEnabled={initialFeedbackWidgetEnabled}
+            initialWidgetTouchEnabled={initialFeedbackWidgetTouchEnabled}
+          />
+        )}
+
+        {tab === "integrations" && (
+          <div className="space-y-4">
+            <div
+              role="alert"
+              className="rounded-2xl border-2 border-red-500 bg-red-50 p-4 text-sm text-red-800 dark:border-red-500 dark:bg-red-950/40 dark:text-red-200"
+            >
+              <p className="font-semibold">Heads up — production-critical settings</p>
+              <p className="mt-1">
+                Changing or deleting these will break or disable key functionality
+                that impacts all users. Please be very careful when modifying these
+                values.
               </p>
             </div>
-          )}
+            {claude.ok && (
+              <LlmProviderToggleClient initial={claude.provider} />
+            )}
 
-          {resend.ok ? (
-            <ResendSettingsClient
-              initial={{
-                configured: resend.configured,
-                statusLabel: resend.statusLabel,
-                fromEmail: resend.fromEmail,
-                contactToEmail: resend.contactToEmail,
-                updatedAt: resend.updatedAt,
-              }}
-            />
-          ) : (
-            <p className="text-sm text-red-700 dark:text-red-300">{resend.error}</p>
-          )}
+            <RagEmbeddingsAdminClient />
 
-          {googleMaps.ok ? (
-            <GoogleMapsSettingsClient
-              initial={{
-                configured: googleMaps.configured,
-                statusLabel: googleMaps.statusLabel,
-                updatedAt: googleMaps.updatedAt,
-              }}
-            />
-          ) : (
-            <p className="text-sm text-red-700 dark:text-red-300">{googleMaps.error}</p>
-          )}
+            {claude.ok ? (
+              <ClaudeSettingsClient
+                initial={{
+                  configured: claude.configured,
+                  statusLabel: claude.statusLabel,
+                  updatedAt: claude.updatedAt,
+                }}
+                adminInitial={anthropicAdminKey}
+              />
+            ) : (
+              <p className="text-sm text-red-700 dark:text-red-300">{claude.error}</p>
+            )}
 
-          {maxmind.ok ? (
-            <MaxMindSettingsClient
-              initial={{
-                configured: maxmind.configured,
-                statusLabel: maxmind.statusLabel,
-                downloadedAt: maxmind.downloadedAt,
-              }}
-            />
-          ) : (
-            <p className="text-sm text-red-700 dark:text-red-300">{maxmind.error}</p>
-          )}
+            {integration.ok ? (
+              <OpenAISettingsClient
+                initial={{
+                  configured: integration.configured,
+                  statusLabel: integration.statusLabel,
+                  updatedAt: integration.updatedAt,
+                }}
+                adminInitial={openaiAdminKey}
+              />
+            ) : (
+              <div className="space-y-2">
+                <p className="text-sm text-red-700 dark:text-red-300">{integration.error}</p>
+                <p className="text-sm text-muted">
+                  Saving keys requires <code className="font-mono">SUPABASE_SERVICE_ROLE_KEY</code> on the
+                  app server so secrets are not exposed to browsers.
+                </p>
+              </div>
+            )}
 
-          {redditPixel.ok ? (
-            <RedditPixelSettingsClient
-              initial={{
-                configured: redditPixel.configured,
-                statusLabel: redditPixel.statusLabel,
-              }}
-            />
-          ) : (
-            <p className="text-sm text-red-700 dark:text-red-300">{redditPixel.error}</p>
-          )}
-        </div>
-      )}
+            {resend.ok ? (
+              <ResendSettingsClient
+                initial={{
+                  configured: resend.configured,
+                  statusLabel: resend.statusLabel,
+                  fromEmail: resend.fromEmail,
+                  contactToEmail: resend.contactToEmail,
+                  updatedAt: resend.updatedAt,
+                }}
+              />
+            ) : (
+              <p className="text-sm text-red-700 dark:text-red-300">{resend.error}</p>
+            )}
 
-      {tab === "ai_feedback" && (
-        <CoachAiFeedbackTabs
-          initialKbMisses={initialCoachAiKbMisses}
-          initialError={coachAiKbMissesError}
-        />
-      )}
+            {googleMaps.ok ? (
+              <GoogleMapsSettingsClient
+                initial={{
+                  configured: googleMaps.configured,
+                  statusLabel: googleMaps.statusLabel,
+                  updatedAt: googleMaps.updatedAt,
+                }}
+              />
+            ) : (
+              <p className="text-sm text-red-700 dark:text-red-300">{googleMaps.error}</p>
+            )}
 
-      {tab === "seeds" && (
-        <PlaybookSeedsAdminClient initial={initialSeeds} />
-      )}
+            {maxmind.ok ? (
+              <MaxMindSettingsClient
+                initial={{
+                  configured: maxmind.configured,
+                  statusLabel: maxmind.statusLabel,
+                  downloadedAt: maxmind.downloadedAt,
+                }}
+              />
+            ) : (
+              <p className="text-sm text-red-700 dark:text-red-300">{maxmind.error}</p>
+            )}
 
-      {tab === "beta" && (
-        <BetaFeaturesAdminClient initialFeatures={initialBetaFeatures} />
-      )}
+            {redditPixel.ok ? (
+              <RedditPixelSettingsClient
+                initial={{
+                  configured: redditPixel.configured,
+                  statusLabel: redditPixel.statusLabel,
+                }}
+              />
+            ) : (
+              <p className="text-sm text-red-700 dark:text-red-300">{redditPixel.error}</p>
+            )}
+          </div>
+        )}
 
-      {tab === "opex" && (
-        <OpexAdminClient
-          initialServices={initialOpexServices}
-          initialEntries={initialOpexEntries}
-          initialPeriodMonth={initialOpexPeriod}
-          initialError={opexError}
-        />
-      )}
-
-      {tab === "site" && (
-        <div className="space-y-4">
-          <CoachSeatsAdminClient
-            initialDefaults={initialSeatDefaults}
-            initialBonusRows={initialCoachBonusRows}
-            initialPack={initialCoachCalPack}
+        {tab === "ai_feedback" && (
+          <CoachAiFeedbackTabs
+            initialKbMisses={initialCoachAiKbMisses}
+            initialError={coachAiKbMissesError}
           />
-          <SiteSettingsAdminClient
-            initialHideLobbyAnimation={initialHideLobbyAnimation}
-            initialExamplesPageEnabled={initialExamplesPageEnabled}
-            initialFreeMaxPlays={initialFreeMaxPlays}
-            initialMobileEditingEnabled={initialMobileEditingEnabled}
-            initialHideOwnerInfoAbout={initialHideOwnerInfoAbout}
-            initialReferralConfig={initialReferralConfig}
-            initialAppleSigninEnabled={initialAppleSigninEnabled}
-            initialGoogleSigninEnabled={initialGoogleSigninEnabled}
-            initialCoachCalUpgradeBannerEnabled={initialCoachCalUpgradeBannerEnabled}
-            initialCoachAiEvalDays={initialCoachAiEvalDays}
+        )}
+
+        {tab === "seeds" && (
+          <PlaybookSeedsAdminClient initial={initialSeeds} />
+        )}
+
+        {tab === "beta" && (
+          <BetaFeaturesAdminClient initialFeatures={initialBetaFeatures} />
+        )}
+
+        {tab === "opex" && (
+          <OpexAdminClient
+            initialServices={initialOpexServices}
+            initialEntries={initialOpexEntries}
+            initialPeriodMonth={initialOpexPeriod}
+            initialError={opexError}
           />
-        </div>
-      )}
+        )}
+
+        {tab === "site" && (
+          <div className="space-y-4">
+            <CoachSeatsAdminClient
+              initialDefaults={initialSeatDefaults}
+              initialBonusRows={initialCoachBonusRows}
+              initialPack={initialCoachCalPack}
+            />
+            <SiteSettingsAdminClient
+              initialHideLobbyAnimation={initialHideLobbyAnimation}
+              initialExamplesPageEnabled={initialExamplesPageEnabled}
+              initialFreeMaxPlays={initialFreeMaxPlays}
+              initialMobileEditingEnabled={initialMobileEditingEnabled}
+              initialHideOwnerInfoAbout={initialHideOwnerInfoAbout}
+              initialReferralConfig={initialReferralConfig}
+              initialAppleSigninEnabled={initialAppleSigninEnabled}
+              initialGoogleSigninEnabled={initialGoogleSigninEnabled}
+              initialCoachCalUpgradeBannerEnabled={initialCoachCalUpgradeBannerEnabled}
+              initialCoachAiEvalDays={initialCoachAiEvalDays}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SubTabBar<T extends string>({
+  value,
+  onChange,
+  items,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  items: { value: T; label: string }[];
+}) {
+  return (
+    <div
+      role="tablist"
+      className="inline-flex w-full gap-1 overflow-x-auto rounded-xl border border-border bg-surface-raised p-1 text-xs sm:w-auto"
+    >
+      {items.map((item) => {
+        const active = item.value === value;
+        return (
+          <button
+            key={item.value}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(item.value)}
+            className={`shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 transition-colors ${
+              active
+                ? "bg-foreground/10 font-semibold text-foreground"
+                : "text-muted hover:text-foreground"
+            }`}
+          >
+            {item.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

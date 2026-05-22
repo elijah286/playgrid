@@ -134,7 +134,7 @@ function GeographyMap({ cities }: { cities: GeoCityPoint[] }) {
       ref={containerRef}
       role="application"
       aria-label="World map of user activity by city"
-      className="h-[520px] w-full overflow-hidden rounded-2xl ring-1 ring-border"
+      className="h-[300px] w-full overflow-hidden rounded-2xl ring-1 ring-border sm:h-[420px] lg:h-[520px]"
     />
   );
 }

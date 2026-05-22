@@ -296,6 +296,7 @@ export function UsersAdminClient({
           </button>
         </div>
 
+        <div className="hidden overflow-x-auto md:block">
         <table className="w-full text-left text-sm">
           <thead className="bg-surface-inset text-xs font-semibold uppercase tracking-wide text-muted">
             <tr>
@@ -481,6 +482,147 @@ export function UsersAdminClient({
             )}
           </tbody>
         </table>
+        </div>
+
+        <ul className="divide-y divide-border md:hidden">
+          {filtered.length === 0 ? (
+            <li className="px-4 py-8 text-center text-sm text-muted">
+              No users match that search.
+            </li>
+          ) : (
+            filtered.map((u) => {
+              const isOpen = expanded === u.id;
+              return (
+                <li key={u.id}>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() =>
+                      setExpanded((cur) => (cur === u.id ? null : u.id))
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setExpanded((cur) => (cur === u.id ? null : u.id));
+                      }
+                    }}
+                    className="flex w-full cursor-pointer items-start gap-3 px-4 py-3 text-left hover:bg-surface-inset/40"
+                  >
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                        <ChevronRight
+                          className={`size-3.5 shrink-0 text-muted transition-transform ${
+                            isOpen ? "rotate-90" : ""
+                          }`}
+                        />
+                        <span className="truncate">{u.email}</span>
+                        {u.id === currentUserId && (
+                          <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                            you
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5 pl-5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDialog({ kind: "plan", user: u });
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-surface-inset"
+                        >
+                          <span
+                            className={
+                              u.tier === "free"
+                                ? "text-muted"
+                                : u.tier === "coach_ai"
+                                  ? "text-primary"
+                                  : "text-foreground"
+                            }
+                          >
+                            {TIER_LABELS[u.tier]}
+                          </span>
+                          {u.entitlementSource === "stripe" && (
+                            <span className="rounded bg-emerald-500/10 px-1 text-[9px] font-semibold uppercase text-emerald-700 dark:text-emerald-300">
+                              stripe
+                            </span>
+                          )}
+                          {u.entitlementSource === "comp" && (
+                            <span className="rounded bg-primary/10 px-1 text-[9px] font-semibold uppercase text-primary">
+                              comp
+                            </span>
+                          )}
+                        </button>
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${signupSourceChipClass(u.signupSource.kind)}`}
+                          title={u.signupSource.detail ?? u.signupSource.label}
+                        >
+                          {u.signupSource.label}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 pl-5 text-[11px] text-muted">
+                        {u.displayName ? (
+                          <span className="text-foreground/70">
+                            {u.displayName}
+                          </span>
+                        ) : null}
+                        <span title={u.lastSignIn ?? ""}>
+                          Active {formatLastSignIn(u.lastSignIn)}
+                        </span>
+                        {u.playsCreated > 0 ? (
+                          <span title={`${u.playsCreated} plays`}>
+                            {u.playsCreated} play
+                            {u.playsCreated === 1 ? "" : "s"}
+                          </span>
+                        ) : null}
+                        {u.totalSecondsOnSite != null &&
+                        u.totalSecondsOnSite > 0 ? (
+                          <span>{formatTimeOnSite(u.totalSecondsOnSite)} on site</span>
+                        ) : null}
+                        <span>Joined {formatCreatedAt(u.createdAt)}</span>
+                      </div>
+                    </div>
+                    <div
+                      className="shrink-0"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <UserActionMenu
+                        disabled={pending}
+                        isSelf={u.id === currentUserId}
+                        onEdit={() => setDialog({ kind: "edit", user: u })}
+                        onReset={() => setDialog({ kind: "reset", user: u })}
+                        onDelete={() => {
+                          if (
+                            !confirm(`Delete ${u.email}? This cannot be undone.`)
+                          )
+                            return;
+                          setMsg(null);
+                          startTransition(async () => {
+                            const res = await deleteUserAsAdminAction(u.id);
+                            if (!res.ok)
+                              setMsg({ kind: "error", text: res.error });
+                            else {
+                              setMsg({
+                                kind: "success",
+                                text: `Deleted ${u.email}.`,
+                              });
+                              refresh();
+                            }
+                          });
+                        }}
+                      />
+                    </div>
+                  </div>
+                  {isOpen && (
+                    <div className="bg-surface-inset/30 px-4 py-3">
+                      <UserStatsPanel userId={u.id} />
+                    </div>
+                  )}
+                </li>
+              );
+            })
+          )}
+        </ul>
       </div>
 
       {dialog?.kind === "add" && (
