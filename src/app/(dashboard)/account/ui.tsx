@@ -17,7 +17,6 @@ import {
   cancelScheduledDowngradeAction,
   createBillingPortalSessionAction,
   setSeatQuantityAction,
-  submitCancellationFeedbackAction,
 } from "@/app/actions/billing";
 import { SEAT_PRICE_USD_PER_MONTH } from "@/lib/billing/seats-config";
 import type { Entitlement, SubscriptionTier } from "@/lib/billing/entitlement";
@@ -426,9 +425,6 @@ function PlanCard({
 }) {
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const [feedbackText, setFeedbackText] = useState("");
-  const [feedbackPending, startFeedbackTransition] = useTransition();
   const [cancelingDowngrade, startCancelDowngrade] = useTransition();
   const tier = entitlement?.tier ?? "free";
   const source = entitlement?.source ?? "free";
@@ -456,25 +452,6 @@ function PlanCard({
         return;
       }
       window.location.href = res.url;
-    });
-  }
-
-  function openManageBilling() {
-    setErr(null);
-    setFeedbackText("");
-    setFeedbackOpen(true);
-  }
-
-  function submitFeedbackAndContinue() {
-    const text = feedbackText.trim();
-    if (!text) {
-      goToPortal();
-      return;
-    }
-    startFeedbackTransition(async () => {
-      await submitCancellationFeedbackAction(text);
-      setFeedbackOpen(false);
-      goToPortal();
     });
   }
 
@@ -523,12 +500,12 @@ function PlanCard({
           {isPaid ? (
             <button
               type="button"
-              onClick={openManageBilling}
-              disabled={pending || feedbackPending}
+              onClick={goToPortal}
+              disabled={pending}
               data-web-only
               className="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-surface disabled:opacity-50"
             >
-              Manage billing
+              {pending ? "Opening…" : "Manage billing"}
             </button>
           ) : (
             <Link
@@ -552,95 +529,7 @@ function PlanCard({
 
         {err ? <p className="text-xs text-red-700">{err}</p> : null}
       </div>
-      <ManageBillingFeedbackModal
-        open={feedbackOpen}
-        text={feedbackText}
-        onTextChange={setFeedbackText}
-        pending={feedbackPending || pending}
-        onSubmit={submitFeedbackAndContinue}
-        onSkip={() => {
-          setFeedbackOpen(false);
-          goToPortal();
-        }}
-        onClose={() => setFeedbackOpen(false)}
-      />
     </Card>
-  );
-}
-
-/**
- * Lightweight feedback ask before redirecting to the Stripe billing portal.
- * Stripe collects a structured cancellation reason in its own UI; this is
- * additional free-text we capture while the user is still in our app.
- *
- * Optional by design — "Skip to billing" continues without writing a row.
- */
-function ManageBillingFeedbackModal({
-  open,
-  text,
-  onTextChange,
-  pending,
-  onSubmit,
-  onSkip,
-  onClose,
-}: {
-  open: boolean;
-  text: string;
-  onTextChange: (next: string) => void;
-  pending: boolean;
-  onSubmit: () => void;
-  onSkip: () => void;
-  onClose: () => void;
-}) {
-  if (!open) return null;
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Quick feedback"
-    >
-      <div
-        className="w-full max-w-md rounded-2xl bg-surface-raised shadow-2xl ring-1 ring-border"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="border-b border-border px-5 py-3">
-          <h3 className="text-base font-semibold text-foreground">Before you go — quick favor?</h3>
-          <p className="mt-1 text-xs text-muted">
-            Heading to billing? If anything is missing or not clicking, a sentence here goes a long way. Optional.
-          </p>
-        </div>
-        <div className="px-5 py-4">
-          <textarea
-            value={text}
-            onChange={(e) => onTextChange(e.target.value)}
-            rows={4}
-            maxLength={4000}
-            placeholder="What's working, what's not, what would make this worth keeping?"
-            className="w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          />
-        </div>
-        <div className="flex flex-wrap justify-end gap-2 border-t border-border px-5 py-3">
-          <button
-            type="button"
-            onClick={onSkip}
-            disabled={pending}
-            className="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-surface disabled:opacity-50"
-          >
-            Skip to billing
-          </button>
-          <button
-            type="button"
-            onClick={onSubmit}
-            disabled={pending}
-            className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-hover disabled:opacity-50"
-          >
-            {pending ? "Sending…" : "Send & continue"}
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
 

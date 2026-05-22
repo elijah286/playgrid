@@ -277,48 +277,6 @@ export async function cancelScheduledDowngradeAction(): Promise<
   }
 }
 
-/**
- * Capture optional free-text feedback from a paid user clicking "Manage
- * billing". They can submit or skip. Kept narrowly scoped (no header /
- * dropdown), so a non-canceller doesn't have to triage categories.
- *
- * Persisted to subscription_cancellation_feedback alongside their current
- * stripe_subscription_id (if known) so admins can stitch a comment to a
- * later cancellation row.
- */
-export async function submitCancellationFeedbackAction(
-  message: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
-  const trimmed = message.trim();
-  if (!trimmed) return { ok: false, error: "Message can't be empty." };
-  if (trimmed.length > 4000) return { ok: false, error: "Message is too long." };
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
-
-  const admin = createServiceRoleClient();
-  const { data: sub } = await admin
-    .from("subscriptions")
-    .select("stripe_subscription_id")
-    .eq("user_id", user.id)
-    .not("stripe_subscription_id", "is", null)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const { error } = await admin.from("subscription_cancellation_feedback").insert({
-    user_id: user.id,
-    message: trimmed,
-    stripe_subscription_id: sub?.stripe_subscription_id ?? null,
-  });
-  if (error) return { ok: false, error: error.message };
-  return { ok: true };
-}
-
 export async function createBillingPortalSessionAction(): Promise<
   { ok: true; url: string } | { ok: false; error: string }
 > {
