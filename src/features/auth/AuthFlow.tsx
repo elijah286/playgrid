@@ -13,6 +13,7 @@ import {
 import { Button, Input, useToast } from "@/components/ui";
 import { PASSWORD_RULES_LABEL, validatePassword } from "@/lib/auth/password";
 import { suggestEmailDomainCorrection } from "@/lib/auth/email-typo";
+import { track } from "@/lib/analytics/track";
 
 function GoogleGlyph({ className }: { className?: string }) {
   return (
@@ -138,6 +139,7 @@ export function AuthFlow({
     submittingRef.current = true;
     setPending(true);
     clearErrors();
+    track({ event: "auth_oauth_started", target: provider });
     try {
       const supabase = createClient();
       const { error } = await supabase.auth.signInWithOAuth({
@@ -169,6 +171,7 @@ export function AuthFlow({
     }
     setPending(true);
     clearErrors();
+    track({ event: "auth_email_submitted" });
     try {
       const res = await emailHasAccountAction(trimmed);
       if (!res.ok) throw new Error(res.error);
@@ -176,12 +179,15 @@ export function AuthFlow({
         // Existing accounts always land on the password step. OTP-only
         // users can fall through via the "Use a one-time passcode instead"
         // link under the password input.
+        track({ event: "auth_email_known", metadata: { branch: "password" } });
         setStep("password");
       } else {
+        track({ event: "auth_email_new", metadata: { branch: "code" } });
         await sendCode({ isNewUser: true, silent: true });
         setStep("code");
       }
     } catch (e: unknown) {
+      track({ event: "auth_email_error" });
       setFormError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
       setPending(false);
@@ -193,14 +199,17 @@ export function AuthFlow({
     submittingRef.current = true;
     setPending(true);
     clearErrors();
+    track({ event: "auth_password_attempt" });
     try {
       const supabase = createClient();
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
+      track({ event: "auth_password_success" });
       window.location.assign(safeNext);
       return; // keep pending=true through navigation so the button stays in its loading state
     } catch (e: unknown) {
       if (isInvalidCredentials(e)) {
+        track({ event: "auth_password_invalid" });
         setBadPassword(true);
       } else {
         setFormError(e instanceof Error ? e.message : "Sign-in failed.");
@@ -246,6 +255,7 @@ export function AuthFlow({
     }
     setPending(true);
     clearErrors();
+    track({ event: "auth_code_attempt" });
     try {
       const supabase = createClient();
       const { error, data } = await supabase.auth.verifyOtp({
@@ -284,13 +294,17 @@ export function AuthFlow({
       const justCreated = Date.now() - createdAt < 5 * 60_000;
 
       if (!hasProfile && justCreated) {
+        track({ event: "auth_code_success", metadata: { branch: "new-user-profile" } });
         setStep("new-user-profile");
       } else if (cameFromForgot) {
+        track({ event: "auth_code_success", metadata: { branch: "set-new-password" } });
         setStep("set-new-password");
       } else {
+        track({ event: "auth_code_success", metadata: { branch: "offer-reset" } });
         setStep("offer-reset");
       }
     } catch (e: unknown) {
+      track({ event: "auth_code_invalid" });
       setFormError(e instanceof Error ? e.message : "That code didn't work. Try again.");
     } finally {
       setPending(false);
@@ -368,6 +382,7 @@ export function AuthFlow({
         // user appears by email until they edit their account.
       });
       toast("Welcome to XO Gridmaker!", "success");
+      track({ event: "auth_signup_completed", metadata: { method: "email_otp" } });
       // Fresh signup — append the marker so RedditPixel fires SignUp on
       // the next page load. The OAuth callback adds this marker
       // server-side; the email-OTP path adds it here.
