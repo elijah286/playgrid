@@ -15,6 +15,13 @@ const DB_PATH = join(tmpdir(), "playgrid-geolite2-city.mmdb");
 const DB_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // refresh after 30 days
 
 let readerPromise: Promise<ReaderModel | null> | null = null;
+// When a download or reader-open fails we mark the time so we don't hammer
+// MaxMind on every request during an outage. Without this guard, a single
+// cold-start failure left the whole Cloud Run instance returning null
+// geo for its entire lifetime — which is why ~42% of page_views had
+// country=null in the week after the Cloud Run migration.
+let lastReaderFailureAt = 0;
+const READER_RETRY_BACKOFF_MS = 60_000;
 
 export type GeoLookup = {
   country: string | null;
@@ -101,10 +108,29 @@ async function loadReader(): Promise<ReaderModel | null> {
 }
 
 function getReader(): Promise<ReaderModel | null> {
-  if (!readerPromise) {
-    readerPromise = loadReader().catch(() => null);
+  if (readerPromise) return readerPromise;
+  // Cooldown after a failure to avoid hammering MaxMind during outages.
+  if (Date.now() - lastReaderFailureAt < READER_RETRY_BACKOFF_MS) {
+    return Promise.resolve(null);
   }
-  return readerPromise;
+  const attempt = loadReader().then(
+    (r) => {
+      if (!r) {
+        lastReaderFailureAt = Date.now();
+        readerPromise = null;
+        console.warn("[maxmind] loadReader returned null; will retry after backoff");
+      }
+      return r;
+    },
+    (err) => {
+      lastReaderFailureAt = Date.now();
+      readerPromise = null;
+      console.warn("[maxmind] loadReader threw; will retry after backoff:", err instanceof Error ? err.message : err);
+      return null;
+    },
+  );
+  readerPromise = attempt;
+  return attempt;
 }
 
 export async function refreshMaxMindDb(): Promise<{ ok: boolean; error?: string }> {
