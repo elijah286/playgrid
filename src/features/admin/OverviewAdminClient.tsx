@@ -39,6 +39,7 @@ export type OverviewJumpTarget =
   | "analytics"
   | "geography"
   | "invites"
+  | "revenue"
   | "payments"
   | "feedback"
   | "ai_feedback";
@@ -171,7 +172,7 @@ export function OverviewAdminClient({
                 ? "Stripe error"
                 : "loading…"
           }
-          onClick={() => onJump("payments")}
+          onClick={() => onJump("revenue")}
         />
         <HeroKpi
           icon={DollarSign}
@@ -179,7 +180,7 @@ export function OverviewAdminClient({
           value={billing ? formatCurrency(billing.mrr) : "—"}
           sub={billing ? "recurring revenue" : billingError ? "Stripe error" : "loading…"}
           tone="emerald"
-          onClick={() => onJump("payments")}
+          onClick={() => onJump("revenue")}
         />
         <HeroKpi
           icon={TrendingUp}
@@ -204,7 +205,7 @@ export function OverviewAdminClient({
                 : "loading…"
           }
           tone="emerald"
-          onClick={() => onJump("payments")}
+          onClick={() => onJump("revenue")}
         />
       </HeroKpiGrid>
 

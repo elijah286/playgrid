@@ -1132,6 +1132,15 @@ export const FEATURES: FeatureEntry[] = [
 
   // ── Admin tools ────────────────────────────────────────────────
   {
+    id: "admin-revenue-breakdown",
+    name: "Revenue breakdown tab",
+    description:
+      "Site Admin → Revenue shows MRR / ARR / paid users / lifetime revenue at the top, then a tier breakdown (Coach vs Coach Pro by sub count and MRR contribution), a stacked monthly chart of recurring vs one-time revenue over the last 12 months, and a top-20 customers table sorted by lifetime spend with email + tier. Data pulls live from Stripe, cached for 60 minutes. The Overview tab's Paid users / MRR / Total revenue tiles now jump here instead of Stripe config.",
+    category: "Admin tools",
+    status: "internal",
+    addedDate: "2026-05-22",
+  },
+  {
     id: "admin-overview-dashboard",
     name: "Site admin Overview dashboard",
     description:

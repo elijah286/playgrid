@@ -18,6 +18,7 @@ import {
 import { listCoachInvitationsAction } from "@/app/actions/coach-invitations";
 import {
   getBillingSummaryForOverviewAction,
+  getRevenueBreakdownAction,
   getStripeConfigStatusAction,
   listCancellationFeedbackForAdminAction,
   listGiftCodesAction,
@@ -132,6 +133,7 @@ export default async function SettingsPage({
     cancellationFeedbackRes,
     billingSummaryRes,
     shareLifetimeRes,
+    revenueBreakdownRes,
   ] = await Promise.all([
     listUsersForAdminAction(),
     getOpenAIIntegrationStatusAction(),
@@ -172,6 +174,7 @@ export default async function SettingsPage({
     listCancellationFeedbackForAdminAction(),
     getBillingSummaryForOverviewAction(),
     getShareLifetimeSummaryAction(),
+    getRevenueBreakdownAction(),
   ]);
 
   return (
@@ -379,6 +382,12 @@ export default async function SettingsPage({
         billingSummaryError={billingSummaryRes.ok ? null : billingSummaryRes.error}
         initialShareLifetime={shareLifetimeRes.ok ? shareLifetimeRes.summary : null}
         shareLifetimeError={shareLifetimeRes.ok ? null : shareLifetimeRes.error}
+        initialRevenueBreakdown={
+          revenueBreakdownRes.ok ? revenueBreakdownRes.breakdown : null
+        }
+        revenueBreakdownError={
+          revenueBreakdownRes.ok ? null : revenueBreakdownRes.error
+        }
       />
     </div>
   );

@@ -15,6 +15,7 @@ import {
   Settings as SettingsIcon,
   Sparkles,
   Ticket,
+  TrendingUp,
   Users,
 } from "lucide-react";
 import { UsersAdminClient, type AdminUserRow } from "@/features/admin/UsersAdminClient";
@@ -27,6 +28,7 @@ import { ResendSettingsClient } from "@/features/admin/ResendSettingsClient";
 import { GoogleMapsSettingsClient } from "@/features/admin/GoogleMapsSettingsClient";
 import { MaxMindSettingsClient } from "@/features/admin/MaxMindSettingsClient";
 import { RedditPixelSettingsClient } from "@/features/admin/RedditPixelSettingsClient";
+import { RevenueAdminClient } from "@/features/admin/RevenueAdminClient";
 import { FeedbackAdminClient } from "@/features/admin/FeedbackAdminClient";
 import { CoachAiFeedbackTabs } from "@/features/admin/CoachAiFeedbackTabs";
 import type { KbMissRow } from "@/app/actions/coach-ai-feedback";
@@ -68,7 +70,10 @@ import {
   type OverviewJumpTarget,
   type OverviewWindow,
 } from "@/features/admin/OverviewAdminClient";
-import type { BillingSummary } from "@/app/actions/admin-billing";
+import type {
+  BillingSummary,
+  RevenueBreakdown,
+} from "@/app/actions/admin-billing";
 import type { ShareLifetimeSummary } from "@/app/actions/admin-traffic-insights";
 
 type IntegrationProps =
@@ -117,6 +122,7 @@ type Tab =
   | "geography"
   | "opex"
   | "invites"
+  | "revenue"
   | "payments"
   | "feedback"
   | "ai_feedback"
@@ -135,6 +141,7 @@ function isTab(value: string | null | undefined): value is Tab {
     value === "geography" ||
     value === "opex" ||
     value === "invites" ||
+    value === "revenue" ||
     value === "payments" ||
     value === "feedback" ||
     value === "ai_feedback" ||
@@ -202,6 +209,8 @@ export function SettingsClient({
   billingSummaryError,
   initialShareLifetime,
   shareLifetimeError: _shareLifetimeError,
+  initialRevenueBreakdown,
+  revenueBreakdownError,
 }: {
   currentUserId: string;
   initialUsers: AdminUserRow[];
@@ -259,6 +268,8 @@ export function SettingsClient({
   billingSummaryError: string | null;
   initialShareLifetime: ShareLifetimeSummary | null;
   shareLifetimeError: string | null;
+  initialRevenueBreakdown: RevenueBreakdown | null;
+  revenueBreakdownError: string | null;
 }) {
   const [tab, setTab] = useState<Tab>("overview");
   const [analyticsSubTab, setAnalyticsSubTab] = useState<
@@ -334,6 +345,7 @@ export function SettingsClient({
     {
       label: "Revenue",
       items: [
+        { value: "revenue", label: "Revenue", icon: TrendingUp },
         { value: "payments", label: "Payments", icon: CreditCard },
       ],
     },
@@ -473,6 +485,13 @@ export function SettingsClient({
           <CoachInvitationsAdminClient
             initialItems={initialInvites}
             initialError={invitesError}
+          />
+        )}
+
+        {tab === "revenue" && (
+          <RevenueAdminClient
+            breakdown={initialRevenueBreakdown}
+            error={revenueBreakdownError}
           />
         )}
 

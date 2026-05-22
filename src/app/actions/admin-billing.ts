@@ -7,7 +7,11 @@ import { hasSupabaseEnv } from "@/lib/supabase/config";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
 import { getStripeConfigStatus, type StripeConfigStatus } from "@/lib/site/stripe-config";
 import { setCoachAiTierEnabled } from "@/lib/site/pricing-config";
-import { getStripeClient } from "@/lib/billing/stripe";
+import {
+  getStripeClient,
+  tierForPriceId,
+  type BillingInterval,
+} from "@/lib/billing/stripe";
 
 const SITE_ROW_ID = "default";
 
@@ -863,11 +867,200 @@ export type BillingSummary = {
   asOf: string;
 };
 
-// In-memory cache so per-render dashboard hits don't hammer the Stripe API.
-// Stripe data doesn't change minute-to-minute for an overview tile; 1h is
-// plenty.
-let billingSummaryCache: { ts: number; data: BillingSummary } | null = null;
-const BILLING_SUMMARY_TTL_MS = 60 * 60 * 1000;
+export type RevenueTierKey = "coach" | "coach_ai" | "other";
+
+export type RevenueBreakdown = {
+  asOf: string;
+  byTier: Array<{ tier: RevenueTierKey; count: number; mrr: number }>;
+  monthly: Array<{
+    month: string;
+    total: number;
+  }>;
+  topCustomers: Array<{
+    customerId: string;
+    userId: string | null;
+    email: string | null;
+    displayName: string | null;
+    tier: RevenueTierKey | null;
+    lifetimeSpend: number;
+  }>;
+  summary: BillingSummary;
+};
+
+type StripeAggregate = {
+  asOf: string;
+  /** Subscriptions in status "active" — these contribute MRR. */
+  activeSubs: Array<{
+    customerId: string;
+    tier: RevenueTierKey;
+    interval: BillingInterval | null;
+    mrrCents: number;
+  }>;
+  trialingCount: number;
+  /** Last-12-months revenue by year-month. */
+  byMonth: Record<string, { totalCents: number }>;
+  /** Lifetime spend keyed by Stripe customer.id with whatever email we
+   *  observed on a charge for matching back to a user. */
+  byCustomer: Record<string, { totalCents: number; email: string | null }>;
+  /** Per-customer tier as seen on their most recent active subscription. */
+  tierByCustomer: Record<string, RevenueTierKey>;
+  lifetimeNetCents: number;
+};
+
+// Single shared cache for the expensive Stripe iteration. Both the Overview
+// summary and the Revenue tab derive from it.
+let stripeAggregateCache: { ts: number; data: StripeAggregate } | null = null;
+const STRIPE_AGGREGATE_TTL_MS = 60 * 60 * 1000;
+
+function monthKey(d: Date): string {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function last12MonthKeys(now = new Date()): string[] {
+  const out: string[] = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    out.push(monthKey(d));
+  }
+  return out;
+}
+
+async function buildStripeAggregate(): Promise<StripeAggregate> {
+  const { stripe, config } = await getStripeClient();
+
+  const aggregate: StripeAggregate = {
+    asOf: new Date().toISOString(),
+    activeSubs: [],
+    trialingCount: 0,
+    byMonth: {},
+    byCustomer: {},
+    tierByCustomer: {},
+    lifetimeNetCents: 0,
+  };
+
+  for (const status of ["active", "trialing"] as const) {
+    let cursor: string | undefined;
+    while (true) {
+      const page: Awaited<ReturnType<typeof stripe.subscriptions.list>> =
+        await stripe.subscriptions.list({
+          status,
+          limit: 100,
+          starting_after: cursor,
+          expand: ["data.items.data.price"],
+        });
+      for (const sub of page.data) {
+        if (status === "trialing") {
+          aggregate.trialingCount += 1;
+          continue;
+        }
+        const customerId =
+          typeof sub.customer === "string" ? sub.customer : sub.customer?.id ?? "";
+        let mrrCents = 0;
+        let tier: RevenueTierKey = "other";
+        let interval: BillingInterval | null = null;
+        for (const item of sub.items.data) {
+          const price = item.price;
+          const unitAmount = price?.unit_amount ?? 0;
+          const qty = item.quantity ?? 1;
+          const intv = price?.recurring?.interval;
+          if (unitAmount && intv) {
+            const amount = unitAmount * qty;
+            if (intv === "month") mrrCents += amount;
+            else if (intv === "year") mrrCents += Math.round(amount / 12);
+          }
+          if (tier === "other" && price?.id) {
+            const mapped = tierForPriceId(config, price.id);
+            if (mapped) {
+              tier = mapped.tier === "coach_ai" ? "coach_ai" : "coach";
+              interval = mapped.interval;
+            }
+          }
+        }
+        aggregate.activeSubs.push({ customerId, tier, interval, mrrCents });
+        if (customerId) aggregate.tierByCustomer[customerId] = tier;
+      }
+      if (!page.has_more) break;
+      cursor = page.data[page.data.length - 1]?.id;
+      if (!cursor) break;
+    }
+  }
+
+  const twelveMonthCutoff = (() => {
+    const d = new Date();
+    d.setUTCMonth(d.getUTCMonth() - 11, 1);
+    d.setUTCHours(0, 0, 0, 0);
+    return d.getTime();
+  })();
+
+  let chargeCursor: string | undefined;
+  let pages = 0;
+  const MAX_PAGES = 200;
+  while (pages < MAX_PAGES) {
+    const page: Awaited<ReturnType<typeof stripe.charges.list>> =
+      await stripe.charges.list({
+        limit: 100,
+        starting_after: chargeCursor,
+      });
+    for (const ch of page.data) {
+      if (!ch.paid) continue;
+      const net = (ch.amount_captured ?? 0) - (ch.amount_refunded ?? 0);
+      aggregate.lifetimeNetCents += net;
+
+      const customerId =
+        typeof ch.customer === "string" ? ch.customer : ch.customer?.id ?? "";
+      if (customerId) {
+        const slot = aggregate.byCustomer[customerId] ?? {
+          totalCents: 0,
+          email: null,
+        };
+        slot.totalCents += net;
+        if (!slot.email) {
+          const fromBilling = ch.billing_details?.email ?? null;
+          const fromReceipt = ch.receipt_email ?? null;
+          slot.email = fromBilling ?? fromReceipt;
+        }
+        aggregate.byCustomer[customerId] = slot;
+      }
+
+      const createdMs = (ch.created ?? 0) * 1000;
+      if (createdMs >= twelveMonthCutoff) {
+        const key = monthKey(new Date(createdMs));
+        const bucket = aggregate.byMonth[key] ?? { totalCents: 0 };
+        bucket.totalCents += net;
+        aggregate.byMonth[key] = bucket;
+      }
+    }
+    pages += 1;
+    if (!page.has_more) break;
+    chargeCursor = page.data[page.data.length - 1]?.id;
+    if (!chargeCursor) break;
+  }
+
+  return aggregate;
+}
+
+async function getStripeAggregate(): Promise<StripeAggregate> {
+  if (
+    stripeAggregateCache &&
+    Date.now() - stripeAggregateCache.ts < STRIPE_AGGREGATE_TTL_MS
+  ) {
+    return stripeAggregateCache.data;
+  }
+  const data = await buildStripeAggregate();
+  stripeAggregateCache = { ts: Date.now(), data };
+  return data;
+}
+
+function summaryFromAggregate(agg: StripeAggregate): BillingSummary {
+  const mrrCents = agg.activeSubs.reduce((s, a) => s + a.mrrCents, 0);
+  return {
+    paidUsers: agg.activeSubs.length,
+    trialingUsers: agg.trialingCount,
+    mrr: mrrCents / 100,
+    lifetimeRevenue: agg.lifetimeNetCents / 100,
+    asOf: agg.asOf,
+  };
+}
 
 export async function getBillingSummaryForOverviewAction(): Promise<
   | { ok: true; summary: BillingSummary; cached: boolean }
@@ -876,76 +1069,109 @@ export async function getBillingSummaryForOverviewAction(): Promise<
   const gate = await assertAdmin();
   if (!gate.ok) return { ok: false, error: gate.error };
 
-  if (billingSummaryCache && Date.now() - billingSummaryCache.ts < BILLING_SUMMARY_TTL_MS) {
-    return { ok: true, summary: billingSummaryCache.data, cached: true };
-  }
+  const cacheHit =
+    stripeAggregateCache &&
+    Date.now() - stripeAggregateCache.ts < STRIPE_AGGREGATE_TTL_MS;
 
   try {
-    const { stripe } = await getStripeClient();
+    const agg = await getStripeAggregate();
+    return { ok: true, summary: summaryFromAggregate(agg), cached: !!cacheHit };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return { ok: false, error: msg };
+  }
+}
 
-    let paidUsers = 0;
-    let trialingUsers = 0;
-    let mrrCents = 0;
+export async function getRevenueBreakdownAction(): Promise<
+  | { ok: true; breakdown: RevenueBreakdown; cached: boolean }
+  | { ok: false; error: string }
+> {
+  const gate = await assertAdmin();
+  if (!gate.ok) return { ok: false, error: gate.error };
 
-    for (const status of ["active", "trialing"] as const) {
-      let cursor: string | undefined;
-      while (true) {
-        const page: Awaited<ReturnType<typeof stripe.subscriptions.list>> =
-          await stripe.subscriptions.list({
-            status,
-            limit: 100,
-            starting_after: cursor,
-            expand: ["data.items.data.price"],
-          });
-        for (const sub of page.data) {
-          if (status === "active") paidUsers += 1;
-          else trialingUsers += 1;
-          for (const item of sub.items.data) {
-            const price = item.price;
-            const unitAmount = price?.unit_amount ?? 0;
-            const qty = item.quantity ?? 1;
-            const interval = price?.recurring?.interval;
-            if (!unitAmount || !interval) continue;
-            const amount = unitAmount * qty;
-            if (interval === "month") mrrCents += amount;
-            else if (interval === "year") mrrCents += Math.round(amount / 12);
-          }
-        }
-        if (!page.has_more) break;
-        cursor = page.data[page.data.length - 1]?.id;
-        if (!cursor) break;
-      }
-    }
+  const cacheHit =
+    stripeAggregateCache &&
+    Date.now() - stripeAggregateCache.ts < STRIPE_AGGREGATE_TTL_MS;
 
-    let lifetimeNetCents = 0;
-    let chargeCursor: string | undefined;
-    let pages = 0;
-    const MAX_PAGES = 100;
-    while (pages < MAX_PAGES) {
-      const page: Awaited<ReturnType<typeof stripe.charges.list>> =
-        await stripe.charges.list({
-          limit: 100,
-          starting_after: chargeCursor,
-        });
-      for (const ch of page.data) {
-        if (!ch.paid) continue;
-        lifetimeNetCents += (ch.amount_captured ?? 0) - (ch.amount_refunded ?? 0);
-      }
-      pages += 1;
-      if (!page.has_more) break;
-      chargeCursor = page.data[page.data.length - 1]?.id;
-      if (!chargeCursor) break;
-    }
+  try {
+    const agg = await getStripeAggregate();
 
-    const summary: BillingSummary = {
-      paidUsers,
-      trialingUsers,
-      mrr: mrrCents / 100,
-      lifetimeRevenue: lifetimeNetCents / 100,
-      asOf: new Date().toISOString(),
+    const tierTotals: Record<RevenueTierKey, { count: number; mrrCents: number }> = {
+      coach: { count: 0, mrrCents: 0 },
+      coach_ai: { count: 0, mrrCents: 0 },
+      other: { count: 0, mrrCents: 0 },
     };
-    billingSummaryCache = { ts: Date.now(), data: summary };
-    return { ok: true, summary, cached: false };
+    for (const sub of agg.activeSubs) {
+      tierTotals[sub.tier].count += 1;
+      tierTotals[sub.tier].mrrCents += sub.mrrCents;
+    }
+    const byTier: RevenueBreakdown["byTier"] = (
+      ["coach", "coach_ai", "other"] as RevenueTierKey[]
+    )
+      .map((tier) => ({
+        tier,
+        count: tierTotals[tier].count,
+        mrr: tierTotals[tier].mrrCents / 100,
+      }))
+      .filter((row) => row.count > 0 || row.mrr > 0);
+
+    const months = last12MonthKeys();
+    const monthly: RevenueBreakdown["monthly"] = months.map((month) => {
+      const bucket = agg.byMonth[month] ?? { totalCents: 0 };
+      return { month, total: bucket.totalCents / 100 };
+    });
+
+    const customerEntries = Object.entries(agg.byCustomer)
+      .map(([customerId, info]) => ({ customerId, ...info }))
+      .filter((c) => c.totalCents > 0)
+      .sort((a, b) => b.totalCents - a.totalCents)
+      .slice(0, 20);
+
+    const admin = createServiceRoleClient();
+    const [{ data: authData }, { data: profileRows }] = await Promise.all([
+      admin.auth.admin.listUsers({ perPage: 1000, page: 1 }),
+      admin.from("profiles").select("id, display_name"),
+    ]);
+    const emailToUserId = new Map<string, string>();
+    for (const u of authData?.users ?? []) {
+      if (u.email) emailToUserId.set(u.email.toLowerCase(), u.id);
+    }
+    const displayNameById = new Map<string, string | null>();
+    for (const p of profileRows ?? []) {
+      displayNameById.set(
+        p.id as string,
+        (p as { display_name: string | null }).display_name,
+      );
+    }
+
+    const topCustomers: RevenueBreakdown["topCustomers"] = customerEntries.map(
+      (c) => {
+        const email = c.email ?? null;
+        const userId = email
+          ? emailToUserId.get(email.toLowerCase()) ?? null
+          : null;
+        return {
+          customerId: c.customerId,
+          userId,
+          email,
+          displayName: userId ? displayNameById.get(userId) ?? null : null,
+          tier: agg.tierByCustomer[c.customerId] ?? null,
+          lifetimeSpend: c.totalCents / 100,
+        };
+      },
+    );
+
+    return {
+      ok: true,
+      breakdown: {
+        asOf: agg.asOf,
+        byTier,
+        monthly,
+        topCustomers,
+        summary: summaryFromAggregate(agg),
+      },
+      cached: !!cacheHit,
+    };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     return { ok: false, error: msg };
