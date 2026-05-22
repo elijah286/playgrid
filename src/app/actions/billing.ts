@@ -151,6 +151,116 @@ export async function createCheckoutSessionAction(input: {
 }
 
 /**
+ * Embedded Checkout variant of createCheckoutSessionAction — same trial
+ * logic, customer lookup, and proration guard, but returns a `clientSecret`
+ * for Stripe's `<EmbeddedCheckout />` component instead of a redirect URL.
+ * The user completes payment in an iframe on /checkout; Stripe sends them
+ * to `return_url` (our existing /home welcome flow) after success.
+ */
+export async function createEmbeddedCheckoutSessionAction(input: {
+  tier: Exclude<SubscriptionTier, "free">;
+  interval: BillingInterval;
+}): Promise<
+  { ok: true; clientSecret: string; publishableKey: string }
+  | { ok: false; error: string }
+> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  // Same guard as the redirect path — don't let an already-paid user spin
+  // up a second subscription via Checkout. Tier changes belong on /pricing
+  // through the upgrade/downgrade flows.
+  try {
+    const existing = await getActivePaidSubscriptions(user.id);
+    if (existing.length > 0) {
+      return {
+        ok: false,
+        error:
+          "You already have an active subscription. Use the upgrade flow from the pricing page.",
+      };
+    }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Subscription lookup failed." };
+  }
+
+  try {
+    const { stripe, config } = await getStripeClient();
+    if (!config.publishableKey) {
+      return {
+        ok: false,
+        error: "No Stripe publishable key configured. Set it in admin settings.",
+      };
+    }
+    const priceId = priceIdFor(config, input.tier, input.interval);
+    if (!priceId) {
+      return {
+        ok: false,
+        error: `No Stripe price ID configured for ${input.tier} / ${input.interval}.`,
+      };
+    }
+
+    const customerId = await getCustomerIdForUser(user.id, user.email ?? "");
+    const origin = await siteOrigin();
+
+    // Same trial-eligibility logic as the redirect path — Coach Pro gets
+    // the configurable evaluation window the first time, never again.
+    let trialPeriodDays: number | undefined;
+    if (input.tier === "coach_ai") {
+      const trialUsed = await hasUsedCoachProTrial(user.id);
+      if (!trialUsed) trialPeriodDays = await getCoachAiEvalDays();
+    }
+
+    const welcomeKey = input.tier === "coach_ai" ? "coach_pro" : "team_coach";
+    // After payment, Stripe navigates the top-level window to return_url.
+    // We use the existing /home welcome path so the celebration dialog and
+    // checkout_completed analytics keep firing without changes.
+    const returnUrl = `${origin}/home?welcome=${welcomeKey}&from=checkout&session_id={CHECKOUT_SESSION_ID}`;
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      // Stripe SDK v22 / API 2025-09-30.basil renamed the legacy
+      // `"embedded"` ui_mode value to `"embedded_page"`. Same iframe
+      // checkout, new name.
+      ui_mode: "embedded_page",
+      customer: customerId,
+      line_items: [{ price: priceId, quantity: 1 }],
+      return_url: returnUrl,
+      allow_promotion_codes: true,
+      client_reference_id: user.id,
+      subscription_data: {
+        metadata: { user_id: user.id, tier: input.tier, interval: input.interval },
+        ...(trialPeriodDays
+          ? {
+              trial_period_days: trialPeriodDays,
+              trial_settings: {
+                end_behavior: { missing_payment_method: "cancel" },
+              },
+            }
+          : {}),
+      },
+      ...(trialPeriodDays
+        ? { payment_method_collection: "if_required" as const }
+        : {}),
+      metadata: { user_id: user.id, tier: input.tier, interval: input.interval },
+    });
+    if (!session.client_secret) {
+      return { ok: false, error: "Stripe did not return a client secret." };
+    }
+    return {
+      ok: true,
+      clientSecret: session.client_secret,
+      publishableKey: config.publishableKey,
+    };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Checkout failed." };
+  }
+}
+
+/**
  * Compute the proration preview for a tier upgrade. Called by the pricing
  * page modal before the user confirms — they see exactly what they'll be
  * charged today before clicking "Confirm upgrade".

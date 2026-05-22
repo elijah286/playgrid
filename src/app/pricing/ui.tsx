@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Check, Sparkles } from "lucide-react";
 import {
   createBillingPortalSessionAction,
-  createCheckoutSessionAction,
   previewSubscriptionChangeAction,
   confirmSubscriptionChangeAction,
   previewSubscriptionDowngradeAction,
@@ -169,6 +169,7 @@ export function PricingClient({
    *  "no charge today" footnote is suppressed. */
   coachProTrialUsed?: boolean;
 }) {
+  const router = useRouter();
   const allTiers = buildTiers(freeMaxPlays, seatDefaults, coachAiEvalDays);
   const tiers = showCoachAi ? allTiers : allTiers.filter((t) => t.id !== "coach_ai");
   const [interval, setInterval] = useState<Interval>("month");
@@ -361,25 +362,16 @@ export function PricingClient({
       }
       return;
     }
-    startTransition(async () => {
-      // Telemetry: record the click so the engagement funnel can show
-      // pricing → checkout dropoff. Fired before the action so we still
-      // capture intent if the action fails or the redirect aborts.
-      track({
-        event: "checkout_started",
-        target: t.id,
-        metadata: { interval, tier: t.id },
-      });
-      const res = await createCheckoutSessionAction({
-        tier: t.id as Exclude<SubscriptionTier, "free">,
-        interval,
-      });
-      if (!res.ok) {
-        setErr(res.error);
-        return;
-      }
-      window.location.href = res.url;
+    // Telemetry: record the click so the engagement funnel can show
+    // pricing → checkout dropoff. Fired before navigation so we still
+    // capture intent even if the next page errors. The actual Stripe
+    // checkout session is created on /checkout via embedded mode.
+    track({
+      event: "checkout_started",
+      target: t.id,
+      metadata: { interval, tier: t.id },
     });
+    router.push(`/checkout?tier=${t.id}&interval=${interval}`);
   }
 
   return (

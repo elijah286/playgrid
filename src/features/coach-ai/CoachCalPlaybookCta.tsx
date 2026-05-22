@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { track } from "@/lib/analytics/track";
-import { createCheckoutSessionAction } from "@/app/actions/billing";
 import { CheckoutLoadingOverlay } from "@/features/billing/CheckoutLoadingOverlay";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
 
@@ -190,19 +189,12 @@ export function CoachCalPlaybookCta({
               return;
             }
             // Free user: skip /pricing comparison and jump straight to
-            // Stripe Checkout — they already declared Coach Pro intent.
+            // embedded checkout — they already declared Coach Pro intent.
+            // /checkout handles the active-sub guard and surfaces any
+            // error with a link back to pricing.
             setErr(null);
-            startTransition(async () => {
-              const res = await createCheckoutSessionAction({
-                tier: "coach_ai",
-                interval: "month",
-              });
-              if (!res.ok) {
-                setErr(res.error);
-                router.push("/pricing");
-                return;
-              }
-              window.location.href = res.url;
+            startTransition(() => {
+              router.push("/checkout?tier=coach_ai&interval=month");
             });
           }}
           className="mt-3 flex w-full items-center justify-center rounded-xl py-2 text-sm font-semibold text-white shadow transition hover:opacity-90 disabled:opacity-60"

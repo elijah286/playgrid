@@ -6,7 +6,6 @@ import { Lock } from "lucide-react";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { ENTRY_POINTS, previewCtaLabel, type CoachCalEntryPointId } from "./entry-points";
 import { track } from "@/lib/analytics/track";
-import { createCheckoutSessionAction } from "@/app/actions/billing";
 import { CheckoutLoadingOverlay } from "@/features/billing/CheckoutLoadingOverlay";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
 
@@ -87,21 +86,13 @@ export function CoachAiPreviewChat({
       return;
     }
     // Free user with clear Coach Pro intent: skip /pricing
-    // and jump straight to Stripe Checkout.
+    // and jump straight to embedded checkout. /checkout handles
+    // the active-sub guard and surfaces any error with a link
+    // back to pricing.
     setErr(null);
-    startTransition(async () => {
-      const res = await createCheckoutSessionAction({
-        tier: "coach_ai",
-        interval: "month",
-      });
-      if (!res.ok) {
-        setErr(res.error);
-        onCtaClick?.();
-        router.push("/pricing");
-        return;
-      }
-      onCtaClick?.();
-      window.location.href = res.url;
+    onCtaClick?.();
+    startTransition(() => {
+      router.push("/checkout?tier=coach_ai&interval=month");
     });
   }
 

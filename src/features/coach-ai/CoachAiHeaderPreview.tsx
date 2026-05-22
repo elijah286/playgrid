@@ -5,7 +5,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { Lock } from "lucide-react";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { track } from "@/lib/analytics/track";
-import { createCheckoutSessionAction } from "@/app/actions/billing";
 import { CheckoutLoadingOverlay } from "@/features/billing/CheckoutLoadingOverlay";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
 import { cn } from "@/lib/utils";
@@ -122,26 +121,13 @@ export function CoachAiHeaderPreview({
     }
     // Free + Coach Pro intent is unambiguous (the coach just clicked
     // "Start trial" / "Subscribe"). Skip the /pricing comparison shop
-    // and jump straight to Stripe Checkout — one less click, no
-    // second-guessing the decision.
+    // and jump straight to embedded checkout — one less click, no
+    // second-guessing the decision. /checkout handles the active-sub
+    // guard and surfaces any error with a link back to pricing.
     setErr(null);
-    startTransition(async () => {
-      const res = await createCheckoutSessionAction({
-        tier: "coach_ai",
-        interval: "month",
-      });
-      if (!res.ok) {
-        // Fall back to /pricing on any error (e.g. the active-sub
-        // guard fires because of an out-of-band sub the UI didn't
-        // know about). The coach lands on the comparison page with
-        // the error surfaced so they can react.
-        setErr(res.error);
-        onCtaClick?.();
-        router.push("/pricing");
-        return;
-      }
-      onCtaClick?.();
-      window.location.href = res.url;
+    onCtaClick?.();
+    startTransition(() => {
+      router.push("/checkout?tier=coach_ai&interval=month");
     });
   }
 
