@@ -66,12 +66,6 @@ export default async function LearningCenterPage() {
             Learning Center as the catalog grows. Each lands as a full
             interactive lesson when ready — drop `comingSoon` and add
             it to TUTORIAL_LIST. */}
-        <LessonCard
-          title="Print plays"
-          summary="Send any selection of plays to a print-ready page — wristband, call sheet, full playbook PDF, or a single-play coach card."
-          status="not_started"
-          comingSoon
-        />
       </ul>
     </article>
   );

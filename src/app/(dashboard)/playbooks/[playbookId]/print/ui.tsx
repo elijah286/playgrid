@@ -59,6 +59,8 @@ import {
 import { Badge, Button, Card, Input, SegmentedControl, useToast } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { track } from "@/lib/analytics/track";
+import { TutorialDeepLinkLauncher } from "@/features/tutorials/TutorialDeepLinkLauncher";
+import type { SportVariant } from "@/domain/play/types";
 
 type Props = {
   playbookId: string;
@@ -76,6 +78,9 @@ type Props = {
   isExamplePreview?: boolean;
   /** Site admin can promote user presets into system presets. */
   isSiteAdmin?: boolean;
+  /** Sport variant of the playbook. Used by the deep-link tutorial
+   *  launcher to variant-filter `?tour=` query params. */
+  variant?: SportVariant | null;
 };
 
 type SortKey = "position" | "alpha" | "group" | "tag";
@@ -170,6 +175,7 @@ export function PrintPlaybookClient({
   canRemovePlaysheetWatermark,
   isExamplePreview = false,
   isSiteAdmin = false,
+  variant = null,
 }: Props) {
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
@@ -961,12 +967,13 @@ export function PrintPlaybookClient({
 
   return (
     <>
+      <TutorialDeepLinkLauncher variant={variant} />
       <div className="flex flex-col gap-3 lg:[height:calc(100vh-180px)] lg:min-h-[520px]">
         <Card className="flex flex-wrap items-center justify-between gap-2 p-2">
           <p className="px-1 text-sm font-semibold text-foreground">
             {selected.size} of {initialPack.length} play{initialPack.length === 1 ? "" : "s"} selected
           </p>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2" data-tutor="print-export-buttons">
             <Button
               variant="secondary"
               leftIcon={wristbandLocked ? Lock : Printer}
@@ -1024,6 +1031,7 @@ export function PrintPlaybookClient({
               subtitle={FORMATS.find((f) => f.id === config.product)?.title}
               open={formatOpen}
               onToggle={() => setFormatOpen((v) => !v)}
+              dataTutor="print-format-section"
             >
               <FormatAndPresetPanel
                 config={config}
@@ -1046,6 +1054,7 @@ export function PrintPlaybookClient({
               open={customizeOpen}
               onToggle={() => setCustomizeOpen((v) => !v)}
               icon={Settings2}
+              dataTutor="print-customize-section"
             >
               <CustomizePanel
                 config={config}
@@ -1124,7 +1133,10 @@ export function PrintPlaybookClient({
               )}
             </div>
             {pageCount > 0 ? (
-              <div className="relative flex min-h-0 flex-1 justify-center overflow-auto">
+              <div
+                data-tutor="print-preview"
+                className="relative flex min-h-0 flex-1 justify-center overflow-auto"
+              >
                 <button
                   ref={(el) => {
                     previewSvgRef.current = el;
@@ -1244,6 +1256,7 @@ function Section({
   onToggle,
   icon: Icon,
   children,
+  dataTutor,
 }: {
   title: string;
   subtitle?: string;
@@ -1251,9 +1264,12 @@ function Section({
   onToggle: () => void;
   icon?: React.ComponentType<{ className?: string }>;
   children: React.ReactNode;
+  /** Optional data-tutor key applied to the section's outer Card so
+   *  the tutorial engine can spotlight this collapsible region. */
+  dataTutor?: string;
 }) {
   return (
-    <Card className="overflow-hidden p-0">
+    <Card className="overflow-hidden p-0" data-tutor={dataTutor}>
       <button
         type="button"
         className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-surface-raised"

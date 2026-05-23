@@ -119,6 +119,7 @@ export default async function PlaybookPrintPage({ params }: Props) {
         }
         isExamplePreview={isExamplePreview}
         isSiteAdmin={isSiteAdmin}
+        variant={(book.sport_variant as SportVariant | null) ?? null}
       />
       {isExamplePreview && (
         <StickyExampleCta

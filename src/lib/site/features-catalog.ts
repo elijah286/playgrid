@@ -88,6 +88,15 @@ export const FEATURES: FeatureEntry[] = [
     status: "ga",
     addedDate: "2026-05-22",
   },
+  {
+    id: "tutorial-print-plays",
+    name: "Guided Print-Plays tutorial",
+    description:
+      "A 6-step tour of the print preview page — picking a format (call sheet, playbook, wrist coach), reading the live preview, opening the Customize panel for diagram scale and label toggles, and exporting via the browser print dialog or direct PDF download. Spotlights the format / customize sections, the live preview pane, and the Print + PDF buttons. Launches from the Learning Center directly into the playbook's print page.",
+    category: "Onboarding & help",
+    status: "ga",
+    addedDate: "2026-05-22",
+  },
   // ── Playbook ─────────────────────────────────────────────────────
   {
     id: "playbook-create",

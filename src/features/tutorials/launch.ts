@@ -44,6 +44,13 @@ export async function launchTutorial(
       router.push(`/playbooks/${playbookId}/game?tour=${tutorialId}`);
       return { ok: true };
     }
+    case "print_v1": {
+      // Print preview is publicly available — anyone can browse the live
+      // preview. Wristband export is paywalled, but the tour itself
+      // works for every user.
+      router.push(`/playbooks/${playbookId}/print?tour=${tutorialId}`);
+      return { ok: true };
+    }
   }
 }
 

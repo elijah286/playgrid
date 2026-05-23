@@ -20,6 +20,7 @@ const ALL_TUTORIAL_IDS: ReadonlyArray<TutorialId> = [
   "formations_v1",
   "practice_plan_v1",
   "game_mode_v1",
+  "print_v1",
 ];
 
 export async function listTutorialProgress(): Promise<TutorialProgressRow[]> {
