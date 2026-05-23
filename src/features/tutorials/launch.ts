@@ -23,11 +23,18 @@ export async function launchTutorial(
 ): Promise<{ ok: boolean; error?: string }> {
   switch (tutorialId) {
     case "play_authoring_v1":
-    case "defense_v1":
     case "formations_v1": {
       const res = await createTutorialPlayAction(playbookId);
       if (!res.ok) return { ok: false, error: res.error };
       router.push(`/plays/${res.playId}/edit?tour=${tutorialId}`);
+      return { ok: true };
+    }
+    case "defense_v1": {
+      // The defense lesson teaches coaches to author a standalone
+      // defensive play — starting from the playbook page's New Play
+      // dialog with Defense selected as the play type. We don't create
+      // a scratch play; the coach creates one through the tour.
+      router.push(`/playbooks/${playbookId}?tour=defense_v1`);
       return { ok: true };
     }
     case "practice_plan_v1": {

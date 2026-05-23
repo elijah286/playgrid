@@ -451,6 +451,7 @@ export function OpponentOverlayCard({
                   await onInstallVsPlay(offId);
                 });
               }}
+              data-tutor="install-vs-play"
               className="inline-flex items-center justify-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
             >
               <Swords className="size-3" />

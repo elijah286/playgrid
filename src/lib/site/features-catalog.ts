@@ -56,7 +56,7 @@ export const FEATURES: FeatureEntry[] = [
     id: "tutorial-build-defense",
     name: "Guided Build-a-Defense tutorial",
     description:
-      "A hands-on tour of installing defenses inside the play editor — picking a defensive play or formation from the playbook as an overlay, dropping a custom defense to arrange for this exact play, repositioning defenders, and promoting a custom call to a standalone defensive play. Spotlights the opponent picker, custom-create button, and save-as-defense action with reactive checklists; replayable anytime from the Learning Center.",
+      "An 8-step hands-on tour of authoring a standalone defensive play. Walks the coach from the playbook page's New Play button into the dialog, highlights the Defense section as the play type, follows the navigation into the play editor, then teaches drawing coverage zones, installing movements via the quick-actions menu, and locking the defense against an offensive play via the opponent picker's \"Install vs this play\" button. Spans two surfaces (playbook → editor) and persists across the navigation; replayable anytime from the Learning Center.",
     category: "Onboarding & help",
     status: "ga",
     addedDate: "2026-05-22",

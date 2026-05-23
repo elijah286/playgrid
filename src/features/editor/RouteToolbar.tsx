@@ -385,14 +385,14 @@ export function RouteToolbar({
         />
 
         {isDefense && onAddRectZone && onAddEllipseZone && (
-          <>
+          <span data-tutor="route-toolbar-add-zone" className="contents">
             <Tooltip content="Add rectangular zone">
               <IconButton icon={Square} variant="ghost" size="sm" onClick={onAddRectZone} />
             </Tooltip>
             <Tooltip content="Add elliptical zone">
               <IconButton icon={Circle} variant="ghost" size="sm" onClick={onAddEllipseZone} />
             </Tooltip>
-          </>
+          </span>
         )}
 
         <Tooltip

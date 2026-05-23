@@ -7,6 +7,7 @@ import {
 } from "@/features/admin/ExamplePreviewContext";
 import type { ReferralConfig } from "@/lib/site/referral-config";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
+import { TutorialDeepLinkLauncher } from "@/features/tutorials/TutorialDeepLinkLauncher";
 import { track } from "@/lib/analytics/track";
 import { PlayNumberBadge, EditablePlayNumberBadge } from "@/features/editor/PlayNumberBadge";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -1361,6 +1362,7 @@ function PlaybookDetailClientInner({
     // `hidden`) so no ancestor accidentally becomes a sticky containing
     // block.
     <div className="-mt-8 flex flex-col gap-0 pb-20 sm:gap-4 sm:pb-0">
+      <TutorialDeepLinkLauncher variant={variant} />
       {/* flex+gap (instead of space-y) so display:none siblings — like the
           tab strip on mobile — don't leave a phantom gap above the tab
           content. space-y uses :not([hidden]) which doesn't match
@@ -1831,6 +1833,7 @@ function PlaybookDetailClientInner({
             loading={creating}
             onClick={openFormationPicker}
             title={isViewer ? "Viewers can't create plays" : undefined}
+            data-tutor="new-play-button"
             // No leftIcon: the "+" + label combo wrapped to two lines on
             // narrow phones ("+ New" / "play"). Text-only sizes the
             // button to a single tight pill that never wraps.
@@ -2693,7 +2696,10 @@ function PlaybookDetailClientInner({
               if (e.target === e.currentTarget) setShowFormationPicker(false);
             }}
           >
-          <div className="relative flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-border bg-surface-raised shadow-elevated">
+          <div
+            data-tutor="new-play-dialog"
+            className="relative flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-border bg-surface-raised shadow-elevated"
+          >
             <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-6 py-4">
               <div className="min-w-0">
                 <h2 className="text-base font-bold text-foreground">
@@ -2794,6 +2800,7 @@ function PlaybookDetailClientInner({
                     subtitle={`${sportProfileForVariant(variant).defensePlayerCount} defenders`}
                     open={openSection === "defense"}
                     onHeaderClick={() => setOpenSection("defense")}
+                    dataTutor="new-play-defense-section"
                   >
                     {defenseTemplates.length > 0 && (
                       <>
@@ -4754,6 +4761,7 @@ function PlayTypeSection({
   open,
   onHeaderClick,
   children,
+  dataTutor,
 }: {
   title: string;
   subtitle: string;
@@ -4761,9 +4769,13 @@ function PlayTypeSection({
   onToggle?: () => void;
   onHeaderClick: () => void;
   children: React.ReactNode;
+  /** Optional data-tutor key applied to the section's wrapper so the
+   *  tutorial engine can spotlight the whole collapsible region. */
+  dataTutor?: string;
 }) {
   return (
     <div
+      data-tutor={dataTutor}
       className={`flex flex-col rounded-xl border border-border bg-surface-raised ${open ? "min-h-0 flex-1" : "shrink-0"}`}
     >
       <button
