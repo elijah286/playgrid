@@ -2261,6 +2261,24 @@ export async function runAgent(
     return null;
   })();
   const priorAssistantTurnHadFence = priorAssistantFenceJson !== null;
+  /** Most recent assistant fence that contains OFFENSE players (team="O" or
+   *  unspecified team). Distinct from `priorAssistantFenceJson` which returns
+   *  any fence including defense-only ones.
+   *
+   *  Used by the compose_defense auto-correct path: when Cal calls
+   *  compose_defense WITHOUT on_play, the auto-correct injects a prior fence
+   *  so the overlay branch can run (preserves offense + replaces defenders).
+   *  If the injected fence is itself defense-only, the overlay strips the
+   *  defenders, leaves zero offense, and produces an offense-less result —
+   *  exactly the regression a coach surfaced 2026-05-23 ("install" saved a
+   *  defense play with no offense visible). Walking back to the most recent
+   *  fence WITH offense fixes this: the matchup play that started the chat
+   *  (or any earlier "vs" fence) becomes the on_play target, not the most
+   *  recent defense-only exploration.
+   *
+   *  Falls back to `priorAssistantFenceJson` when no offense fence exists at
+   *  all — preserving the existing behavior for pure-defense conversations. */
+  const priorAssistantOffenseFenceJson = findPriorOffenseFenceJson(history);
   /** Every play fence in the most-recent fence-bearing assistant turn —
    *  not just the first. Cal sometimes emits 3 plays in one reply and
    *  the coach says one "yes" meaning "save all three." Walks back the
@@ -2485,7 +2503,14 @@ export async function runAgent(
       // input drifts from it (different player count, different ids),
       // overwrite the input with the real chat fence. Cal's intent
       // (what to change) is preserved; only the baseline is corrected.
-      const correctedInput = autoCorrectPriorFence(tu.name, tu.input as Record<string, unknown>, priorAssistantFenceJson);
+      // For compose_defense specifically, prefer an offense-containing prior
+      // fence — defense-only fences leave the overlay branch with no offense
+      // to preserve (see priorAssistantOffenseFenceJson docstring above).
+      const priorFenceForTool =
+        tu.name === "compose_defense"
+          ? (priorAssistantOffenseFenceJson ?? priorAssistantFenceJson)
+          : priorAssistantFenceJson;
+      const correctedInput = autoCorrectPriorFence(tu.name, tu.input as Record<string, unknown>, priorFenceForTool);
       const r = await runTool(tu.name, correctedInput, ctx);
       const resultText = r.ok ? r.result : r.error;
       // Capture the LAST fence emitted by any fence-producing tool
@@ -3323,6 +3348,42 @@ export async function synthesizeBudgetExceededReply(
   } catch {
     return null;
   }
+}
+
+/** Walk backwards through assistant turns looking for the most recent ```play
+ *  fence that contains OFFENSE players (anything not tagged `team: "D"`).
+ *
+ *  Compose_defense's overlay branch preserves whatever offense is in the
+ *  prior fence — if there is none (defense-only fence from an earlier
+ *  exploration turn), the overlay strips defenders and produces an offense-
+ *  less result. Walking back to a fence WITH offense fixes the regression
+ *  surfaced 2026-05-23 where "install [defense]" saved a defense play with
+ *  no offense visible.
+ *
+ *  Returns null when no offense-containing fence exists in history — caller
+ *  falls back to the broader `priorAssistantFenceJson` (any fence) so pure-
+ *  defense conversations still work. */
+export function findPriorOffenseFenceJson(
+  history: ReadonlyArray<ChatMessage>,
+): string | null {
+  for (let i = history.length - 1; i >= 0; i--) {
+    const m = history[i];
+    if (m.role !== "assistant") continue;
+    const text = extractAssistantText(m);
+    const matches = [...text.matchAll(/```play\s*\n([\s\S]*?)\n```/g)];
+    for (const match of matches) {
+      const body = match[1].trim();
+      try {
+        const parsed = JSON.parse(body) as { players?: Array<{ team?: string }> };
+        if (!Array.isArray(parsed.players)) continue;
+        const hasOffense = parsed.players.some((p) => p && p.team !== "D");
+        if (hasOffense) return body;
+      } catch {
+        // Not parseable JSON — skip this fence and look for an earlier one.
+      }
+    }
+  }
+  return null;
 }
 
 /** Tool names that accept a prior play fence as a string input. Their

@@ -31,6 +31,7 @@ import {
   shouldEmitLobbyOrphanWarning,
   shouldSkipFenceInCreateAutoCommit,
   SAVE_INTENT_DEFENSE_RE,
+  findPriorOffenseFenceJson,
 } from "./agent";
 import type { ChatMessage } from "./llm";
 
@@ -606,5 +607,125 @@ describe("shouldSkipFenceInCreateAutoCommit — pins the play-page defense-save 
         hasDefenseSaveIntent: false,
       }),
     ).toBe(false);
+  });
+});
+
+describe("findPriorOffenseFenceJson — picks the most recent offense-containing fence", () => {
+  // Surfaced 2026-05-23: a coach asked Cal for a defense matchup ("Spread
+  // Doubles vs 4-1 Man Press"), then said "install". Cal called
+  // compose_defense WITHOUT on_play. The existing autoCorrectPriorFence
+  // injected the most recent fence — which was a defense-only exploration
+  // from an earlier turn. The compose_defense overlay stripped defenders
+  // from the (already empty) offense, producing a saved play with no
+  // offense visible. Fix: prefer an offense-containing fence, not just
+  // any fence.
+
+  const offenseFence = JSON.stringify({
+    title: "Smash Right",
+    players: [
+      { id: "QB", x: 0, y: -5, team: "O" },
+      { id: "C", x: 0, y: 0, team: "O" },
+      { id: "X", x: -10, y: 0, team: "O" },
+      { id: "Y", x: 4, y: -5, team: "O" },
+      { id: "Z", x: 10, y: 0, team: "O" },
+    ],
+  });
+  const defenseOnlyFence = JSON.stringify({
+    title: "5v5 Man Cover 1",
+    focus: "D",
+    players: [
+      { id: "CB", x: -8, y: 5, team: "D" },
+      { id: "NB", x: -3, y: 5, team: "D" },
+      { id: "NB2", x: 3, y: 5, team: "D" },
+      { id: "CB2", x: 8, y: 5, team: "D" },
+      { id: "FS", x: 0, y: 12, team: "D" },
+    ],
+  });
+  const matchupFence = JSON.stringify({
+    title: "Smash Right vs 4-1 Man Press",
+    players: [
+      { id: "QB", x: 0, y: -5, team: "O" },
+      { id: "C", x: 0, y: 0, team: "O" },
+      { id: "X", x: -10, y: 0, team: "O" },
+      { id: "Y", x: 4, y: -5, team: "O" },
+      { id: "Z", x: 10, y: 0, team: "O" },
+      { id: "CB", x: -8, y: 5, team: "D" },
+      { id: "NB", x: -3, y: 5, team: "D" },
+      { id: "NB2", x: 3, y: 5, team: "D" },
+      { id: "CB2", x: 8, y: 5, team: "D" },
+      { id: "FS", x: 0, y: 12, team: "D" },
+    ],
+  });
+
+  it("returns null for an empty history", () => {
+    expect(findPriorOffenseFenceJson([])).toBeNull();
+  });
+
+  it("returns null when only user messages exist", () => {
+    const history: ChatMessage[] = [
+      { role: "user", content: "show me a play" },
+    ];
+    expect(findPriorOffenseFenceJson(history)).toBeNull();
+  });
+
+  it("returns the offense fence when the most recent assistant turn has one", () => {
+    const history: ChatMessage[] = [
+      { role: "assistant", content: `Here it is:\n\n\`\`\`play\n${offenseFence}\n\`\`\`` },
+    ];
+    expect(findPriorOffenseFenceJson(history)).toBe(offenseFence);
+  });
+
+  it("SKIPS the most recent defense-only fence and returns an earlier offense fence (the bug case)", () => {
+    // Cal's history: turn 1 = matchup fence, turn 2 = defense-only exploration.
+    // When the user says "install", we want the matchup (with offense), NOT the
+    // defense-only fence from turn 2 — overlaying onto the defense-only fence
+    // produces an offense-less saved play.
+    const history: ChatMessage[] = [
+      { role: "user", content: "show me Smash vs man press" },
+      { role: "assistant", content: `\`\`\`play\n${matchupFence}\n\`\`\`` },
+      { role: "user", content: "what about a different look" },
+      { role: "assistant", content: `\`\`\`play\n${defenseOnlyFence}\n\`\`\`` },
+    ];
+    expect(findPriorOffenseFenceJson(history)).toBe(matchupFence);
+  });
+
+  it("matches the matchup fence even when focus is 'D' (offense is what matters, not the focus flag)", () => {
+    // A matchup fence with focus:"D" still has offense players — it should
+    // qualify as "offense-containing" because the overlay branch preserves
+    // those offense players verbatim regardless of the focus hint.
+    const focusDWithOffense = JSON.stringify({
+      title: "Spread Doubles vs 4-1 Man Press",
+      focus: "D",
+      players: [
+        { id: "QB", x: 0, y: -5, team: "O" },
+        { id: "C", x: 0, y: 0, team: "O" },
+        { id: "X", x: -10, y: 0, team: "O" },
+        { id: "Y", x: 4, y: -5, team: "O" },
+        { id: "Z", x: 10, y: 0, team: "O" },
+        { id: "CB", x: -8, y: 5, team: "D" },
+      ],
+    });
+    const history: ChatMessage[] = [
+      { role: "assistant", content: `\`\`\`play\n${focusDWithOffense}\n\`\`\`` },
+    ];
+    expect(findPriorOffenseFenceJson(history)).toBe(focusDWithOffense);
+  });
+
+  it("skips unparseable fences gracefully", () => {
+    const broken = "this is not JSON {";
+    const history: ChatMessage[] = [
+      { role: "assistant", content: `\`\`\`play\n${broken}\n\`\`\`` },
+      { role: "assistant", content: `\`\`\`play\n${offenseFence}\n\`\`\`` },
+    ];
+    // The most recent assistant turn has a broken fence; walking back finds
+    // the earlier valid offense fence.
+    expect(findPriorOffenseFenceJson(history)).toBe(offenseFence);
+  });
+
+  it("returns null when all history fences are defense-only", () => {
+    const history: ChatMessage[] = [
+      { role: "assistant", content: `\`\`\`play\n${defenseOnlyFence}\n\`\`\`` },
+    ];
+    expect(findPriorOffenseFenceJson(history)).toBeNull();
   });
 });

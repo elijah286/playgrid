@@ -53,8 +53,17 @@ describe("defensiveReactors — integrity", () => {
         for (const player of a.players) definedDefenderIds.add(player.id);
       }
       for (const r of p.reactors) {
+        // Reactor patterns reference defender ids as they appear in the
+        // rendered fence — AFTER compose_defense's dedup pass suffixes
+        // duplicate ids (e.g. two CBs in flag_5v5 Cover 3 become CB and
+        // CB2). Strip a single trailing digit and re-check; the suffix is
+        // a stable runtime convention, not a catalog-level distinct id.
+        const stripped = r.defender.replace(/[0-9]+$/, "");
+        const matches =
+          definedDefenderIds.has(r.defender) ||
+          definedDefenderIds.has(stripped);
         expect(
-          definedDefenderIds.has(r.defender),
+          matches,
           `${p.variant}/${p.coverage}/${p.concept}: reactor defender "${r.defender}" not in any matching alignment (have: ${[...definedDefenderIds].join(", ")})`,
         ).toBe(true);
       }

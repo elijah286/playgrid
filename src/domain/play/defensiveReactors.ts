@@ -338,6 +338,192 @@ const T11_COVER0_VS_ALL: ReactorPattern = {
   reactors: [],
 };
 
+// ── flag_5v5 patterns ─────────────────────────────────────────────────────
+// flag_5v5 catalogued alignments are F5_COVER_3 ("5v5 Zone" + "Cover 3",
+// defenders FL/FR/CB/FS/CB2 after suffix) and F5_COVER_1 ("5v5 Man" +
+// "Cover 1", defenders CB/NB/NB2/CB2/FS after suffix). Reactor triggers
+// reference the canonical 5v5 offensive roster {X, Y, Z, C} — not the
+// tackle/7v7 H/S labels — since the synthesizer remaps non-canonical
+// labels in flag_5v5. Added 2026-05-23 after a coach surfaced static
+// defenders ("Cal failed to show how the defense should move as the play
+// develops") on a 5v5 install — the reactor catalog had zero flag_5v5
+// entries, so the overlay branch's reactor pass found no pattern and
+// defenders stayed at their alignment positions.
+
+const F5_COVER3_VS_SMASH: ReactorPattern = {
+  variant: "flag_5v5",
+  coverage: "Cover 3",
+  concept: "Smash",
+  description:
+    "Cover 3 vs Smash in 5v5 — the corner-hitch puts CB2 in a vertical bind. Cloud the corner: CB2 carries @Z from underneath, FR drives down on the hitch by @Y. FS stays middle-third for the deep post relief.",
+  reactors: [
+    { defender: "FR", trigger: "Y", behavior: "jump_route",
+      cue: "Sits on the hitch by @Y — drives down on the break, no separation." },
+    { defender: "CB2", trigger: "Z", behavior: "carry_vertical",
+      cue: "Cloud's the corner — undercuts @Z's corner route from below." },
+  ],
+};
+
+const F5_COVER3_VS_SLANTFLAT: ReactorPattern = {
+  variant: "flag_5v5",
+  coverage: "Cover 3",
+  concept: "Slant-Flat",
+  description:
+    "Cover 3 vs Slant-Flat in 5v5 — the slant attacks the hook seam, flat attacks the soft corner. FL drives downhill on @X's slant break; FR squeezes the flat. CB stays over the top on any deep release.",
+  reactors: [
+    { defender: "FL", trigger: "X", behavior: "jump_route",
+      cue: "Drives downhill on @X's slant at the break — 5-yd window, attack." },
+    { defender: "FR", trigger: "Y", behavior: "follow_to_flat",
+      cue: "Caps the flat by @Y — no easy outside catch." },
+  ],
+};
+
+const F5_COVER3_VS_MESH: ReactorPattern = {
+  variant: "flag_5v5",
+  coverage: "Cover 3",
+  concept: "Mesh",
+  description:
+    "Cover 3 vs Mesh in 5v5 — wall off the crossing drags from the flat zones. FL re-routes @X's drag inside-out; FR walls @Y as the second crosser comes through. FS stays clean over the top to take any vertical leak.",
+  reactors: [
+    { defender: "FL", trigger: "X", behavior: "wall_off",
+      cue: "Walls off @X's drag — re-routes inside-out so the QB has to hold." },
+    { defender: "FR", trigger: "Y", behavior: "wall_off",
+      cue: "Walls off the second crosser (@Y) from the right flat zone." },
+  ],
+};
+
+const F5_COVER3_VS_FLOOD: ReactorPattern = {
+  variant: "flag_5v5",
+  coverage: "Cover 3",
+  concept: "Flood",
+  description:
+    "Cover 3 vs Flood in 5v5 — three-level stretch to one side. FR jumps the flat; FS rotates to help over the top of the corner; CB2 carries the vertical. The classic Cover-3 spot drop answer.",
+  reactors: [
+    { defender: "FR", trigger: "C", behavior: "follow_to_flat",
+      cue: "Hits the flat by @C — first underneath read." },
+    { defender: "CB2", trigger: "Z", behavior: "carry_vertical",
+      cue: "Strong-side deep third — carries @Z, no shot over the top." },
+    { defender: "FS", trigger: "Y", behavior: "robber",
+      cue: "Reads the intermediate — robs the sail by @Y." },
+  ],
+};
+
+const F5_COVER3_VS_SNAG: ReactorPattern = {
+  variant: "flag_5v5",
+  coverage: "Cover 3",
+  concept: "Snag",
+  description:
+    "Cover 3 vs Snag in 5v5 — the trips-side stretch puts FR in a hi-lo bind (flat by @C, corner by @Z). FR jumps the flat to take the lowest threat; CB2 carries @Z's corner; FS reads QB eyes and rotates to help.",
+  reactors: [
+    { defender: "FR", trigger: "C", behavior: "follow_to_flat",
+      cue: "Sits the flat by @C — first read; let CB2 take the corner." },
+    { defender: "CB2", trigger: "Z", behavior: "carry_vertical",
+      cue: "Carries @Z's corner — no easy fade behind." },
+  ],
+};
+
+const F5_COVER3_VS_VERTICALS: ReactorPattern = {
+  variant: "flag_5v5",
+  coverage: "Cover 3",
+  concept: "Four Verticals",
+  description:
+    "Cover 3 vs Four Verts in 5v5 — three deep, but four receivers (incl. @C) attack the vertical. CB carries @X; CB2 carries @Z; FS takes the most-threatening inside seam (usually @Y). FL/FR drop to underneath verticals (the @C check release).",
+  reactors: [
+    { defender: "CB", trigger: "X", behavior: "carry_vertical",
+      cue: "Stays over the top of @X — no go-ball over his head." },
+    { defender: "CB2", trigger: "Z", behavior: "carry_vertical",
+      cue: "Stays over the top of @Z — no go-ball over his head." },
+    { defender: "FS", trigger: "Y", behavior: "carry_vertical",
+      cue: "Closes the deep middle — takes the inside seam (@Y)." },
+  ],
+};
+
+const F5_COVER1_VS_SMASH: ReactorPattern = {
+  variant: "flag_5v5",
+  coverage: "Cover 1",
+  concept: "Smash",
+  description:
+    "Cover 1 vs Smash in 5v5 — man-with-help. CB2 locks @Z in man, expects FS over the top on the corner route. CB stays low on @Y's hitch, drives at the break. FS reads QB eyes and rotates to the corner-side deep half.",
+  reactors: [
+    { defender: "CB2", trigger: "Z", behavior: "carry_vertical",
+      cue: "Press-trail @Z — drives the corner upfield, FS has the deep half over the top." },
+    { defender: "CB", trigger: "Y", behavior: "jump_route",
+      cue: "Drives down on @Y's hitch at the break — inside leverage." },
+    { defender: "FS", trigger: "Z", behavior: "robber",
+      cue: "Reads QB to the corner side — caps any deep shot over the top of @Z." },
+  ],
+};
+
+const F5_COVER1_VS_SLANTFLAT: ReactorPattern = {
+  variant: "flag_5v5",
+  coverage: "Cover 1",
+  concept: "Slant-Flat",
+  description:
+    "Cover 1 vs Slant-Flat in 5v5 — CB plays inside leverage on @X knowing FS is the deep-middle insurance. He drives on the slant at the break. NB tracks the flat in man.",
+  reactors: [
+    { defender: "CB", trigger: "X", behavior: "jump_route",
+      cue: "Inside-leverage trail on @X — drives downhill on the slant break (FS has deep)." },
+  ],
+};
+
+const F5_COVER1_VS_MESH: ReactorPattern = {
+  variant: "flag_5v5",
+  coverage: "Cover 1",
+  concept: "Mesh",
+  description:
+    "Cover 1 vs Mesh in 5v5 — the crossers test the man defenders' switch rules. Default: stay with your man across the mesh (trail technique, not switch). NB and NB2 communicate the rub and pass off if needed. CB/CB2 stay tight on @X/@Z.",
+  reactors: [
+    { defender: "NB", trigger: "X", behavior: "wall_off",
+      cue: "Trails @X across the mesh — no clean break from the rub." },
+    { defender: "NB2", trigger: "Y", behavior: "wall_off",
+      cue: "Trails @Y across the mesh — communicate switch only if compromised." },
+  ],
+};
+
+const F5_COVER1_VS_FLOOD: ReactorPattern = {
+  variant: "flag_5v5",
+  coverage: "Cover 1",
+  concept: "Flood",
+  description:
+    "Cover 1 vs Flood in 5v5 — three to one side stresses the man defenders. FS rotates to the flood side for vertical help. CB/NB/CB2 stay tight in man; trust the help and don't bail on the deep route.",
+  reactors: [
+    { defender: "FS", trigger: "Z", behavior: "carry_vertical",
+      cue: "Rotates to the flood side — over-the-top help on @Z." },
+    { defender: "CB2", trigger: "Z", behavior: "carry_vertical",
+      cue: "Press-trail @Z — FS is over the top, no need to bail." },
+  ],
+};
+
+const F5_COVER1_VS_SNAG: ReactorPattern = {
+  variant: "flag_5v5",
+  coverage: "Cover 1",
+  concept: "Snag",
+  description:
+    "Cover 1 vs Snag in 5v5 — the trips-side combination uses natural rubs. CB/NB2/CB2 stay tight in man on @X/@Y/@Z, communicate the rub at the LOS, and use trail technique. FS reads QB eyes for late help.",
+  reactors: [
+    { defender: "CB2", trigger: "Z", behavior: "carry_vertical",
+      cue: "Trails @Z's corner — FS has deep help on the strong side." },
+    { defender: "NB2", trigger: "Y", behavior: "jump_route",
+      cue: "Trails @Y across the snag — drives down on the square-in break." },
+  ],
+};
+
+const F5_COVER1_VS_VERTICALS: ReactorPattern = {
+  variant: "flag_5v5",
+  coverage: "Cover 1",
+  concept: "Four Verticals",
+  description:
+    "Cover 1 vs Four Verts in 5v5 — the offense wants to isolate FS deep. CB/CB2 press-trail the outside verticals; NB/NB2 trail the inside seams. FS reads QB and rotates to the most-threatening seam (usually the strongside Y).",
+  reactors: [
+    { defender: "CB", trigger: "X", behavior: "carry_vertical",
+      cue: "Press-trail @X up the sideline — no separation." },
+    { defender: "CB2", trigger: "Z", behavior: "carry_vertical",
+      cue: "Press-trail @Z up the sideline — no separation." },
+    { defender: "FS", trigger: "Y", behavior: "carry_vertical",
+      cue: "Reads QB; rotates to whichever inside seam shows first — takes @Y." },
+  ],
+};
+
 // ── Catalog ───────────────────────────────────────────────────────────────
 
 export const REACTOR_PATTERNS: ReactorPattern[] = [
@@ -362,6 +548,19 @@ export const REACTOR_PATTERNS: ReactorPattern[] = [
   T11_COVER1_VS_FLOOD,
   T11_COVER1_VS_SLANTFLAT,
   T11_COVER0_VS_ALL,
+  // flag_5v5
+  F5_COVER3_VS_SMASH,
+  F5_COVER3_VS_SLANTFLAT,
+  F5_COVER3_VS_MESH,
+  F5_COVER3_VS_FLOOD,
+  F5_COVER3_VS_SNAG,
+  F5_COVER3_VS_VERTICALS,
+  F5_COVER1_VS_SMASH,
+  F5_COVER1_VS_SLANTFLAT,
+  F5_COVER1_VS_MESH,
+  F5_COVER1_VS_FLOOD,
+  F5_COVER1_VS_SNAG,
+  F5_COVER1_VS_VERTICALS,
 ];
 
 /**
