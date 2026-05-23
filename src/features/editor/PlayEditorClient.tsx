@@ -66,7 +66,6 @@ import {
   ExamplePreviewProvider,
   useExamplePreview,
 } from "@/features/admin/ExamplePreviewContext";
-import { TutorialProvider } from "@/features/tutorials/engine/TutorialProvider";
 import { notifyTutorialAction } from "@/features/tutorials/engine/notify";
 import { PlayAuthoringAutoLauncher } from "@/features/tutorials/PlayAuthoringAutoLauncher";
 import { ROUTE_TEMPLATES, instantiateTemplate } from "@/domain/play/routeTemplates";
@@ -197,7 +196,7 @@ export function PlayEditorClient(props: Props) {
     !props.isPlayArchived &&
     Boolean(props.canEdit);
   return (
-    <TutorialProvider>
+    <>
       <ExamplePreviewProvider
         isPreview={props.isExamplePreview ?? false}
         isArchived={props.isArchived ?? false}
@@ -214,7 +213,7 @@ export function PlayEditorClient(props: Props) {
           playbookId={props.playbookId}
         />
       )}
-    </TutorialProvider>
+    </>
   );
 }
 

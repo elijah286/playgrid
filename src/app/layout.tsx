@@ -7,6 +7,7 @@ import { SiteFooter } from "@/components/layout/SiteFooter";
 import { FieldBackdrop } from "@/components/layout/FieldBackdrop";
 import { ToastProvider } from "@/components/ui/Toast";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
+import { TutorialProvider } from "@/features/tutorials/engine/TutorialProvider";
 import PageViewTracker from "@/components/PageViewTracker";
 import WebVitalsReporter from "@/components/WebVitalsReporter";
 import ConsentGate from "@/components/ConsentGate";
@@ -201,17 +202,19 @@ export default async function RootLayout({
         <ThemeProvider forceLight={!isAuthed}>
           <FieldBackdrop />
           <ToastProvider>
-            <ConfigBanner />
-            <SiteHeader />
-            <div className="flex flex-1 flex-col">{children}</div>
-            <SiteFooter />
-            <PageViewTracker />
-            <WebVitalsReporter />
-            <ConsentGate />
-            <RedditPixel />
-            <NativeAppShell />
-            <OfflineStatusBanner />
-            <ConnectionRecovery />
+            <TutorialProvider>
+              <ConfigBanner />
+              <SiteHeader />
+              <div className="flex flex-1 flex-col">{children}</div>
+              <SiteFooter />
+              <PageViewTracker />
+              <WebVitalsReporter />
+              <ConsentGate />
+              <RedditPixel />
+              <NativeAppShell />
+              <OfflineStatusBanner />
+              <ConnectionRecovery />
+            </TutorialProvider>
           </ToastProvider>
         </ThemeProvider>
       </body>
