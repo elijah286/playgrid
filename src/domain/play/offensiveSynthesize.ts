@@ -51,10 +51,20 @@ type BackArrangement =
 type ReceiverDistribution =
   | { left: number; right: number; te: 0 | 1; bunchSide?: "left" | "right" | null };
 
+/** Non-rectangular placement shapes that don't fit the {left, right, te} model.
+ *  When set, the receivers distribution is ignored and a dedicated placement
+ *  function (`placeCustomShape`) is used. Added 2026-05-23 for flag-specific
+ *  shapes coaches asked for (diamond, tight diamond, flag I-form stack). */
+type CustomShape = "diamond" | "tight_diamond" | "stack_i";
+
 type FormationSpec = {
   qb: QBDepth;
   backs: BackArrangement;
   receivers: ReceiverDistribution;
+  /** Optional override that replaces the standard receiver distribution with
+   *  a fixed geometric shape (diamond, stack-I). When set, the receivers
+   *  distribution above is only used for variant-fit math, not placement. */
+  customShape?: CustomShape;
   /** Strength side. Inverts left/right counts on receivers + flips TE side. */
   strength: "left" | "right";
   /** Optional human-readable disambiguation ("Trips Right", "Pro I Strong Left"). */
@@ -78,13 +88,39 @@ function parseStrength(raw: string): "left" | "right" | null {
  * Returns null when the name is too vague to map confidently — caller can
  * decide whether to default to Spread Doubles or surface an error.
  */
-export function parseFormationName(rawInput: string): FormationSpec | null {
+export function parseFormationName(
+  rawInput: string,
+  variant?: string | null,
+): FormationSpec | null {
   const raw = rawInput.toLowerCase().trim();
   if (!raw) return null;
 
   const strength = parseStrength(raw) ?? "right";
   const has = (kw: string) => raw.includes(kw);
   const matches = (re: RegExp) => re.test(raw);
+  const isFlag =
+    variant === "flag_5v5" || variant === "flag_6v6" || variant === "flag_7v7";
+
+  // Diamond — 4-point shape (C short-middle, 2 wide on LOS, 1 deep middle
+  // behind QB). "Tight Diamond" compresses the wide receivers inward for
+  // pick/rub looks. The 6-man "diamond" entry in the KB ('diamond_6m') uses
+  // 'wishbone' geometry — exclude it here by checking for the 6m marker.
+  // Added 2026-05-23: a coach surfaced Cal hallucinating a Diamond layout
+  // because the parser had no diamond entry → fell back to Spread Doubles.
+  if (matches(/\bdiamond\b/) && !matches(/\b6m\b/)) {
+    const tight = matches(/\btight\b/);
+    return {
+      qb: "shotgun",
+      backs: "none",
+      // Placeholder distribution — overridden by placeCustomShape. The
+      // numbers below are used only by fitReceiversToVariant for the
+      // count-fit math; actual placement comes from the custom branch.
+      receivers: { left: 1, right: 1, te: 0 },
+      customShape: tight ? "tight_diamond" : "diamond",
+      strength,
+      derivedName: tight ? "Tight Diamond" : "Diamond",
+    };
+  }
 
   // Empty / 5-wide — zero backs.
   if (matches(/\b(empty|5[\s-]?wide|five[\s-]?wide|00\s*personnel)\b/)) {
@@ -119,8 +155,28 @@ export function parseFormationName(rawInput: string): FormationSpec | null {
     };
   }
 
-  // Pro I / I-form — 2 backs stacked, QB under center.
+  // I-Formation — variant-dependent shape:
+  //   - Tackle 11: traditional Pro-I (QB under center, FB at -3, HB at -6,
+  //     2 WRs split + TE). Existing test pins this exact shape.
+  //   - Flag (5v5/6v6/7v7): "stack-I" — QB in shotgun, 2 receivers stacked
+  //     in a single-file column directly behind QB (no OL, no FB/HB roles).
+  //     Coaches use this for misdirection / motion / screens off the stack.
+  // The match below covers "Pro I", "I-Form", "I-Formation". A bare "Pro I"
+  // in flag context still maps to the flag stack — coaches occasionally
+  // ask for "Pro I" in flag meaning "the I-stack look," not literally a
+  // QB-under-center Pro-I.
   if (matches(/\b(pro\s*i|i[\s-]?form|i[\s-]?formation)\b/)) {
+    if (isFlag) {
+      return {
+        qb: "shotgun",
+        backs: "none",
+        // Placeholder — actual placement comes from placeCustomShape("stack_i").
+        receivers: { left: 1, right: 1, te: 0 },
+        customShape: "stack_i",
+        strength,
+        derivedName: "I-Formation",
+      };
+    }
     return {
       qb: "under_center",
       backs: "i_stack",
@@ -524,6 +580,85 @@ function placeFlagCenter(): SynthOffensePlayer[] {
   return [{ id: "C", x: 0, y: 0 }];
 }
 
+/**
+ * Place receivers for shapes that don't fit the {left, right, te} model
+ * (diamond, tight diamond, stack-I). Returns the receivers ONLY — the
+ * caller is responsible for placing the C (or OL) + QB.
+ *
+ * Diamond: C at (0,0) [placed elsewhere], X wide-left LOS, Z wide-right LOS,
+ * Y deep middle behind QB at (0,-7). Additional receivers (6v6/7v7) fill
+ * as off-LOS slots between C and the wide WRs.
+ *
+ * Tight Diamond: same 4 points but X/Z pulled inward to ~4-5 yards from
+ * center — designed for picks/rubs vs man press.
+ *
+ * Stack-I: receivers stacked in a single-file column directly behind QB
+ * at y=-7, -10, -13, ... Remaining receivers split wide.
+ */
+function placeCustomShape(
+  shape: CustomShape,
+  skillCount: number,
+  variant: SynthOffense["variant"],
+): SynthOffensePlayer[] {
+  const wideX = variant === "tackle_11" ? 18 : variant === "flag_7v7" ? 12 : 10;
+  const tightX = variant === "tackle_11" ? 8 : variant === "flag_7v7" ? 5 : 4;
+  const players: SynthOffensePlayer[] = [];
+
+  if (shape === "diamond" || shape === "tight_diamond") {
+    const outerX = shape === "tight_diamond" ? tightX : wideX;
+    // Three canonical diamond points (besides C which is placed by the
+    // variant assembler): wide-left, wide-right, deep-middle behind QB.
+    players.push({ id: "X", x: -outerX, y: 0 });
+    players.push({ id: "Z", x:  outerX, y: 0 });
+    players.push({ id: "Y", x: 0, y: -7 });
+    // Variants with > 3 skill positions get additional slots between C and
+    // the wide WRs (off-LOS). 6v6 → +1, 7v7 → +2. Slots alternate sides
+    // (strong-first) so the diamond stays roughly balanced.
+    const slotLabels = ["H", "S", "F"];
+    const slotInner = variant === "tackle_11" ? 7 : variant === "flag_7v7" ? 5 : 4;
+    for (let i = 0; i < skillCount - 3; i++) {
+      const side = i % 2 === 0 ? 1 : -1;
+      players.push({
+        id: slotLabels[i] ?? `H${i + 1}`,
+        x: side * slotInner,
+        y: -1,
+      });
+    }
+    return players;
+  }
+
+  // stack_i — receivers in a vertical column behind the QB. For variants
+  // with > 2 skill positions, additional receivers split wide as X / Z.
+  if (shape === "stack_i") {
+    // 5v5 (3 skill): 1 stacked behind QB + X + Z (column visible against
+    //   the LOS+wide pattern). Smaller-roster variants can't sustain a
+    //   2-deep column because the wide WRs would be missing entirely.
+    // 6v6 (4 skill): 2 stacked + X + Z (true I-stack with wide flankers).
+    // 7v7 (5 skill): 2 stacked + X + slot + Z.
+    // tackle_11 (5 skill): same as 7v7 — though tackle's I-Form is handled
+    //   by the Pro-I branch above and shouldn't reach this code path.
+    const stackCount = skillCount <= 3 ? 1 : 2;
+    for (let i = 0; i < stackCount; i++) {
+      players.push({ id: i === 0 ? "Y" : "H", x: 0, y: -7 - i * 3 });
+    }
+    const remaining = skillCount - stackCount;
+    // Place outermost wide WRs first (X left, Z right), then slots inside.
+    if (remaining >= 1) players.push({ id: "Z", x:  wideX, y: 0 });
+    if (remaining >= 2) players.push({ id: "X", x: -wideX, y: 0 });
+    const innerLabels = ["S", "F"];
+    const slotInner = variant === "tackle_11" ? 7 : variant === "flag_7v7" ? 5 : 4;
+    for (let i = 2; i < remaining; i++) {
+      const side = i % 2 === 0 ? 1 : -1;
+      players.push({ id: innerLabels[i - 2] ?? `S${i}`, x: side * slotInner, y: -1 });
+    }
+    return players;
+  }
+
+  // Exhaustiveness check — TypeScript catches missing shape branches.
+  const _exhaustive: never = shape;
+  return _exhaustive;
+}
+
 function totalSkill(variant: SynthOffense["variant"]): number {
   switch (variant) {
     case "tackle_11": return 5;  // 11 - 5 OL - 1 QB = 5 skill
@@ -585,7 +720,20 @@ function synthesizeForVariant(
   }
   players.push(placeQB(spec.qb));
   players.push(...placeBacks(spec.backs, spec.strength));
-  players.push(...placeReceivers(fittedRec, variant));
+  // Custom shapes (diamond / tight diamond / stack-I) bypass the standard
+  // {left, right, te} receiver placement. The skill count remaining after
+  // QB + (OL or C) + backs determines how many receivers to place.
+  if (spec.customShape) {
+    const backsCount =
+      spec.backs === "none" ? 0
+      : spec.backs === "single" ? 1
+      : spec.backs === "i_stack" || spec.backs === "split" ? 2
+      : 3;
+    const skillRemaining = totalSkill(variant) - backsCount;
+    players.push(...placeCustomShape(spec.customShape, skillRemaining, variant));
+  } else {
+    players.push(...placeReceivers(fittedRec, variant));
+  }
 
   // Round x/y to 1 decimal so the rendered diagram doesn't carry float
   // jitter that the validator's overlap check might mis-detect.
@@ -670,7 +818,7 @@ export function synthesizeOffense(
     ? variant
     : null;
   if (!v) return null;
-  const spec = parseFormationName(formation);
+  const spec = parseFormationName(formation, v);
   if (!spec) return null;
   return synthesizeForVariant(spec, v);
 }

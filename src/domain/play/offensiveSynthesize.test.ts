@@ -57,6 +57,26 @@ const FORMATION_CASES: Array<{
   // accepts either as canonical.
   { variant: "flag_5v5", name: "Spread", mustHave: ["QB", "C", "X", "Y", "Z"] },
   { variant: "flag_5v5", name: "Spread Doubles", mustHave: ["QB", "C", "X", "Y", "Z"] },
+
+  // Diamond family — added 2026-05-23 after a coach surfaced Cal hallucinating
+  // a "Diamond Crossers" layout (synthesizer silently fell back to Spread
+  // Doubles because Diamond wasn't in the parser). Diamond is a 4-point shape:
+  // C short-middle on LOS, two receivers wide, one receiver deep middle behind
+  // QB. Tight Diamond compresses the wide points inward for pick/rub plays.
+  { variant: "flag_5v5", name: "Diamond", mustHave: ["QB", "C", "X", "Y", "Z"] },
+  { variant: "flag_5v5", name: "Tight Diamond", mustHave: ["QB", "C", "X", "Y", "Z"] },
+  { variant: "flag_6v6", name: "Diamond", mustHave: ["QB", "C", "X", "Z"] },
+  { variant: "flag_6v6", name: "Tight Diamond", mustHave: ["QB", "C", "X", "Z"] },
+  { variant: "flag_7v7", name: "Diamond", mustHave: ["QB", "C", "X", "Z"] },
+  { variant: "flag_7v7", name: "Tight Diamond", mustHave: ["QB", "C", "X", "Z"] },
+
+  // I-Formation (flag context) — receivers stacked in a single-file column
+  // behind the QB. Distinct from tackle Pro-I (under-center, FB+HB stack):
+  // in flag the QB is in shotgun and a couple of receivers line up directly
+  // behind in a vertical column. Remaining receivers split wide.
+  { variant: "flag_5v5", name: "I-Formation", mustHave: ["QB", "C", "X", "Y", "Z"] },
+  { variant: "flag_6v6", name: "I-Formation", mustHave: ["QB", "C", "X", "Z"] },
+  { variant: "flag_7v7", name: "I-Formation", mustHave: ["QB", "C", "X", "Z"] },
 ];
 
 describe("synthesizeOffense — variant-correct player counts", () => {
@@ -246,6 +266,102 @@ describe("synthesizeOffense — flag_5v5 canonical roster {Q, C, X, Y, Z}", () =
         `flag_5v5 Trips Right produced non-canonical label "${p.id}"`,
       ).toBe(true);
     }
+  });
+});
+
+describe("synthesizeOffense — Diamond geometry (4-point shape)", () => {
+  // Surfaced 2026-05-23: a coach asked Cal for a "Diamond" formation in
+  // flag_5v5 and got Spread Doubles instead (synthesizer fell back). The
+  // shape contract: C on LOS short-middle, X wide-left on LOS, Z wide-
+  // right on LOS, Y deep-middle behind QB. Tight Diamond pulls X/Z inward
+  // for picks/rubs. The geometric assertions below pin this shape so
+  // future refactors don't silently flatten it back to Spread Doubles.
+
+  it("flag_5v5 Diamond: C short-middle, X/Z wide on LOS, Y behind QB", () => {
+    const synth = synthesizeOffense("flag_5v5", "Diamond");
+    expect(synth, "Diamond returned null — parser doesn't recognize it").not.toBeNull();
+    const byId = new Map(synth!.players.map((p) => [p.id, p]));
+    // C on LOS at center
+    expect(byId.get("C")?.y).toBe(0);
+    expect(byId.get("C")?.x).toBe(0);
+    // Wide receivers on LOS, split apart
+    const x = byId.get("X");
+    const z = byId.get("Z");
+    expect(x, "X (wide left) missing").toBeDefined();
+    expect(z, "Z (wide right) missing").toBeDefined();
+    expect(x!.y).toBe(0);
+    expect(z!.y).toBe(0);
+    expect(x!.x).toBeLessThan(-5); // wide left
+    expect(z!.x).toBeGreaterThan(5); // wide right
+    // Y deep behind QB (y more negative than QB at -5)
+    const y = byId.get("Y");
+    expect(y, "Y (deep back) missing").toBeDefined();
+    expect(y!.y).toBeLessThan(-5);
+    expect(Math.abs(y!.x)).toBeLessThan(2); // centered
+  });
+
+  it("flag_5v5 Tight Diamond: wide receivers compressed inward", () => {
+    const wide = synthesizeOffense("flag_5v5", "Diamond")!;
+    const tight = synthesizeOffense("flag_5v5", "Tight Diamond")!;
+    const wideX = wide.players.find((p) => p.id === "X")!.x;
+    const tightX = tight.players.find((p) => p.id === "X")!.x;
+    // Tight has SMALLER absolute x (closer to center)
+    expect(
+      Math.abs(tightX),
+      `Tight X at x=${tightX} should be inside wide X at x=${wideX}`,
+    ).toBeLessThan(Math.abs(wideX));
+  });
+
+  it("flag_7v7 Diamond: still has 4-point shape (C + X + Z + deep middle)", () => {
+    const synth = synthesizeOffense("flag_7v7", "Diamond")!;
+    expect(synth.players.length).toBe(7);
+    const byId = new Map(synth.players.map((p) => [p.id, p]));
+    expect(byId.get("C")?.y).toBe(0);
+    expect(byId.get("X")!.x).toBeLessThan(-5);
+    expect(byId.get("Z")!.x).toBeGreaterThan(5);
+    // At least one receiver deep behind QB
+    const deep = synth.players.find((p) => p.y < -5 && Math.abs(p.x) < 2 && p.id !== "QB");
+    expect(deep, "Diamond requires a deep-middle receiver behind QB").toBeDefined();
+  });
+});
+
+describe("synthesizeOffense — I-Formation in flag (stack column behind QB)", () => {
+  // Surfaced 2026-05-23: user wants I-Formation in flag to mean "receivers
+  // stacked in a single-file column behind the QB" (NOT the tackle Pro-I
+  // shape of FB + HB under center). The parser must read the variant to
+  // pick the right interpretation. Tackle I-Form behavior is unchanged
+  // and pinned by the existing FORMATION_CASES entry above.
+
+  it("flag_5v5 I-Formation: at least one receiver stacked behind QB on the centerline", () => {
+    const synth = synthesizeOffense("flag_5v5", "I-Formation")!;
+    expect(synth.players.length).toBe(5);
+    // QB at (0, -5). Stacked receivers should be at x≈0, y < -5 (deeper).
+    const stacked = synth.players.filter(
+      (p) => p.id !== "QB" && p.id !== "C" && Math.abs(p.x) < 2 && p.y < -5,
+    );
+    expect(
+      stacked.length,
+      `I-Formation should have at least 1 receiver stacked behind QB on centerline; got [${synth.players.map((p) => `${p.id}@(${p.x},${p.y})`).join(", ")}]`,
+    ).toBeGreaterThanOrEqual(1);
+  });
+
+  it("flag_7v7 I-Formation: 2+ receivers in the I-stack column", () => {
+    const synth = synthesizeOffense("flag_7v7", "I-Formation")!;
+    expect(synth.players.length).toBe(7);
+    const stacked = synth.players.filter(
+      (p) => p.id !== "QB" && p.id !== "C" && Math.abs(p.x) < 2 && p.y < -5,
+    );
+    expect(stacked.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("tackle_11 I-Form is unchanged (Pro-I shape, NOT flag stack column)", () => {
+    // Regression guard: don't accidentally change tackle Pro-I when adding
+    // the flag-context I-form path.
+    const synth = synthesizeOffense("tackle_11", "I-Form")!;
+    expect(synth.players.length).toBe(11);
+    // Pro-I has FB (F) at -3 and HB (B) at -6 — not a flag stack column.
+    expect(synth.players.find((p) => p.id === "F")).toBeDefined();
+    expect(synth.players.find((p) => p.id === "B")).toBeDefined();
   });
 });
 
