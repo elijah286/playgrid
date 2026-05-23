@@ -1779,19 +1779,24 @@ const place_offense: CoachAiTool = {
   def: {
     name: "place_offense",
     description:
-      "Get canonical OFFENSIVE starting alignment for a named formation. " +
-      "ALWAYS call this BEFORE drawing offense in any play diagram — freehanding " +
-      "the formation produces broken looks (Pro I labeled as Spread, players " +
-      "stacked at the same coordinate, missing OL, etc.). The synthesizer " +
-      "handles common formation names and falls back to Spread Doubles when " +
-      "the coach is vague. " +
-      "Returns a `players` array in the same {id, x, y} format as the diagram's " +
-      "players list — drop them straight in with team:\"O\". " +
-      "Recognized formation names (case-insensitive): Spread, Empty / 5-wide, " +
-      "Trips (with optional 'Right'/'Left'), Doubles / 2x2, Twins, Bunch, Stack, " +
-      "Pro I / I-form, Pro Set / Split-back, Singleback / Ace, Pistol, Wishbone, " +
-      "T-formation / Full House, Shotgun. Strength side parsed from " +
-      "'right'/'left'/'strong'/'weak' if present.",
+      "Get an OFFENSIVE starting alignment. Three modes: " +
+      "(1) NAMED FORMATION (most common): pass `formation` — synthesizer returns the canonical layout. " +
+      "Recognized names (case-insensitive): Spread, Empty / 5-wide, Trips (Right/Left), Doubles / 2x2, " +
+      "Twins, Bunch, Stack, Diamond, Tight Diamond, I-Formation (flag-context = stack column behind QB; " +
+      "tackle-context = Pro-I), Pro I / I-form, Pro Set / Split-back, Singleback / Ace, Pistol, Wishbone, " +
+      "T-formation / Full House, Shotgun, Trips Bunch. Strength side parsed from 'right'/'left'/'strong'/'weak'. " +
+      "(2) NAMED FORMATION + MODIFIERS: same as (1) but pass `spacing: 'tight'|'wide'` to compress/expand " +
+      "the receiver splits, `stack: 'FRONT-BACK'` (e.g. 'Z-Y') to stack one receiver behind another, " +
+      "and/or `overrides: {playerId: {x?, y?}}` to nudge specific players off their canonical spot. " +
+      "Use this when the coach asks for a named formation with tweaks: 'Diamond with X off the LOS at 3 yards', " +
+      "'Tight Bunch with Y stacked behind Z'. " +
+      "(3) CUSTOM FREEHAND LAYOUT: pass `custom_layout` (a full {id, x, y}[] array) when the coach describes a " +
+      "layout that doesn't match any catalog name. Skips the catalog entirely. Roster count must match the " +
+      "variant (5 for flag_5v5, 6 for flag_6v6, 7 for flag_7v7, 11 for tackle_11). The same downstream " +
+      "validators (overlap, color-clash, missing players) still apply. " +
+      "ALWAYS call this BEFORE drawing offense — hand-authoring the players[] array in the fence is forbidden " +
+      "and the chat-time validator REJECTS full-offense diagrams where place_offense wasn't called this turn. " +
+      "Returns a `players` array in {id, x, y} format — drop them in with team:\"O\".",
     input_schema: {
       type: "object",
       properties: {
@@ -1800,43 +1805,164 @@ const place_offense: CoachAiTool = {
           description:
             "Formation name as the coach said it. Examples: \"Spread Doubles\", " +
             "\"Trips Right\", \"Pro I Strong Left\", \"Empty\", \"Pistol\", " +
-            "\"Wishbone\".",
+            "\"Diamond\", \"Tight Diamond\", \"I-Formation\". " +
+            "Optional when `custom_layout` is provided.",
+        },
+        spacing: {
+          type: "string",
+          enum: ["tight", "wide", "normal"],
+          description:
+            "Modifier on the formation's receiver splits. 'tight' pulls receivers " +
+            "~50% inward (for pick/rub looks vs press); 'wide' pushes them ~30% " +
+            "outward; 'normal' (default) uses catalog splits. Use when the coach " +
+            "says 'tight bunch', 'wide doubles', 'compressed diamond'.",
+        },
+        stack: {
+          type: "string",
+          description:
+            "Stack two receivers — format 'FRONT-BACK' (e.g. 'Z-Y' means Y aligns " +
+            "behind Z at the same x, 2 yards back). Use when the coach asks for a " +
+            "stacked alignment for pre-snap disguise.",
+        },
+        overrides: {
+          type: "object",
+          description:
+            "Per-player coordinate overrides applied AFTER the formation produces its " +
+            "baseline. Map of player_id → { x?: number, y?: number }. Either coord can " +
+            "be omitted to keep the catalog default. Use for surgical adjustments: " +
+            "'Diamond with X off the LOS at 3 yards' → overrides: { X: { y: -3 } }. " +
+            "An override targeting a player that isn't in the formation is silently " +
+            "skipped — the tool's response warns when this happens.",
+          additionalProperties: {
+            type: "object",
+            properties: {
+              x: { type: "number" },
+              y: { type: "number" },
+            },
+            additionalProperties: false,
+          },
+        },
+        custom_layout: {
+          type: "array",
+          description:
+            "Full freehand player layout — skips catalog lookup entirely. Use ONLY " +
+            "when the coach describes a formation that doesn't match any catalog " +
+            "name AND can't be expressed via formation + overrides. Each entry must " +
+            "have a unique id and explicit x/y. Roster count must match the variant. " +
+            "Validators still gate the output for overlaps, color clashes, etc.",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              x: { type: "number" },
+              y: { type: "number" },
+            },
+            required: ["id", "x", "y"],
+            additionalProperties: false,
+          },
         },
       },
-      required: ["formation"],
       additionalProperties: false,
     },
   },
   async handler(input, ctx) {
     const formation = typeof input.formation === "string" ? input.formation.trim() : "";
-    if (!formation) return { ok: false, error: "formation is required." };
+    const customLayout = Array.isArray(input.custom_layout)
+      ? (input.custom_layout as Array<{ id: unknown; x: unknown; y: unknown }>)
+      : null;
+    const spacing = typeof input.spacing === "string" ? input.spacing : null;
+    const stack = typeof input.stack === "string" ? input.stack.trim() : "";
+    const overrides = (input.overrides && typeof input.overrides === "object" && !Array.isArray(input.overrides))
+      ? (input.overrides as Record<string, { x?: unknown; y?: unknown }>)
+      : null;
+
+    if (!formation && !customLayout) {
+      return { ok: false, error: "Either `formation` or `custom_layout` is required." };
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { synthesizeOffense, synthesizeOffenseFallback } = require("@/domain/play/offensiveSynthesize") as typeof import("@/domain/play/offensiveSynthesize");
+    const synthMod = require("@/domain/play/offensiveSynthesize") as typeof import("@/domain/play/offensiveSynthesize");
+    const { synthesizeOffense, synthesizeOffenseFallback, applyOverrides, applySpacingModifier, applyStackModifier, buildCustomOffense } = synthMod;
 
     const variant = ctx.sportVariant ?? "flag_7v7";
-    const synth = synthesizeOffense(variant, formation) ?? synthesizeOffenseFallback(variant);
-    if (!synth) {
-      return {
-        ok: false,
-        error:
-          `No offensive synthesizer available for variant "${variant}". ` +
-          `Place offense by hand using the prompt's formation legality rules.`,
-      };
+    const warnings: string[] = [];
+
+    // Mode 3: custom freehand layout — bypass catalog entirely.
+    let synth: ReturnType<typeof synthesizeOffense> = null;
+    if (customLayout) {
+      const parsed = customLayout
+        .filter((p) => typeof p.id === "string" && typeof p.x === "number" && typeof p.y === "number")
+        .map((p) => ({ id: p.id as string, x: p.x as number, y: p.y as number }));
+      if (parsed.length !== customLayout.length) {
+        warnings.push("Some custom_layout entries were malformed (non-string id or non-number coord) and were dropped.");
+      }
+      synth = buildCustomOffense(variant as "flag_5v5" | "flag_6v6" | "flag_7v7" | "tackle_11", parsed);
+      if (!synth) {
+        return { ok: false, error: "custom_layout failed structural check (empty or duplicate ids)." };
+      }
+    } else {
+      // Mode 1/2: named formation, optionally with modifiers.
+      synth = synthesizeOffense(variant, formation) ?? synthesizeOffenseFallback(variant);
+      if (!synth) {
+        return {
+          ok: false,
+          error:
+            `No offensive synthesizer available for variant "${variant}". ` +
+            `Place offense by hand using the prompt's formation legality rules.`,
+        };
+      }
+      // Apply spacing modifier first (broad-stroke adjustment), then stack
+      // (targeted relocation), then overrides (surgical positioning). Order
+      // matters: overrides should win over spacing/stack so the coach's most
+      // specific intent is preserved.
+      if (spacing === "tight" || spacing === "wide" || spacing === "normal") {
+        applySpacingModifier(synth.players, spacing);
+      }
+      if (stack) {
+        const ok = applyStackModifier(synth.players, stack);
+        if (!ok) {
+          warnings.push(
+            `Stack modifier "${stack}" couldn't be applied — invalid format ` +
+            `(use "FRONT-BACK", e.g. "Z-Y") or one of the named players isn't in this formation.`,
+          );
+        }
+      }
+      if (overrides) {
+        // Coerce to typed shape before passing into the synth helper.
+        const typedOverrides: Record<string, { x?: number; y?: number }> = {};
+        for (const [id, ov] of Object.entries(overrides)) {
+          if (!ov || typeof ov !== "object") continue;
+          const entry: { x?: number; y?: number } = {};
+          if (typeof ov.x === "number") entry.x = ov.x;
+          if (typeof ov.y === "number") entry.y = ov.y;
+          if (Object.keys(entry).length > 0) typedOverrides[id] = entry;
+        }
+        const { missing } = applyOverrides(synth.players, typedOverrides);
+        if (missing.length > 0) {
+          warnings.push(
+            `Overrides targeted players not in this formation: ${missing.join(", ")}. ` +
+            `Those overrides were skipped — verify the player ids match the catalog roster.`,
+          );
+        }
+      }
     }
 
     const playersJson = JSON.stringify(
       synth.players.map((p) => ({ id: p.id, x: p.x, y: p.y, team: "O" })),
     );
 
+    const headline = customLayout
+      ? `Custom freehand layout (${synth.variant}):`
+      : `${synth.exactMatch ? "Synthesized" : "Synthesized (fallback to Spread Doubles)"} "${synth.formation}" (${synth.variant}):`;
+
     const lines: string[] = [
-      `${synth.exactMatch ? "Synthesized" : "Synthesized (fallback to Spread Doubles)"} "${synth.formation}" (${synth.variant}):`,
+      headline,
       synth.description,
       "",
       `Drop these players into your diagram (team:"O"):`,
       playersJson,
     ];
-    if (!synth.exactMatch) {
+    if (!synth.exactMatch && !customLayout) {
       lines.push(
         "",
         "NOTE: I couldn't pin down the formation from the name, so I drew a " +
@@ -1844,6 +1970,9 @@ const place_offense: CoachAiTool = {
         "correct you (\"Drew Spread Doubles by default — let me know if you " +
         "meant something else.\").",
       );
+    }
+    if (warnings.length > 0) {
+      lines.push("", "WARNINGS:", ...warnings.map((w) => `- ${w}`));
     }
     return { ok: true, result: lines.join("\n") };
   },

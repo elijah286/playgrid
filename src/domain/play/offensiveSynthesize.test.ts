@@ -19,7 +19,14 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { synthesizeOffense } from "./offensiveSynthesize";
+import {
+  synthesizeOffense,
+  applyOverrides,
+  applySpacingModifier,
+  applyStackModifier,
+  buildCustomOffense,
+  parseStackSpec,
+} from "./offensiveSynthesize";
 import { sportProfileForVariant } from "./factory";
 
 const FORMATION_CASES: Array<{
@@ -362,6 +369,183 @@ describe("synthesizeOffense — I-Formation in flag (stack column behind QB)", (
     // Pro-I has FB (F) at -3 and HB (B) at -6 — not a flag stack column.
     expect(synth.players.find((p) => p.id === "F")).toBeDefined();
     expect(synth.players.find((p) => p.id === "B")).toBeDefined();
+  });
+});
+
+describe("Flexibility modifiers — applyOverrides", () => {
+  // Added 2026-05-23: coaches asked for flexibility beyond named formations
+  // (Phase 1). Overrides let Cal start from a catalog baseline and tweak
+  // individual players. Tests pin: applies single coord, applies both,
+  // unknown ids land in `missing`, doesn't mutate unspecified players.
+
+  it("applies x only when y is omitted", () => {
+    const players = [
+      { id: "X", x: -10, y: 0 },
+      { id: "Z", x: 10, y: 0 },
+    ];
+    const { applied } = applyOverrides(players, { X: { x: -7 } });
+    expect(applied).toEqual(["X"]);
+    expect(players[0]).toEqual({ id: "X", x: -7, y: 0 });
+    expect(players[1]).toEqual({ id: "Z", x: 10, y: 0 }); // untouched
+  });
+
+  it("applies both x and y when both specified", () => {
+    const players = [{ id: "Y", x: 0, y: -5 }];
+    applyOverrides(players, { Y: { x: 0, y: -7 } });
+    expect(players[0]).toEqual({ id: "Y", x: 0, y: -7 });
+  });
+
+  it("returns missing ids for overrides targeting non-existent players", () => {
+    const players = [{ id: "X", x: -10, y: 0 }];
+    const { applied, missing } = applyOverrides(players, {
+      X: { y: -3 },
+      Z: { x: 10 }, // doesn't exist in this formation
+      FB: { y: -5 }, // also missing
+    });
+    expect(applied).toEqual(["X"]);
+    expect(missing.sort()).toEqual(["FB", "Z"]);
+  });
+
+  it("rounds coordinates to 1 decimal (no float jitter)", () => {
+    const players = [{ id: "X", x: 0, y: 0 }];
+    applyOverrides(players, { X: { x: -7.876543, y: -3.123456 } });
+    expect(players[0].x).toBe(-7.9);
+    expect(players[0].y).toBe(-3.1);
+  });
+});
+
+describe("Flexibility modifiers — applySpacingModifier", () => {
+  it("tight pulls wide receivers ~50% inward, leaves centerline players alone", () => {
+    const players = [
+      { id: "C", x: 0, y: 0 },
+      { id: "QB", x: 0, y: -5 },
+      { id: "X", x: -10, y: 0 },
+      { id: "Z", x: 10, y: 0 },
+      { id: "Y", x: 0, y: -7 },
+    ];
+    applySpacingModifier(players, "tight");
+    expect(players[0]).toEqual({ id: "C", x: 0, y: 0 }); // centerline untouched
+    expect(players[1]).toEqual({ id: "QB", x: 0, y: -5 }); // centerline untouched
+    expect(players[2].x).toBe(-5); // X tightens from -10 to -5
+    expect(players[3].x).toBe(5);  // Z tightens from 10 to 5
+    expect(players[4]).toEqual({ id: "Y", x: 0, y: -7 }); // centerline untouched
+  });
+
+  it("wide pushes outward", () => {
+    const players = [
+      { id: "X", x: -10, y: 0 },
+      { id: "Z", x: 10, y: 0 },
+    ];
+    applySpacingModifier(players, "wide");
+    expect(players[0].x).toBe(-13); // 10 * 1.3
+    expect(players[1].x).toBe(13);
+  });
+
+  it("normal is a no-op", () => {
+    const players = [
+      { id: "X", x: -10, y: 0 },
+      { id: "Z", x: 10, y: 0 },
+    ];
+    applySpacingModifier(players, "normal");
+    expect(players[0].x).toBe(-10);
+    expect(players[1].x).toBe(10);
+  });
+});
+
+describe("Flexibility modifiers — applyStackModifier", () => {
+  it("places BACK directly behind FRONT at same x, 2yds back", () => {
+    const players = [
+      { id: "Y", x: 0, y: -5 },
+      { id: "Z", x: 10, y: 0 },
+    ];
+    const ok = applyStackModifier(players, "Z-Y");
+    expect(ok).toBe(true);
+    const y = players.find((p) => p.id === "Y")!;
+    const z = players.find((p) => p.id === "Z")!;
+    expect(y.x).toBe(z.x); // Y now aligned with Z
+    expect(y.y).toBe(z.y - 2); // 2 yds behind
+  });
+
+  it("returns false when stack spec is malformed", () => {
+    const players = [{ id: "X", x: -10, y: 0 }];
+    expect(applyStackModifier(players, "not a stack")).toBe(false);
+    expect(applyStackModifier(players, "")).toBe(false);
+  });
+
+  it("returns false when one of the named players isn't in the formation", () => {
+    const players = [{ id: "X", x: -10, y: 0 }];
+    expect(applyStackModifier(players, "X-Z")).toBe(false); // Z missing
+    expect(applyStackModifier(players, "Z-X")).toBe(false); // Z missing
+  });
+});
+
+describe("parseStackSpec", () => {
+  it("parses canonical FRONT-BACK", () => {
+    expect(parseStackSpec("Z-Y")).toEqual({ front: "Z", back: "Y" });
+  });
+
+  it("tolerates whitespace around the spec", () => {
+    expect(parseStackSpec("  X-Y  ")).toEqual({ front: "X", back: "Y" });
+  });
+
+  it("returns null for non-conforming input", () => {
+    expect(parseStackSpec("X")).toBeNull();
+    expect(parseStackSpec("X Y")).toBeNull();
+    expect(parseStackSpec("X-Y-Z")).toBeNull();
+    expect(parseStackSpec("")).toBeNull();
+  });
+});
+
+describe("Flexibility — buildCustomOffense (Phase 2)", () => {
+  // Custom freehand: Cal authors a layout that doesn't fit any catalog name.
+  // The synthesizer doesn't validate "is this a real formation" — it only
+  // checks the structural shape (non-empty, unique ids). Downstream validators
+  // catch overlaps, missing players, color clashes.
+
+  it("returns a SynthOffense with the provided players", () => {
+    const result = buildCustomOffense("flag_5v5", [
+      { id: "QB", x: 0, y: -5 },
+      { id: "C", x: 0, y: 0 },
+      { id: "X", x: -7, y: -3 },
+      { id: "Y", x: 0, y: -7 },
+      { id: "Z", x: 7, y: -3 },
+    ]);
+    expect(result).not.toBeNull();
+    expect(result!.players.length).toBe(5);
+    expect(result!.formation).toBe("Custom");
+    expect(result!.exactMatch).toBe(true);
+  });
+
+  it("rounds coordinates to 1 decimal", () => {
+    const result = buildCustomOffense("flag_5v5", [
+      { id: "X", x: -7.876543, y: -3.123456 },
+    ]);
+    expect(result!.players[0]).toEqual({ id: "X", x: -7.9, y: -3.1 });
+  });
+
+  it("returns null for empty layout", () => {
+    expect(buildCustomOffense("flag_5v5", [])).toBeNull();
+  });
+
+  it("returns null for layout with duplicate ids", () => {
+    expect(
+      buildCustomOffense("flag_5v5", [
+        { id: "X", x: -10, y: 0 },
+        { id: "X", x: 10, y: 0 },
+      ]),
+    ).toBeNull();
+  });
+
+  it("DOES NOT enforce roster count — that's the caller / validator's job", () => {
+    // The synthesizer is permissive — callers (like place_offense) gate on
+    // variant roster size, and downstream validators (chat-time, save-time)
+    // catch incomplete rosters. This keeps buildCustomOffense useful for
+    // partial layouts (e.g. just the offense for a defense-overlay scenario).
+    const result = buildCustomOffense("flag_5v5", [
+      { id: "QB", x: 0, y: -5 },
+    ]);
+    expect(result).not.toBeNull();
+    expect(result!.players.length).toBe(1);
   });
 });
 

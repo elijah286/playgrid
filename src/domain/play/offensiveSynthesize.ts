@@ -823,6 +823,139 @@ export function synthesizeOffense(
   return synthesizeForVariant(spec, v);
 }
 
+/* ------------------------------------------------------------------ */
+/*  Flexibility modifiers (Phase 1-3, 2026-05-23)                       */
+/* ------------------------------------------------------------------ */
+
+/** Per-player position override. Cal supplies the player id and one or both
+ *  coordinates; the other coord falls through from the catalog. */
+export type PlayerOverride = { x?: number; y?: number };
+
+/** Spacing modifier: scales the magnitude of off-center x-coordinates.
+ *  Centerline players (|x| < 1) are unaffected.
+ *
+ *   - "tight": multiplier 0.5 — receivers pull inward (~half the natural split)
+ *   - "wide":  multiplier 1.3 — receivers spread outward
+ *   - "normal" (default): no change
+ *
+ *   Use when the coach asks for compressed splits ("tight bunch", "tight
+ *   diamond") or wider splits than the catalog default. Cal's prompt
+ *   surfaces this as a modifier on `place_offense`. */
+export type SpacingModifier = "tight" | "wide" | "normal";
+
+/** Stack modifier: take two named players and place the second one DIRECTLY
+ *  behind the first at the same x, 2 yds back. Encoded as "FRONT-BACK" — e.g.
+ *  "Z-Y" means Y stacks behind Z at the same x.
+ *
+ *  Validation: both players must exist in the layout; the "BACK" player's
+ *  current position is discarded in favor of the stack position. Cal
+ *  surfaces this when a coach asks for "X stacked behind Z" etc. */
+export type StackModifier = string; // "FRONT-BACK" pair (e.g. "Z-Y")
+
+const SPACING_FACTOR: Record<SpacingModifier, number> = {
+  tight: 0.5,
+  wide: 1.3,
+  normal: 1.0,
+};
+
+/** Apply spacing modifier in place. Centerline players (|x| < 1) and
+ *  players placed at the exact center (x=0) keep their position so the
+ *  C and centered Y on diamond stays put. */
+export function applySpacingModifier(
+  players: SynthOffensePlayer[],
+  spacing: SpacingModifier,
+): void {
+  const factor = SPACING_FACTOR[spacing];
+  if (factor === 1.0) return;
+  for (const p of players) {
+    if (Math.abs(p.x) < 1) continue;
+    p.x = Math.round(p.x * factor * 10) / 10;
+  }
+}
+
+/** Parse a stack spec like "Z-Y" or "X-H" into the front + back ids.
+ *  Returns null when the format isn't a single dash-separated pair. */
+export function parseStackSpec(spec: string): { front: string; back: string } | null {
+  const match = /^([A-Za-z][A-Za-z0-9]*)-([A-Za-z][A-Za-z0-9]*)$/.exec(spec.trim());
+  if (!match) return null;
+  return { front: match[1], back: match[2] };
+}
+
+/** Apply a stack modifier in place — moves `back` to be 2 yds behind `front`
+ *  at the same x. Returns true on success, false when either id is missing.
+ *  Stacking is for pre-snap disguise (route distribution unclear); the
+ *  receiver behind releases late, the receiver in front jams or quick-releases. */
+export function applyStackModifier(
+  players: SynthOffensePlayer[],
+  stack: StackModifier,
+): boolean {
+  const parsed = parseStackSpec(stack);
+  if (!parsed) return false;
+  const front = players.find((p) => p.id === parsed.front);
+  const back = players.find((p) => p.id === parsed.back);
+  if (!front || !back) return false;
+  back.x = front.x;
+  back.y = front.y - 2; // 2 yds behind the front receiver
+  return true;
+}
+
+/** Apply per-player x/y overrides in place. Unknown ids are silently
+ *  ignored (caller is responsible for verifying the overrides reference
+ *  real players in the layout — the place_offense tool surfaces a warning
+ *  when an override targets a player that didn't make it into the roster). */
+export function applyOverrides(
+  players: SynthOffensePlayer[],
+  overrides: Record<string, PlayerOverride>,
+): { applied: string[]; missing: string[] } {
+  const applied: string[] = [];
+  const missing: string[] = [];
+  for (const [id, override] of Object.entries(overrides)) {
+    const player = players.find((p) => p.id === id);
+    if (!player) {
+      missing.push(id);
+      continue;
+    }
+    if (typeof override.x === "number") player.x = Math.round(override.x * 10) / 10;
+    if (typeof override.y === "number") player.y = Math.round(override.y * 10) / 10;
+    applied.push(id);
+  }
+  return { applied, missing };
+}
+
+/** Build a SynthOffense from a custom freehand layout — no catalog lookup.
+ *  Cal uses this when the coach describes a layout that doesn't match any
+ *  named formation. The output goes through the same sanitizer + validator
+ *  pipeline as catalog-synthesized layouts, so guardrails still catch
+ *  overlaps, missing players, and color clashes.
+ *
+ *  Roster check: count must match the variant. ids must be unique. Returns
+ *  null on basic structural problems; caller surfaces the error to Cal. */
+export function buildCustomOffense(
+  variant: SynthOffense["variant"],
+  layout: Array<{ id: string; x: number; y: number }>,
+): SynthOffense | null {
+  if (layout.length === 0) return null;
+  const seen = new Set<string>();
+  for (const p of layout) {
+    if (seen.has(p.id)) return null; // duplicate id
+    seen.add(p.id);
+  }
+  const players: SynthOffensePlayer[] = layout.map((p) => ({
+    id: p.id,
+    x: Math.round(p.x * 10) / 10,
+    y: Math.round(p.y * 10) / 10,
+  }));
+  return {
+    formation: "Custom",
+    variant,
+    description:
+      `Custom freehand layout (${variant}) — ${layout.length} players placed by the model. ` +
+      `Coach should sanity-check that the spatial relationships match what they asked for.`,
+    players,
+    exactMatch: true,
+  };
+}
+
 /**
  * Last-resort fallback: Spread Doubles (2x2). Use when the coach asks
  * for "an offensive formation" without specifying, or when synthesis
