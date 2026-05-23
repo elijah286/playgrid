@@ -48,6 +48,7 @@ import {
   type DigestPlaybookPref,
 } from "@/app/actions/digest-prefs";
 import { Button, Modal, SegmentedControl, useToast } from "@/components/ui";
+import { useInboxBadge } from "@/features/dashboard/InboxBadgeContext";
 
 type SortMode = "urgency" | "newest" | "oldest";
 type FilterKind =
@@ -160,6 +161,7 @@ export function InboxTab({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const { resolveOptimistically, reviveOptimistically } = useInboxBadge();
   const [alerts, setAlerts] = useState<InboxAlert[]>(initialAlerts);
   const [busy, setBusy] = useState<string | null>(null);
   const [sort, setSort] = useState<SortMode>("urgency");
@@ -498,11 +500,14 @@ export function InboxTab({
     setBusy(busyKey);
     // Optimistic: flip immediately. Roll back if the server rejects.
     setStatusByKey(alert.key, "archived");
+    const wasActive = alert.status === "active";
+    if (wasActive) resolveOptimistically(alert.key);
     startTransition(async () => {
       try {
         const res = await archiveAlertAction(alertRef(alert));
         if (!res.ok) {
           setStatusByKey(alert.key, "active");
+          if (wasActive) reviveOptimistically(alert.key);
           toast(res.error, "error");
           return;
         }
@@ -520,10 +525,13 @@ export function InboxTab({
     // Optimistic remove. If the server fails, the next router.refresh()
     // (or a manual reload) will resurrect the row.
     removeByKey(alert.key);
+    const wasActive = alert.status === "active";
+    if (wasActive) resolveOptimistically(alert.key);
     startTransition(async () => {
       try {
         const res = await deleteAlertAction(alertRef(alert));
         if (!res.ok) {
+          if (wasActive) reviveOptimistically(alert.key);
           toast(res.error, "error");
           router.refresh();
           return;
@@ -540,6 +548,9 @@ export function InboxTab({
     const busyKey = `unarch:${alert.key}`;
     setBusy(busyKey);
     setStatusByKey(alert.key, "active");
+    // Unarchive bumps the active count by one. The badge picks that up
+    // on the next router.refresh() — we don't optimistically increment
+    // because we don't track which keys have been "revived from archive."
     startTransition(async () => {
       try {
         const res = await unarchiveAlertAction(alertRef(alert));
@@ -560,18 +571,23 @@ export function InboxTab({
     const refs = selectedAlerts.map(alertRef);
     if (refs.length === 0) return;
     const keys = selectedAlerts.map((a) => a.key);
+    const previouslyActiveKeys = selectedAlerts
+      .filter((a) => a.status === "active")
+      .map((a) => a.key);
     setBusy("bulk:arch");
     setAlerts((prev) =>
       prev.map((a) =>
         keys.includes(a.key) ? { ...a, status: "archived" } : a,
       ),
     );
+    for (const k of previouslyActiveKeys) resolveOptimistically(k);
     clearSelection();
     setSelectMode(false);
     startTransition(async () => {
       try {
         const res = await bulkArchiveAlertsAction(refs);
         if (!res.ok) {
+          for (const k of previouslyActiveKeys) reviveOptimistically(k);
           toast(res.error, "error");
           router.refresh();
           return;
@@ -588,14 +604,19 @@ export function InboxTab({
     const refs = selectedAlerts.map(alertRef);
     if (refs.length === 0) return;
     const keys = new Set(selectedAlerts.map((a) => a.key));
+    const previouslyActiveKeys = selectedAlerts
+      .filter((a) => a.status === "active")
+      .map((a) => a.key);
     setBusy("bulk:del");
     setAlerts((prev) => prev.filter((a) => !keys.has(a.key)));
+    for (const k of previouslyActiveKeys) resolveOptimistically(k);
     clearSelection();
     setSelectMode(false);
     startTransition(async () => {
       try {
         const res = await bulkDeleteAlertsAction(refs);
         if (!res.ok) {
+          for (const k of previouslyActiveKeys) reviveOptimistically(k);
           toast(res.error, "error");
           router.refresh();
           return;
@@ -617,15 +638,20 @@ export function InboxTab({
       }));
     if (events.length === 0) return;
     const keys = new Set(selectedAlerts.map((a) => a.key));
+    const previouslyActiveKeys = selectedAlerts
+      .filter((a) => a.status === "active")
+      .map((a) => a.key);
     setBusy("bulk:rsvp");
     // Optimistic remove: an RSVP'd event no longer needs your attention.
     setAlerts((prev) => prev.filter((a) => !keys.has(a.key)));
+    for (const k of previouslyActiveKeys) resolveOptimistically(k);
     clearSelection();
     setSelectMode(false);
     startTransition(async () => {
       try {
         const res = await bulkRsvpAction(events, status);
         if (!res.ok) {
+          for (const k of previouslyActiveKeys) reviveOptimistically(k);
           toast(`${res.error} (${res.applied}/${events.length} applied)`, "error");
           router.refresh();
           return;
@@ -650,6 +676,8 @@ export function InboxTab({
     if (!eventId || !occurrenceDate) return;
     const busyKey = `rsvp:${status}:${alert.key}`;
     setBusy(busyKey);
+    const wasActive = alert.status === "active";
+    if (wasActive) resolveOptimistically(alert.key);
     startTransition(async () => {
       try {
         const res = await setRsvpAction({
@@ -659,6 +687,7 @@ export function InboxTab({
           note: null,
         });
         if (!res.ok) {
+          if (wasActive) reviveOptimistically(alert.key);
           toast(res.error, "error");
           return;
         }
@@ -666,6 +695,7 @@ export function InboxTab({
         toast(`RSVP'd ${labelForRsvp(status)}`, "success");
         router.refresh();
       } catch (e) {
+        if (wasActive) reviveOptimistically(alert.key);
         toast(e instanceof Error ? e.message : "Something went wrong.", "error");
       } finally {
         setBusy(null);
@@ -680,6 +710,8 @@ export function InboxTab({
     okMsg: string,
   ) {
     setBusy(busyKey);
+    const wasActive = alert.status === "active";
+    if (wasActive) resolveOptimistically(alert.key);
     startTransition(async () => {
       try {
         let res: { ok: true } | { ok: false; error: string };
@@ -702,6 +734,7 @@ export function InboxTab({
           res = { ok: false, error: "Unknown alert" };
         }
         if (!res.ok) {
+          if (wasActive) reviveOptimistically(alert.key);
           toast(res.error, "error");
           return;
         }
@@ -709,6 +742,7 @@ export function InboxTab({
         toast(okMsg, "success");
         router.refresh();
       } catch (e) {
+        if (wasActive) reviveOptimistically(alert.key);
         toast(e instanceof Error ? e.message : "Something went wrong.", "error");
       } finally {
         setBusy(null);

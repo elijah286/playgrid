@@ -13,6 +13,7 @@ import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { getBetaFeatures, isBetaFeatureAvailable } from "@/lib/site/beta-features-config";
 import { listInboxAlertsAction } from "@/app/actions/inbox";
 import { OfflineAutoRefreshMount } from "@/components/offline/OfflineAutoRefreshMount";
+import { InboxBadgeProvider } from "@/features/dashboard/InboxBadgeContext";
 import { HomeBottomNav } from "./home/HomeBottomNav";
 
 // Auth is NOT enforced here. Anon visitors may reach example-playbook
@@ -105,33 +106,36 @@ export default async function DashboardLayout({
     // site header). The body has `overflow-x: clip` (set in globals
     // CSS via `<body class="...overflow-x-hidden">`) which prevents
     // horizontal scroll without becoming a sticky containing block.
-    <div className="min-h-full">
-      {expirationNotice && <ExpirationBanner notice={expirationNotice} />}
-      <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
-      <NameCapturePrompt needed={nameCaptureNeeded} />
-      <TimeOnSiteTracker />
-      {feedbackSettings.enabled && (
-        <FeedbackWidget
-          hasCreatedPlay={hasCreatedPlay}
-          touchEnabled={feedbackSettings.touchEnabled}
-        />
-      )}
-      {/* Global mobile bottom nav. Persists across every dashboard
-          route so the toolbar never disappears between page navs.
-          The component itself bails (returns null) on routes that
-          have their own toolbar (playbook detail, play editor) so
-          we don't stack two bars on top of each other. */}
-      {user && (
-        <HomeBottomNav
-          showCalendar={teamCalendarAvailable}
-          showCoachCal={coachAiAvailable || showCoachCalPromo}
-          inboxCount={inboxCount}
-          inboxUrgent={inboxUrgent}
-          isAdmin={isAdmin}
-        />
-      )}
-      {user && <OfflineAutoRefreshMount />}
-    </div>
+    <InboxBadgeProvider
+      initialCount={inboxCount}
+      initialUrgent={inboxUrgent}
+    >
+      <div className="min-h-full">
+        {expirationNotice && <ExpirationBanner notice={expirationNotice} />}
+        <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
+        <NameCapturePrompt needed={nameCaptureNeeded} />
+        <TimeOnSiteTracker />
+        {feedbackSettings.enabled && (
+          <FeedbackWidget
+            hasCreatedPlay={hasCreatedPlay}
+            touchEnabled={feedbackSettings.touchEnabled}
+          />
+        )}
+        {/* Global mobile bottom nav. Persists across every dashboard
+            route so the toolbar never disappears between page navs.
+            The component itself bails (returns null) on routes that
+            have their own toolbar (playbook detail, play editor) so
+            we don't stack two bars on top of each other. */}
+        {user && (
+          <HomeBottomNav
+            showCalendar={teamCalendarAvailable}
+            showCoachCal={coachAiAvailable || showCoachCalPromo}
+            isAdmin={isAdmin}
+          />
+        )}
+        {user && <OfflineAutoRefreshMount />}
+      </div>
+    </InboxBadgeProvider>
   );
 }
 

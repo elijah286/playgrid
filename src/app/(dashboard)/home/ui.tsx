@@ -67,6 +67,7 @@ import {
 } from "@/app/(dashboard)/playbooks/[playbookId]/PlaybookHeader";
 import { HomeCalendarTab } from "@/features/calendar/HomeCalendarTab";
 import { InboxTab } from "@/features/dashboard/InboxTab";
+import { useInboxBadge } from "@/features/dashboard/InboxBadgeContext";
 import type { InboxAlert } from "@/app/actions/inbox";
 import type { ActivityEntry } from "@/app/actions/activity";
 import { useIsNativeApp } from "@/lib/native/useIsNativeApp";
@@ -1182,19 +1183,13 @@ export function DashboardClient({
     },
     [searchParams],
   );
-  // Tab badge counts every active item the user hasn't dismissed yet —
-  // including admin "system notices" (signups, purchases, milestones).
-  // The badge drops when the user RSVPs, archives, or deletes; archived
-  // and deleted rows arrive with a non-active status from the server.
-  const inboxCount = inboxAlerts.filter((a) => a.status === "active").length;
-  // Inbox is "urgent" when it contains time-pressured items: pending RSVPs
-  // or (future) billing/system alerts. Otherwise the badge stays neutral.
-  // Archived/deleted items don't drive the urgency flag.
-  const inboxUrgent = inboxAlerts.some(
-    (a) =>
-      a.status === "active" &&
-      (a.kind === "rsvp_pending" || a.kind === "system_alert"),
-  );
+  // Badge count + urgency come from InboxBadgeContext so the desktop tab
+  // nav reacts the moment the coach archives/deletes/RSVPs an alert,
+  // instead of waiting on the layout's router.refresh() round-trip.
+  // The server-rendered baseline is hydrated from the parent layout
+  // (which calls listInboxAlertsAction itself); inboxAlerts here still
+  // drives the in-tab alert list, just not the badge.
+  const { count: inboxCount, urgent: inboxUrgent } = useInboxBadge();
   const activityCount = activityEntries.length;
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();

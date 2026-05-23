@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { BookOpen, Calendar, CreditCard, GraduationCap, Inbox, Loader2, LogOut, MoreHorizontal, Shield, User } from "lucide-react";
 import { CalNavButton } from "@/features/coach-ai/CalNavButton";
+import { useInboxBadge } from "@/features/dashboard/InboxBadgeContext";
 import { signOutAction } from "@/app/actions/auth";
 
 /**
@@ -39,18 +40,15 @@ const HIDE_ON_RE = /^\/(playbooks\/[^/]+|plays\/[^/]+\/edit)/;
 export function HomeBottomNav({
   showCalendar,
   showCoachCal,
-  inboxCount,
-  inboxUrgent,
   isAdmin,
 }: {
   showCalendar: boolean;
   showCoachCal: boolean;
-  inboxCount: number;
-  inboxUrgent: boolean;
   isAdmin: boolean;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { count: inboxCount, urgent: inboxUrgent } = useInboxBadge();
   const [moreOpen, setMoreOpen] = useState(false);
   useEffect(() => {
     if (!moreOpen) return;
