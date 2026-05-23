@@ -229,11 +229,11 @@ export function defensePlayerCountForVariant(
 
 /** Human-readable label for each sport variant, for use in UI. */
 export const SPORT_VARIANT_LABELS: Record<SportVariant, string> = {
-  flag_5v5: "Flag",
-  flag_6v6: "Flag 6v6",
+  flag_5v5: "5v5 Flag",
+  flag_6v6: "6v6 Flag",
   flag_7v7: "7v7",
   other: "Other",
-  tackle_11: "Tackle",
+  tackle_11: "11v11 Tackle",
 };
 
 /**

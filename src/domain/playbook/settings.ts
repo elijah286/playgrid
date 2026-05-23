@@ -125,10 +125,10 @@ export type PlaybookSettings = {
 
 /** Label used in UI + warnings. */
 export const SPORT_VARIANT_LABELS: Record<SportVariant, string> = {
-  flag_5v5: "Flag 5v5",
-  flag_6v6: "Flag 6v6",
+  flag_5v5: "5v5 Flag",
+  flag_6v6: "6v6 Flag",
   flag_7v7: "7v7",
-  tackle_11: "Tackle (11v11)",
+  tackle_11: "11v11 Tackle",
   other: "Other",
 };
 

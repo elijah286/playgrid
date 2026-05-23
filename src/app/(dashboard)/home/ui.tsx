@@ -268,6 +268,9 @@ function PlaybookTile({
         <p className="text-[11px] text-muted">
           {tile.season ? `${tile.season} · ` : ""}
           {tile.play_count} play{tile.play_count === 1 ? "" : "s"}
+          {tile.sport_variant && tile.sport_variant in SPORT_VARIANT_LABELS
+            ? ` · ${SPORT_VARIANT_LABELS[tile.sport_variant]}`
+            : ""}
         </p>
       </div>
     </div>
@@ -667,6 +670,9 @@ function PlaybookBookTile({
                 <p className="mt-0.5 truncate text-[11px] font-medium text-white/80 sm:text-xs">
                   {tile.season ? `${tile.season} · ` : ""}
                   {tile.play_count} play{tile.play_count === 1 ? "" : "s"}
+                  {tile.sport_variant && tile.sport_variant in SPORT_VARIANT_LABELS
+                    ? ` · ${SPORT_VARIANT_LABELS[tile.sport_variant]}`
+                    : ""}
                 </p>
               </div>
             </div>
