@@ -70,6 +70,15 @@ export const FEATURES: FeatureEntry[] = [
     status: "ga",
     addedDate: "2026-05-22",
   },
+  {
+    id: "tutorial-create-practice-plan",
+    name: "Guided Create-Practice-Plan tutorial",
+    description:
+      "A hands-on tour of the practice plan editor — naming the plan, adding a timeline block, setting start time and duration, splitting a block into parallel activities (Skill / Line / Specialists lanes), and saving plus printing for the coaching staff. Spotlights the title input, add-block button, block editor panel, add-lane button, and the save / print buttons with reactive checklists. Launches from the Learning Center by creating a fresh \"Tutorial practice plan\" in the playbook the coach picks.",
+    category: "Onboarding & help",
+    status: "ga",
+    addedDate: "2026-05-22",
+  },
   // ── Playbook ─────────────────────────────────────────────────────
   {
     id: "playbook-create",

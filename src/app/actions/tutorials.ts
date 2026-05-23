@@ -10,6 +10,7 @@ import {
   upsertTutorialProgress,
 } from "@/lib/data/tutorial-progress";
 import { createPlayAction } from "@/app/actions/plays";
+import { createPracticePlanAction } from "@/app/actions/practice-plans";
 import { assertNotLocked } from "@/lib/billing/downgrade-locks";
 import {
   getPlaybookOwnerEntitlement,
@@ -64,6 +65,24 @@ export async function createTutorialPlayAction(playbookId: string) {
   });
   if (!res.ok) return { ok: false as const, error: res.error };
   return { ok: true as const, playId: res.playId };
+}
+
+/**
+ * Create a fresh practice plan in the given playbook for the practice-plan
+ * tutorial. The plan is empty (no blocks) so every step of the tour —
+ * adding a block, setting time, adding a lane — has something to do.
+ *
+ * Practice plans don't have an `is_tutorial` flag (yet) so the plan is
+ * a normal one named "Tutorial practice plan" the coach can rename or
+ * delete after.
+ */
+export async function createTutorialPracticePlanAction(playbookId: string) {
+  if (!hasSupabaseEnv()) {
+    return { ok: false as const, error: "Supabase is not configured." };
+  }
+  const res = await createPracticePlanAction(playbookId, "Tutorial practice plan");
+  if (!res.ok) return { ok: false as const, error: res.error };
+  return { ok: true as const, planId: res.planId };
 }
 
 /**

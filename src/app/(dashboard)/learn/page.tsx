@@ -67,12 +67,6 @@ export default async function LearningCenterPage() {
             interactive lesson when ready — drop `comingSoon` and add
             it to TUTORIAL_LIST. */}
         <LessonCard
-          title="Create a practice plan"
-          summary="Lay out a practice timeline with drills and lanes, attach plays you want reps on, and share the plan with your staff."
-          status="not_started"
-          comingSoon
-        />
-        <LessonCard
           title="Use Game Mode"
           summary="Run plays from the sideline on game day — quick play picker, wristband-friendly callouts, and a clean read for the coordinator."
           status="not_started"

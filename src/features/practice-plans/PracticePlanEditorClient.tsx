@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { ArrowLeft, Plus, Printer, Save, Trash2, Loader2, GripVertical } from "lucide-react";
+import type { SportVariant } from "@/domain/play/types";
 import {
   computeTotalDurationMinutes,
   formatOffset,
@@ -15,6 +16,8 @@ import {
   renamePracticePlanAction,
   savePracticePlanVersionAction,
 } from "@/app/actions/practice-plans";
+import { notifyTutorialAction } from "@/features/tutorials/engine/notify";
+import { TutorialDeepLinkLauncher } from "@/features/tutorials/TutorialDeepLinkLauncher";
 import { EquipmentDiagramPreview } from "./EquipmentDiagramPreview";
 
 function uid(): string {
@@ -48,11 +51,15 @@ export function PracticePlanEditorClient({
   playbookId,
   initialTitle,
   initialDocument,
+  variant,
 }: {
   planId: string;
   playbookId: string;
   initialTitle: string;
   initialDocument: PracticePlanDocument;
+  /** Sport variant of the playbook this plan belongs to. Drives any
+   *  variant-specific copy in deep-linked tutorials. */
+  variant: SportVariant | null;
 }) {
   const [title, setTitle] = useState(initialTitle);
   const [doc, setDoc] = useState<PracticePlanDocument>(() => ({
@@ -116,6 +123,7 @@ export function PracticePlanEditorClient({
     updateDoc((d) => ({ ...d, blocks: [...d.blocks, block] }));
     setSelectedBlockId(block.id);
     setSelectedLaneId(block.lanes[0].id);
+    notifyTutorialAction("plan-block-added");
   };
 
   const deleteBlock = (blockId: string) => {
@@ -150,6 +158,7 @@ export function PracticePlanEditorClient({
           : b,
       ),
     }));
+    notifyTutorialAction("plan-lane-added");
   };
 
   const removeLane = (blockId: string, laneId: string) => {
@@ -198,6 +207,7 @@ export function PracticePlanEditorClient({
 
   return (
     <div className="flex h-screen flex-col bg-background">
+      <TutorialDeepLinkLauncher variant={variant} />
       {/* Header */}
       <header className="flex items-center justify-between gap-4 border-b border-border bg-surface px-4 py-2">
         <div className="flex min-w-0 items-center gap-3">
@@ -212,6 +222,7 @@ export function PracticePlanEditorClient({
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            data-tutor="plan-title"
             className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-base font-semibold hover:border-border focus:border-primary focus:outline-none"
           />
           <span className="whitespace-nowrap text-xs text-muted">
@@ -228,6 +239,7 @@ export function PracticePlanEditorClient({
             href={`/practice-plans/${planId}/print?auto=1`}
             target="_blank"
             rel="noreferrer"
+            data-tutor="plan-print-button"
             className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-semibold hover:bg-surface-inset"
             title="Open print view (save as PDF in print dialog)"
           >
@@ -238,6 +250,7 @@ export function PracticePlanEditorClient({
             type="button"
             onClick={handleSave}
             disabled={saving}
+            data-tutor="plan-save-button"
             className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             {saving ? (
@@ -267,6 +280,7 @@ export function PracticePlanEditorClient({
             <button
               type="button"
               onClick={addBlock}
+              data-tutor="plan-add-block"
               className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary hover:bg-primary/20"
             >
               <Plus className="h-3 w-3" />
@@ -336,7 +350,10 @@ export function PracticePlanEditorClient({
           ) : (
             <div className="mx-auto max-w-3xl space-y-6">
               {/* Block-level controls */}
-              <div className="rounded-lg border border-border bg-surface p-4">
+              <div
+                data-tutor="plan-block-editor"
+                className="rounded-lg border border-border bg-surface p-4"
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1">
                     <label className="block text-xs font-semibold uppercase tracking-wide text-muted">
@@ -422,6 +439,7 @@ export function PracticePlanEditorClient({
                     <button
                       type="button"
                       onClick={() => addLane(selectedBlock.id)}
+                      data-tutor="plan-add-lane"
                       className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary hover:bg-primary/20"
                     >
                       <Plus className="h-3 w-3" />
