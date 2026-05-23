@@ -28,6 +28,7 @@ import type { PlayDocument, SportVariant } from "@/domain/play/types";
 import { useTutorial } from "@/features/tutorials/engine/TutorialProvider";
 import { PLAY_AUTHORING_TUTORIAL } from "@/features/tutorials/tutorials/playAuthoring";
 import { launchPlayAuthoringTour } from "@/features/tutorials/launch";
+import { notifyTutorialAction } from "@/features/tutorials/engine/notify";
 import { useToast } from "@/components/ui";
 import { FormationThumbnail } from "@/app/(dashboard)/playbooks/[playbookId]/PlaybookFormationsTab";
 import {
@@ -481,6 +482,7 @@ function FormationTitlePicker({
   function pick(f: SavedFormation | null) {
     if (!f) {
       dispatch({ type: "document.setFormationLink", formationId: null, formationName: "" });
+      notifyTutorialAction("formation-unlinked");
     } else {
       dispatch({
         type: "document.setFormationLink",
@@ -489,6 +491,7 @@ function FormationTitlePicker({
         players: f.players,
         formationLosY: f.losY,
       });
+      notifyTutorialAction("formation-applied");
     }
     setOpen(false);
   }
@@ -527,6 +530,7 @@ function FormationTitlePicker({
                     if (e.key === "Enter" && filtered.length > 0) pick(filtered[0]);
                   }}
                   placeholder="Search formations…"
+                  data-tutor="formation-picker-search"
                   className="w-full rounded-md border border-border bg-surface-inset py-1.5 pl-7 pr-2 text-xs font-normal text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
                 />
               </div>
@@ -546,8 +550,11 @@ function FormationTitlePicker({
                 const name = window.prompt("Name for the new formation");
                 if (!name || !name.trim()) return;
                 setOpen(false);
-                void onSaveAsNewFormation(name.trim());
+                void Promise.resolve(onSaveAsNewFormation(name.trim())).then(
+                  () => notifyTutorialAction("formation-saved"),
+                );
               }}
+              data-tutor="save-as-formation-button"
               className="flex w-full items-center gap-2 border-b border-border px-3 py-2 text-left text-xs font-medium text-primary hover:bg-primary/5"
             >
               <Plus className="size-3.5" />
@@ -557,6 +564,7 @@ function FormationTitlePicker({
               <button
                 type="button"
                 onClick={() => pick(null)}
+                data-tutor="unlink-formation-button"
                 className="flex w-full items-center gap-2 border-b border-border px-3 py-2 text-left text-xs font-medium text-danger hover:bg-danger/5"
               >
                 <Link2Off className="size-3.5" />

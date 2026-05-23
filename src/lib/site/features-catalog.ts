@@ -61,6 +61,15 @@ export const FEATURES: FeatureEntry[] = [
     status: "ga",
     addedDate: "2026-05-22",
   },
+  {
+    id: "tutorial-use-formations",
+    name: "Guided Use-Formations tutorial",
+    description:
+      "A hands-on tour of the formation picker — opening it from the header, searching by name, browsing the grid or list view, applying a saved formation to the current play, saving the current player layout as a new formation, and unlinking a play from a formation while keeping the layout. Spotlights the picker, search input, save-as-new button, and unlink button with reactive checklists; replayable anytime from the Learning Center.",
+    category: "Onboarding & help",
+    status: "ga",
+    addedDate: "2026-05-22",
+  },
   // ── Playbook ─────────────────────────────────────────────────────
   {
     id: "playbook-create",
