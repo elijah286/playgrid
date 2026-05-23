@@ -2377,26 +2377,42 @@ function EditorCanvasImpl({
                   const rect = svg.getBoundingClientRect();
                   const startX = ev.clientX;
                   const startY = ev.clientY;
+                  const startCX = z.center.x;
+                  const startCY = z.center.y;
                   const startW = z.size.w;
                   const startH = z.size.h;
                   (ev.currentTarget as Element).setPointerCapture?.(ev.pointerId);
                   const onMove = (m: PointerEvent) => {
                     const dx = (m.clientX - startX) / rect.width / fieldAspect;
                     const dy = -(m.clientY - startY) / rect.height;
-                    let nw = startW;
-                    let nh = startH;
-                    if (axis.includes("e")) nw = startW + dx;
-                    if (axis.includes("w")) nw = startW - dx;
-                    if (axis.includes("n")) nh = startH + dy;
-                    if (axis.includes("s")) nh = startH - dy;
+                    // Asymmetric resize: the opposite edge stays anchored and
+                    // only the dragged edge moves. Center shifts by the same
+                    // amount the half-extent changes so the anchored edge
+                    // remains fixed even when the size clamps at min/max.
+                    let nW = startW;
+                    let nCx = startCX;
+                    if (axis.includes("e")) {
+                      nW = Math.max(0.02, Math.min(0.5, startW + dx / 2));
+                      nCx = startCX + (nW - startW);
+                    } else if (axis.includes("w")) {
+                      nW = Math.max(0.02, Math.min(0.5, startW - dx / 2));
+                      nCx = startCX - (nW - startW);
+                    }
+                    let nH = startH;
+                    let nCy = startCY;
+                    if (axis.includes("n")) {
+                      nH = Math.max(0.02, Math.min(0.5, startH + dy / 2));
+                      nCy = startCY + (nH - startH);
+                    } else if (axis.includes("s")) {
+                      nH = Math.max(0.02, Math.min(0.5, startH - dy / 2));
+                      nCy = startCY - (nH - startH);
+                    }
                     dispatch({
                       type: "zone.update",
                       zoneId: z.id,
                       patch: {
-                        size: {
-                          w: Math.max(0.02, Math.min(0.5, nw)),
-                          h: Math.max(0.02, Math.min(0.5, nh)),
-                        },
+                        center: { x: nCx, y: nCy },
+                        size: { w: nW, h: nH },
                       },
                     });
                   };
