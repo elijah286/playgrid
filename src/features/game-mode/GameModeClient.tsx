@@ -61,6 +61,8 @@ import { hapticImpact, hapticSelection, hapticSuccess } from "@/lib/native/hapti
 import { keepAwakeOff, keepAwakeOn } from "@/lib/native/keepAwake";
 import { captureCurrentLocation } from "@/lib/native/geolocation";
 import { setGameSessionVenueAction } from "@/app/actions/game-sessions";
+import { TutorialDeepLinkLauncher } from "@/features/tutorials/TutorialDeepLinkLauncher";
+import type { SportVariant } from "@/domain/play/types";
 
 const HEARTBEAT_MS = 20_000;
 
@@ -1015,6 +1017,9 @@ export function GameModeClient({
       ref={rootRef}
       className="fixed inset-0 z-50 flex flex-col bg-surface-inset text-foreground"
     >
+      <TutorialDeepLinkLauncher
+        variant={(sportVariant as SportVariant | null) ?? null}
+      />
       {/* Top bar — exit affordance and the play name. The X opens the end-
           game dialog for the caller, or quietly leaves for spectators. */}
       <div className="flex items-center gap-2 border-b border-border bg-surface-raised px-2 py-1">
@@ -1122,7 +1127,10 @@ export function GameModeClient({
                       />
                     )}
                   </div>
-                  <div className="flex w-44 shrink-0 flex-col gap-1.5 sm:w-48">
+                  <div
+                    data-tutor="game-mode-pick-next"
+                    className="flex w-44 shrink-0 flex-col gap-1.5 sm:w-48"
+                  >
                     <button
                       type="button"
                       onClick={runNextPlay}
@@ -1145,6 +1153,7 @@ export function GameModeClient({
                 type="button"
                 onClick={openNextPicker}
                 disabled={!currentPlay}
+                data-tutor="game-mode-pick-next"
                 className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-primary bg-primary text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:border-border disabled:bg-surface disabled:text-muted"
               >
                 Choose next play
@@ -1156,15 +1165,17 @@ export function GameModeClient({
         {session &&
           session.kind === "game" &&
           pickerMode !== "next" && (
-            <ScoreCard
-              events={scoreEvents}
-              usLabel={playbookName}
-              themLabel={session.opponent?.trim() || "Opponent"}
-              isTackle={isTackle}
-              onAdd={addScore}
-              onOverwrite={overwriteScore}
-              accentColor={accentColor}
-            />
+            <div data-tutor="game-mode-score">
+              <ScoreCard
+                events={scoreEvents}
+                usLabel={playbookName}
+                themLabel={session.opponent?.trim() || "Opponent"}
+                isTackle={isTackle}
+                onAdd={addScore}
+                onOverwrite={overwriteScore}
+                accentColor={accentColor}
+              />
+            </div>
           )}
       </div>
 

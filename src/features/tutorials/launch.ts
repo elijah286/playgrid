@@ -36,6 +36,14 @@ export async function launchTutorial(
       router.push(`/practice-plans/${res.planId}/edit?tour=${tutorialId}`);
       return { ok: true };
     }
+    case "game_mode_v1": {
+      // Game Mode runs against the live session for the playbook — no
+      // separate scratch resource. Entitlement (Coach+ tier) is enforced
+      // by the /game route; non-entitled users will be redirected to
+      // /pricing on landing.
+      router.push(`/playbooks/${playbookId}/game?tour=${tutorialId}`);
+      return { ok: true };
+    }
   }
 }
 

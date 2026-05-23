@@ -79,6 +79,15 @@ export const FEATURES: FeatureEntry[] = [
     status: "ga",
     addedDate: "2026-05-22",
   },
+  {
+    id: "tutorial-use-game-mode",
+    name: "Guided Use-Game-Mode tutorial",
+    description:
+      "A 7-step walkthrough of the sideline Game Mode flow — game vs scrimmage, picking the next play from a wristband-friendly searchable picker, scoring with thumbs-up / thumbs-down and outcome tags, and tracking the running scoreboard for game sessions. Spotlights the choose-next-play button and the scoreboard; the remaining steps are concept-only since they describe in-session actions that vary by session state. Launches directly into the playbook's Game Mode (entitlement-gated to Coach+ tier).",
+    category: "Onboarding & help",
+    status: "ga",
+    addedDate: "2026-05-22",
+  },
   // ── Playbook ─────────────────────────────────────────────────────
   {
     id: "playbook-create",

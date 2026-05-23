@@ -5,7 +5,8 @@ export type TutorialId =
   | "play_authoring_v1"
   | "defense_v1"
   | "formations_v1"
-  | "practice_plan_v1";
+  | "practice_plan_v1"
+  | "game_mode_v1";
 
 export type TutorialStatus =
   | "not_started"
