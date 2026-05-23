@@ -46,18 +46,18 @@ export const BUILD_DEFENSE_TUTORIAL: TutorialDef = {
     },
     {
       id: "pick-defense",
-      title: "Pick Defense",
+      title: "Tap the Defense tab",
       body: () =>
-        "Open the Defense section. You'll see common alignments for your variant (4-3, 3-4, dime, etc.) plus any defense formations you've already saved. Each option creates a play with the right number of defenders pre-placed.",
+        "Tap the Defense tab — then pick a defensive play to continue. You'll see common alignments for your variant (4-3, 3-4, dime, etc.) plus any defense formations you've already saved. Each option creates a play with the right number of defenders pre-placed.",
       anchor: { kind: "anchor", key: "new-play-defense-section" },
       advance: { kind: "next" },
       dimBackground: false,
     },
     {
       id: "land-in-editor",
-      title: "Pick a formation or start blank",
+      title: "Pick a defensive play",
       body: () =>
-        "Tap a template (or your own saved formation) to drop defenders onto a fresh play. If you want full control, scroll up and use the Offense section's \"No specific formation\" — same idea but blank — defenders show up either way and you can rearrange them.",
+        "Tap a template (or your own saved formation) to drop defenders onto a fresh play. Each option pre-places the right number of defenders so you can jump straight into drawing zones and movements.",
       anchor: { kind: "anchor", key: "new-play-defense-section" },
       // Auto-advance once we land in the editor — the canvas mounts as
       // soon as navigation completes from the picker.
