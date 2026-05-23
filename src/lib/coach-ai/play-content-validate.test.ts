@@ -287,6 +287,74 @@ describe("validateOffensiveCoverage", () => {
     expect(errors).toHaveLength(0);
   });
 
+  it("rejects flag_5v5 'Bunch Right Crossers' missing ONLY @C (user-reported 2026-05-23)", () => {
+    // The exact case the coach surfaced: Cal hand-authored 5 players for a
+    // bunch-right concept and gave routes to Y, Z, X — but completely
+    // forgot @C. The chat-time validator caught it, Cal's single retry
+    // also failed, the buggy fence shipped, and the auto-save error
+    // bounced back to the coach with a vague "Common encodings…" message
+    // that didn't give Cal anything concrete to insert.
+    //
+    // The fix is to put a literal copy-pasteable JSON snippet for each
+    // missing player into the error itself, so both Cal's retry critique
+    // and the auto-save user-facing message lead with the actual fix.
+    const settings = defaultSettingsForVariant("flag_5v5");
+    const errors = validateOffensiveCoverage(
+      {
+        variant: "flag_5v5",
+        players: [
+          { id: "QB", x: 0, y: -5, team: "O" },
+          { id: "C", x: 0, y: 0, team: "O" },
+          { id: "X", x: -10, y: 0, team: "O" },
+          { id: "Y", x: 4, y: -5, team: "O" },
+          { id: "Z", x: 10, y: 0, team: "O" },
+        ],
+        routes: [
+          { from: "Y", path: [[2.8, -2], [-1, -2], [-7.2, -2]] },
+          { from: "Z", path: [[10, 10], [15, 10]] },
+          { from: "X", path: [[-11.5, 0.5], [-15.5, 1.5]] },
+        ],
+      },
+      "flag_5v5",
+      settings,
+    );
+    expect(errors).toHaveLength(1);
+    // Only @C is missing — and the error must contain a concrete
+    // copy-pasteable route entry for @C that Cal can drop straight in.
+    expect(errors[0]).toContain("@C");
+    expect(errors[0]).not.toContain("@X");
+    expect(errors[0]).not.toContain("@Y");
+    expect(errors[0]).not.toContain("@Z");
+    expect(errors[0]).toContain('"from": "C"');
+    expect(errors[0]).toMatch(/"path":\s*\[/);
+  });
+
+  it("includes per-player JSON suggestions for EACH missing player", () => {
+    // When multiple players are missing, the error names each one with
+    // its own copy-pasteable JSON snippet — Cal shouldn't have to guess
+    // route coordinates per player.
+    const settings = defaultSettingsForVariant("flag_5v5");
+    const errors = validateOffensiveCoverage(
+      {
+        variant: "flag_5v5",
+        players: [
+          { id: "Q", x: 0, y: -5, team: "O" },
+          { id: "C", x: 0, y: 0, team: "O" },
+          { id: "X", x: -10, y: 0, team: "O" },
+          { id: "Y", x: 4, y: -5, team: "O" },
+          { id: "Z", x: 10, y: 0, team: "O" },
+        ],
+        routes: [{ from: "X", path: [[-10, 6]] }],
+      },
+      "flag_5v5",
+      settings,
+    );
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain('"from": "C"');
+    expect(errors[0]).toContain('"from": "Y"');
+    expect(errors[0]).toContain('"from": "Z"');
+  });
+
   it("EXEMPTS @C in flag_7v7 (centerIsEligible:false)", () => {
     const settings = defaultSettingsForVariant("flag_7v7");
     const errors = validateOffensiveCoverage(

@@ -195,12 +195,43 @@ export function validateOffensiveCoverage(
   if (missing.length === 0) return [];
 
   const playerList = missing.map((id) => `@${id}`).join(", ");
+
+  // Per-player JSON suggestions. Cal's retry critique passes the validator
+  // error verbatim and the auto-save failure surface shows it to the
+  // coach — both improve dramatically when the message hands over a
+  // literal copy-pasteable entry instead of "common encodings…" prose.
+  // Surfaced 2026-05-23: a Bunch Right concept shipped with only @Y/@X/@Z
+  // routed; Cal's single retry repeated the same mistake because the
+  // generic guidance didn't tell it WHICH @id to add or WHERE.
+  const startById = new Map<string, { x: number; y: number }>();
+  for (const p of offense as Array<{ id?: unknown; x?: unknown; y?: unknown }>) {
+    if (typeof p.id !== "string") continue;
+    startById.set(p.id, {
+      x: typeof p.x === "number" ? p.x : 0,
+      y: typeof p.y === "number" ? p.y : 0,
+    });
+  }
+  const suggestionLines = missing.map((id) => {
+    const start = startById.get(id) ?? { x: 0, y: 0 };
+    // 3-yd upfield from the player's start position — a safe "stay/sit"
+    // default that satisfies the gate. Cal should override with something
+    // tailored to the play (drag, swing, etc.) when intent suggests it.
+    const endY = Math.round((start.y + 3) * 10) / 10;
+    const endX = Math.round(start.x * 10) / 10;
+    const snippet = `{ "from": "${id}", "path": [[${endX}, ${endY}]], "tip": "arrow" }`;
+    if (id.toUpperCase().replace(/\d+$/, "") === "C") {
+      return `  • @${id} → ${snippet} (3-yd sit — common outlet for the center in flag_5v5; swap for a drag/swing/shoot if the play needs it)`;
+    }
+    return `  • @${id} → ${snippet} (3-yd default — replace path with the route the play actually calls for)`;
+  });
+
   return [
     `Flag offensive play is missing actions for: ${playerList}. ` +
-      `In ${variantStr}, every non-QB${centerEligible ? " (including @C, an eligible receiver)" : ""} offensive player must have a route or pre-snap motion. ` +
-      `Common encodings: a pass route → \`{ from: "<id>", path: [[x,y], ...] }\`; pre-snap motion → \`{ from: "<id>", motion: [[x,y], ...], path: [[x,y], ...] }\` (motion is the dashed pre-snap zig-zag, path is the post-snap action — set path to [] for pure motion); a designed run / handoff target → encode the runner's gap as a forward \`path\` (no special "carry" field at the diagram level — the path IS the run). ` +
-      `If the prose says "@B motions then @Z takes the handoff," the diagram MUST have a motion entry for @B AND a forward path for @Z. ` +
-      `Re-emit the diagram with all ${requiredIds.length} required action(s) populated. Don't claim the play is complete in prose unless every named player has a corresponding entry.`,
+      `In ${variantStr}, every non-QB${centerEligible ? " (including @C, an eligible receiver)" : ""} offensive player must have a route or pre-snap motion.\n` +
+      `Add a route entry for each missing player. Copy-pasteable defaults:\n` +
+      `${suggestionLines.join("\n")}\n` +
+      `Other encodings if the play needs them: pre-snap motion → \`{ "from": "<id>", "motion": [[x,y], ...], "path": [[x,y], ...] }\` (set \`path: []\` for pure motion); designed run / handoff target → encode the runner's gap as a forward \`path\` (no "carry" field at the diagram level — the path IS the run). ` +
+      `Re-emit the diagram with all ${requiredIds.length} required action(s) populated.`,
   ];
 }
 
