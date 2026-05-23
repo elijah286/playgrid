@@ -1217,6 +1217,12 @@ export function DashboardClient({
   const [duplicating, setDuplicating] = useState<DashboardPlaybookTile | null>(null);
   const [customizing, setCustomizing] = useState<DashboardPlaybookTile | null>(null);
   const [inviting, setInviting] = useState<DashboardPlaybookTile | null>(null);
+  // Tiles the coach just confirmed deletion on. We hide them locally
+  // before the server action returns so the grid reacts instantly — the
+  // tile reappears if the delete fails.
+  const [optimisticallyRemovedIds, setOptimisticallyRemovedIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
   // Book covers everywhere. The site-admin "hide_lobby_animation" toggle
   // still falls back to flat tiles for low-end-device cohorts; otherwise
   // we always render the cover treatment. Per-tile touch detection inside
@@ -1230,8 +1236,12 @@ export function DashboardClient({
     "dashboard.showExamples",
   );
 
-  const ownedAll = data.playbooks.filter((b) => b.role === "owner" && !b.is_default);
-  const sharedAll = data.playbooks.filter((b) => b.role !== "owner");
+  const visiblePlaybooks =
+    optimisticallyRemovedIds.size > 0
+      ? data.playbooks.filter((b) => !optimisticallyRemovedIds.has(b.id))
+      : data.playbooks;
+  const ownedAll = visiblePlaybooks.filter((b) => b.role === "owner" && !b.is_default);
+  const sharedAll = visiblePlaybooks.filter((b) => b.role !== "owner");
   // Example playbooks are pulled out of the main grid so the admin's
   // real work isn't mixed with marketing copies. They only show when
   // the admin toggles "Show marketing examples".
@@ -1304,6 +1314,38 @@ export function DashboardClient({
         refresh();
       } catch (e) {
         toast(e instanceof Error ? e.message : errLabel, "error");
+      }
+    });
+  }
+
+  function deletePlaybookOptimistic(tile: DashboardPlaybookTile) {
+    setOptimisticallyRemovedIds((prev) => {
+      const next = new Set(prev);
+      next.add(tile.id);
+      return next;
+    });
+    const restore = () =>
+      setOptimisticallyRemovedIds((prev) => {
+        if (!prev.has(tile.id)) return prev;
+        const next = new Set(prev);
+        next.delete(tile.id);
+        return next;
+      });
+    startTransition(async () => {
+      try {
+        const res = await deletePlaybookAction(tile.id);
+        if (!res.ok) {
+          restore();
+          toast(res.error ?? "Couldn't delete playbook.", "error");
+          return;
+        }
+        refresh();
+      } catch (e) {
+        restore();
+        toast(
+          e instanceof Error ? e.message : "Couldn't delete playbook.",
+          "error",
+        );
       }
     });
   }
@@ -1466,7 +1508,7 @@ export function DashboardClient({
           onSelect: () =>
             confirmAnd(
               `Delete "${tile.name}" and all its plays? This can't be undone.`,
-              () => handle(() => deletePlaybookAction(tile.id)),
+              () => deletePlaybookOptimistic(tile),
             ),
         },
       ];
@@ -1533,7 +1575,7 @@ export function DashboardClient({
         onSelect: () =>
           confirmAnd(
             `Delete "${tile.name}" and all its plays? This can't be undone.`,
-            () => handle(() => deletePlaybookAction(tile.id)),
+            () => deletePlaybookOptimistic(tile),
           ),
       },
     ];
