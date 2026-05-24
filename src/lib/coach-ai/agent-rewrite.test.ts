@@ -12,7 +12,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { applyAuthoritativeFenceRewrite } from "./agent";
+import { applyAuthoritativeFenceRewrite, rescueOrStripFence } from "./agent";
 
 describe("applyAuthoritativeFenceRewrite — replace Cal's fence with the tool's", () => {
   const TOOL_FENCE = '{"title":"Mesh","routes":[{"from":"H","path":[[-8.3,1],[12.9,1]]},{"from":"S","path":[[8.4,7],[-12.8,7]]}]}';
@@ -68,5 +68,129 @@ describe("applyAuthoritativeFenceRewrite — replace Cal's fence with the tool's
     const input = "```play-ref\n{\"id\":\"abc\"}\n```";
     const out = applyAuthoritativeFenceRewrite(input, "AUTHORITATIVE");
     expect(out).toBe(input);
+  });
+});
+
+describe("rescueOrStripFence — substitute tool fence first, strip only as fallback", () => {
+  // Phase 4 fix (2026-05-25): eval suite surfaced that Cal frequently
+  // calls compose_play correctly, then IGNORES its output and rebuilds
+  // the play manually (place_offense + get_route_template per route).
+  // Cal hand-authors the resulting fence; Phase 2b's gate catches it
+  // twice and STRIPS the fence — coach sees a stripped reply with
+  // prose only.
+  //
+  // The fix: when validation or provenance fails AFTER retry AND we
+  // have a tool-emitted fence available this turn, SUBSTITUTE Cal's
+  // hand-authored fence with the tool's authoritative version instead
+  // of stripping. The tool fence is in approvedFences by construction
+  // (the provenance tracker captured it on emission), so the
+  // substituted reply ships cleanly.
+  //
+  // Strip remains the fallback for the case where no tool fence is
+  // available (Cal hand-authored without ever calling a tool).
+
+  const TOOL_FENCE = '{"title":"Snag Right","routes":[{"from":"Y","route_kind":"Spot"}]}';
+  const CAL_HAND_AUTHORED =
+    'Here is the play:\n```play\n{"title":"My Snag","routes":[]}\n```\nDetails below.';
+
+  it("no rescue needed when neither gate failed (no-op)", () => {
+    const result = rescueOrStripFence({
+      text: CAL_HAND_AUTHORED,
+      lastFenceFromTool: TOOL_FENCE,
+      lastFenceToolName: "compose_play",
+      validationFailedAfterRetry: false,
+      provenanceFailedAfterRetry: false,
+      validationErrors: [],
+    });
+    expect(result.rescued).toBe(false);
+    expect(result.stripped).toBe(false);
+    expect(result.text).toBe(CAL_HAND_AUTHORED);
+  });
+
+  it("rescues with tool fence when provenance failed after retry", () => {
+    const result = rescueOrStripFence({
+      text: CAL_HAND_AUTHORED,
+      lastFenceFromTool: TOOL_FENCE,
+      lastFenceToolName: "compose_play",
+      validationFailedAfterRetry: false,
+      provenanceFailedAfterRetry: true,
+      validationErrors: [],
+    });
+    expect(result.rescued).toBe(true);
+    expect(result.stripped).toBe(false);
+    // The fence in textToEmit should now be the TOOL's, not Cal's.
+    expect(result.text).toContain("Snag Right");
+    expect(result.text).not.toContain('"title":"My Snag"');
+    // Surrounding prose is preserved.
+    expect(result.text).toContain("Here is the play:");
+    expect(result.text).toContain("Details below.");
+    // Logs the rescue for observability.
+    expect(result.logLine).toContain("[coach-ai:rescue]");
+    expect(result.logLine).toContain("compose_play");
+    expect(result.logLine).toContain("provenance");
+  });
+
+  it("rescues with tool fence when validation failed after retry", () => {
+    const result = rescueOrStripFence({
+      text: CAL_HAND_AUTHORED,
+      lastFenceFromTool: TOOL_FENCE,
+      lastFenceToolName: "compose_play",
+      validationFailedAfterRetry: true,
+      provenanceFailedAfterRetry: false,
+      validationErrors: ["missing actions for @C, @Y"],
+    });
+    expect(result.rescued).toBe(true);
+    expect(result.stripped).toBe(false);
+    expect(result.text).toContain("Snag Right");
+    expect(result.logLine).toContain("validation");
+  });
+
+  it("strips when retry failed and NO tool fence is available", () => {
+    const result = rescueOrStripFence({
+      text: CAL_HAND_AUTHORED,
+      lastFenceFromTool: null,
+      lastFenceToolName: null,
+      validationFailedAfterRetry: false,
+      provenanceFailedAfterRetry: true,
+      validationErrors: [],
+    });
+    expect(result.rescued).toBe(false);
+    expect(result.stripped).toBe(true);
+    // Fence removed. Prose remains (stripBrokenFences keeps the
+    // surrounding text + adds a graceful apology marker).
+    expect(result.text).not.toContain('"title":"My Snag"');
+    expect(result.text).toContain("Here is the play:");
+  });
+
+  it("strips when retry failed and Cal's reply has NO fence to substitute", () => {
+    const calNoFence = "Sorry, I couldn't compose that. Try a different angle.";
+    const result = rescueOrStripFence({
+      text: calNoFence,
+      lastFenceFromTool: TOOL_FENCE,
+      lastFenceToolName: "compose_play",
+      validationFailedAfterRetry: true,
+      provenanceFailedAfterRetry: false,
+      validationErrors: ["missing routes"],
+    });
+    // The rescue attempt finds no fence in the text → no substitution.
+    // Falls through to strip (which is itself a no-op here since
+    // there's no fence to strip). Text passes through unchanged
+    // except for the strip's apology overlay (only added when a
+    // fence WAS present — so the calNoFence text comes back as-is).
+    expect(result.rescued).toBe(false);
+    expect(result.stripped).toBe(true);
+    expect(result.text).toContain("couldn't compose");
+  });
+
+  it("does not log when no rescue or strip happens", () => {
+    const result = rescueOrStripFence({
+      text: "no fence here",
+      lastFenceFromTool: null,
+      lastFenceToolName: null,
+      validationFailedAfterRetry: false,
+      provenanceFailedAfterRetry: false,
+      validationErrors: [],
+    });
+    expect(result.logLine).toBeNull();
   });
 });

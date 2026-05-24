@@ -2625,20 +2625,46 @@ export async function runAgent(
         // coach saw a Spread Doubles labeled "Four Verticals" with only
         // X and Z drawn.
         let textToEmit = scrubCritiqueLeak(renderedText);
-        // Safety net: when the second attempt ALSO fails (either
-        // validator), strip any broken / unapproved play fences so we
-        // ship a graceful "couldn't compose" instead of bad geometry.
-        // Provenance errors join validation errors here — same
-        // mechanical fix (strip the fence), but the apology summary
-        // uses whichever error list explains the failure. Skipped
-        // when the Phase 2d kill switch is on (in which case the
-        // unapproved fence ships as-is — the legacy behavior).
-        if (provenanceGateEnforced && !provenance.ok && validatorRetried) {
-          textToEmit = stripBrokenFences(textToEmit, [
-            "hand-authored play fence — coach must request a spec-block re-emit",
-          ]);
-        } else if (!validation.ok && validatorRetried) {
-          textToEmit = stripBrokenFences(textToEmit, validation.errors);
+        // Safety net (Phase 4, 2026-05-25): when the second attempt
+        // ALSO fails, prefer to SUBSTITUTE Cal's hand-authored fence
+        // with a tool-emitted fence from this turn rather than
+        // strip. The "Cal calls compose_play then rebuilds manually"
+        // pattern surfaced via the eval suite — the tool fence is
+        // already approved by the provenance tracker, so the
+        // substituted reply ships cleanly. Strip remains the
+        // fallback when no tool fence is available.
+        //
+        // Skipped entirely when the Phase 2d kill switch is on (in
+        // which case the unapproved fence ships as-is — legacy
+        // behavior).
+        const rescue = rescueOrStripFence({
+          text: textToEmit,
+          lastFenceFromTool,
+          lastFenceToolName,
+          validationFailedAfterRetry: !validation.ok && validatorRetried,
+          provenanceFailedAfterRetry: provenanceGateEnforced && !provenance.ok && validatorRetried,
+          validationErrors: validation.ok ? [] : validation.errors,
+        });
+        textToEmit = rescue.text;
+        if (rescue.logLine) console.warn(rescue.logLine);
+        if (rescue.rescued) {
+          // Mirror the substitution onto messages[last] so the next
+          // turn's prior-fence lookup uses the authoritative fence
+          // (not Cal's hand-authored version). Same pattern as the
+          // unconditional rewrite block below; running it here keeps
+          // the textToEmit + messages mirror atomic with the rescue.
+          const lastMsg = messages[messages.length - 1];
+          if (lastMsg && lastMsg.role === "assistant" && lastFenceFromTool) {
+            if (typeof lastMsg.content === "string") {
+              lastMsg.content = applyAuthoritativeFenceRewrite(lastMsg.content, lastFenceFromTool);
+            } else {
+              for (const block of lastMsg.content) {
+                if (block.type === "text") {
+                  block.text = applyAuthoritativeFenceRewrite(block.text, lastFenceFromTool);
+                }
+              }
+            }
+          }
         }
         // PHASE 2a — Mirror the spec→fence rewrite onto the assistant
         // message in `messages` so the NEXT turn's prior-fence lookup
@@ -3500,6 +3526,103 @@ export function applyAuthoritativeFenceRewrite(
   const FENCE_RE = /```play\s*\n([\s\S]*?)\n```/;
   if (!FENCE_RE.test(text)) return text;
   return text.replace(FENCE_RE, "```play\n" + toolFenceBody + "\n```");
+}
+
+/** Phase 4 (2026-05-25): RESCUE or STRIP a failed-validation reply.
+ *
+ *  Eval-suite finding: Cal frequently calls compose_play correctly,
+ *  then ignores its output and rebuilds the play manually
+ *  (place_offense + get_route_template per route). Cal hand-authors
+ *  the resulting fence; Phase 2b's gate catches it on attempt=first,
+ *  Cal's retry hand-authors again, and the strip path removes the
+ *  fence entirely — coach sees a stripped reply with prose only.
+ *
+ *  This helper changes the safety-net contract: when retry failed
+ *  AND we have a tool-emitted fence available from this turn,
+ *  SUBSTITUTE Cal's hand-authored fence with the tool's authoritative
+ *  version. The tool fence is in approvedFences by construction
+ *  (the provenance tracker captured it on emission), so the
+ *  substituted reply ships cleanly — coach sees the right play
+ *  instead of "couldn't compose".
+ *
+ *  Strip remains the fallback for the case where no tool fence is
+ *  available (Cal hand-authored without ever calling a tool, or
+ *  every tool call failed before producing a fence).
+ *
+ *  Exported for unit testing — `runAgent` calls this with state
+ *  pulled from its own validation results. */
+export function rescueOrStripFence(opts: {
+  /** The (already scrubbed + rendered) text Cal is about to emit. */
+  text: string;
+  /** Body of the last fence a fence-producing tool emitted this turn,
+   *  or null. The substitute-first path uses this; strip is the
+   *  fallback when null. */
+  lastFenceFromTool: string | null;
+  /** Name of the tool that produced lastFenceFromTool (for logging). */
+  lastFenceToolName: string | null;
+  /** True iff `validateDiagrams` returned !ok on the retry pass. */
+  validationFailedAfterRetry: boolean;
+  /** True iff the Phase 2b provenance gate fired on the retry pass
+   *  AND enforcement is enabled. */
+  provenanceFailedAfterRetry: boolean;
+  /** Errors from `validateDiagrams` (only used when stripping after
+   *  a validation failure — feeds the apology summary). */
+  validationErrors: string[];
+}): {
+  /** Final text to emit. */
+  text: string;
+  /** True iff substitution succeeded — caller should mirror onto
+   *  `messages[last]` so the next turn's prior-fence lookup uses the
+   *  authoritative fence. */
+  rescued: boolean;
+  /** True iff the strip path ran (fence(s) removed). */
+  stripped: boolean;
+  /** Single-line console.warn payload for observability, or null
+   *  when no rescue/strip happened. */
+  logLine: string | null;
+} {
+  const needsRescue =
+    opts.validationFailedAfterRetry || opts.provenanceFailedAfterRetry;
+  if (!needsRescue) {
+    return { text: opts.text, rescued: false, stripped: false, logLine: null };
+  }
+
+  // Path 1 — try to substitute Cal's hand-authored fence with the
+  // tool's authoritative one. Only fires when a tool fence is
+  // available AND Cal's text contains a ```play fence to replace.
+  if (opts.lastFenceFromTool) {
+    const before = opts.text;
+    const substituted = applyAuthoritativeFenceRewrite(
+      opts.text,
+      opts.lastFenceFromTool,
+    );
+    if (substituted !== before) {
+      const failureType = opts.provenanceFailedAfterRetry
+        ? "provenance"
+        : "validation";
+      return {
+        text: substituted,
+        rescued: true,
+        stripped: false,
+        logLine:
+          `[coach-ai:rescue] substituted hand-authored fence with ${opts.lastFenceToolName ?? "tool"} ` +
+          `output after ${failureType} failure on retry.`,
+      };
+    }
+  }
+
+  // Path 2 — strip. No tool fence available (or Cal's reply has no
+  // fence to substitute). Coach sees a graceful "couldn't compose"
+  // overlay instead of broken geometry.
+  let stripped: string;
+  if (opts.provenanceFailedAfterRetry) {
+    stripped = stripBrokenFences(opts.text, [
+      "hand-authored play fence — coach must request a spec-block re-emit",
+    ]);
+  } else {
+    stripped = stripBrokenFences(opts.text, opts.validationErrors);
+  }
+  return { text: stripped, rescued: false, stripped: true, logLine: null };
 }
 
 function scrubCritiqueLeak(text: string): string {
