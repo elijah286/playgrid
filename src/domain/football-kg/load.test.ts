@@ -91,6 +91,12 @@ const fixtureConcept: ConceptDef = {
   altFormations: [
     { id: "doubles", note: "Canonical — balanced look, natural mesh angles" },
   ],
+  // Matcher pattern (role-based — what the chat-time validator checks).
+  pattern: [
+    { role: "any", family: "Drag", depthRangeYds: { min: 2, max: 3.5 } },
+    { role: "any", family: "Drag", depthRangeYds: { min: 6, max: 9 } },
+  ],
+  // Optional builder data (per-player assignments for compose_play).
   assignments: [
     { player: "X", action: { kind: "route", routeId: "drag", depthYds: 2 } },
     { player: "Z", action: { kind: "route", routeId: "drag", depthYds: 6 } },
@@ -257,9 +263,24 @@ describe("ConceptDefZ — schema validation", () => {
     expect(ConceptDefZ.safeParse(fixtureConcept).success).toBe(true);
   });
 
-  it("rejects a concept with no assignments", () => {
-    const bad = { ...fixtureConcept, assignments: [] };
+  it("rejects a concept with no pattern AND no structural requirements", () => {
+    // After Phase 1b's schema redesign, `assignments` is optional and
+    // `pattern` is the required matcher input. A concept with empty
+    // pattern AND no structural fallback fails the refine() check
+    // ("must define either a pattern (route-based) or structural").
+    const bad = { ...fixtureConcept, pattern: [], structural: undefined };
     expect(ConceptDefZ.safeParse(bad).success).toBe(false);
+  });
+
+  it("accepts a concept with empty pattern IF structural requirements are set (run/RPO concept)", () => {
+    // Mirror QB Draw / Sweep / Counter: empty pattern but with structural.
+    const runConcept = {
+      ...fixtureConcept,
+      id: "test-run-concept",
+      pattern: [],
+      structural: { requiresCarry: { player: "back" as const } },
+    };
+    expect(ConceptDefZ.safeParse(runConcept).success).toBe(true);
   });
 
   it("rejects a concept with a non-kebab-case routeId reference", () => {

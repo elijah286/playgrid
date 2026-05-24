@@ -32,6 +32,83 @@ describe("Phase 1b migrated KG — validation", () => {
   });
 });
 
+describe("Phase 1b migrated concepts — coverage", () => {
+  it("has all 20 concepts from the legacy catalog", () => {
+    expect(FOOTBALL_KG.concepts.length).toBe(20);
+  });
+
+  it("every concept has a unique id", () => {
+    const ids = FOOTBALL_KG.concepts.map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("every concept has a defaultFormation pointing at a real formation", () => {
+    const formationIds = new Set(FOOTBALL_KG.formations.map((f) => f.id));
+    for (const c of FOOTBALL_KG.concepts) {
+      expect(
+        formationIds.has(c.defaultFormation.id),
+        `concept ${c.id}: defaultFormation "${c.defaultFormation.id}" not in formations`,
+      ).toBe(true);
+    }
+  });
+
+  it("every altFormation reference resolves to a real formation", () => {
+    const formationIds = new Set(FOOTBALL_KG.formations.map((f) => f.id));
+    for (const c of FOOTBALL_KG.concepts) {
+      for (const alt of c.altFormations ?? []) {
+        expect(
+          formationIds.has(alt.id),
+          `concept ${c.id}: altFormations "${alt.id}" not in formations`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("pass concepts have non-empty pattern (matcher requirements)", () => {
+    const passConcepts = ["curl-flat", "smash", "stick", "snag", "four-verticals", "mesh", "flood", "drive", "levels", "y-cross", "dagger"];
+    for (const id of passConcepts) {
+      const c = FOOTBALL_KG.concepts.find((x) => x.id === id);
+      expect(c, `pass concept ${id} missing`).toBeDefined();
+      expect(c!.pattern.length, `${id}: pass concept must have pattern entries`).toBeGreaterThan(0);
+    }
+  });
+
+  it("run/RPO concepts have structural requirements", () => {
+    const runConcepts = ["qb-draw", "bubble-rpo", "jet-reverse", "sweep", "dive", "power", "counter", "draw", "flea-flicker"];
+    for (const id of runConcepts) {
+      const c = FOOTBALL_KG.concepts.find((x) => x.id === id);
+      expect(c, `run/RPO concept ${id} missing`).toBeDefined();
+      expect(c!.structural, `${id}: run/RPO concept must have structural requirements`).toBeDefined();
+    }
+  });
+
+  it("Flood has sameSideRequired set", () => {
+    const flood = FOOTBALL_KG.concepts.find((c) => c.id === "flood");
+    expect(flood?.sameSideRequired).toBe(true);
+  });
+
+  it("Power restricts to tackle_11 (gap-scheme run with pulling guards)", () => {
+    const power = FOOTBALL_KG.concepts.find((c) => c.id === "power");
+    expect(power?.variants).toEqual(["tackle_11"]);
+  });
+
+  it("capability gates are set on concepts that need them", () => {
+    const expectations: Array<[string, string]> = [
+      ["qb-draw", "qbRun"],
+      ["bubble-rpo", "rpoRead"],
+      ["bubble-rpo", "handoff"],
+      ["jet-reverse", "trickPlay"],
+      ["sweep", "handoff"],
+      ["flea-flicker", "trickPlay"],
+    ];
+    for (const [id, cap] of expectations) {
+      const c = FOOTBALL_KG.concepts.find((x) => x.id === id);
+      expect(c, `concept ${id} missing`).toBeDefined();
+      expect(c!.requiresCapabilities ?? [], `${id} should require capability "${cap}"`).toContain(cap);
+    }
+  });
+});
+
 describe("Phase 1b migrated formations — coverage", () => {
   // 17 canonical formations carried over from offensiveSynthesize.ts's
   // parseFormationName rules + the recent flag-specific additions
