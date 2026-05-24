@@ -48,12 +48,10 @@ const fixtureFormation: FormationDef = {
   variants: ["flag_5v5", "flag_7v7", "tackle_11"],
   description: "Balanced 2x2 spread set — two receivers each side of the center.",
   body: "Doubles places two receivers on each side of the center, with the QB in shotgun and (in variants with backs) a single back beside the QB. Balanced look — defense can't cheat coverage to one side. Foundation set for most spread offenses. Pairs with mesh, smash, four-verts, and bubble RPOs.",
-  positions: {
-    QB: { x: 0, y: -5, onLine: false },
-    C: { x: 0, y: 0, onLine: true },
-    X: { x: -10, y: 0, onLine: true },
-    Z: { x: 10, y: 0, onLine: true },
-    Y: { x: 4, y: -5, onLine: false },
+  spec: {
+    qb: "shotgun",
+    backs: "single",
+    receivers: { left: 2, right: 2, te: 0 },
   },
   tags: ["spread", "balanced", "no-trips"],
 };
@@ -208,12 +206,48 @@ describe("checkRouteBreakDirInvariant — geometry must match declared breakDir"
 });
 
 describe("FormationDefZ — schema validation", () => {
-  it("accepts a canonical formation", () => {
+  it("accepts a spec-mode formation", () => {
     expect(FormationDefZ.safeParse(fixtureFormation).success).toBe(true);
   });
 
-  it("rejects a formation with fewer than 2 players", () => {
-    const bad: FormationDef = { ...fixtureFormation, positions: { QB: { x: 0, y: -5, onLine: false } } };
+  it("accepts a customShape-mode formation", () => {
+    const diamond: FormationDef = {
+      id: "diamond",
+      name: "Diamond",
+      family: "formation",
+      variants: ["flag_5v5"],
+      description: "4-point geometric diamond — C short, X/Z wide intermediate, Y deep middle.",
+      body: "Four-point shape that stretches the defense vertically AND horizontally. C top, X/Z lateral mid-depth, Y deep middle. The four points form a true diamond.",
+      customShape: "diamond",
+    };
+    expect(FormationDefZ.safeParse(diamond).success).toBe(true);
+  });
+
+  it("accepts a positions-mode formation", () => {
+    const custom: FormationDef = {
+      id: "weird-stack",
+      name: "Weird Stack",
+      family: "formation",
+      variants: ["flag_5v5"],
+      description: "Custom one-off layout that doesn't fit spec or customShape.",
+      body: "Some explicit-position formation for testing the third mode.",
+      positions: {
+        QB: { x: 0, y: -5, onLine: false },
+        C: { x: 0, y: 0, onLine: true },
+      },
+    };
+    expect(FormationDefZ.safeParse(custom).success).toBe(true);
+  });
+
+  it("REJECTS a formation with no spec, customShape, or positions", () => {
+    const bad = {
+      id: "empty-formation",
+      name: "Empty",
+      family: "formation",
+      variants: ["flag_5v5"],
+      description: "Has no mode specified at all.",
+      body: "This formation defines no spec, no customShape, no positions — should fail validation.",
+    };
     expect(FormationDefZ.safeParse(bad).success).toBe(false);
   });
 });
