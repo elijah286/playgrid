@@ -164,7 +164,7 @@ export function validateKG(kg: FootballKG): ValidationResult {
         });
       }
     }
-    for (const assignment of c.assignments) {
+    for (const assignment of c.assignments ?? []) {
       if (assignment.action.kind === "route") {
         if (!routeIds.has(assignment.action.routeId)) {
           errors.push({

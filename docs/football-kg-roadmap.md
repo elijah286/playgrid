@@ -1,6 +1,6 @@
 # Football Knowledge Graph — Phase 1 Roadmap
 
-**Status:** In progress (sub-phase 1b — routes + schemes + formations done; concepts next) · **Branch:** `feat/football-kg` · **Started:** 2026-05-24
+**Status:** In progress (sub-phase 1b — routes + schemes + formations + concepts done; reactor patterns next) · **Branch:** `feat/football-kg` · **Started:** 2026-05-24
 
 This document is the source of truth for the multi-week Coach Cal architectural refactor. Read it first if you're picking this work up across sessions.
 
@@ -51,14 +51,14 @@ Decisions locked 2026-05-24:
 1. **Routes (26)** — ✅ DONE 2026-05-24. All in `defs/routes.ts` as a single typed array (one file, not per-route — simpler in TS-first mode; per-file split is a Phase 6+ YAML migration concern). Schema validation + cross-ref + geometry invariants pass.
 2. **Formations (17)** — ✅ DONE 2026-05-24. Decided: hybrid schema. `FormationDef` supports THREE modes (spec / customShape / positions), validator enforces at least one. Migrated: spread, doubles, trips, twins, empty, bunch, stack, pro-i, pro-set, wishbone, t-formation, pistol, singleback, diamond, tight-diamond, i-formation-flag, trips-bunch. Tackle-only formations (Pro I, Pro Set, Wishbone, T-form, Pistol) restrict to tackle_11; flag-context I-Form restricts to flag variants.
 3. **Defensive alignments / Schemes (19)** — ✅ DONE. All 19 in `defs/schemes.ts` (T11:7, F7:6, F6:4, F5:2). Renamed `players`→`defenders`, single-variant entries wrapped in `variants[]`. Cross-ref test pins zone-id integrity (every zone-assignment defender references a zone defined on the scheme).
-4. **Concepts (20)** — pending. Reference routes (now migrated) + formations (pending). Need formations done first.
-5. **Reactor patterns (~18)** — pending. Reference schemes + concepts.
+4. **Concepts (20)** — ✅ DONE 2026-05-24. All 20 in `defs/concepts.ts` (11 pass concepts + 6 run/RPO + 1 trick play + Power restricted to tackle_11). Schema redesigned: ConceptDef has matcher pattern (role-based) + optional structural requirements (carry/RPO/ballPath) + optional builder assignments. Capability gates wired (qbRun, rpoRead, handoff, trickPlay, playAction).
+5. **Reactor patterns (~18)** — pending. Reference schemes (✓) + concepts (✓). Unblocked. Last migration step.
 
 **File layout (final form):**
 - `src/domain/football-kg/defs/routes.ts` ✅ — all 26 routes as a single typed array
 - `src/domain/football-kg/defs/formations.ts` ✅ — 17 formations (parametric + custom shapes)
 - `src/domain/football-kg/defs/schemes.ts` ✅ — all 19 defensive alignments
-- `src/domain/football-kg/defs/concepts.ts` — pending
+- `src/domain/football-kg/defs/concepts.ts` ✅ — 20 concepts (matcher + structural + capability gates)
 - `src/domain/football-kg/defs/reactor-patterns.ts` — pending
 - `src/domain/football-kg/defs/index.ts` ✅ — assembly point
 - `src/domain/football-kg/defs/migration.test.ts` ✅ — schema + cross-ref + per-family coverage
