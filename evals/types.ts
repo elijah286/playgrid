@@ -51,6 +51,11 @@ export type ScenarioContext = {
    *  recognized keys live in `KNOWN_PREFERENCE_KEYS` in
    *  `src/lib/coach-ai/user-preferences.ts`. */
   preferences?: Array<{ key: string; value: string }>;
+  /** Cal version. Defaults to "v2" (full Phase 2 stack). Set to "v1"
+   *  to test the legacy-fallback behavior (no provenance gate, no
+   *  rescue, no server-side label aliasing). Matches the
+   *  site_settings.coach_cal_version toggle the admin can flip. */
+  calVersion?: "v1" | "v2";
 };
 
 /** One chat turn from the coach. Single-turn scenarios use [msg];
