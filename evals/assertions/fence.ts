@@ -89,23 +89,39 @@ export function fenceHasRouteFor(playerId: string, routeKind?: string): Assertio
   };
 }
 
-/** Every offensive non-QB player in the first fence has a route. The
- *  validator's missing-action gate enforces this server-side; this
- *  assertion catches "Cal shipped a fence that fails save-time" at
- *  eval time. */
+/** Every offensive player who NEEDS a route in this variant has one.
+ *  Mirrors the production `validateOffensiveCoverage` rule:
+ *  - QB is always exempt (he throws / hands off).
+ *  - Linemen (LT, LG, RG, RT in tackle_11) are exempt — they block.
+ *  - Center (@C) is exempt UNLESS variant is flag_5v5 (the only
+ *    variant where centerIsEligible defaults to true).
+ *  - Everyone else needs a route. */
 export function fenceHasNoIdleOffensivePlayers(): Assertion {
   return (cap) => {
     const f = firstFenceTyped(cap);
     if (!f) return { ok: false, description: "fence must cover every offensive player", details: "no fence emitted" };
+    const variant = (f.variant ?? "").toString();
+    const isFlag5v5 = variant === "flag_5v5";
+    const TACKLE_LINEMEN = new Set(["LT", "LG", "RG", "RT", "T", "G", "OL"]);
     const offense = (f.players ?? []).filter((p) => p?.team !== "D");
     const routedIds = new Set((f.routes ?? []).map((r) => r?.from));
     const idle = offense
-      .filter((p) => p?.id && p.id !== "QB" && p.id !== "Q" && !routedIds.has(p.id))
+      .filter((p) => {
+        if (!p?.id) return false;
+        // QB always exempt.
+        if (p.id === "QB" || p.id === "Q") return false;
+        // Tackle linemen always exempt.
+        if (TACKLE_LINEMEN.has(p.id)) return false;
+        // Center: only required in flag_5v5.
+        if (p.id === "C" && !isFlag5v5) return false;
+        // Already routed? Not idle.
+        return !routedIds.has(p.id);
+      })
       .map((p) => `@${p.id}`);
     if (idle.length > 0) {
       return {
         ok: false,
-        description: "every non-QB offensive player should have a route",
+        description: `every eligible offensive player in ${variant || "this variant"} should have a route`,
         details: `idle players: ${idle.join(", ")}`,
       };
     }
