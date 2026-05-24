@@ -845,3 +845,73 @@ describe("PER_CROP_VISION_PROMPT — per-crop single-play translation (round 13)
     expect(PER_CROP_VISION_PROMPT).toMatch(/flag_7v7.*@Q AND @C are both exempt/);
   });
 });
+
+describe("NORMAL_PROMPT — SPEC EMISSION (Phase 2c, 2026-05-24)", () => {
+  // Phase 2b makes hand-authored play fences structurally impossible
+  // to ship; Phase 2c teaches Cal the new emission shape (```spec).
+  // These tests pin the prompt rule so a future "let me simplify"
+  // refactor doesn't drop the directive that points Cal at the
+  // structurally-safe path.
+
+  it("declares the two-path emission constraint", () => {
+    // TWO PATHS, BOTH STRUCTURAL — anything else is rejected by
+    // the chat-time provenance gate. The framing matters: Cal
+    // shouldn't think of spec mode as one of N options, it should
+    // think of hand-authoring as not-an-option.
+    expect(NORMAL_PROMPT).toMatch(/How to emit a play diagram — TWO PATHS, BOTH STRUCTURAL/);
+    expect(NORMAL_PROMPT).toMatch(/structurally rejected/);
+    expect(NORMAL_PROMPT).toMatch(/provenance gate/);
+  });
+
+  it("names Path A as tool fences with verbatim-drop instruction", () => {
+    // Tool fences are still supported; the rule is drop-verbatim.
+    // Cal's tendency is to tweak ("just a small depth adjustment")
+    // — the explicit "zero edits" phrasing names that failure mode.
+    expect(NORMAL_PROMPT).toMatch(/Path A — TOOL FENCES/);
+    expect(NORMAL_PROMPT).toMatch(/Drop it VERBATIM/);
+    expect(NORMAL_PROMPT).toMatch(/zero edits/);
+  });
+
+  it("names Path B as spec emission and frames it as preferred", () => {
+    expect(NORMAL_PROMPT).toMatch(/Path B — SPEC EMISSION \(preferred/);
+    expect(NORMAL_PROMPT).toMatch(/you never write coordinates/i);
+    // The pre-rendered example uses Trips Right — pin one assignment
+    // so a future "shorten the example" doesn't silently kill it.
+    expect(NORMAL_PROMPT).toMatch(/"family": "Slant"/);
+    expect(NORMAL_PROMPT).toMatch(/"formation": \{ "name": "Trips Right"/);
+  });
+
+  it("tells Cal to prefer Option A (spec) from compose_play's result", () => {
+    // compose_play now returns both shapes; the prompt must steer
+    // Cal toward dropping the spec block. Otherwise the legacy
+    // training bias toward emitting raw JSON wins.
+    expect(NORMAL_PROMPT).toMatch(/PREFER Option A — the spec block/);
+  });
+
+  it("explains the retry behavior when the gate fires", () => {
+    // The retry critique routes Cal at spec emission, NOT at
+    // "try to repair the fence by hand". The prompt should
+    // describe that flow so Cal understands the gate isn't
+    // arbitrary — it has a clear escape hatch.
+    expect(NORMAL_PROMPT).toMatch(/When the provenance gate fires/);
+    expect(NORMAL_PROMPT).toMatch(/emit a ```spec block/);
+    expect(NORMAL_PROMPT).toMatch(/stripped from your reply/);
+  });
+
+  it("cross-references the new section from rule 7c (SAVE BY DEFAULT)", () => {
+    // Rule 7c is the heaviest-trafficked rule for the
+    // compose-then-emit flow; it must point at the new
+    // emission constraint so Cal doesn't fall back to old
+    // verbatim-play-fence guidance.
+    expect(NORMAL_PROMPT).toMatch(/Option A.*spec block.*PREFERRED|spec block.*PREFERRED.*Option A/);
+    expect(NORMAL_PROMPT).toMatch(/See the "How to emit a play diagram" section/);
+  });
+
+  it("cross-references the new section from rule 7g (PlaySpec)", () => {
+    // Rule 7g originally framed PlaySpec as a create_play arg.
+    // After 2c the same shape is also the chat-emission shape;
+    // 7g must point at the new section so Cal doesn't see two
+    // disconnected "spec" worlds.
+    expect(NORMAL_PROMPT).toMatch(/Same shape used in two places/);
+  });
+});
