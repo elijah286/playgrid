@@ -37,6 +37,7 @@ async function loadAllScenarios(): Promise<Scenario[]> {
 async function main() {
   const args = process.argv.slice(2);
   const asJson = args.includes("--json");
+  const verbose = args.includes("--verbose");
   const filter = args.find((a) => !a.startsWith("--"));
 
   const all = await loadAllScenarios();
@@ -109,11 +110,21 @@ async function main() {
           const argSummary = JSON.stringify(c.input).slice(0, 120);
           console.log(`    - ${c.name}(${argSummary})`);
         }
-        // Assistant text (truncated). Often the failure is "Cal
-        // shipped a stripped reply" — the truncated text shows
-        // whether prose survived after the fence got removed.
-        const preview = r.capture.assistantText.slice(0, 400).replace(/\n/g, " ");
-        console.log(`  reply preview: ${preview}${r.capture.assistantText.length > 400 ? "..." : ""}`);
+        // Assistant text. Truncated by default; pass --verbose to
+        // see the full reply, which is essential when diagnosing
+        // "Cal said it would emit a spec but the runner saw 0 fences"
+        // — either the spec block was malformed, didn't emit at all,
+        // or was wrapped in unexpected delimiters.
+        if (verbose) {
+          console.log(`  reply (${r.capture.assistantText.length} chars):`);
+          console.log(r.capture.assistantText.split("\n").map((l) => `    | ${l}`).join("\n"));
+          if (r.capture.specBlocks.length > 0) {
+            console.log(`  spec blocks parsed: ${r.capture.specBlocks.length}`);
+          }
+        } else {
+          const preview = r.capture.assistantText.slice(0, 400).replace(/\n/g, " ");
+          console.log(`  reply preview: ${preview}${r.capture.assistantText.length > 400 ? "..." : ""}`);
+        }
       }
     }
   }

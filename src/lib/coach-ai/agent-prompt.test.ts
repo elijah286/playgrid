@@ -884,6 +884,22 @@ describe("NORMAL_PROMPT — SPEC EMISSION (Phase 2c, 2026-05-24)", () => {
     expect(NORMAL_PROMPT).toMatch(/"formation": \{ "name": "Trips Right"/);
   });
 
+  it("names the decision tree (catalog concept vs formation-only vs bespoke route)", () => {
+    // Phase 4 follow-up (2026-05-25): the eval suite found Cal calling
+    // compose_play({concept: "Spread"}) when the coach asked for a
+    // formation-named play with a bespoke route. "Spread" isn't a
+    // concept — it's a formation. Decision tree distinguishes the
+    // three cases so Cal picks the right tool flow.
+    expect(NORMAL_PROMPT).toMatch(/DECISION TREE — which path for a play request/);
+    expect(NORMAL_PROMPT).toMatch(/Coach names a CATALOG CONCEPT/);
+    expect(NORMAL_PROMPT).toMatch(/Coach names a FORMATION but no catalog concept/);
+    expect(NORMAL_PROMPT).toMatch(/Coach asks for a play with an OFF-CATALOG route/);
+    expect(NORMAL_PROMPT).toMatch(/NEVER call `compose_play` with a formation name as the concept/);
+    // The decision-tree case 2 specifically names the place_offense
+    // → ```spec recipe so Cal knows the exact tool flow.
+    expect(NORMAL_PROMPT).toMatch(/Call `place_offense\(\{ formation: "<name>" \}\)` to get player positions/);
+  });
+
   it("preserves the bespoke / off-catalog route escape hatch (custom action)", () => {
     // Cal must understand that custom routes ARE supported via the
     // spec path. Without this, the "you never write coordinates"

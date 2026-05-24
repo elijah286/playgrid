@@ -924,8 +924,16 @@ const compose_play: CoachAiTool = {
       return {
         ok: false,
         error:
-          `${result.error}\n\nAvailable concepts: ${result.availableConcepts.join(", ")}.\n` +
-          `If the coach didn't name a catalog concept, this tool can't help — they want something off-catalog and you'll need to author the play another way.`,
+          `${result.error}\n\nAvailable concepts: ${result.availableConcepts.join(", ")}.\n\n` +
+          `**DO NOT retry compose_play with the same input.** "${concept}" isn't a catalog concept. If you passed a formation name (Spread, Trips, Bunch, Diamond, etc.) — those are FORMATIONS, not concepts. Concepts describe the route combination; formations describe player positions.\n\n` +
+          `**To build this play, emit a \`\`\`spec block directly** (Path B in the prompt). Recipe:\n` +
+          `  1. Call \`place_offense({ formation: "<formation>" })\` first to get the player positions for the variant. (Skip if you already know who's at what x/y.)\n` +
+          `  2. Emit a \`\`\`spec block with one assignment per receiver:\n` +
+          `     - For catalog routes (Slant, Post, Curl, Hitch, Go, Out, In, Dig, etc.): \`{ "player": "X", "action": { "kind": "route", "family": "Hitch" } }\`.\n` +
+          `     - For OFF-CATALOG / bespoke routes (option routes, exotic combos): \`{ "player": "X", "action": { "kind": "custom", "description": "what the route does", "waypoints": [[x1, y1], [x2, y2]] } }\`.\n` +
+          `     - Center is eligible in flag_5v5 by default — give @C a route too.\n` +
+          `  3. The harness renders the spec to a play fence server-side; the provenance gate approves it because it came from a server-side render (not Cal hand-authoring).\n\n` +
+          `Do NOT hand-author a \`\`\`play fence — the chat-time gate strips it. Do NOT call compose_play with a different concept name unless you genuinely mean one of: ${result.availableConcepts.join(", ")}.`,
       };
     }
 
