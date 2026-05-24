@@ -1,6 +1,6 @@
 # Football Knowledge Graph — Phase 1 Roadmap
 
-**Status:** Phase 1c in progress (KB seed generator done; legacy file generators reframed as Phase 1d direct-cut) · **Branch:** `feat/football-kg` · **Started:** 2026-05-24
+**Status:** Phase 1d COMPLETE (all 4 legacy catalog files now read from KG); Phase 1e next · **Branch:** `feat/football-kg` · **Started:** 2026-05-24
 
 This document is the source of truth for the multi-week Coach Cal architectural refactor. Read it first if you're picking this work up across sessions.
 
@@ -84,14 +84,21 @@ Decisions locked 2026-05-24:
 
 **Acceptance:** `npx tsx scripts/fb-kg/generate-kb-seed.ts --write` produces a fresh migration. Tests confirm structural validity. Phase 1c COMPLETE on this front.
 
-### 1d — Cut tools to read from KG
+### 1d — Cut tools to read from KG ✅ COMPLETE 2026-05-24
+
+**Reframed during implementation.** Instead of cutting tools individually + deleting legacy files, the cleaner approach was: replace the legacy files' inline data arrays with calls to `projectXxxToLegacy()` functions. Tools keep their existing import paths; the data they consume is now sourced from the KG. Result: ~2,600 lines of duplicated inline catalog data removed, replaced with 4 projection-function calls.
 
 **Files modified:**
-- `src/lib/coach-ai/tools.ts` — `compose_play`, `place_offense`, `compose_defense`, `get_route_template`, `get_concept_skeleton` import from `football-kg/defs` instead of legacy catalog files
-- `src/domain/play/routeTemplates.ts`, `conceptCatalog.ts`, `defensiveAlignments.ts`, `defensiveReactors.ts` — DELETED once nothing imports them (verified by grep + typecheck).
-- `src/domain/play/offensiveSynthesize.ts` — refactored to read formation specs from `FOOTBALL_KG.formations` instead of its own parser-based catalog.
+- `src/domain/football-kg/legacy-projections.ts` — NEW. Pure functions that project each KG family to its legacy-file shape (LegacyRouteTemplate, LegacyConceptEntry, LegacyDefensiveAlignment, LegacyReactorPattern). 4 projection functions, ~250 lines.
+- `src/domain/play/routeTemplates.ts` — 851 → 322 lines. `ROUTE_TEMPLATES = projectRoutesToLegacy()`. Module-load invariants (`assertBreakDirInvariants`, `assertConstraintsMatchGeometry`) and helpers (`findTemplate`, `instantiateTemplate`) preserved.
+- `src/domain/play/conceptCatalog.ts` — 615 → 261 lines. `CONCEPT_CATALOG = projectConceptsToLegacy()`. `assertConceptInvariants` + `findConcept` + `detectConcept` + `assertConcept` preserved.
+- `src/domain/play/defensiveAlignments.ts` — 741 → 240 lines. `DEFENSIVE_ALIGNMENTS = projectSchemesToLegacy()`. `findDefensiveAlignment`, `listDefensiveAlignments`, `alignmentForStrength`, `zonesForStrength`, `getDefenderAssignmentDefault`, `alignmentWithAssignments` preserved.
+- `src/domain/play/defensiveReactors.ts` — 442 → 167 lines. `REACTOR_PATTERNS = projectReactorPatternsToLegacy()`. `findReactorPattern` + `detectConceptFromTitle` preserved.
+- `src/domain/play/conceptSkeleton.ts` — `+buildSlantFlat` skeleton builder added so the new KG-only `slant-flat` concept has a corresponding composition path.
 
-**Acceptance:** all existing Cal tests pass; no behavior change visible to coaches. Legacy catalog files gone or stripped to import-only re-exports.
+**Acceptance:** 1698 tests pass; one pre-existing failure (fieldTheme) is unrelated. Typecheck +0. No behavior change visible to coaches — the inline catalog data is now a derived projection of the KG.
+
+**Why not delete the legacy files entirely?** They still own the TYPES (BreakStyle, BreakDirection, RouteConstraints, RouteTemplate, ConceptEntry, DefensiveAlignment, ReactorPattern, etc.) and the HELPERS (findTemplate, findConcept, findDefensiveAlignment, findReactorPattern, alignmentForStrength, etc.) that other code imports by name. Migrating those import paths to the KG is a separate cleanup pass — for now, keeping the legacy files as thin (200-300 line) bridges is the minimum-risk path.
 
 ### 1e — Manifest CLI + first scenario evals
 

@@ -185,6 +185,41 @@ function buildCurlFlat(_c: ConceptEntry, opts: ConceptSkeletonOptions): Skeleton
   };
 }
 
+/**
+ * Slant-Flat — quick-game variant of Curl-Flat. Outside receiver runs a
+ * slant (5yd inside cut at ~25° above horizontal) instead of a curl;
+ * back/slot releases to the flat as the low element of the high-low.
+ * Added 2026-05-24 (Phase 1d) to back the Slant-Flat KG concept entry
+ * that was previously referenced by reactor patterns but absent from
+ * CONCEPT_CATALOG.
+ */
+function buildSlantFlat(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
+  const variant = opts.variant;
+  const side: "left" | "right" = opts.strength ?? "right";
+  const outsideWR = side === "right" ? "Z" : "X";
+  const slot = side === "right" ? "S" : "H";
+  const backsideWR = side === "right" ? "X" : "Z";
+  const backsideSlot = side === "right" ? "H" : "S";
+  const assignments: PlayerAssignment[] = [
+    routeAt(outsideWR, "Slant", 5),    // the slant (high) — sharp inside cut at 5yd
+    routeAt("B", "Flat", 3),           // the flat (low) — RB swings
+    routeAt(slot, "Sit", 6),           // sensible secondary (settle in zone)
+    routeAt(backsideWR, "Go", 18),     // backside clear
+    routeAt(backsideSlot, "Drag", 3),  // backside outlet
+    qbDropback(),
+    ...lineBlocks(variant),
+  ];
+  return {
+    ok: true,
+    concept: "Slant-Flat",
+    spec: baseSpec(variant, `Slant-Flat ${cap(side)}`, "Spread Doubles", side, assignments),
+    notes:
+      `Slant-Flat ${cap(side)}: ${outsideWR} slant @ 5yd (high), B flat @ 3yd (low) — high-low on the flat defender. ` +
+      `Quick-game variant of Curl-Flat — faster to release, beats press man (slant cuts inside immediately). ` +
+      `${slot} sit @ 6yd as secondary, ${backsideWR} go @ 18yd to clear backside.`,
+  };
+}
+
 function buildSmash(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
   const variant = opts.variant;
   const side: "left" | "right" = opts.strength ?? "right";
@@ -932,6 +967,7 @@ function buildFleaFlicker(_c: ConceptEntry, opts: ConceptSkeletonOptions): Skele
 
 const SKELETON_BUILDERS: Record<string, (concept: ConceptEntry, opts: ConceptSkeletonOptions) => SkeletonResult> = {
   "Curl-Flat":      buildCurlFlat,
+  "Slant-Flat":     buildSlantFlat,
   "Smash":          buildSmash,
   "Stick":          buildStick,
   "Snag":           buildSnag,
