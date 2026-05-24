@@ -32,9 +32,13 @@ const fixtureRoute: RouteDef = {
   variants: ["flag_5v5", "flag_7v7", "tackle_11"],
   description: "Shallow crossing route across the field at 1-5 yards.",
   body: "The drag is a horizontal route that crosses the field at 1-5 yards deep. Used as a man-coverage answer and as a hot route vs blitz. Receiver runs flat (no vertical climb) and looks for the ball over their inside shoulder. Common pairings: mesh (two drags crossing), drive (drag + dig combo), and quick-game (drag as a hot vs man press).",
-  waypoints: [[5, 2], [10, 2]],
-  depthRange: { min: 1, max: 5 },
-  curve: false,
+  points: [{ x: 0, y: 0 }, { x: -0.20, y: 0.10 }],
+  shapes: ["straight"],
+  directional: true,
+  breakStyle: "none",
+  breakDir: "toward_qb",
+  constraints: { depthRangeYds: { min: 1, max: 5 }, side: "toward_qb" },
+  kbSubtopic: "route_drag",
 };
 
 const fixtureFormation: FormationDef = {
@@ -149,14 +153,57 @@ describe("RouteDefZ — schema validation", () => {
     expect(RouteDefZ.safeParse(bad).success).toBe(false);
   });
 
-  it("rejects an empty waypoints array", () => {
-    const bad = { ...fixtureRoute, waypoints: [] };
+  it("rejects a points array with fewer than 2 waypoints", () => {
+    const bad = { ...fixtureRoute, points: [{ x: 0, y: 0 }] };
     expect(RouteDefZ.safeParse(bad).success).toBe(false);
   });
 
-  it("rejects depthRange with max < min", () => {
-    const bad = { ...fixtureRoute, depthRange: { min: 5, max: 1 } };
+  it("rejects constraints.depthRangeYds with max < min", () => {
+    const bad = { ...fixtureRoute, constraints: { depthRangeYds: { min: 5, max: 1 }, side: "toward_qb" as const } };
     expect(RouteDefZ.safeParse(bad).success).toBe(false);
+  });
+
+  it("rejects shapes whose length doesn't match points.length - 1", () => {
+    const bad = { ...fixtureRoute, shapes: ["straight" as const, "straight" as const] };
+    expect(RouteDefZ.safeParse(bad).success).toBe(false);
+  });
+
+  it("rejects a kbSubtopic that doesn't start with 'route_'", () => {
+    const bad = { ...fixtureRoute, kbSubtopic: "drag" };
+    expect(RouteDefZ.safeParse(bad).success).toBe(false);
+  });
+});
+
+describe("checkRouteBreakDirInvariant — geometry must match declared breakDir", () => {
+  it("toward_qb passes when final x is negative (inside)", () => {
+    // fixtureRoute has final x = -0.20 with breakDir "toward_qb" ✓
+    const result = validateKG({ ...EMPTY_KG, routes: [fixtureRoute] });
+    expect(result.ok).toBe(true);
+  });
+
+  it("toward_qb FAILS when final x is positive (outside)", () => {
+    const bad: RouteDef = {
+      ...fixtureRoute,
+      points: [{ x: 0, y: 0 }, { x: 0.20, y: 0.10 }],  // final x is positive!
+    };
+    const result = validateKG({ ...EMPTY_KG, routes: [bad] });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors.some((e) => /breakDir="toward_qb"/.test(e.message))).toBe(true);
+    }
+  });
+
+  it("vertical FAILS when |final x| > 0.10", () => {
+    const bad: RouteDef = {
+      ...fixtureRoute,
+      breakDir: "vertical",
+      points: [{ x: 0, y: 0 }, { x: -0.20, y: 0.55 }],
+    };
+    const result = validateKG({ ...EMPTY_KG, routes: [bad] });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors.some((e) => /breakDir="vertical"/.test(e.message))).toBe(true);
+    }
   });
 });
 
