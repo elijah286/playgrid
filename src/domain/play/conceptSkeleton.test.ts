@@ -17,6 +17,8 @@ import { CONCEPT_CATALOG, findConcept } from "./conceptCatalog";
 import { assertConcept } from "./conceptMatch";
 import { playSpecToCoachDiagram } from "./specRenderer";
 import { coachDiagramToPlayDocument } from "@/features/coach-ai/coachDiagramConverter";
+import { validateOffensiveCoverage } from "@/lib/coach-ai/play-content-validate";
+import type { CoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
 
 describe("generateConceptSkeleton — every catalog concept has a builder", () => {
   for (const concept of CONCEPT_CATALOG) {
@@ -214,6 +216,60 @@ describe("generateConceptSkeleton — flag_6v6 end-to-end", () => {
         `${concept.name}/flag_6v6: overlap resolver threw — geometry isn't safe`,
       ).not.toThrow();
     });
+  }
+});
+
+describe("generateConceptSkeleton — variant-roster completeness", () => {
+  // The Snag-in-flag_5v5 regression (2026-05-24): coach asked "Build a Snag
+  // out of Bunch", Cal called compose_play, the tool returned a fence with
+  // only 2 of 5 routes drawn because `buildSnag` hardcoded tackle/7v7 IDs
+  // ("S", "H", "B") and the 5v5 synthesizer silently drops routes for
+  // players that don't exist in the roster {Q, C, X, Y, Z}.
+  //
+  // Phase 2b's provenance gate DOES NOT catch this — the broken fence has
+  // valid tool provenance; it's just wrong. The right enforcement layer is
+  // the catalog itself: every skeleton must produce a complete play for
+  // every variant it claims to support.
+  //
+  // The check uses `validateOffensiveCoverage` (the production chat-time +
+  // save-time validator) directly so this test passes iff the validator
+  // would pass. That matches the user's surface: if the validator flags
+  // missing routes on @C/@Y, the play is broken; if it doesn't, the play
+  // is good. Re-implementing the rule here would risk drift.
+  //
+  // Rosters per variant:
+  //  - flag_5v5: {Q, C, X, Y, Z}  — C is eligible by default
+  //  - flag_6v6: {Q, C, X, Y, Z, ?} (synth assigns the 6th)
+  //  - flag_7v7: {Q, C, X, Y, Z, H, B} — C is snapper-only by default
+  //  - tackle_11: full 11 incl. OL — linemen exempt
+  const variants = ["flag_5v5", "flag_6v6", "flag_7v7", "tackle_11"] as const;
+  const PASS_CONCEPTS = CONCEPT_CATALOG.filter(
+    (c) => !["QB Draw", "Bubble RPO", "Jet Reverse"].includes(c.name),
+  );
+
+  for (const concept of PASS_CONCEPTS) {
+    for (const variant of variants) {
+      it(`${concept.name} in ${variant} passes the offensive-coverage gate`, () => {
+        const result = generateConceptSkeleton(concept.name, { variant });
+        expect(result.ok, result.ok ? undefined : result.error).toBe(true);
+        if (!result.ok) return;
+        const { diagram } = playSpecToCoachDiagram(result.spec);
+        // Shape the diagram the way the validator expects (it reads
+        // variant off the diagram if not passed). Pass variant explicitly.
+        const errors = validateOffensiveCoverage(
+          diagram as CoachDiagram,
+          variant,
+          null, // playbook settings: use variant defaults
+          result.spec.playType,
+        );
+        expect(
+          errors,
+          `${concept.name}/${variant} fails the offensive-coverage gate:\n  ${errors.join("\n  ")}\n` +
+            `\nLikely the skeleton hardcodes tackle/7v7 IDs (S/H/B) that don't exist in this variant's roster. ` +
+            `See buildFleaFlicker for the variant-aware pattern (Y + C in flag_5v5).`,
+        ).toEqual([]);
+      });
+    }
   }
 });
 

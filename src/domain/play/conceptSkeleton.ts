@@ -156,32 +156,78 @@ function baseSpec(
   };
 }
 
+/** Compact assignments shape for the 5v5 roster {Q, C, X, Y, Z}.
+ *
+ *  Phase 2 follow-up (2026-05-24): every concept-builder originally
+ *  hardcoded tackle/7v7 IDs (S, H, B). In flag_5v5 the synthesizer
+ *  silently drops routes for non-existent IDs, leaving 2-3 of 5
+ *  players standing still — the Snag-out-of-Bunch regression. This
+ *  helper centralizes the 5v5 roster mapping so each builder's 5v5
+ *  branch is a tiny declarative routes block.
+ *
+ *  The 5v5 mapping convention:
+ *  - The "back" role (tackle's @B) maps to @Y. The 5v5 roster has no
+ *    traditional backfield runner; @Y absorbs both the slot and the
+ *    back roles depending on the play.
+ *  - The "inside slot" role (tackle's @H or @S) ALSO maps to @Y
+ *    when the back/back-equivalent isn't needed, OR to @C when both
+ *    are needed (the center IS an eligible receiver in 5v5; the
+ *    snapper-eligible underneath is a real route option).
+ *  - @X and @Z keep their outside-receiver roles.
+ *
+ *  Caller controls collision resolution by passing roles directly:
+ *  `flagFiveRoutes({ Y: {family: "Drag", depthYds: 2}, C: {family: "Drag", depthYds: 8} })`. */
+function flagFiveRoutes(routes: Record<string, { family: string; depthYds: number }>): PlayerAssignment[] {
+  const assignments: PlayerAssignment[] = [];
+  for (const [id, r] of Object.entries(routes)) {
+    assignments.push(routeAt(id, r.family, r.depthYds));
+  }
+  assignments.push(qbDropback());
+  return assignments;
+}
+
 // ── Per-concept builders ────────────────────────────────────────────────
 
 function buildCurlFlat(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
   const variant = opts.variant;
   const side: "left" | "right" = opts.strength ?? "right";
-  // Outside Curl on the strong side, RB Flat on the strong side.
   const outsideWR = side === "right" ? "Z" : "X";
-  const slot = side === "right" ? "S" : "H";
   const backsideWR = side === "right" ? "X" : "Z";
-  const backsideSlot = side === "right" ? "H" : "S";
-  const assignments: PlayerAssignment[] = [
-    routeAt(outsideWR, "Curl", 5),     // the curl (high)
-    routeAt("B", "Flat", 4),           // the flat (low) — RB swings
-    routeAt(slot, "Sit", 6),           // sensible secondary
-    routeAt(backsideWR, "Go", 18),     // backside clear
-    routeAt(backsideSlot, "Drag", 3),  // backside outlet
-    qbDropback(),
-    ...lineBlocks(variant),
-  ];
+  let assignments: PlayerAssignment[];
+  let notes: string;
+  if (variant === "flag_5v5") {
+    // 5v5 roster {Q,C,X,Y,Z}. Curl (high) on outside Z, Flat (low) on
+    // C — the snapper-eligible underneath as the high-low partner. Y
+    // takes the slot Sit; backside X clears.
+    assignments = flagFiveRoutes({
+      [outsideWR]: { family: "Curl", depthYds: 5 },
+      C: { family: "Flat", depthYds: 4 },
+      Y: { family: "Sit", depthYds: 6 },
+      [backsideWR]: { family: "Go", depthYds: 18 },
+    });
+    notes =
+      `Curl-Flat ${cap(side)}: @${outsideWR} curl @ 5yd (high), @C flat @ 4yd (low) — high-low on the flat defender (5v5: C is the eligible underneath outlet). @Y sit @ 6yd; @${backsideWR} go @ 18yd to clear.`;
+  } else {
+    const slot = side === "right" ? "S" : "H";
+    const backsideSlot = side === "right" ? "H" : "S";
+    assignments = [
+      routeAt(outsideWR, "Curl", 5),     // the curl (high)
+      routeAt("B", "Flat", 4),           // the flat (low) — RB swings
+      routeAt(slot, "Sit", 6),           // sensible secondary
+      routeAt(backsideWR, "Go", 18),     // backside clear
+      routeAt(backsideSlot, "Drag", 3),  // backside outlet
+      qbDropback(),
+      ...lineBlocks(variant),
+    ];
+    notes =
+      `Curl-Flat ${cap(side)}: ${outsideWR} curl @ 5yd (high), B flat @ 4yd (low) — high-low on the flat defender. ` +
+      `${slot} sit @ 6yd as secondary, ${backsideWR} go @ 18yd to clear backside.`;
+  }
   return {
     ok: true,
     concept: "Curl-Flat",
     spec: baseSpec(variant, `Curl-Flat ${cap(side)}`, "Spread Doubles", side, assignments),
-    notes:
-      `Curl-Flat ${cap(side)}: ${outsideWR} curl @ 5yd (high), B flat @ 4yd (low) — high-low on the flat defender. ` +
-      `${slot} sit @ 6yd as secondary, ${backsideWR} go @ 18yd to clear backside.`,
+    notes,
   };
 }
 
@@ -197,26 +243,40 @@ function buildSlantFlat(_c: ConceptEntry, opts: ConceptSkeletonOptions): Skeleto
   const variant = opts.variant;
   const side: "left" | "right" = opts.strength ?? "right";
   const outsideWR = side === "right" ? "Z" : "X";
-  const slot = side === "right" ? "S" : "H";
   const backsideWR = side === "right" ? "X" : "Z";
-  const backsideSlot = side === "right" ? "H" : "S";
-  const assignments: PlayerAssignment[] = [
-    routeAt(outsideWR, "Slant", 5),    // the slant (high) — sharp inside cut at 5yd
-    routeAt("B", "Flat", 3),           // the flat (low) — RB swings
-    routeAt(slot, "Sit", 6),           // sensible secondary (settle in zone)
-    routeAt(backsideWR, "Go", 18),     // backside clear
-    routeAt(backsideSlot, "Drag", 3),  // backside outlet
-    qbDropback(),
-    ...lineBlocks(variant),
-  ];
+  let assignments: PlayerAssignment[];
+  let notes: string;
+  if (variant === "flag_5v5") {
+    assignments = flagFiveRoutes({
+      [outsideWR]: { family: "Slant", depthYds: 5 },
+      C: { family: "Flat", depthYds: 3 },
+      Y: { family: "Sit", depthYds: 6 },
+      [backsideWR]: { family: "Go", depthYds: 18 },
+    });
+    notes =
+      `Slant-Flat ${cap(side)}: @${outsideWR} slant @ 5yd (high), @C flat @ 3yd (low) — high-low on the flat defender (5v5: C is the eligible underneath). Quick-game variant of Curl-Flat. @Y sit @ 6yd; @${backsideWR} go @ 18yd.`;
+  } else {
+    const slot = side === "right" ? "S" : "H";
+    const backsideSlot = side === "right" ? "H" : "S";
+    assignments = [
+      routeAt(outsideWR, "Slant", 5),
+      routeAt("B", "Flat", 3),
+      routeAt(slot, "Sit", 6),
+      routeAt(backsideWR, "Go", 18),
+      routeAt(backsideSlot, "Drag", 3),
+      qbDropback(),
+      ...lineBlocks(variant),
+    ];
+    notes =
+      `Slant-Flat ${cap(side)}: ${outsideWR} slant @ 5yd (high), B flat @ 3yd (low) — high-low on the flat defender. ` +
+      `Quick-game variant of Curl-Flat — faster to release, beats press man (slant cuts inside immediately). ` +
+      `${slot} sit @ 6yd as secondary, ${backsideWR} go @ 18yd to clear backside.`;
+  }
   return {
     ok: true,
     concept: "Slant-Flat",
     spec: baseSpec(variant, `Slant-Flat ${cap(side)}`, "Spread Doubles", side, assignments),
-    notes:
-      `Slant-Flat ${cap(side)}: ${outsideWR} slant @ 5yd (high), B flat @ 3yd (low) — high-low on the flat defender. ` +
-      `Quick-game variant of Curl-Flat — faster to release, beats press man (slant cuts inside immediately). ` +
-      `${slot} sit @ 6yd as secondary, ${backsideWR} go @ 18yd to clear backside.`,
+    notes,
   };
 }
 
@@ -224,34 +284,67 @@ function buildSmash(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRes
   const variant = opts.variant;
   const side: "left" | "right" = opts.strength ?? "right";
   const outsideWR = side === "right" ? "Z" : "X";
-  const slot = side === "right" ? "S" : "H";
   const backsideWR = side === "right" ? "X" : "Z";
-  const backsideSlot = side === "right" ? "H" : "S";
-  const assignments: PlayerAssignment[] = [
-    routeAt(outsideWR, "Hitch", 5),    // the underneath
-    routeAt(slot, "Corner", 13),       // the over (corner)
-    routeAt("B", "Flat", 4),
-    routeAt(backsideWR, "Go", 18),
-    routeAt(backsideSlot, "Drag", 3),
-    qbDropback(),
-    ...lineBlocks(variant),
-  ];
+  let assignments: PlayerAssignment[];
+  let notes: string;
+  if (variant === "flag_5v5") {
+    // Smash 5v5: high-low on the corner. Y runs the corner over the
+    // outside Hitch; C takes the Flat as the eligible underneath.
+    assignments = flagFiveRoutes({
+      [outsideWR]: { family: "Hitch", depthYds: 5 },
+      Y: { family: "Corner", depthYds: 13 },
+      C: { family: "Flat", depthYds: 4 },
+      [backsideWR]: { family: "Go", depthYds: 18 },
+    });
+    notes =
+      `Smash ${cap(side)}: @${outsideWR} hitch @ 5yd (low), @Y corner @ 13yd (high) — high-low on the corner. @C flat @ 4yd; @${backsideWR} go @ 18yd to clear backside.`;
+  } else {
+    const slot = side === "right" ? "S" : "H";
+    const backsideSlot = side === "right" ? "H" : "S";
+    assignments = [
+      routeAt(outsideWR, "Hitch", 5),
+      routeAt(slot, "Corner", 13),
+      routeAt("B", "Flat", 4),
+      routeAt(backsideWR, "Go", 18),
+      routeAt(backsideSlot, "Drag", 3),
+      qbDropback(),
+      ...lineBlocks(variant),
+    ];
+    notes =
+      `Smash ${cap(side)}: ${outsideWR} hitch @ 5yd (low), ${slot} corner @ 13yd (high) — high-low on the cornerback. ` +
+      `B flat @ 4yd, ${backsideWR} go @ 18yd to clear backside.`;
+  }
   return {
     ok: true,
     concept: "Smash",
     spec: baseSpec(variant, `Smash ${cap(side)}`, "Spread Doubles", side, assignments),
-    notes:
-      `Smash ${cap(side)}: ${outsideWR} hitch @ 5yd (low), ${slot} corner @ 13yd (high) — high-low on the cornerback. ` +
-      `B flat @ 4yd, ${backsideWR} go @ 18yd to clear backside.`,
+    notes,
   };
 }
 
 function buildStick(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
   const variant = opts.variant;
   const side: "left" | "right" = opts.strength ?? "right";
-  const slot = side === "right" ? "S" : "H";
   const outsideWR = side === "right" ? "Z" : "X";
   const backsideWR = side === "right" ? "X" : "Z";
+  if (variant === "flag_5v5") {
+    // Stick 5v5: Y plays the slot stick (Sit @ 6yd). C takes the Flat
+    // as the eligible underneath. X/Z run quick verticals to clear.
+    const assignments = flagFiveRoutes({
+      Y: { family: "Sit", depthYds: 6 },
+      C: { family: "Flat", depthYds: 4 },
+      [outsideWR]: { family: "Hitch", depthYds: 5 },
+      [backsideWR]: { family: "Hitch", depthYds: 5 },
+    });
+    return {
+      ok: true,
+      concept: "Stick",
+      spec: baseSpec(variant, `Stick ${cap(side)}`, "Trips", side, assignments),
+      notes:
+        `Stick ${cap(side)}: @Y stick @ 6yd, @C flat @ 4yd — high-low (5v5: C is the eligible underneath). @${outsideWR}/@${backsideWR} hitch @ 5yd.`,
+    };
+  }
+  const slot = side === "right" ? "S" : "H";
   const backsideSlot = side === "right" ? "H" : "S";
   const assignments: PlayerAssignment[] = [
     routeAt(slot, "Sit", 6),           // the stick
@@ -275,30 +368,71 @@ function buildStick(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRes
 function buildSnag(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
   const variant = opts.variant;
   const side: "left" | "right" = opts.strength ?? "right";
-  const slot = side === "right" ? "S" : "H";
   const outsideWR = side === "right" ? "Z" : "X";
   const backsideWR = side === "right" ? "X" : "Z";
-  const backsideSlot = side === "right" ? "H" : "S";
-  const assignments: PlayerAssignment[] = [
-    routeAt(slot, "Spot", 5),          // the snag/spot
-    routeAt(outsideWR, "Corner", 13),  // the over
-    routeAt("B", "Flat", 4),           // the flat
-    routeAt(backsideWR, "Go", 18),
-    routeAt(backsideSlot, "Drag", 3),
-    qbDropback(),
-    ...lineBlocks(variant),
-  ];
+  let assignments: PlayerAssignment[];
+  let notes: string;
+  if (variant === "flag_5v5") {
+    // 5v5 roster: {Q, C, X, Y, Z}. No traditional slot or back, so the
+    // triangle maps to: Y=Spot (the inside short), C=Flat (the
+    // snapper-eligible underneath outlet — required per the 5v5
+    // center-is-eligible rule), Z=Corner (deep outside), X=Go
+    // (backside clear). Every non-QB player gets a route, satisfying
+    // the offensive-coverage gate.
+    assignments = [
+      routeAt("Y", "Spot", 5),         // the snag/spot
+      routeAt(outsideWR, "Corner", 13),// the over
+      routeAt("C", "Flat", 4),         // the flat (C as eligible outlet)
+      routeAt(backsideWR, "Go", 18),   // backside clear
+      qbDropback(),
+    ];
+    notes =
+      `Snag ${cap(side)}: @Y spot @ 5yd, @${outsideWR} corner @ 13yd, @C flat @ 4yd — triangle stretch (5v5: C is the eligible underneath, no traditional back).`;
+  } else {
+    // 7v7 + tackle: traditional Trips Bunch with slot + back.
+    const slot = side === "right" ? "S" : "H";
+    const backsideSlot = side === "right" ? "H" : "S";
+    assignments = [
+      routeAt(slot, "Spot", 5),          // the snag/spot
+      routeAt(outsideWR, "Corner", 13),  // the over
+      routeAt("B", "Flat", 4),           // the flat
+      routeAt(backsideWR, "Go", 18),
+      routeAt(backsideSlot, "Drag", 3),
+      qbDropback(),
+      ...lineBlocks(variant),
+    ];
+    notes =
+      `Snag ${cap(side)}: ${slot} spot @ 5yd, ${outsideWR} corner @ 13yd, B flat @ 4yd — triangle stretch.`;
+  }
   return {
     ok: true,
     concept: "Snag",
     spec: baseSpec(variant, `Snag ${cap(side)}`, "Trips Bunch", side, assignments),
-    notes:
-      `Snag ${cap(side)}: ${slot} spot @ 5yd, ${outsideWR} corner @ 13yd, B flat @ 4yd — triangle stretch.`,
+    notes,
   };
 }
 
 function buildFourVerts(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
   const variant = opts.variant;
+  if (variant === "flag_5v5") {
+    // Four Verticals in 5v5 is structurally a 3-Verts concept (only 3
+    // true receivers besides QB+C): X+Z go, Y seams. C runs a quick
+    // outlet (Sit/Stick at 5yd) — eligible per the center-eligible
+    // rule. Same vertical-stretch intent, scaled to the roster.
+    const assignments = flagFiveRoutes({
+      X: { family: "Go", depthYds: 18 },
+      Z: { family: "Go", depthYds: 18 },
+      Y: { family: "Seam", depthYds: 14 },
+      C: { family: "Sit", depthYds: 5 },
+    });
+    return {
+      ok: true,
+      concept: "Four Verticals",
+      spec: baseSpec(variant, "Four Verticals", "Spread Doubles", undefined, assignments),
+      notes:
+        `Four Verticals (5v5 scale): @X+@Z go routes outside, @Y seam @ 14yd inside, @C sits @ 5yd as the eligible outlet. 5v5 has only 3 true receivers + C, so the "fourth vert" is replaced by the snap-quick C outlet.`,
+    };
+  }
   const assignments: PlayerAssignment[] = [
     routeAt("X", "Go", 18),
     routeAt("Z", "Go", 18),
@@ -319,6 +453,25 @@ function buildFourVerts(_c: ConceptEntry, opts: ConceptSkeletonOptions): Skeleto
 
 function buildMesh(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
   const variant = opts.variant;
+  if (variant === "flag_5v5") {
+    // Mesh 5v5: Y under-drag, C over-drag (the canonical mesh
+    // crossing pair, with C as the eligible-receiver center). X curls
+    // over the top, Z clears. Same 2yd + 8yd differentiated depths so
+    // the cross is visually unambiguous (the 2026-05-02 lesson).
+    const assignments = flagFiveRoutes({
+      Y: { family: "Drag", depthYds: 2 },
+      C: { family: "Drag", depthYds: 8 },
+      X: { family: "Curl", depthYds: 12 },
+      Z: { family: "Go", depthYds: 18 },
+    });
+    return {
+      ok: true,
+      concept: "Mesh",
+      spec: baseSpec(variant, "Mesh", "Spread Doubles", undefined, assignments),
+      notes:
+        `Mesh (5v5): @Y under-drag @ 2yd + @C over-drag @ 8yd — 6yd visual separation (5v5: C is the eligible inside-pair partner). @X curl @ 12yd, @Z go @ 18yd to clear.`,
+    };
+  }
   // Inside slots run the differentiated drags (H under, S over). Outside
   // X/Z run a sit + clear over the top.
   //
@@ -357,8 +510,26 @@ function buildFlood(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRes
   const variant = opts.variant;
   const side: "left" | "right" = opts.strength ?? "right";
   const outsideWR = side === "right" ? "Z" : "X";
-  const slot = side === "right" ? "S" : "H";
   const backsideWR = side === "right" ? "X" : "Z";
+  if (variant === "flag_5v5") {
+    // Flood 5v5: three levels to the strong side. Outside corner @ 14
+    // (high), Y out @ 8 (mid, second-level break), C flat @ 4 (low —
+    // eligible underneath). Backside X clears.
+    const assignments = flagFiveRoutes({
+      [outsideWR]: { family: "Corner", depthYds: 14 },
+      Y: { family: "Out", depthYds: 8 },
+      C: { family: "Flat", depthYds: 4 },
+      [backsideWR]: { family: "Go", depthYds: 18 },
+    });
+    return {
+      ok: true,
+      concept: "Flood",
+      spec: baseSpec(variant, `Flood ${cap(side)}`, "Spread Doubles", side, assignments),
+      notes:
+        `Flood ${cap(side)} (5v5): @${outsideWR} corner @ 14yd (deep), @Y out @ 8yd (mid), @C flat @ 4yd (low — eligible underneath). @${backsideWR} go @ 18yd to clear backside. Three strong-side levels stretch the corner + flat defender.`,
+    };
+  }
+  const slot = side === "right" ? "S" : "H";
   const backsideSlot = side === "right" ? "H" : "S";
   // Spread Doubles (NOT Trips). Reason: Trips puts all 3 strong-side
   // players on the right (Z + 2 slots). The "backside drag" Cal's prose
@@ -398,6 +569,21 @@ function buildFlood(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRes
 
 function buildDrive(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
   const variant = opts.variant;
+  if (variant === "flag_5v5") {
+    const assignments = flagFiveRoutes({
+      Y: { family: "Drag", depthYds: 3 },
+      X: { family: "Dig", depthYds: 12 },
+      Z: { family: "Go", depthYds: 18 },
+      C: { family: "Sit", depthYds: 5 },
+    });
+    return {
+      ok: true,
+      concept: "Drive",
+      spec: baseSpec(variant, "Drive", "Spread Doubles", undefined, assignments),
+      notes:
+        `Drive (5v5): @Y under-drag @ 3yd + @X dig @ 12yd over the top — two crossers at differentiated depths. @Z deep clear; @C sits @ 5yd as the eligible underneath.`,
+    };
+  }
   const assignments: PlayerAssignment[] = [
     routeAt("H", "Drag", 3),    // under (the rub)
     routeAt("X", "Dig", 12),    // over (the void route)
@@ -418,6 +604,21 @@ function buildDrive(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRes
 
 function buildLevels(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
   const variant = opts.variant;
+  if (variant === "flag_5v5") {
+    const assignments = flagFiveRoutes({
+      Y: { family: "In", depthYds: 7 },
+      X: { family: "Dig", depthYds: 12 },
+      Z: { family: "Go", depthYds: 18 },
+      C: { family: "Sit", depthYds: 5 },
+    });
+    return {
+      ok: true,
+      concept: "Levels",
+      spec: baseSpec(variant, "Levels", "Spread Doubles", undefined, assignments),
+      notes:
+        `Levels (5v5): @Y in @ 7yd (low) + @X dig @ 12yd (high) — high-low on the underneath LB. @Z deep clear; @C sits @ 5yd.`,
+    };
+  }
   const assignments: PlayerAssignment[] = [
     routeAt("H", "In", 7),      // low in
     routeAt("X", "Dig", 12),    // high dig (over the in)
@@ -438,6 +639,24 @@ function buildLevels(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRe
 
 function buildYCross(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
   const variant = opts.variant;
+  if (variant === "flag_5v5") {
+    // Y-Cross 5v5: @Y already exists as the inside receiver and runs
+    // the deep cross. @X post clears the safety. @C flat as the
+    // eligible underneath outlet. @Z backside go.
+    const assignments = flagFiveRoutes({
+      Y: { family: "Dig", depthYds: 15 },
+      X: { family: "Post", depthYds: 14 },
+      C: { family: "Flat", depthYds: 4 },
+      Z: { family: "Go", depthYds: 18 },
+    });
+    return {
+      ok: true,
+      concept: "Y-Cross",
+      spec: baseSpec(variant, "Y-Cross", "Singleback", undefined, assignments),
+      notes:
+        `Y-Cross (5v5): @Y deep cross @ 15yd, @X post @ 14yd to clear the safety, @C flat @ 4yd outlet. @Z backside go @ 18yd.`,
+    };
+  }
   // "Singleback" formation produces a Y/TE (which Y-Cross requires by
   // definition — the Y is the deep crosser). Spread Doubles has no Y,
   // so a Y-Cross skeleton emitted under that formation would silently
@@ -462,6 +681,21 @@ function buildYCross(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRe
 
 function buildDagger(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
   const variant = opts.variant;
+  if (variant === "flag_5v5") {
+    const assignments = flagFiveRoutes({
+      Y: { family: "Seam", depthYds: 14 },
+      X: { family: "Dig", depthYds: 12 },
+      Z: { family: "Go", depthYds: 18 },
+      C: { family: "Sit", depthYds: 5 },
+    });
+    return {
+      ok: true,
+      concept: "Dagger",
+      spec: baseSpec(variant, "Dagger", "Spread Doubles", undefined, assignments),
+      notes:
+        `Dagger (5v5): @Y seam @ 14yd (vertical clear) + @X dig @ 12yd (in the void) — same vertical-stretch + dig logic as 7v7/tackle. @Z deep clear; @C sits @ 5yd as the eligible outlet.`,
+    };
+  }
   const assignments: PlayerAssignment[] = [
     routeAt("H", "Seam", 18),   // the clear (vertical seam)
     routeAt("X", "Dig", 15),    // the deep dig in the void
@@ -719,6 +953,23 @@ function buildSingleHandoffRun(
     [sideSign * lateralBias * 0.5, -3],
   ];
 
+  // The "back" / ballcarrier id is variant-dependent. In flag_5v5 there
+  // is no @B in the roster {Q, C, X, Y, Z} — the back maps to @Y. In
+  // 7v7 + tackle the canonical @B exists.
+  const carrierId = variant === "flag_5v5" ? "Y" : "B";
+
+  // Receiver coverage in flag variants. Tackle uses `unspecified` for
+  // skill players because they can legally stalk-block; the validator
+  // doesn't require routes for tackle. In flag, the offensive-coverage
+  // gate REQUIRES a route or motion for every non-QB skill player —
+  // `unspecified` ships a play with idle receivers. Replace with a
+  // short stalk-hitch (3yd) so the receivers look like stalk-blockers
+  // in shape while satisfying the gate.
+  const isFlag = variant === "flag_5v5" || variant === "flag_6v6" || variant === "flag_7v7";
+  const stalkAction: AssignmentAction = isFlag
+    ? { kind: "route", family: "Hitch", depthYds: 3 }
+    : { kind: "unspecified" };
+
   const assignments: PlayerAssignment[] = [
     {
       player: "QB",
@@ -726,26 +977,30 @@ function buildSingleHandoffRun(
       action: { kind: "carry", waypoints: qbWaypoints },
     },
     {
-      player: "B",
+      player: carrierId,
       confidence: "high",
       action: { kind: "carry", runType, waypoints: backWaypoints },
     },
-    // Receivers in run-blocking / stalk-block posture. `unspecified`
-    // keeps them visible in the formation without drawing fake pass
-    // routes the defense could read.
-    { player: "X", confidence: "med", action: { kind: "unspecified" } },
-    { player: "Z", confidence: "med", action: { kind: "unspecified" } },
-    { player: "H", confidence: "med", action: { kind: "unspecified" } },
-    { player: "S", confidence: "med", action: { kind: "unspecified" } },
-    ...lineBlocks(variant),
   ];
+
+  // Receivers in run-blocking / stalk-block posture. Per-variant
+  // rosters: 5v5 has {C, X, Z} besides QB + carrier (Y); 7v7+ has
+  // {X, Z, H, S}; tackle adds the OL via lineBlocks below.
+  const stalkReceivers: string[] = variant === "flag_5v5"
+    ? ["X", "Z", "C"]
+    : ["X", "Z", "H", "S"];
+  for (const id of stalkReceivers) {
+    if (id === carrierId) continue;
+    assignments.push({ player: id, confidence: "med", action: stalkAction });
+  }
+  assignments.push(...lineBlocks(variant));
 
   return {
     ok: true,
     concept: conceptName,
     spec: {
       ...baseSpec(variant, `${conceptName} ${cap(side)}`, "Spread Doubles", side, assignments),
-      ballPath: [{ from: "QB", to: "B", atPoint: mesh }],
+      ballPath: [{ from: "QB", to: carrierId, atPoint: mesh }],
     },
     notes: runNotesFor(conceptName, side),
   };
