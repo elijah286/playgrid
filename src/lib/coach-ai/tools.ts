@@ -19,6 +19,7 @@ import {
 import { synthesizeAlignment } from "@/domain/play/defensiveSynthesize";
 import { applyRouteMods, type RouteMod } from "./play-mutations";
 import { validateRouteAssignments } from "./route-assignment-validate";
+import { applyLabelAliasesToFence, applyLabelAliasesToSpec } from "./user-preferences";
 import { findTemplate as findRouteTemplate } from "@/domain/play/routeTemplates";
 import { sanitizeCoachDiagram } from "@/domain/play/sanitize";
 import { generateConceptSkeleton } from "@/domain/play/conceptSkeleton";
@@ -661,17 +662,21 @@ const get_concept_skeleton: CoachAiTool = {
     // Compose the play-fence-ready diagram. We intentionally include the
     // title + variant in the fence shape (Cal's prompt schema for `play`
     // fences expects those) and let Cal trim/extend if customizing.
-    const fenceJson = JSON.stringify(
-      {
-        title: result.spec.title ?? result.concept,
-        variant,
-        focus: "O",
-        ...renderResult.diagram,
-      },
-      null,
-      2,
-    );
-    const specJson = JSON.stringify(result.spec, null, 2);
+    const skeletonFence = {
+      title: result.spec.title ?? result.concept,
+      variant,
+      focus: "O" as const,
+      ...renderResult.diagram,
+    };
+    // Task #36 — apply coach label-alias prefs server-side.
+    const aliasedSkeletonFence = ctx.preferenceOverrides
+      ? applyLabelAliasesToFence(skeletonFence, ctx.preferenceOverrides)
+      : skeletonFence;
+    const aliasedSkeletonSpec = ctx.preferenceOverrides
+      ? applyLabelAliasesToSpec(result.spec, ctx.preferenceOverrides)
+      : result.spec;
+    const fenceJson = JSON.stringify(aliasedSkeletonFence, null, 2);
+    const specJson = JSON.stringify(aliasedSkeletonSpec, null, 2);
 
     return {
       ok: true,
@@ -740,7 +745,7 @@ const modify_play_route: CoachAiTool = {
       additionalProperties: false,
     },
   },
-  async handler(input) {
+  async handler(input, ctx) {
     // Delegate to applyRouteMods — the single source of geometric truth for
     // route mutations (AGENTS.md Rule 10). This eliminates the duplicated
     // xSign math that used to live here, which silently dropped the
@@ -786,7 +791,11 @@ const modify_play_route: CoachAiTool = {
     if (!r.ok) {
       return { ok: false, error: r.errors.join("\n") };
     }
-    const fenceJson = JSON.stringify(r.fence, null, 2);
+    // Task #36 — apply coach label-alias prefs server-side.
+    const aliasedFence = ctx.preferenceOverrides
+      ? applyLabelAliasesToFence(r.fence, ctx.preferenceOverrides)
+      : r.fence;
+    const fenceJson = JSON.stringify(aliasedFence, null, 2);
 
     const changeSummary: string[] = [];
     if (setFamily !== undefined) changeSummary.push(`route family → "${setFamily}"`);
@@ -1062,8 +1071,21 @@ const compose_play: CoachAiTool = {
       };
     }
 
-    const fenceJson = JSON.stringify(fence, null, 2);
-    const specJson = JSON.stringify(result.spec, null, 2);
+    // Task #36 (2026-05-25): apply coach label-alias preferences
+    // server-side so the fence + spec we return already use the
+    // coach's vocabulary (FS → Free, Y → TE, etc.). Cal drops the
+    // renamed fence verbatim and prose naturally references the
+    // aliased labels because that's what the diagram shows. Eval
+    // suite surfaced that prompt-only steering on Cal to apply
+    // aliases was unreliable — this closes the gap structurally.
+    const prefAliasedFence = ctx.preferenceOverrides
+      ? applyLabelAliasesToFence(fence, ctx.preferenceOverrides)
+      : fence;
+    const prefAliasedSpec = ctx.preferenceOverrides
+      ? applyLabelAliasesToSpec(result.spec, ctx.preferenceOverrides)
+      : result.spec;
+    const fenceJson = JSON.stringify(prefAliasedFence, null, 2);
+    const specJson = JSON.stringify(prefAliasedSpec, null, 2);
     const renderWarnings = renderResult.warnings.length > 0
       ? `\n\n**Renderer warnings (informational; the diagram still rendered):**\n${renderResult.warnings.map((w) => `  • [${w.code}] ${w.message}`).join("\n")}`
       : "";
@@ -1151,7 +1173,11 @@ const revise_play: CoachAiTool = {
         error: `revise_play failed:\n${r.errors.map((e) => `  • ${e}`).join("\n")}`,
       };
     }
-    const fenceJson = JSON.stringify(r.fence, null, 2);
+    // Task #36 — apply coach label-alias prefs server-side.
+    const reviseAliasedFence = ctx.preferenceOverrides
+      ? applyLabelAliasesToFence(r.fence, ctx.preferenceOverrides)
+      : r.fence;
+    const fenceJson = JSON.stringify(reviseAliasedFence, null, 2);
     return {
       ok: true,
       result:
@@ -1466,7 +1492,11 @@ const compose_defense: CoachAiTool = {
       routes: finalRoutes,
       zones: sanitized.diagram.zones,
     };
-    const fenceJson = JSON.stringify(finalFence, null, 2);
+    // Task #36 — apply coach label-alias prefs before serializing.
+    const aliasedFinalFence = ctx.preferenceOverrides
+      ? applyLabelAliasesToFence(finalFence, ctx.preferenceOverrides)
+      : finalFence;
+    const fenceJson = JSON.stringify(aliasedFinalFence, null, 2);
 
     const summary = onPlayRaw
       ? `Overlayed "${alignment.front} / ${alignment.coverage}" defense onto the prior play (${alignment.variant}, strength=${strength}). Offense byte-identical; defense replaced.`
@@ -1526,7 +1556,7 @@ const set_defender_assignment: CoachAiTool = {
       additionalProperties: false,
     },
   },
-  async handler(input) {
+  async handler(input, ctx) {
     const priorJson = typeof input.prior_play_fence === "string" ? input.prior_play_fence.trim() : "";
     const defender = typeof input.defender === "string" ? input.defender.trim() : "";
     const action = (input.action ?? {}) as Record<string, unknown>;
@@ -1688,7 +1718,16 @@ const set_defender_assignment: CoachAiTool = {
     if (newZones.length > 0) newFence.zones = newZones;
     else delete newFence.zones;
 
-    const fenceJson = JSON.stringify(newFence, null, 2);
+    // Task #36 — apply coach label-alias prefs server-side. The
+    // helper accepts a permissive shape; cast `newFence` since it's
+    // already shaped like a fence (players[]+routes[]+zones?[]).
+    const aliasedDefenderFence = ctx.preferenceOverrides
+      ? applyLabelAliasesToFence(
+          newFence as Parameters<typeof applyLabelAliasesToFence>[0],
+          ctx.preferenceOverrides,
+        )
+      : newFence;
+    const fenceJson = JSON.stringify(aliasedDefenderFence, null, 2);
     return {
       ok: true,
       result:
@@ -1758,15 +1797,24 @@ const place_defense: CoachAiTool = {
       const id = count === 1 ? p.id : `${p.id}${count}`;
       return { id, role: p.id, x: p.x, y: p.y };
     });
-    const playersJson = JSON.stringify(
-      uniquePlayers.map((p) => ({ id: p.id, role: p.role, x: p.x, y: p.y, team: "D" })),
-    );
+    // Task #36 — apply coach label-alias prefs at the tool-result
+    // boundary so the JSON Cal copies into the fence already uses
+    // the coach's vocabulary. Without this, Cal would have to
+    // remember to rename per the system-prompt block (unreliable).
+    const baseDefensePayload = {
+      players: uniquePlayers.map((p) => ({ id: p.id, role: p.role, x: p.x, y: p.y, team: "D" as const })),
+      zones: alignment.zones.filter((z) => z.ownerLabel),
+    };
+    const aliasedDefensePayload = ctx.preferenceOverrides
+      ? applyLabelAliasesToFence(baseDefensePayload, ctx.preferenceOverrides)
+      : baseDefensePayload;
+    const playersJson = JSON.stringify(aliasedDefensePayload.players);
 
     const isMan = alignment.manCoverage;
     // Emit only zones that have a defender actually dropping into them
     // (alignment.zones already carries `ownerLabel` from the catalog).
     // Cover 1 keeps the FS deep-middle zone; Cover 0 emits none.
-    const zones = alignment.zones.filter((z) => z.ownerLabel);
+    const zones = aliasedDefensePayload.zones ?? [];
     const zonesJson = JSON.stringify(zones);
 
     // Per-defender assignment breakdown — surfaced so Cal can narrate
@@ -1775,9 +1823,14 @@ const place_defense: CoachAiTool = {
     // mixed-coverage answer (FS deep middle zone + everyone else man)
     // instead of either "all zone" or "all man". Use the suffixed id
     // (DT vs DT2) so the breakdown matches the players[] above.
+    // Use the ALIASED player ids in the breakdown so the prose Cal
+    // reads matches the JSON Cal will copy — otherwise the breakdown
+    // says "FS: zone drop → deep middle" but the fence has @Free,
+    // and Cal would either get confused or fall back to "FS" in its
+    // reply.
     const assignmentBreakdown = alignment.players
       .map((p, i) => {
-        const uid = uniquePlayers[i].id;
+        const uid = aliasedDefensePayload.players[i]?.id ?? uniquePlayers[i].id;
         const a = p.assignment;
         if (!a) return `  ${uid}: (catalog default — likely man)`;
         switch (a.kind) {
