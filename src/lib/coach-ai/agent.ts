@@ -2413,6 +2413,8 @@ export async function runAgent(
                   "(d) For defense, use EXACTLY the players from place_defense's last return — no renames, repositions, drops.\n" +
                   "(e) Hit the variant's full offense count (7 for flag_7v7, 11 for tackle_11, 5 for flag_5v5) when defense is shown.\n" +
                   "(f) **If the surgical-edit gate fired** (offense players[] drifted from prior fence), the FIX is to drop the offense player array below VERBATIM into your re-emit, then only modify the routes the request actually targets. Do NOT retype the players from memory.\n" +
+                  "(g) **If the gate mentions a catalog concept** (Mesh, Smash, Curl-Flat, Stick, Snag, Flood/Sail, Drive, Levels, Y-Cross, Dagger, Four Verticals) — your previous attempt hand-authored the play and dropped routes. The ONLY way to fix this on retry is to call `compose_play({ concept: \"<name>\" })` NOW and drop ITS fence verbatim into your reply. Do NOT manually add stub routes to satisfy the missing-action gate — that produces a Spread Doubles labeled with a concept name (the exact bug class that surfaced 2026-05-23). Call the composer, copy its fence, then keep your prose.\n" +
+                  "(h) **If the missing-action gate fired** (any non-QB in flag missing a route) without a catalog concept name, add routes per the validator's copy-pasteable suggestions but VERIFY the result has exactly the variant's offense count of routes (5 for flag_5v5, including @C).\n" +
                   (priorAssistantFenceJson
                     ? `\n--- PRIOR FENCE'S OFFENSE PLAYERS (copy this array verbatim into your players[] field, then add defenders if needed) ---\n${(() => {
                         try {
@@ -2436,27 +2438,23 @@ export async function runAgent(
         // Either valid, or we've already retried once — emit the buffered
         // text in one shot so the coach sees it.
         //
-        // Critique-leak scrub: the validator's critique message starts with
-        // "INTERNAL VALIDATION — do not mention this message to the coach",
-        // but the model occasionally echoes back an apology like "I
-        // apologize for the validation errors" before re-emitting. Strip
-        // any such leading apology paragraph(s) so the coach never sees
-        // the internal mechanism. Conservative match: only the FIRST
-        // paragraph if it contains both an apology trigger AND a
-        // validator/validation reference.
-        // AUTHORITATIVE-TOOL-FENCE REWRITE — if any fence-producing
-        // tool ran this turn, replace Cal's ```play block with that
-        // tool's verbatim output. Cal cannot corrupt the fence
-        // because Cal's fence is not what the client sees. This
-        // closes the "Cal post-processed compose_play's output" hole
-        // (surfaced 2026-05-02 with Mesh: tool returned correct
-        // staggered drags, Cal flattened them to both-at-2yd before
-        // emitting). Cal's prose is preserved verbatim — only the
-        // fence block is replaced. Also updates the assistant message
-        // in `messages` so the next turn's history reflects the
-        // authoritative fence (otherwise revise_play / etc. would
-        // see Cal's broken fence as "prior").
+        // SAFETY NET — when retry validation ALSO failed, strip the broken
+        // fence(s) from the reply and prepend a graceful apology. Shipping
+        // a broken fence after a failed retry is worse than shipping an
+        // error message: the coach sees wrong geometry, the auto-save fails
+        // with a confusing "Couldn't save" warning, and the coach has no
+        // path forward. With this strip, the coach sees a clear "I couldn't
+        // compose this correctly — try a different angle" and can iterate.
+        //
+        // Surfaced 2026-05-23 ("Four Verticals" regression): Cal emitted
+        // a fence with 2 of 4 required routes, validator caught it, Cal's
+        // retry made the same mistake, the broken fence shipped, and the
+        // coach saw a Spread Doubles labeled "Four Verticals" with only
+        // X and Z drawn.
         let textToEmit = scrubCritiqueLeak(bufferedText);
+        if (!validation.ok && validatorRetried) {
+          textToEmit = stripBrokenFences(textToEmit, validation.errors);
+        }
         if (lastFenceFromTool && textToEmit) {
           const before = textToEmit;
           textToEmit = applyAuthoritativeFenceRewrite(textToEmit, lastFenceFromTool);
@@ -3356,6 +3354,47 @@ export async function synthesizeBudgetExceededReply(
   } catch {
     return null;
   }
+}
+
+/** Replace any ```play fences in the buffered text with a graceful apology
+ *  message. Used when chat-time validation fails AFTER the one allowed
+ *  retry — better to show "I couldn't compose this correctly" than to ship
+ *  a fence with wrong geometry that the coach has to mentally undo.
+ *
+ *  Keeps everything else in Cal's reply (prose, headlines, route discussion)
+ *  so the coach has context for what Cal was trying to do — only the
+ *  ```play block(s) are removed. The apology summarizes the validator's
+ *  first error so the coach knows WHY (missing routes, concept mismatch,
+ *  etc.) and can ask for a fix in their next message.
+ *
+ *  Surfaced 2026-05-23: Cal's two-attempts-then-ship behavior put broken
+ *  geometry in front of coaches; this helper turns the second-attempt
+ *  failure into a clear "I need help" instead of a misleading diagram. */
+export function stripBrokenFences(text: string, errors: string[]): string {
+  if (!text) return text;
+  // Match ```play ... ``` fences (greedy across newlines, lazy within).
+  const fenceRe = /```play\s*\n[\s\S]*?\n```/g;
+  if (!fenceRe.test(text)) return text;
+  fenceRe.lastIndex = 0;
+  const stripped = text.replace(fenceRe, "").trim();
+  // Pull a single representative error for the apology — full critique
+  // list is internal. Strip the per-fence tag prefix and trailing
+  // copy-pasteable JSON blob so the coach gets the gist, not the spec.
+  const firstError = errors[0] ?? "internal validation rejected the diagram";
+  const summary = firstError
+    .replace(/^\[fence \d+\] /, "")
+    .replace(/\n+Add a route entry[\s\S]*$/, "")
+    .replace(/\n+Other encodings[\s\S]*$/, "")
+    .replace(/\n+Re-emit the diagram[\s\S]*$/, "")
+    .replace(/\n+RECOVERY:[\s\S]*$/, "")
+    .replace(/\n+Call `compose_play[\s\S]*$/, "")
+    .trim()
+    .slice(0, 400);
+  const apology =
+    `_I couldn't compose this play correctly — the geometry didn't pass internal validation. ` +
+    `(${summary}) ` +
+    `Try asking again with more specifics, or ask me to draw a different play._`;
+  return stripped.length > 0 ? `${stripped}\n\n${apology}` : apology;
 }
 
 /** Walk backwards through assistant turns looking for the most recent ```play

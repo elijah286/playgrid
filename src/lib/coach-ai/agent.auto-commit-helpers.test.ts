@@ -32,6 +32,7 @@ import {
   shouldSkipFenceInCreateAutoCommit,
   SAVE_INTENT_DEFENSE_RE,
   findPriorOffenseFenceJson,
+  stripBrokenFences,
 } from "./agent";
 import type { ChatMessage } from "./llm";
 
@@ -727,5 +728,70 @@ describe("findPriorOffenseFenceJson — picks the most recent offense-containing
       { role: "assistant", content: `\`\`\`play\n${defenseOnlyFence}\n\`\`\`` },
     ];
     expect(findPriorOffenseFenceJson(history)).toBeNull();
+  });
+});
+
+describe("stripBrokenFences — graceful handling when retry validation fails", () => {
+  // Surfaced 2026-05-23 ("Four Verticals" regression): Cal emitted a fence
+  // with only 2 of 4 required routes; chat-time validator caught it; Cal's
+  // single retry made the same mistake; the broken fence shipped anyway
+  // (the previous code only retried once and shipped on second failure).
+  // This helper turns that second-attempt failure into a clear apology
+  // instead of a misleading diagram.
+
+  it("returns text unchanged when no fence is present", () => {
+    expect(stripBrokenFences("Just some prose, no diagram.", ["error"])).toBe(
+      "Just some prose, no diagram.",
+    );
+    expect(stripBrokenFences("", ["error"])).toBe("");
+  });
+
+  it("strips a single ```play fence and appends an apology", () => {
+    const text =
+      "Here's the Four Verticals play:\n\n" +
+      '```play\n{"title":"Four Verticals","players":[]}\n```\n\n' +
+      "Run it on third down.";
+    const result = stripBrokenFences(text, ["missing actions for: @C, @Y"]);
+    expect(result).not.toContain("```play");
+    expect(result).toContain("Here's the Four Verticals play:");
+    expect(result).toContain("Run it on third down.");
+    expect(result).toContain("couldn't compose this play correctly");
+    expect(result).toContain("missing actions for: @C, @Y");
+  });
+
+  it("strips multiple fences when the reply had several", () => {
+    const text =
+      "```play\n{\"id\":\"p1\"}\n```\n\nAnd:\n\n```play\n{\"id\":\"p2\"}\n```";
+    const result = stripBrokenFences(text, ["validator rejected the routes"]);
+    expect(result).not.toContain("```play");
+    expect(result).toContain("couldn't compose this play correctly");
+  });
+
+  it("uses just the apology when the original was nothing but a fence", () => {
+    const text = '```play\n{"id":"only"}\n```';
+    const result = stripBrokenFences(text, ["bad geometry"]);
+    expect(result).not.toContain("```play");
+    expect(result).toMatch(/^_I couldn't compose this play correctly/);
+  });
+
+  it("trims away copy-pasteable JSON suggestions from the error summary", () => {
+    // The validator's missing-action error includes a long copy-pasteable
+    // suggestion block (\"Add a route entry...\"). For the user-facing
+    // apology we want the headline, not the full spec.
+    const error =
+      "Flag offensive play is missing actions for: @C, @Y. In flag_5v5...\n" +
+      "Add a route entry for each missing player. Copy-pasteable defaults:\n" +
+      '  • @C → { "from": "C", "path": [[0, 3]], "tip": "arrow" } (3-yd sit)\n' +
+      'Other encodings if the play needs them: pre-snap motion → ...\n' +
+      "Re-emit the diagram with all 4 required action(s) populated.";
+    const result = stripBrokenFences('```play\n{}\n```', [error]);
+    expect(result).toContain("missing actions for: @C, @Y");
+    expect(result).not.toContain("Copy-pasteable defaults");
+    expect(result).not.toContain("Re-emit the diagram");
+  });
+
+  it("falls back to a generic message when errors array is empty", () => {
+    const result = stripBrokenFences('```play\n{}\n```', []);
+    expect(result).toContain("internal validation rejected the diagram");
   });
 });
