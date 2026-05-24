@@ -40,18 +40,21 @@ const scenario: Scenario = {
     { role: "user", text: "Draw a Diamond Crossers play" },
   ],
   assertions: [
-    // Cal must reach for compose_play with a Mesh-family concept +
-    // Diamond formation. We accept any concept that the catalog
-    // models as a "crossers" play (Mesh is the canonical match) AS
-    // LONG AS the formation override targets Diamond.
+    // Cal must reach for compose_play with the Diamond formation. We
+    // accept ANY catalog concept that has crossing-route DNA (Mesh,
+    // Drive, Levels, Y-Cross) — "Diamond Crossers" is coach
+    // shorthand that maps reasonably to any of these. The structural
+    // requirement is "compose_play, Diamond formation, complete
+    // play"; the specific concept name is Cal's call.
     toolCalled("compose_play", (args) => {
       const c = typeof args.concept === "string" ? args.concept.toLowerCase() : "";
       const f = typeof args.formation === "string" ? args.formation.toLowerCase() : "";
-      const isMeshLike = c === "mesh" || c === "crossers" || c.includes("cross");
+      const isCrossingConcept =
+        c === "mesh" || c === "drive" || c === "levels" || c === "y-cross" || c.includes("cross");
       const isDiamond = f.includes("diamond");
-      return isMeshLike && isDiamond;
+      return isCrossingConcept && isDiamond;
     }),
-    fenceCount({ exact: 1 }),
+    fenceCount({ min: 1, max: 1 }),
     fenceVariant("flag_5v5"),
     fenceHasNoIdleOffensivePlayers(),
   ],
