@@ -32,9 +32,59 @@ describe("Phase 1b migrated KG — validation", () => {
   });
 });
 
+describe("Phase 1b migrated reactor patterns — coverage", () => {
+  it("has 30 reactor patterns (legacy had 31; T11 Cover 0 excluded — empty pattern + no T11 Cover 0 scheme)", () => {
+    expect(FOOTBALL_KG.reactorPatterns.length).toBe(30);
+  });
+
+  it("every reactor pattern has a unique id", () => {
+    const ids = FOOTBALL_KG.reactorPatterns.map((r) => r.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("every reactor pattern's schemeId resolves to a real scheme", () => {
+    const schemeIds = new Set(FOOTBALL_KG.schemes.map((s) => s.id));
+    for (const r of FOOTBALL_KG.reactorPatterns) {
+      expect(
+        schemeIds.has(r.schemeId),
+        `reactor ${r.id}: schemeId "${r.schemeId}" not in schemes`,
+      ).toBe(true);
+    }
+  });
+
+  it("every reactor pattern's conceptId resolves to a real concept (or is '*' wildcard)", () => {
+    const conceptIds = new Set(FOOTBALL_KG.concepts.map((c) => c.id));
+    for (const r of FOOTBALL_KG.reactorPatterns) {
+      if (r.conceptId === "*") continue;
+      expect(
+        conceptIds.has(r.conceptId),
+        `reactor ${r.id}: conceptId "${r.conceptId}" not in concepts`,
+      ).toBe(true);
+    }
+  });
+
+  it("variant coverage matches the legacy catalog (f7:14, t11:4, f5:12)", () => {
+    const byVariant: Record<string, number> = {};
+    for (const r of FOOTBALL_KG.reactorPatterns) {
+      byVariant[r.variant] = (byVariant[r.variant] ?? 0) + 1;
+    }
+    expect(byVariant.flag_7v7).toBe(14);
+    expect(byVariant.tackle_11).toBe(4);
+    expect(byVariant.flag_5v5).toBe(12);
+  });
+
+  it("Cover 0 wildcard pattern exists for flag_7v7", () => {
+    const wildcard = FOOTBALL_KG.reactorPatterns.find(
+      (r) => r.variant === "flag_7v7" && r.conceptId === "*",
+    );
+    expect(wildcard).toBeDefined();
+    expect(wildcard!.schemeId).toBe("f7-cover-0");
+  });
+});
+
 describe("Phase 1b migrated concepts — coverage", () => {
-  it("has all 20 concepts from the legacy catalog", () => {
-    expect(FOOTBALL_KG.concepts.length).toBe(20);
+  it("has 21 concepts (20 from legacy catalog + slant-flat added 2026-05-24 for reactor cross-ref)", () => {
+    expect(FOOTBALL_KG.concepts.length).toBe(21);
   });
 
   it("every concept has a unique id", () => {

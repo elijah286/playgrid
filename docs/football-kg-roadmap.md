@@ -1,6 +1,6 @@
 # Football Knowledge Graph — Phase 1 Roadmap
 
-**Status:** In progress (sub-phase 1b — routes + schemes + formations + concepts done; reactor patterns next) · **Branch:** `feat/football-kg` · **Started:** 2026-05-24
+**Status:** Phase 1b COMPLETE (113 primitives migrated); Phase 1c next · **Branch:** `feat/football-kg` · **Started:** 2026-05-24
 
 This document is the source of truth for the multi-week Coach Cal architectural refactor. Read it first if you're picking this work up across sessions.
 
@@ -52,14 +52,16 @@ Decisions locked 2026-05-24:
 2. **Formations (17)** — ✅ DONE 2026-05-24. Decided: hybrid schema. `FormationDef` supports THREE modes (spec / customShape / positions), validator enforces at least one. Migrated: spread, doubles, trips, twins, empty, bunch, stack, pro-i, pro-set, wishbone, t-formation, pistol, singleback, diamond, tight-diamond, i-formation-flag, trips-bunch. Tackle-only formations (Pro I, Pro Set, Wishbone, T-form, Pistol) restrict to tackle_11; flag-context I-Form restricts to flag variants.
 3. **Defensive alignments / Schemes (19)** — ✅ DONE. All 19 in `defs/schemes.ts` (T11:7, F7:6, F6:4, F5:2). Renamed `players`→`defenders`, single-variant entries wrapped in `variants[]`. Cross-ref test pins zone-id integrity (every zone-assignment defender references a zone defined on the scheme).
 4. **Concepts (20)** — ✅ DONE 2026-05-24. All 20 in `defs/concepts.ts` (11 pass concepts + 6 run/RPO + 1 trick play + Power restricted to tackle_11). Schema redesigned: ConceptDef has matcher pattern (role-based) + optional structural requirements (carry/RPO/ballPath) + optional builder assignments. Capability gates wired (qbRun, rpoRead, handoff, trickPlay, playAction).
-5. **Reactor patterns (~18)** — pending. Reference schemes (✓) + concepts (✓). Unblocked. Last migration step.
+5. **Reactor patterns (30)** — ✅ DONE 2026-05-24. 30 of 31 legacy patterns migrated (T11 Cover 0 excluded — empty reactor array + no T11 Cover 0 alignment in catalog; no movement info lost). Patterns reference schemes + concepts by id. Cross-ref validator confirms every schemeId / conceptId resolves; defender ids match the scheme's roster suffix-tolerantly (CB → CB2).
+
+**Phase 1b COMPLETE 2026-05-24.** Total migrated: 113 football primitives (26 routes + 17 formations + 19 schemes + 21 concepts + 30 reactor patterns). 79 tests pass in worktree scope. Single source of truth established.
 
 **File layout (final form):**
 - `src/domain/football-kg/defs/routes.ts` ✅ — all 26 routes as a single typed array
 - `src/domain/football-kg/defs/formations.ts` ✅ — 17 formations (parametric + custom shapes)
 - `src/domain/football-kg/defs/schemes.ts` ✅ — all 19 defensive alignments
 - `src/domain/football-kg/defs/concepts.ts` ✅ — 20 concepts (matcher + structural + capability gates)
-- `src/domain/football-kg/defs/reactor-patterns.ts` — pending
+- `src/domain/football-kg/defs/reactor-patterns.ts` ✅ — 30 patterns (F7: 14, T11: 4, F5: 12)
 - `src/domain/football-kg/defs/index.ts` ✅ — assembly point
 - `src/domain/football-kg/defs/migration.test.ts` ✅ — schema + cross-ref + per-family coverage
 
