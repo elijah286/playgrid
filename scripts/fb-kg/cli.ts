@@ -96,7 +96,9 @@ function audit(asJson: boolean): void {
           family: familyName,
           message: `Zero ${familyName} entries apply to variant "${variant}".`,
         });
-      } else if (count < 3 && familyName !== "drills") {
+      } else if (count < 3) {
+        // (drills are filtered out of `familiesWithVariant` already; this
+        // branch fires for sparse non-drill families.)
         findings.push({
           severity: "info",
           family: familyName,

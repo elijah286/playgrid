@@ -1068,11 +1068,13 @@ const compose_play: CoachAiTool = {
       result:
         `Composed "${result.concept}" (${variant}${strength ? `, strength=${strength}` : ""}):\n\n` +
         `**Summary:** ${result.notes}${formationOverrideNote}${overridesNote}${autoCapNote}\n\n` +
-        `**PLAY FENCE — drop VERBATIM into your reply between \`\`\`play and \`\`\`. Geometry is coach-canonical and sanitized; do NOT call get_route_template for any route in this fence — the depths are already correct:**\n` +
-        `\`\`\`play\n${fenceJson}\n\`\`\`\n\n` +
-        `**PlaySpec — pass to create_play if the coach wants the play saved to their playbook:**\n` +
-        `\`\`\`json\n${specJson}\n\`\`\`${renderWarnings}\n\n` +
-        `Customizations the coach may ask for AFTER this fence is in chat: call \`revise_play\` (NOT compose_play again — that would reset other tweaks). \`revise_play\` takes the fence + an array of route mods and preserves players[] verbatim.`,
+        `**PLAY DIAGRAM — drop ONE of these blocks (NOT both) into your reply:**\n\n` +
+        `**Option A (PREFERRED, spec-only authoring):** Drop the SPEC block. The harness renders it to a play fence at display time. Cal NEVER writes coordinates — the renderer produces them deterministically from the catalog. This eliminates the bug class where Cal hand-authored wrong coords (Diamond Crossers regression, etc.).\n` +
+        `\`\`\`spec\n${specJson}\n\`\`\`\n\n` +
+        `**Option B (legacy, still supported):** Drop the play FENCE verbatim. Geometry is coach-canonical and sanitized; do NOT call get_route_template for any route — the depths are already correct.\n` +
+        `\`\`\`play\n${fenceJson}\n\`\`\`${renderWarnings}\n\n` +
+        `For saving: \`create_play\` accepts EITHER the spec OR the fence — pass whichever you dropped into chat.\n\n` +
+        `Customizations the coach may ask for AFTER this is in chat: call \`revise_play\` (NOT compose_play again — that would reset other tweaks). \`revise_play\` takes the fence + an array of route mods and preserves players[] verbatim.`,
     };
   },
 };
