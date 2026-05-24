@@ -2265,6 +2265,28 @@ describe("extractProseDepthClaims — parses '@X at N yards' patterns", () => {
     const claims = extractProseDepthClaims("@X is open. @Y stops at 5 yards.");
     expect(claims).toEqual([{ carrier: "Y", depthYds: 5 }]);
   });
+
+  it("handles the hyphen form: 'at 2-yard level' (regression — surfaced 2026-05-24)", () => {
+    // Previously the regex required `\s*y` between digit and "yard". That
+    // failed on "@Y at the 2-yard level" because the "-" isn't whitespace.
+    // A Cal turn shipped with prose claiming "@Y...at the 2-yard level"
+    // and a route at y=-2 — the chat-time validator silently passed it.
+    const claims = extractProseDepthClaims(
+      "lock onto @Y and @C at the 2-yard level.",
+    );
+    expect(claims.length).toBeGreaterThanOrEqual(1);
+    expect(claims[0]).toEqual({ carrier: "Y", depthYds: 2 });
+  });
+
+  it("handles 'at the N yards' (with the article)", () => {
+    const claims = extractProseDepthClaims("@X runs the curl at the 9 yards mark.");
+    expect(claims).toEqual([{ carrier: "X", depthYds: 9 }]);
+  });
+
+  it("handles compact 'at 3yd' form", () => {
+    const claims = extractProseDepthClaims("@C drags at 3yd.");
+    expect(claims).toEqual([{ carrier: "C", depthYds: 3 }]);
+  });
 });
 
 describe("validateProseRouteCoherence — flags prose-vs-route drift", () => {

@@ -343,7 +343,15 @@ export function extractProseDepthClaims(prose: string): Array<{ carrier: string;
   // ~80 chars of the "at N yards" claim to be considered as referring to it.
   // The carrier id is captured separately and the depth range is parsed
   // (single number or "N-M" range).
-  const re = /@([A-Z][A-Z0-9]*)[^.!?\n]{0,80}?\bat\s+(\d{1,2})(?:\s*[-–]\s*(\d{1,2}))?\s*y(?:ar)?d/gi;
+  //
+  // The separator between the digit and "yard" allows whitespace OR hyphen
+  // (covers "at 5 yards" AND "at 2-yard level" — coaches use both freely).
+  // Surfaced 2026-05-24: an earlier version only allowed `\s*` between the
+  // digit and "y", so "at the 2-yard level" silently failed to match, and
+  // the prose-route coherence gate let a mismatch through to the coach.
+  // (The save-time route-assignment validator caught it as a fallback,
+  // but the bad fence was already in front of the coach.)
+  const re = /@([A-Z][A-Z0-9]*)[^.!?\n]{0,80}?\bat\s+(?:the\s+)?(\d{1,2})(?:\s*[-–]\s*(\d{1,2}))?[-\s]*y(?:ar)?d/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(prose)) !== null) {
     const carrier = m[1].toUpperCase();

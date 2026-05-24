@@ -879,13 +879,15 @@ const compose_play: CoachAiTool = {
       "Inputs: " +
       "(1) `concept` — the catalog name (case-insensitive, aliases supported). " +
       "(2) `strength` — optional, for side-flooding concepts (Flood, Smash, Curl-Flat, Stick, Snag): 'left' or 'right'. " +
-      "(3) `overrides` — optional array of intent-level route changes to apply on top of the canonical skeleton, e.g. [{ player: 'H', set_depth_yds: 5 }, { player: 'Z', set_family: 'Post' }]. " +
+      "(3) `formation` — OPTIONAL formation override. By default each concept uses its canonical formation (Mesh from Doubles, Smash from Doubles, Snag from Trips Bunch, etc.). Pass `formation` to run the same concept from a DIFFERENT formation (e.g. 'Mesh from Diamond' → `{ concept: 'Mesh', formation: 'Diamond' }`). Routes are re-anchored to the override formation's player positions; the route families (Drag, Curl, Go, etc.) and depths stay the same. Accepted formations are anything `place_offense` understands: Diamond, Tight Diamond, Bunch, Trips Bunch, I-Formation, Empty, Stack, Twins, Doubles, Trips, etc. " +
+      "(4) `overrides` — optional array of intent-level route changes to apply on top of the canonical skeleton, e.g. [{ player: 'H', set_depth_yds: 5 }, { player: 'Z', set_family: 'Post' }]. " +
       "Returns: a SANITIZED ```play fence ready to drop verbatim into the reply, plus the matching PlaySpec for create_play. The skeleton's canonical depths (e.g. Mesh under-drag @ 2yd, over-drag @ 6yd) are baked into the path waypoints; do NOT re-derive geometry via get_route_template after this tool runs.",
     input_schema: {
       type: "object",
       properties: {
         concept: { type: "string", description: "Catalog concept name (Mesh, Flood, Sail, Curl-Flat, Smash, Stick, Snag, Four Verticals, 4 Verts, Drive, Levels, Y-Cross, Dagger). Aliases supported." },
         strength: { type: "string", enum: ["left", "right"], description: "Strong side for side-flooding concepts. Defaults to 'right'." },
+        formation: { type: "string", description: "Optional formation override. Replaces the concept's canonical formation with a different named one (Diamond, Tight Diamond, Bunch, I-Formation, etc. — anything place_offense understands). Use when the coach asks for a known concept run from a non-default formation: 'Mesh from a Diamond' → `{ concept: 'Mesh', formation: 'Diamond' }`. Routes re-anchor to the override formation's player positions; route families and depths stay catalog-correct." },
         overrides: {
           type: "array",
           description: "Optional intent-level route changes applied on top of the skeleton. Each item: { player, set_family?, set_depth_yds?, set_non_canonical? }. Use this when the coach asks for a custom variant on a catalog play (e.g. 'mesh with the over-drag at 8 yards' → overrides: [{ player: 'S', set_depth_yds: 8, set_non_canonical: true }]).",
@@ -912,6 +914,7 @@ const compose_play: CoachAiTool = {
     if (!concept) return { ok: false, error: "concept is required." };
     const strengthRaw = typeof input.strength === "string" ? input.strength.toLowerCase() : undefined;
     const strength = strengthRaw === "left" || strengthRaw === "right" ? strengthRaw : undefined;
+    const formationOverride = typeof input.formation === "string" ? input.formation.trim() : "";
     const overrides = Array.isArray(input.overrides) ? (input.overrides as RouteMod[]) : [];
 
     const variant = (ctx.sportVariant as "tackle_11" | "flag_7v7" | "flag_5v5" | undefined) ?? "flag_7v7";
@@ -961,6 +964,33 @@ const compose_play: CoachAiTool = {
     const autoCappedSummaries: string[] = playbookSettings?.maxThrowDepthYds != null
       ? autoCapSpecDepthsToMaxThrow(result.spec, playbookSettings.maxThrowDepthYds)
       : [];
+
+    // Formation override (2026-05-24). Swap the concept's canonical formation
+    // for a different named one (e.g. "Mesh from a Diamond" →
+    // formation: "Diamond"). The renderer uses spec.formation.name to
+    // synthesize player positions via synthesizeOffense; routes then
+    // re-anchor to the new positions because their waypoints are derived
+    // from each player's start + the route family's geometry. Route
+    // FAMILIES and depthYds stay catalog-correct (the concept doesn't
+    // change); only player POSITIONS change.
+    //
+    // Caveat: if the override formation's roster doesn't include a player
+    // the concept's assignments reference (e.g. concept needs @H but
+    // Diamond's 5v5 roster is {C, X, Y, Z}), the renderer will drop the
+    // missing route — surfaced via the existing missing-action and
+    // route-assignment validators downstream. Cal sees the validation
+    // error and can pick a different formation or concept.
+    const formationOverrideSummary: string[] = [];
+    if (formationOverride) {
+      const originalFormation = result.spec.formation.name;
+      result.spec.formation = {
+        name: formationOverride,
+        ...(result.spec.formation.strength ? { strength: result.spec.formation.strength } : {}),
+      };
+      formationOverrideSummary.push(
+        `formation override: ${originalFormation} → ${formationOverride}`,
+      );
+    }
 
     const renderResult = playSpecToCoachDiagram(result.spec);
     let fence = {
@@ -1027,12 +1057,17 @@ const compose_play: CoachAiTool = {
     const autoCapNote = autoCappedSummaries.length > 0
       ? `\n\n**Auto-capped to playbook's max throw depth:** ${autoCappedSummaries.join("; ")}.`
       : "";
+    const formationOverrideNote = formationOverrideSummary.length > 0
+      ? `\n\n**Formation override applied:** ${formationOverrideSummary.join("; ")}. ` +
+        `Route families and depths are still the catalog concept's defaults; only the player starting positions changed. ` +
+        `When you describe this play to the coach, mention the formation explicitly ("Mesh run from a Diamond formation") so they know it's not the canonical look.`
+      : "";
 
     return {
       ok: true,
       result:
         `Composed "${result.concept}" (${variant}${strength ? `, strength=${strength}` : ""}):\n\n` +
-        `**Summary:** ${result.notes}${overridesNote}${autoCapNote}\n\n` +
+        `**Summary:** ${result.notes}${formationOverrideNote}${overridesNote}${autoCapNote}\n\n` +
         `**PLAY FENCE — drop VERBATIM into your reply between \`\`\`play and \`\`\`. Geometry is coach-canonical and sanitized; do NOT call get_route_template for any route in this fence — the depths are already correct:**\n` +
         `\`\`\`play\n${fenceJson}\n\`\`\`\n\n` +
         `**PlaySpec — pass to create_play if the coach wants the play saved to their playbook:**\n` +
