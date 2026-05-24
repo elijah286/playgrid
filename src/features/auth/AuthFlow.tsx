@@ -14,6 +14,12 @@ import { Button, Input, useToast } from "@/components/ui";
 import { PASSWORD_RULES_LABEL, validatePassword } from "@/lib/auth/password";
 import { suggestEmailDomainCorrection } from "@/lib/auth/email-typo";
 import { track } from "@/lib/analytics/track";
+import { isNativeApp } from "@/lib/native/isNativeApp";
+import { useIsNativeApp } from "@/lib/native/useIsNativeApp";
+import {
+  canUseNativeGoogleAuth,
+  signInWithGoogleNative,
+} from "@/lib/native/googleAuth";
 
 function GoogleGlyph({ className }: { className?: string }) {
   return (
@@ -82,6 +88,12 @@ export function AuthFlow({
   googleEnabled = false,
 }: AuthFlowProps) {
   const { toast } = useToast();
+
+  // Hide the Google button on native when the plugin isn't usable (env
+  // var missing, or the installed APK predates the plugin). On web the
+  // button always falls back to the Supabase-hosted OAuth flow.
+  const native = useIsNativeApp();
+  const hideGoogleOnNative = native && !canUseNativeGoogleAuth();
 
   const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/home";
 
@@ -156,8 +168,52 @@ export function AuthFlow({
       submittingRef.current = false;
     }
   }
+
+  // Native Google sign-in: skips the OAuth redirect (WebViews can't load
+  // Google's auth pages) and uses the system Google SDK to fetch an ID
+  // token, then hands it to Supabase. We replicate the side-effects the
+  // /auth/callback route runs server-side for web OAuth (first-touch
+  // attribution snapshot + Reddit signup pixel marker) so the native
+  // flow ends up in the same state as a successful web OAuth.
+  async function signInWithGoogleOnNative() {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setPending(true);
+    clearErrors();
+    track({ event: "auth_oauth_started", target: "google" });
+    try {
+      const supabase = createClient();
+      const { isFreshSignup } = await signInWithGoogleNative(supabase);
+
+      if (inviteCode) {
+        await afterSignupSyncRoleAction();
+      }
+      // Fire-and-forget — action is idempotent and self-gated.
+      void runSignupAttributionAction();
+
+      track({ event: "auth_oauth_success", target: "google" });
+      hardNavigate(isFreshSignup ? withRedditSignupMarker(safeNext) : safeNext);
+      return; // keep pending true through navigation
+    } catch (e: unknown) {
+      // capgo plugin rejects with code USER_CANCELLED when the user
+      // dismisses the Google account picker. Don't surface an error for
+      // intentional cancellation — just reset the button state.
+      const code = (e as { code?: string } | null)?.code;
+      if (code !== "USER_CANCELLED") {
+        setFormError(
+          e instanceof Error ? e.message : "Could not start Google sign-in.",
+        );
+      }
+      setPending(false);
+      submittingRef.current = false;
+    }
+  }
+
   const signInWithApple = () => signInWithOAuthProvider("apple", "Apple");
-  const signInWithGoogle = () => signInWithOAuthProvider("google", "Google");
+  const signInWithGoogle = () =>
+    isNativeApp()
+      ? signInWithGoogleOnNative()
+      : signInWithOAuthProvider("google", "Google");
 
   async function submitEmail() {
     if (!hasSupabaseEnv()) {
@@ -507,23 +563,17 @@ export function AuthFlow({
               Guideline 4.8 once the iOS app ships, so flip it back on then. */}
           {step === "email" && (appleEnabled || googleEnabled) && (
             <>
-              {googleEnabled && (
-                // Google's OAuth servers refuse to load in WebView UAs since
-                // 2021, and our Capacitor wrapper has no deep-link callback
-                // to bring users back from a system-browser flow. Hide the
-                // button on native; Apple Sign In + email OTP cover the gap.
-                <div data-web-only>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="w-full"
-                    onClick={() => void signInWithGoogle()}
-                    disabled={pending}
-                  >
-                    <GoogleGlyph className="mr-2 size-4" aria-hidden />
-                    Continue with Google
-                  </Button>
-                </div>
+              {googleEnabled && !hideGoogleOnNative && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="w-full"
+                  onClick={() => void signInWithGoogle()}
+                  disabled={pending}
+                >
+                  <GoogleGlyph className="mr-2 size-4" aria-hidden />
+                  Continue with Google
+                </Button>
               )}
               {appleEnabled && (
                 <Button
