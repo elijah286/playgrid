@@ -43,6 +43,14 @@ export type ScenarioContext = {
    *  play's diagram. Used to test deictic interpretation ("this
    *  play"). */
   anchoredPlayDiagramText?: string;
+  /** Phase 3 — coach preference overrides. When set, the agent
+   *  injects these into the system prompt INSTEAD of fetching from
+   *  Supabase. Lets eval scenarios verify preference-driven Cal
+   *  behavior (label aliases, default coverages, etc.) without
+   *  seeding the production DB. Shape: array of {key, value} pairs;
+   *  recognized keys live in `KNOWN_PREFERENCE_KEYS` in
+   *  `src/lib/coach-ai/user-preferences.ts`. */
+  preferences?: Array<{ key: string; value: string }>;
 };
 
 /** One chat turn from the coach. Single-turn scenarios use [msg];

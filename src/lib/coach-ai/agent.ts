@@ -2174,18 +2174,27 @@ export async function runAgent(
   // every diagram + answer — that's how "always label my safety U" persists.
   // Returns null when migration 0188 hasn't applied yet; we treat that as
   // "no preferences" and continue.
+  //
+  // PHASE 3 (2026-05-25): `ctx.preferenceOverrides` short-circuits the DB
+  // fetch. Used by the eval suite to test preference-driven Cal behavior
+  // without seeding the production DB. Production callers leave the field
+  // unset and the DB fetch path runs as before.
   let preferencesBlock = "";
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const prefMod = require("./user-preferences") as typeof import("./user-preferences");
-    // userId comes from the supabase session — fetched inside the helper.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { createClient } = require("@/lib/supabase/server") as typeof import("@/lib/supabase/server");
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const prefs = await prefMod.fetchActivePreferences(user.id, ctx.playbookId);
-      preferencesBlock = prefMod.renderPreferencesBlock(prefs);
+    if (ctx.preferenceOverrides && ctx.preferenceOverrides.length > 0) {
+      preferencesBlock = prefMod.renderPreferencesBlock(ctx.preferenceOverrides);
+    } else {
+      // userId comes from the supabase session — fetched inside the helper.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { createClient } = require("@/lib/supabase/server") as typeof import("@/lib/supabase/server");
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const prefs = await prefMod.fetchActivePreferences(user.id, ctx.playbookId);
+        preferencesBlock = prefMod.renderPreferencesBlock(prefs);
+      }
     }
   } catch (e) {
     console.error("[coach-ai] failed to load preferences:", e);
