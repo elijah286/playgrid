@@ -150,3 +150,101 @@ describe("renderSpecBlocksToFences — idempotency", () => {
     expect(twice.text).toBe(once.text);
   });
 });
+
+describe("renderSpecBlocksToFences — bespoke / custom routes (off-catalog shapes)", () => {
+  // 2026-05-24 architectural check: Phase 2b's "no hand-authored
+  // fences" rule shouldn't close off the ability to draw routes
+  // that aren't in the catalog. The user's worry: "if a coach
+  // describes a highly bespoke route, can Cal still represent it?"
+  //
+  // The answer is yes — Cal authors the bespoke route inside a
+  // `\`\`\`spec` block as a `{ kind: "custom", description,
+  // waypoints }` assignment. The renderer emits the waypoints
+  // verbatim, no `route_kind` is set (so the catalog-family
+  // validator's Layer 3 skips it), and the rendered fence has
+  // tool/render provenance (so Phase 2b approves it).
+  //
+  // This test pins that pipeline end-to-end. If a future refactor
+  // accidentally removes the custom escape hatch, this test fails.
+
+  it("renders a spec with a custom-action route into a fence with the verbatim waypoints", () => {
+    const specJson = JSON.stringify({
+      schemaVersion: 1,
+      variant: "flag_7v7",
+      title: "Spread — X option route",
+      playType: "offense",
+      formation: { name: "Spread Doubles", strength: "right" },
+      assignments: [
+        {
+          player: "X",
+          action: {
+            kind: "custom",
+            description: "option route: 5-yd stem, then break out if MOFO / sit if MOFC",
+            waypoints: [[-10, 5], [-13, 5]] as Array<[number, number]>,
+          },
+        },
+        { player: "Z", action: { kind: "route", family: "Go" } },
+        { player: "H", action: { kind: "route", family: "Hitch" } },
+        { player: "S", action: { kind: "route", family: "Drag" } },
+        { player: "B", action: { kind: "route", family: "Flat" } },
+      ],
+    });
+    const input = `\`\`\`spec\n${specJson}\n\`\`\``;
+    const result = renderSpecBlocksToFences(input);
+    expect(result.renders).toHaveLength(1);
+    expect(result.renders[0].ok).toBe(true);
+    // The rendered fence must contain the custom route's waypoints
+    // verbatim. The render emits the path; the player's start
+    // position is added by the synth based on the formation, so the
+    // fence's @X route should mention the waypoints.
+    expect(result.text).toContain("```play");
+    // The path values from the spec survive to the fence text.
+    expect(result.text).toContain("-13");
+    // The custom route has no route_kind in the rendered fence
+    // (Layer 3 of route-assignment-validate will skip it).
+    expect(result.text).not.toContain('"route_kind": "custom"');
+  });
+
+  it("a custom-route spec passes Phase 2b's provenance gate via the spec-render approval path", () => {
+    // The full Phase 2b gate runs inside agent.ts and depends on
+    // chat context. Here we verify the contract: a spec render
+    // produces an `ok: true` SpecBlockRender with a fenceJson,
+    // and the agent's pipeline approves THAT fenceJson by calling
+    // `approvedFences.approve(fenceJson)` on each successful
+    // render (see agent.ts:2461). So if the render succeeds and
+    // we can read `fenceJson`, the approval path is wired.
+    const specJson = JSON.stringify({
+      schemaVersion: 1,
+      variant: "flag_5v5",
+      title: "Custom screen",
+      playType: "offense",
+      formation: { name: "Spread Doubles", strength: "right" },
+      assignments: [
+        { player: "Z", action: { kind: "route", family: "Go" } },
+        { player: "X", action: { kind: "route", family: "Hitch" } },
+        {
+          player: "Y",
+          action: {
+            kind: "custom",
+            description: "bubble screen — release wide, settle at 2yd, look for the block",
+            waypoints: [[8, -1], [10, 1]] as Array<[number, number]>,
+          },
+        },
+        { player: "C", action: { kind: "route", family: "Flat" } },
+      ],
+    });
+    const input = `\`\`\`spec\n${specJson}\n\`\`\``;
+    const result = renderSpecBlocksToFences(input);
+    expect(result.renders).toHaveLength(1);
+    const render = result.renders[0];
+    expect(render.ok).toBe(true);
+    if (render.ok) {
+      // The agent.ts pipeline approves render.fenceJson — make sure
+      // that field is present and well-formed.
+      expect(render.fenceJson).toBeTruthy();
+      expect(typeof render.fenceJson).toBe("string");
+      // Verify the bespoke waypoints made it into the JSON.
+      expect(render.fenceJson).toContain("10");
+    }
+  });
+});

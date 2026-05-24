@@ -874,11 +874,31 @@ describe("NORMAL_PROMPT — SPEC EMISSION (Phase 2c, 2026-05-24)", () => {
 
   it("names Path B as spec emission and frames it as preferred", () => {
     expect(NORMAL_PROMPT).toMatch(/Path B — SPEC EMISSION \(preferred/);
-    expect(NORMAL_PROMPT).toMatch(/you never write coordinates/i);
+    // The "no coordinates" claim is now SCOPED to catalog routes (the
+    // earlier blanket "you never write coordinates" was misleading for
+    // bespoke custom routes — see the custom-route test below).
+    expect(NORMAL_PROMPT).toMatch(/For catalog routes you never write coordinates/);
     // The pre-rendered example uses Trips Right — pin one assignment
     // so a future "shorten the example" doesn't silently kill it.
     expect(NORMAL_PROMPT).toMatch(/"family": "Slant"/);
     expect(NORMAL_PROMPT).toMatch(/"formation": \{ "name": "Trips Right"/);
+  });
+
+  it("preserves the bespoke / off-catalog route escape hatch (custom action)", () => {
+    // Cal must understand that custom routes ARE supported via the
+    // spec path. Without this, the "you never write coordinates"
+    // framing would push Cal to either force every coach request
+    // into a catalog family (loses fidelity) or hand-author a fence
+    // (rejected by Phase 2b). The escape hatch keeps coverage for
+    // option routes, exotic combos, screens with specific blocker
+    // pulls — anything the catalog doesn't already model.
+    expect(NORMAL_PROMPT).toMatch(/Bespoke \/ off-catalog routes are FULLY SUPPORTED via the spec/);
+    expect(NORMAL_PROMPT).toMatch(/\{ kind: "custom", description, waypoints \}/);
+    expect(NORMAL_PROMPT).toMatch(/Phase 2b's gate doesn't reject custom routes inside specs/);
+    // The example covers a real off-catalog case (option route) with
+    // an actual waypoint payload so Cal sees what the shape looks like.
+    expect(NORMAL_PROMPT).toMatch(/"kind": "custom"/);
+    expect(NORMAL_PROMPT).toMatch(/"waypoints": \[\[/);
   });
 
   it("tells Cal to prefer Option A (spec) from compose_play's result", () => {

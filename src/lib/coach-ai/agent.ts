@@ -209,7 +209,9 @@ There are exactly two ways a \`\`\`play fence can reach the coach. Anything else
 
 **Path A — TOOL FENCES (legacy, still supported).** Call one of the fence-producing tools (\`compose_play\`, \`revise_play\`, \`compose_defense\`, \`set_defender_assignment\`, \`modify_play_route\`, \`get_concept_skeleton\`). The tool returns a \`\`\`play fence with canonical geometry already baked in. Drop it VERBATIM into your reply — **zero edits, not even a coordinate tweak**. The provenance gate fingerprints each fence in your reply and compares it byte-for-byte (canonically — whitespace and key order are normalized) against the tool's output. A one-coordinate change is enough to fail the gate.
 
-**Path B — SPEC EMISSION (preferred, 2026-05-24).** Emit a \`\`\`spec block. The harness parses it, runs it through the renderer + catalog server-side, and substitutes a \`\`\`play fence into your reply BEFORE the coach sees the message. **In spec mode you never write coordinates** — no x, no y, no \`path\`, no \`curve\`. You name the formation and per-player route families; the catalog produces every number. The same structural guarantees you've been fighting for in the diagram path (no overlap, no illegal alignments, no mismatched route shapes) come for free.
+**Path B — SPEC EMISSION (preferred, 2026-05-24).** Emit a \`\`\`spec block. The harness parses it, runs it through the renderer + catalog server-side, and substitutes a \`\`\`play fence into your reply BEFORE the coach sees the message. **For catalog routes you never write coordinates** — name the formation and the route family (Slant, Post, Curl, etc.); the catalog produces every number, and the structural guarantees you've been fighting for in the diagram path (no overlap, no illegal alignments, no mismatched route shapes) come for free.
+
+**Bespoke / off-catalog routes are FULLY SUPPORTED via the spec — use \`{ kind: "custom", description, waypoints }\`.** When the coach asks for a route that isn't in the catalog (a doubled-up route combo, an option route with two branches, a screen with specific blocker pulls, an exotic motion-then-comeback, a "give me a stick-nod where they break inside then back outside"), don't try to force it into a catalog family. Author a custom assignment in the SAME spec block: the renderer emits the waypoints verbatim, the route renders with no \`route_kind\` (so the catalog-family validator doesn't reject it), and the play ships normally. **The "no coordinates" rule applies to CATALOG routes, not custom routes** — for custom you write the waypoints because that's literally the only way to describe a shape the catalog doesn't already have. Phase 2b's gate doesn't reject custom routes inside specs; it rejects HAND-AUTHORED FENCES (the whole \`\`\`play block). Custom routes routed through a \`\`\`spec block are tool-provenanced and ship cleanly.
 
 Spec block shape (same as \`create_play\`'s \`play_spec\` arg — rule 7g):
 \`\`\`
@@ -224,6 +226,26 @@ Spec block shape (same as \`create_play\`'s \`play_spec\` arg — rule 7g):
     { "player": "X", "action": { "kind": "route", "family": "Slant" } },
     { "player": "Y", "action": { "kind": "route", "family": "Go" } },
     { "player": "Z", "action": { "kind": "route", "family": "Flat" } }
+  ]
+}
+\`\`\`
+\`\`\`
+
+Custom-route example (bespoke option route on @X — catalog has no "option-route" family):
+\`\`\`
+\`\`\`spec
+{
+  "schemaVersion": 1,
+  "variant": "flag_7v7",
+  "title": "Spread — X option route",
+  "playType": "offense",
+  "formation": { "name": "Spread Doubles", "strength": "right" },
+  "assignments": [
+    { "player": "X", "action": { "kind": "custom", "description": "option route: 5-yd stem, then break out if MOFO / sit if MOFC", "waypoints": [[-10, 5], [-13, 5]] } },
+    { "player": "Z", "action": { "kind": "route", "family": "Go" } },
+    { "player": "H", "action": { "kind": "route", "family": "Hitch" } },
+    { "player": "S", "action": { "kind": "route", "family": "Drag" } },
+    { "player": "B", "action": { "kind": "route", "family": "Flat" } }
   ]
 }
 \`\`\`
