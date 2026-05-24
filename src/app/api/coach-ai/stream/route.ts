@@ -8,6 +8,7 @@ import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { getCoachCalCapState } from "@/lib/billing/coach-cal-cap";
 import { getCoachCalImageCapState } from "@/lib/billing/coach-cal-image-cap";
 import type { CoachAiMode, ToolContext } from "@/lib/coach-ai/tools";
+import { getCoachCalVersion } from "@/lib/site/coach-cal-version";
 import { normalizePlaybookSettings } from "@/domain/playbook/settings";
 import {
   backfillHistory,
@@ -144,6 +145,11 @@ async function loadToolContext(
 
   const effectivePlaybookId = playbookId ?? resolvedPlay?.playbookId ?? null;
 
+  // Site-wide Cal version toggle (admin-controlled, persisted in
+  // site_settings). Fetched once per turn. Defaults to "v2" on any DB
+  // miss so a transient outage doesn't accidentally revert to v1.
+  const calVersion = await getCoachCalVersion();
+
   if (!effectivePlaybookId) {
     return {
       playbookId: null, playbookName: null, sportVariant: null, gameLevel: null,
@@ -157,6 +163,7 @@ async function loadToolContext(
       playDiagramRecap,
       threadId: null,
       userId: null,
+      calVersion,
     };
   }
   const [{ data }, { data: canEdit }] = await Promise.all([
@@ -192,6 +199,7 @@ async function loadToolContext(
     playDiagramRecap,
     threadId: null,
     userId: null,
+    calVersion,
   };
 }
 

@@ -9,6 +9,7 @@ import { setMobileEditingEnabledAction } from "@/app/actions/admin-mobile-editin
 import { setHideOwnerInfoAboutAction } from "@/app/actions/admin-about";
 import { setReferralConfigAction } from "@/app/actions/admin-referral";
 import { setCoachCalUpgradeBannerEnabledAction } from "@/app/actions/admin-coach-cal-banner";
+import { setCoachCalVersionAction } from "@/app/actions/admin-coach-cal-version";
 import { setCoachAiEvalDaysAction } from "@/app/actions/admin-coach-ai-eval";
 import {
   COACH_AI_EVAL_DAYS_MIN,
@@ -30,6 +31,7 @@ export function SiteSettingsAdminClient({
   initialAppleSigninEnabled,
   initialGoogleSigninEnabled,
   initialCoachCalUpgradeBannerEnabled,
+  initialCoachCalVersion,
   initialCoachAiEvalDays,
 }: {
   initialHideLobbyAnimation: boolean;
@@ -41,6 +43,7 @@ export function SiteSettingsAdminClient({
   initialAppleSigninEnabled: boolean;
   initialGoogleSigninEnabled: boolean;
   initialCoachCalUpgradeBannerEnabled: boolean;
+  initialCoachCalVersion: "v1" | "v2";
   initialCoachAiEvalDays: number;
 }) {
   const { toast } = useToast();
@@ -66,6 +69,9 @@ export function SiteSettingsAdminClient({
     initialCoachCalUpgradeBannerEnabled,
   );
   const [coachCalBannerPending, startCoachCalBannerTransition] = useTransition();
+
+  const [coachCalVersion, setCoachCalVersion] = useState<"v1" | "v2">(initialCoachCalVersion);
+  const [coachCalVersionPending, startCoachCalVersionTransition] = useTransition();
 
   const [savedEvalDays, setSavedEvalDays] = useState(initialCoachAiEvalDays);
   const [evalDaysInput, setEvalDaysInput] = useState(String(initialCoachAiEvalDays));
@@ -115,6 +121,26 @@ export function SiteSettingsAdminClient({
       }
       toast(
         next ? "Coach Cal upgrade banner is on." : "Coach Cal upgrade banner is off.",
+        "success",
+      );
+    });
+  }
+
+  function switchCoachCalVersion(next: "v1" | "v2") {
+    const prev = coachCalVersion;
+    if (next === prev) return;
+    setCoachCalVersion(next);
+    startCoachCalVersionTransition(async () => {
+      const res = await setCoachCalVersionAction(next);
+      if (!res.ok) {
+        setCoachCalVersion(prev);
+        toast(res.error, "error");
+        return;
+      }
+      toast(
+        next === "v2"
+          ? "Cal v2 active (full Phase 2 stack: provenance gate + rescue + server-side aliasing)."
+          : "Cal v1 active (legacy behavior: no provenance gate, no rescue, no server-side aliasing).",
         "success",
       );
     });
@@ -301,6 +327,50 @@ export function SiteSettingsAdminClient({
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-foreground">
+            Coach Cal version
+          </p>
+          <p className="mt-0.5 text-xs text-muted">
+            <strong>v2 (default):</strong> full Phase 2 stack — provenance gate
+            rejects hand-authored fences, rescue substitutes tool output on retry
+            failure, server-side label aliases applied in compose_play /
+            compose_defense / place_defense.{" "}
+            <strong>v1 (fallback):</strong> legacy pre-Phase-2 behavior — none of
+            the above. Flip to v1 instantly if v2 misbehaves; catalog fixes
+            (Snag-in-5v5, QB-carry route_kind, Seam drift, etc.) still apply in
+            both versions because they're bug fixes, not behavior changes.
+          </p>
+        </div>
+        <div className="inline-flex items-center gap-1 rounded-lg bg-surface p-1 ring-1 ring-border">
+          <button
+            type="button"
+            className={`rounded-md px-3 py-1 text-sm transition-colors ${
+              coachCalVersion === "v2"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted hover:text-foreground"
+            }`}
+            disabled={coachCalVersionPending}
+            onClick={() => switchCoachCalVersion("v2")}
+          >
+            v2
+          </button>
+          <button
+            type="button"
+            className={`rounded-md px-3 py-1 text-sm transition-colors ${
+              coachCalVersion === "v1"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted hover:text-foreground"
+            }`}
+            disabled={coachCalVersionPending}
+            onClick={() => switchCoachCalVersion("v1")}
+          >
+            v1
+          </button>
+        </div>
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
         <div>
           <p className="text-sm font-semibold text-foreground">

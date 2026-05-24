@@ -2519,7 +2519,15 @@ export async function runAgent(
         // an immediate workaround without a code revert. Default:
         // enforcement ON.
         const provenance = validateFenceProvenance(renderedText, approvedFences);
-        const provenanceGateEnforced = process.env.COACH_CAL_PROVENANCE_GATE !== "off";
+        // Enforcement gate. Two ways to disable: (a) the
+        // `COACH_CAL_PROVENANCE_GATE=off` Cloud Run env var (emergency
+        // global kill switch — see AGENTS.md "Phase 2b provenance
+        // gate — kill switch + log format" section), or (b) the
+        // admin-controlled `coach_cal_version` site setting set to
+        // "v1". Default behavior is enforcement ON (v2).
+        const provenanceGateEnforced =
+          process.env.COACH_CAL_PROVENANCE_GATE !== "off" &&
+          (ctx.calVersion ?? "v2") !== "v1";
         if (!provenance.ok) {
           // Always log — observability is independent of enforcement.
           // Format: structured prefix + key facts + sample body so
