@@ -35,6 +35,7 @@ import { getHideOwnerInfoAbout } from "@/lib/site/about-config";
 import { getAuthProvidersConfig } from "@/lib/site/auth-providers-config";
 import { getReferralConfig } from "@/lib/site/referral-config";
 import { getCoachCalUpgradeBannerEnabled } from "@/lib/site/coach-cal-banner-config";
+import { getCoachCalVersion } from "@/lib/site/coach-cal-version";
 import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
 import { getBetaFeatures } from "@/lib/site/beta-features-config";
 import { getTrafficSummaryAction } from "@/app/actions/admin-traffic";
@@ -134,6 +135,7 @@ export default async function SettingsPage({
     billingSummaryRes,
     shareLifetimeRes,
     revenueBreakdownRes,
+    coachCalVersion,
   ] = await Promise.all([
     listUsersForAdminAction(),
     getOpenAIIntegrationStatusAction(),
@@ -175,6 +177,7 @@ export default async function SettingsPage({
     getBillingSummaryForOverviewAction(),
     getShareLifetimeSummaryAction(),
     getRevenueBreakdownAction(),
+    getCoachCalVersion(),
   ]);
 
   return (
@@ -345,6 +348,7 @@ export default async function SettingsPage({
         initialAppleSigninEnabled={authProviders.apple}
         initialGoogleSigninEnabled={authProviders.google}
         initialCoachCalUpgradeBannerEnabled={coachCalUpgradeBannerEnabled}
+        initialCoachCalVersion={coachCalVersion}
         initialCoachAiEvalDays={coachAiEvalDays}
         initialCoachAiKbMisses={coachAiKbMissesRes.ok ? coachAiKbMissesRes.items : []}
         coachAiKbMissesError={coachAiKbMissesRes.ok ? null : coachAiKbMissesRes.error}

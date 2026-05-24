@@ -591,6 +591,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-02",
   },
   {
+    id: "site-admin-coach-cal-version-toggle",
+    name: "Site admin · Coach Cal version toggle (v1 / v2)",
+    description:
+      "Site Admin → Site settings now has a one-click toggle between Cal v2 (default — full Phase 2 stack: provenance gate rejects hand-authored fences, rescue substitutes tool output on retry failure, server-side label aliasing in compose_play / compose_defense / place_defense) and Cal v1 (legacy pre-Phase-2 behavior: none of the above). Persisted in `site_settings.coach_cal_version` and read once per chat turn by the agent — flips take effect immediately, no deploy required. The emergency `COACH_CAL_PROVENANCE_GATE=off` env var still wins if the UI toggle is unreachable. Catalog fixes (Snag-in-5v5 roster, QB-carry route_kind, Seam lateral drift, etc.) apply in both versions because they're bug fixes, not behavior changes.",
+    category: "Admin tools",
+    status: "internal",
+    addedDate: "2026-05-25",
+  },
+  {
     id: "play-move-to-group-from-action-menu",
     name: "Move a play between groups from the ⋮ menu",
     description:

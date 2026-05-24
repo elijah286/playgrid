@@ -91,6 +91,13 @@ export type ToolContext = {
    *  `CoachPreference` type from `./user-preferences` exactly so
    *  the agent can pass it straight to `renderPreferencesBlock`. */
   preferenceOverrides?: Array<{ key: string; value: string; scope: "user" | "playbook"; note: string | null }>;
+  /** Phase 5 (2026-05-25) — Cal version toggle. "v2" (default) runs
+   *  the full Phase 2 stack: provenance gate, rescue path, server-side
+   *  label aliasing in compose_play / compose_defense / etc. "v1"
+   *  short-circuits those three (gate off, no rescue, no aliasing) so
+   *  the site admin can flip the toggle if v2 misbehaves in prod.
+   *  Catalog fixes + non-behavioral bug fixes still apply in both. */
+  calVersion?: "v1" | "v2";
 };
 
 export type ToolHandler = (
@@ -669,11 +676,15 @@ const get_concept_skeleton: CoachAiTool = {
       ...renderResult.diagram,
     };
     // Task #36 — apply coach label-alias prefs server-side.
-    const aliasedSkeletonFence = ctx.preferenceOverrides
-      ? applyLabelAliasesToFence(skeletonFence, ctx.preferenceOverrides)
+    // Server-side label aliasing is a v2-only feature; in v1 the
+    // fence ships with canonical labels (Cal copies as-is). Both the
+    // calVersion check and the preferenceOverrides check have to pass.
+    const aliasesActive = (ctx.calVersion ?? "v2") !== "v1" && Boolean(ctx.preferenceOverrides);
+    const aliasedSkeletonFence = aliasesActive
+      ? applyLabelAliasesToFence(skeletonFence, ctx.preferenceOverrides!)
       : skeletonFence;
-    const aliasedSkeletonSpec = ctx.preferenceOverrides
-      ? applyLabelAliasesToSpec(result.spec, ctx.preferenceOverrides)
+    const aliasedSkeletonSpec = aliasesActive
+      ? applyLabelAliasesToSpec(result.spec, ctx.preferenceOverrides!)
       : result.spec;
     const fenceJson = JSON.stringify(aliasedSkeletonFence, null, 2);
     const specJson = JSON.stringify(aliasedSkeletonSpec, null, 2);
@@ -791,8 +802,8 @@ const modify_play_route: CoachAiTool = {
     if (!r.ok) {
       return { ok: false, error: r.errors.join("\n") };
     }
-    // Task #36 — apply coach label-alias prefs server-side.
-    const aliasedFence = ctx.preferenceOverrides
+    // Task #36 — apply coach label-alias prefs server-side. v2 only.
+    const aliasedFence = (ctx.calVersion ?? "v2") !== "v1" && ctx.preferenceOverrides
       ? applyLabelAliasesToFence(r.fence, ctx.preferenceOverrides)
       : r.fence;
     const fenceJson = JSON.stringify(aliasedFence, null, 2);
@@ -1078,11 +1089,13 @@ const compose_play: CoachAiTool = {
     // aliased labels because that's what the diagram shows. Eval
     // suite surfaced that prompt-only steering on Cal to apply
     // aliases was unreliable — this closes the gap structurally.
-    const prefAliasedFence = ctx.preferenceOverrides
-      ? applyLabelAliasesToFence(fence, ctx.preferenceOverrides)
+    // v2 only — see Cal-version comment elsewhere in this file.
+    const composeAliasesActive = (ctx.calVersion ?? "v2") !== "v1" && Boolean(ctx.preferenceOverrides);
+    const prefAliasedFence = composeAliasesActive
+      ? applyLabelAliasesToFence(fence, ctx.preferenceOverrides!)
       : fence;
-    const prefAliasedSpec = ctx.preferenceOverrides
-      ? applyLabelAliasesToSpec(result.spec, ctx.preferenceOverrides)
+    const prefAliasedSpec = composeAliasesActive
+      ? applyLabelAliasesToSpec(result.spec, ctx.preferenceOverrides!)
       : result.spec;
     const fenceJson = JSON.stringify(prefAliasedFence, null, 2);
     const specJson = JSON.stringify(prefAliasedSpec, null, 2);
@@ -1174,7 +1187,7 @@ const revise_play: CoachAiTool = {
       };
     }
     // Task #36 — apply coach label-alias prefs server-side.
-    const reviseAliasedFence = ctx.preferenceOverrides
+    const reviseAliasedFence = (ctx.calVersion ?? "v2") !== "v1" && ctx.preferenceOverrides
       ? applyLabelAliasesToFence(r.fence, ctx.preferenceOverrides)
       : r.fence;
     const fenceJson = JSON.stringify(reviseAliasedFence, null, 2);
@@ -1493,7 +1506,7 @@ const compose_defense: CoachAiTool = {
       zones: sanitized.diagram.zones,
     };
     // Task #36 — apply coach label-alias prefs before serializing.
-    const aliasedFinalFence = ctx.preferenceOverrides
+    const aliasedFinalFence = (ctx.calVersion ?? "v2") !== "v1" && ctx.preferenceOverrides
       ? applyLabelAliasesToFence(finalFence, ctx.preferenceOverrides)
       : finalFence;
     const fenceJson = JSON.stringify(aliasedFinalFence, null, 2);
@@ -1721,7 +1734,7 @@ const set_defender_assignment: CoachAiTool = {
     // Task #36 — apply coach label-alias prefs server-side. The
     // helper accepts a permissive shape; cast `newFence` since it's
     // already shaped like a fence (players[]+routes[]+zones?[]).
-    const aliasedDefenderFence = ctx.preferenceOverrides
+    const aliasedDefenderFence = (ctx.calVersion ?? "v2") !== "v1" && ctx.preferenceOverrides
       ? applyLabelAliasesToFence(
           newFence as Parameters<typeof applyLabelAliasesToFence>[0],
           ctx.preferenceOverrides,
@@ -1805,7 +1818,7 @@ const place_defense: CoachAiTool = {
       players: uniquePlayers.map((p) => ({ id: p.id, role: p.role, x: p.x, y: p.y, team: "D" as const })),
       zones: alignment.zones.filter((z) => z.ownerLabel),
     };
-    const aliasedDefensePayload = ctx.preferenceOverrides
+    const aliasedDefensePayload = (ctx.calVersion ?? "v2") !== "v1" && ctx.preferenceOverrides
       ? applyLabelAliasesToFence(baseDefensePayload, ctx.preferenceOverrides)
       : baseDefensePayload;
     const playersJson = JSON.stringify(aliasedDefensePayload.players);

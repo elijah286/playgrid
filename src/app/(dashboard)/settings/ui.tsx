@@ -201,6 +201,7 @@ export function SettingsClient({
   initialReferralConfig,
   initialExcludedEmails,
   initialCoachCalUpgradeBannerEnabled,
+  initialCoachCalVersion,
   initialCoachAiEvalDays,
   initialCancellationFeedback,
   cancellationFeedbackError,
@@ -260,6 +261,7 @@ export function SettingsClient({
   initialReferralConfig: ReferralConfig;
   initialExcludedEmails: string[];
   initialCoachCalUpgradeBannerEnabled: boolean;
+  initialCoachCalVersion: "v1" | "v2";
   initialCoachAiEvalDays: number;
   initialCancellationFeedback: CancellationFeedbackRow[];
   cancellationFeedbackError: string | null;
@@ -658,6 +660,7 @@ export function SettingsClient({
               initialAppleSigninEnabled={initialAppleSigninEnabled}
               initialGoogleSigninEnabled={initialGoogleSigninEnabled}
               initialCoachCalUpgradeBannerEnabled={initialCoachCalUpgradeBannerEnabled}
+              initialCoachCalVersion={initialCoachCalVersion}
               initialCoachAiEvalDays={initialCoachAiEvalDays}
             />
           </div>
