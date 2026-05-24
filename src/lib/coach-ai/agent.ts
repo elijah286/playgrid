@@ -2,6 +2,11 @@ import { chat, type ChatMessage, type ContentBlock } from "./llm";
 import { runTool, toolDefs, type ToolContext } from "./tools";
 import { validateDiagrams } from "./diagram-validate";
 import { renderSpecBlocksToFences, hasSpecBlocks } from "./spec-fence-render";
+import {
+  ApprovedFenceTracker,
+  validateFenceProvenance,
+  fenceProvenanceCritique,
+} from "./fence-provenance";
 import { projectSpecToNotes } from "./notes-from-spec";
 import { coachDiagramToPlaySpec } from "@/domain/play/specParser";
 import { cropPlaysFromSheet, expandBBox, type PlayLayoutEntry } from "./image-crop";
@@ -2240,6 +2245,40 @@ export async function runAgent(
    *  compose_play, modify_play_route) are safe to auto-persist into the
    *  anchored playId; defense overlays may target a different play. */
   let lastFenceToolName: string | null = null;
+  /** Phase 2b — per-turn provenance tracker. Records every fence body
+   *  that's "approved" to appear in Cal's reply:
+   *
+   *  1. Fences captured from prior assistant turns (already shown to the
+   *     coach in earlier turns — Cal may legitimately re-quote them).
+   *  2. Fences returned by any fence-producing tool THIS turn
+   *     (compose_play, revise_play, compose_defense, etc.).
+   *  3. Fences produced by server-side `\`\`\`spec` rendering THIS turn.
+   *
+   *  The chat-time validator calls `validateFenceProvenance` against
+   *  Cal's emitted text; any `\`\`\`play` fence whose canonical
+   *  fingerprint isn't in this tracker is hand-authored — that's the
+   *  failure mode the Diamond Crossers / Four Verticals / Bunch-in-5v5
+   *  regressions all share. Rejection routes Cal through the
+   *  `\`\`\`spec` retry critique (see `fenceProvenanceCritique`). */
+  const approvedFences = new ApprovedFenceTracker();
+  // Pre-approve every fence already in chat history. Reasoning: these
+  // fences already passed earlier gates (or were emitted before the
+  // gate existed) and reached the coach. Cal can legitimately quote
+  // them when answering follow-up questions ("redraw the prior play",
+  // "compare last week's play to this one"). The gate's job is to
+  // reject NEW hand-authored fences in the current turn — not to
+  // invalidate Cal's own prior outputs.
+  {
+    const FENCE_RE = /```play\s*\n([\s\S]*?)\n```/g;
+    for (const m of history) {
+      if (m.role !== "assistant") continue;
+      const text = extractAssistantText(m);
+      let match: RegExpExecArray | null;
+      while ((match = FENCE_RE.exec(text)) !== null) {
+        approvedFences.approve(match[1].trim());
+      }
+    }
+  }
   /** Inputs (front, coverage) of the most recent successful compose_defense
    *  call this turn. Used by the defense auto-commit branch to construct
    *  the saved play's name as "{front} {coverage} vs {offense}" without
@@ -2367,8 +2406,59 @@ export async function runAgent(
       // Final assistant turn. If we buffered to validate, do that now.
       if (shouldBuffer) {
         const bufferedText = extractAssistantText(result.message);
+
+        // PHASE 2a — Render `\`\`\`spec` blocks into `\`\`\`play` fences
+        // BEFORE the validator runs so both gates (provenance + diagram-
+        // validate) operate on the actual fence Cal would emit. Each
+        // successful render is also approved for Phase 2b provenance.
+        // Prior order ran the validator on the raw text (which contained
+        // the spec block as opaque JSON), then rendered post-validation —
+        // that meant a spec block whose render had bad geometry would
+        // slip past validateDiagrams entirely.
+        let renderedText = bufferedText;
+        let specRenderApplied = false;
+        if (hasSpecBlocks(bufferedText)) {
+          const rendered = renderSpecBlocksToFences(bufferedText);
+          renderedText = rendered.text;
+          specRenderApplied = renderedText !== bufferedText;
+          for (const rr of rendered.renders) {
+            if (rr.ok) approvedFences.approve(rr.fenceJson);
+          }
+        }
+
+        // PHASE 2b — provenance gate. Reject any `\`\`\`play` fence in
+        // the reply that didn't come from a tool call or a server-side
+        // spec render. This is the structural fix for hand-authored
+        // fences (Diamond Crossers, Four Verticals, Bunch-in-5v5,
+        // prose-route mismatches). The dedicated critique routes Cal
+        // to `\`\`\`spec` emission rather than the generic "your reply
+        // failed validation" loop.
+        const provenance = validateFenceProvenance(renderedText, approvedFences);
+        if (!provenance.ok && !validatorRetried) {
+          messages.pop();
+          newMessages.pop();
+          const critique: ChatMessage = {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text:
+                  "INTERNAL VALIDATION — do not mention this message to the coach. " +
+                  "Do NOT begin your re-emit with \"I apologize\", \"you're right\", " +
+                  "or any reference to a validator. Just emit the corrected " +
+                  "response as if the broken one never existed.\n\n" +
+                  fenceProvenanceCritique(provenance.handAuthoredFences.length),
+              },
+            ],
+          };
+          messages.push(critique);
+          newMessages.push(critique);
+          validatorRetried = true;
+          continue;
+        }
+
         const validation = validateDiagrams({
-          text: bufferedText,
+          text: renderedText,
           variant: ctx.sportVariant,
           playbookSettings: ctx.playbookSettings,
           lastPlaceDefense,
@@ -2454,25 +2544,27 @@ export async function runAgent(
         // retry made the same mistake, the broken fence shipped, and the
         // coach saw a Spread Doubles labeled "Four Verticals" with only
         // X and Z drawn.
-        let textToEmit = scrubCritiqueLeak(bufferedText);
-        if (!validation.ok && validatorRetried) {
+        let textToEmit = scrubCritiqueLeak(renderedText);
+        // Safety net: when the second attempt ALSO fails (either
+        // validator), strip any broken / unapproved play fences so we
+        // ship a graceful "couldn't compose" instead of bad geometry.
+        // Provenance errors join validation errors here — same
+        // mechanical fix (strip the fence), but the apology summary
+        // uses whichever error list explains the failure.
+        if (!provenance.ok && validatorRetried) {
+          textToEmit = stripBrokenFences(textToEmit, [
+            "hand-authored play fence — coach must request a spec-block re-emit",
+          ]);
+        } else if (!validation.ok && validatorRetried) {
           textToEmit = stripBrokenFences(textToEmit, validation.errors);
         }
-        // PHASE 2a — Render any `\`\`\`spec` blocks Cal emitted into
-        // `\`\`\`play` fences server-side. Cal authors intent (formation
-        // + assignments); the renderer produces coordinates. This
-        // eliminates Cal's ability to hand-author wrong coordinates
-        // because Cal never writes coordinates. Spec mode is opt-in
-        // for compatible tools today; Phase 2c will make it the default
-        // and Phase 2b will reject hand-authored `\`\`\`play` fences
-        // structurally.
-        if (hasSpecBlocks(textToEmit)) {
-          const rendered = renderSpecBlocksToFences(textToEmit);
-          textToEmit = rendered.text;
-          // Mirror the rewrite onto the assistant message in `messages`
-          // so the next turn's prior-fence lookup finds the spec-
-          // rendered fence as the prior diagram. Same pattern as
-          // `applyAuthoritativeFenceRewrite` below.
+        // PHASE 2a — Mirror the spec→fence rewrite onto the assistant
+        // message in `messages` so the NEXT turn's prior-fence lookup
+        // finds the rendered fence as the prior diagram. Render itself
+        // already happened above (before validation); this just
+        // propagates the rewrite onto `messages[last].content`. Same
+        // pattern as `applyAuthoritativeFenceRewrite` below.
+        if (specRenderApplied) {
           const lastMsg = messages[messages.length - 1];
           if (lastMsg && lastMsg.role === "assistant") {
             if (typeof lastMsg.content === "string") {
@@ -2562,9 +2654,22 @@ export async function runAgent(
         "set_defender_assignment",
       ]);
       if (r.ok && FENCE_PRODUCING_TOOLS.has(tu.name)) {
-        const fenceMatch = /```play\s*\n([\s\S]*?)\n```/.exec(resultText);
-        if (fenceMatch) {
-          lastFenceFromTool = fenceMatch[1].trim();
+        // Capture EVERY fence in the tool result (a single tool call
+        // can return more than one — e.g. revise_play that touches
+        // multiple plays is hypothetical but worth defending against).
+        // `lastFenceFromTool` still holds the last one for the
+        // authoritative-rewrite path; `approvedFences` records all of
+        // them for Phase 2b provenance.
+        const fenceRe = /```play\s*\n([\s\S]*?)\n```/g;
+        let fenceMatch: RegExpExecArray | null;
+        let captured: string | null = null;
+        while ((fenceMatch = fenceRe.exec(resultText)) !== null) {
+          const body = fenceMatch[1].trim();
+          approvedFences.approve(body);
+          captured = body;
+        }
+        if (captured) {
+          lastFenceFromTool = captured;
           lastFenceToolName = tu.name;
         }
       }
@@ -2668,7 +2773,14 @@ export async function runAgent(
         // back to both at ~2yd. The fence-fidelity gate compares
         // emitted route paths against the skeleton's verbatim.
         const fenceMatch = /```play\n([\s\S]*?)\n```/.exec(resultText);
-        if (fenceMatch) skeletonReturnedFenceJson = fenceMatch[1].trim();
+        if (fenceMatch) {
+          const body = fenceMatch[1].trim();
+          skeletonReturnedFenceJson = body;
+          // Phase 2b — skeleton's verbatim fence is also approved for
+          // emission (get_concept_skeleton is the legacy alias of
+          // compose_play and isn't in FENCE_PRODUCING_TOOLS).
+          approvedFences.approve(body);
+        }
       }
       if (tu.name === "modify_play_route"   && r.ok) modifyPlayRouteInvoked = true;
       // 2026-05-02 refactor: treat the new constructive tools as
