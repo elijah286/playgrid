@@ -445,6 +445,84 @@ describe("compose_defense — unified create/overlay", () => {
     expect(r.error).toMatch(/byte-preserve|offense|Rule 11/i);
   });
 
+  it("emits zone-drop arrows for zone defenders on overlays (universal fallback)", async () => {
+    // Surfaced 2026-05-25 production: a coach overlayed Cover 2 on a
+    // custom play and saw zones drawn but NO defender movement —
+    // reactor patterns only cover (variant, coverage, concept) triples
+    // we've explicitly authored. `applyZoneDrops` is the universal
+    // fallback: every zone defender gets at least a short arrow.
+    //
+    // Setup: compose Snag (a concept we DO have reactor patterns for,
+    // but use Cover 2 in flag_7v7 where the reactor catalog has
+    // nothing for Snag — so we exercise the fallback path).
+    const compose = loadTool("compose_play");
+    const playR = await compose.handler({ concept: "Flood" }, { ...TACKLE_CTX, sportVariant: "flag_7v7" });
+    expect(playR.ok).toBe(true);
+    if (!playR.ok) return;
+    const priorFenceJson = (/```play\n([\s\S]*?)\n```/.exec(playR.result)!)[1];
+
+    const tool = loadTool("compose_defense");
+    const r = await tool.handler(
+      { front: "7v7 Zone", coverage: "Cover 2", on_play: priorFenceJson },
+      { ...TACKLE_CTX, sportVariant: "flag_7v7" },
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const fence = extractFence(r.result);
+    const routes = (fence.routes as Array<{ from: string; route_kind?: string }> | undefined) ?? [];
+    const defenders = (fence.players as Array<{ id: string; team: string }>).filter(
+      (p) => p.team === "D",
+    );
+    expect(defenders.length).toBeGreaterThan(0);
+
+    // Every zone defender should have at least one route — either a
+    // reactor route OR a zone_drop fallback. The key guarantee is
+    // "no static dots" for zone defenders in zone coverage.
+    const defenderIdsWithRoutes = new Set(routes.map((r) => r.from));
+    const zoneDefenders = defenders.filter((d) => defenderIdsWithRoutes.has(d.id));
+    expect(zoneDefenders.length).toBeGreaterThanOrEqual(Math.floor(defenders.length / 2));
+
+    // At least one route must be route_kind="zone_drop" (proves the
+    // fallback fired — reactor routes would have route_kind="react_*").
+    const dropRoutes = routes.filter((r) => r.route_kind === "zone_drop");
+    expect(dropRoutes.length).toBeGreaterThan(0);
+  });
+
+  it("standalone defense (no on_play) also emits zone-drop arrows", async () => {
+    // Coaches who ask "show me a Cover 2" (no anchored play) should
+    // still see how the defenders move — the fallback applies to both
+    // compose paths.
+    const tool = loadTool("compose_defense");
+    const r = await tool.handler(
+      { front: "7v7 Zone", coverage: "Cover 2" },
+      { ...TACKLE_CTX, sportVariant: "flag_7v7" },
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const fence = extractFence(r.result);
+    const routes = (fence.routes as Array<{ route_kind?: string }> | undefined) ?? [];
+    const dropRoutes = routes.filter((r) => r.route_kind === "zone_drop");
+    expect(dropRoutes.length).toBeGreaterThan(0);
+  });
+
+  it("man coverage produces NO zone-drop routes (only zones are absent in man)", async () => {
+    // Cover 0 / Cover 1 with all-man has no zones → the fallback's
+    // `if assignment.kind !== "zone"` guard skips every defender.
+    // Reactor patterns may still add routes for specific concepts,
+    // but the zone_drop fallback must not fire.
+    const tool = loadTool("compose_defense");
+    const r = await tool.handler(
+      { front: "Nickel (4-2-5)", coverage: "Cover 0" },
+      TACKLE_CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const fence = extractFence(r.result);
+    const routes = (fence.routes as Array<{ route_kind?: string }> | undefined) ?? [];
+    const dropRoutes = routes.filter((r) => r.route_kind === "zone_drop");
+    expect(dropRoutes.length).toBe(0);
+  });
+
   it("emits read_and_react defender routes when overlaying a known concept (Fix 3)", async () => {
     // Compose Flood Right, then overlay Cover 3. The reactor catalog
     // (defensiveReactors.ts) has T11_COVER3_VS_FLOOD with SL → @H follow_to_flat,

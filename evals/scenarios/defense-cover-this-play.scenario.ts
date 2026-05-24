@@ -74,6 +74,36 @@ const scenario: Scenario = {
     // says "2-3 variants in separate turns").
     toolCallCount("compose_defense", { max: 2 }),
 
+    // ── Defender MOVEMENT (Major fix 2026-05-25) ────────────────────
+    // Production feedback: coach applied Cover 2 to a play, saw zones
+    // drawn but defenders shipped static. `applyZoneDrops` is the
+    // universal fallback — every zone defender gets at least a short
+    // arrow showing where they go at the snap. This assertion locks
+    // it in: the overlay fence must contain at least one route owned
+    // by a defender (team:"D"). Either a reactor pattern route OR a
+    // zone_drop fallback satisfies it.
+    ((cap) => {
+      const f = cap.playFences[0];
+      if (!f) return { ok: false as const, description: "expected a fence", details: "no fence" };
+      const players = (f.players as Array<{ id?: string; team?: string }> | undefined) ?? [];
+      const defenderIds = new Set(
+        players.filter((p) => p?.team === "D" && p?.id).map((p) => p!.id!),
+      );
+      const routes = (f.routes as Array<{ from?: string; route_kind?: string }> | undefined) ?? [];
+      const defenderRoutes = routes.filter((r) => r?.from && defenderIds.has(r.from));
+      if (defenderRoutes.length === 0) {
+        return {
+          ok: false as const,
+          description: "defenders must have movement routes (zone drops or reactor reactions)",
+          details: `defenders: [${[...defenderIds].join(", ")}]; routes owned by defenders: 0`,
+        };
+      }
+      return {
+        ok: true as const,
+        description: `${defenderRoutes.length} defender routes shipped (movement visible)`,
+      };
+    }),
+
     // ── Prose assertions (defense movement + behavior) ──────────────
     // Closes the gap between `projectSpecToNotes` (unit-tested in
     // notes-from-spec.test.ts) and Cal's freelance prose. The
