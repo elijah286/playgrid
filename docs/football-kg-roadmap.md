@@ -1,6 +1,6 @@
 # Football Knowledge Graph — Phase 1 Roadmap
 
-**Status:** Phase 1b COMPLETE (113 primitives migrated); Phase 1c next · **Branch:** `feat/football-kg` · **Started:** 2026-05-24
+**Status:** Phase 1c in progress (KB seed generator done; legacy file generators reframed as Phase 1d direct-cut) · **Branch:** `feat/football-kg` · **Started:** 2026-05-24
 
 This document is the source of truth for the multi-week Coach Cal architectural refactor. Read it first if you're picking this work up across sessions.
 
@@ -71,21 +71,27 @@ Decisions locked 2026-05-24:
 
 ### 1c — Auto-generators
 
-**Files:**
-- `scripts/fb-kg/generate-catalog.ts` — produces current TS catalog files from defs
-- `scripts/fb-kg/generate-kb-seed.ts` — produces SQL migration for `rag_documents` chunks
-- `scripts/fb-kg/validate.ts` — CLI wrapper for `load.validate()`
-- Snapshot tests verifying byte-equality with current `conceptCatalog.ts`, `routeTemplates.ts`, etc.
+**Reframed 2026-05-24** after building the first POC. The original plan called for byte-equal generators that reproduce the legacy catalog files (`routeTemplates.ts`, `conceptCatalog.ts`, etc.). After implementing a route-template generator, the better path is:
 
-**Acceptance:** `pnpm fb-kg generate` produces output byte-identical to current files. CI fails if defs change without regenerating.
+- **Drop the byte-equal legacy generators.** Reproducing the existing TS files (types + helpers + comments + data) is brittle — any cosmetic change to a helper requires regenerating. Phase 1d cuts tools to import directly from `FOOTBALL_KG` instead, after which the legacy files can be deleted.
+
+- **Ship the KB seed generator instead.** This is genuinely new content (rag_documents rows derived from each primitive's `body`), so byte-equality isn't a concern. The generator wipes existing `source='football-kg'` rows and re-inserts the current KG snapshot. Coach-authored content (`source='seed'`) is preserved.
+
+**Files:**
+- `scripts/fb-kg/generate-kb-seed.ts` ✅ — produces SQL migration for `rag_documents` from every primitive's `body`. Idempotent: re-running wipes prior KG rows and re-inserts.
+- `src/domain/football-kg/defs/kb-seed-generator.test.ts` ✅ — 11 structural tests verifying every primitive yields a row, variants fan out, SQL escaping handles apostrophes, delete+insert ordering is correct.
+- `scripts/fb-kg/validate.ts` — pending (CLI wrapper for `validateKG`).
+
+**Acceptance:** `npx tsx scripts/fb-kg/generate-kb-seed.ts --write` produces a fresh migration. Tests confirm structural validity. Phase 1c COMPLETE on this front.
 
 ### 1d — Cut tools to read from KG
 
 **Files modified:**
 - `src/lib/coach-ai/tools.ts` — `compose_play`, `place_offense`, `compose_defense`, `get_route_template`, `get_concept_skeleton` import from `football-kg/defs` instead of legacy catalog files
-- Legacy catalog files stay as auto-generated artifacts (not hand-edited)
+- `src/domain/play/routeTemplates.ts`, `conceptCatalog.ts`, `defensiveAlignments.ts`, `defensiveReactors.ts` — DELETED once nothing imports them (verified by grep + typecheck).
+- `src/domain/play/offensiveSynthesize.ts` — refactored to read formation specs from `FOOTBALL_KG.formations` instead of its own parser-based catalog.
 
-**Acceptance:** all existing Cal tests pass; no behavior change visible to coaches.
+**Acceptance:** all existing Cal tests pass; no behavior change visible to coaches. Legacy catalog files gone or stripped to import-only re-exports.
 
 ### 1e — Manifest CLI + first scenario evals
 
