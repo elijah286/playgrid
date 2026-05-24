@@ -16,13 +16,12 @@
 
 import type { FootballKG } from "../load";
 import type { DrillDef } from "../schemas/DrillDef";
-import type { ReactorPatternDef } from "../schemas/ReactorPatternDef";
 import { CONCEPTS } from "./concepts";
 import { FORMATIONS } from "./formations";
+import { REACTOR_PATTERNS } from "./reactor-patterns";
 import { ROUTES } from "./routes";
 import { SCHEMES } from "./schemes";
 
-const REACTOR_PATTERNS: ReactorPatternDef[] = []; // populated in Phase 1b — reactor patterns
 const DRILLS: DrillDef[] = []; // populated in Phase 5+
 
 export const FOOTBALL_KG: FootballKG = {
@@ -35,4 +34,4 @@ export const FOOTBALL_KG: FootballKG = {
 };
 
 // Re-export the constituent arrays so individual lookups are simple.
-export { ROUTES, SCHEMES, FORMATIONS, CONCEPTS };
+export { ROUTES, SCHEMES, FORMATIONS, CONCEPTS, REACTOR_PATTERNS };

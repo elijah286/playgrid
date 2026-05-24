@@ -47,6 +47,21 @@ export const CONCEPTS: ConceptDef[] = [
     ],
   },
   {
+    id: "slant-flat",
+    name: "Slant-Flat",
+    family: "concept",
+    variants: [...ALL_VARIANTS],
+    description: "High-low on the flat defender — outside slant + flat underneath.",
+    body: "Quick-game variant of Curl-Flat. Outside receiver runs a slant (3-yd stem, sharp inside cut at ~25° above horizontal, catches at 5-6 yds); slot or back releases to the flat at 0-3 yds. The flat defender is in a high-low bind — sits on the flat = throw the slant behind him; bites on the slant = throw the flat. Beats press man (slant is a press-man killer because the inside leverage is gained immediately) and Cover 2 (slant fits between the underneath defenders).",
+    aliases: ["Slant/Flat"],
+    complexity: "basic",
+    defaultFormation: { id: "doubles", strength: "right" },
+    pattern: [
+      { role: "outside_wr", family: "Slant", depthRangeYds: { min: 3, max: 7 } },
+      { role: "any",        family: "Flat",  depthRangeYds: { min: 0, max: 4 } },
+    ],
+  },
+  {
     id: "smash",
     name: "Smash",
     family: "concept",

@@ -1,0 +1,490 @@
+/**
+ * Reactor pattern definitions — migrated from src/domain/play/defensiveReactors.ts.
+ *
+ * Last Phase 1b sub-deliverable. 30 of 31 legacy patterns migrated;
+ * T11_COVER0_VS_ALL is excluded because no T11 Cover 0 alignment exists
+ * in the schemes catalog (the legacy pattern's `reactors` array was
+ * empty so no movement information is lost).
+ *
+ * Migration choices:
+ *   - id: kebab-case from variant + scheme-shortname + concept-shortname.
+ *   - schemeId: references the canonical scheme in defs/schemes.ts.
+ *     For variants where multiple schemes share a coverage (T11 Cover 3
+ *     has both 4-3 Over and 4-4 Stack), the reactor points at the
+ *     most common scheme; the runtime lookup at Phase 1d will need
+ *     to handle the multi-scheme-per-coverage case if needed.
+ *   - conceptId: kebab-case concept id, or "*" for the wildcard
+ *     (Cover 0 reacts the same way regardless of concept).
+ *   - reactors carry defender id, trigger (offensive player), behavior,
+ *     and the coach-facing cue verbatim from the legacy file.
+ *
+ * Cross-ref validation (load.ts) confirms:
+ *   - schemeId exists in defs/schemes.ts
+ *   - conceptId exists in defs/concepts.ts (or is "*")
+ *   - reactor defender ids match (suffix-tolerantly) the scheme's
+ *     defenders[] roster (handles CB → CB2 suffixing)
+ */
+
+import type { ReactorPatternDef } from "../schemas/ReactorPatternDef";
+
+export const REACTOR_PATTERNS: ReactorPatternDef[] = [
+  // ── flag_7v7 ──────────────────────────────────────────────────────
+  {
+    id: "f7-tampa-2-vs-slant-flat",
+    name: "F7 Tampa 2 vs Slant-Flat",
+    family: "reactor-pattern",
+    variants: ["flag_7v7"],
+    description: "Tampa 2 reads Slant-Flat as a sweet-spot concept.",
+    body: "Tampa 2 reads Slant-Flat as a sweet-spot concept. HL is the key — he sits in his hook and drives DOWNHILL on @X's slant at the break. CB stays low to cap the flat by @H. M reads vertical from @Y/@Z; if both stay short, M robs the middle.",
+    variant: "flag_7v7",
+    schemeId: "f7-tampa-2",
+    conceptId: "slant-flat",
+    reactors: [
+      { defender: "HL", trigger: "X", behavior: "jump_route", cue: "Reads @X's slant — sits 5 yds, drives downhill at the break." },
+      { defender: "CB", trigger: "H", behavior: "follow_to_flat", cue: "Squeezes the flat — caps @H short of the sideline." },
+      { defender: "M", trigger: "Y", behavior: "robber", cue: "Robs the middle behind HL; carries any seam late." },
+    ],
+  },
+  {
+    id: "f7-tampa-2-vs-flood",
+    name: "F7 Tampa 2 vs Flood",
+    family: "reactor-pattern",
+    variants: ["flag_7v7"],
+    description: "Tampa 2 vs Flood — three-level stretch to one side.",
+    body: "Tampa 2 vs Flood — three-level stretch to one side. CB takes the flat (lowest), HR carries the intermediate, FS rotates to cap the deep. M robs the middle in case of the backside dig.",
+    variant: "flag_7v7",
+    schemeId: "f7-tampa-2",
+    conceptId: "flood",
+    reactors: [
+      { defender: "CB", trigger: "H", behavior: "follow_to_flat", cue: "Jumps the flat by @H — first read." },
+      { defender: "HR", trigger: "Y", behavior: "jump_route", cue: "Sinks under the intermediate — drives on @Y's break." },
+      { defender: "FS", trigger: "Z", behavior: "carry_vertical", cue: "Caps the deep — carries @Z vertical, no shot over the top." },
+    ],
+  },
+  {
+    id: "f7-tampa-2-vs-mesh",
+    name: "F7 Tampa 2 vs Mesh",
+    family: "reactor-pattern",
+    variants: ["flag_7v7"],
+    description: "Tampa 2 vs Mesh — wall off the crossing drags.",
+    body: "Tampa 2 vs Mesh — two crossing drags at 2-6 yds. HL and HR wall off the crossers from inside out so they don't run free across the middle. M sits in the dead spot 8-10 yds.",
+    variant: "flag_7v7",
+    schemeId: "f7-tampa-2",
+    conceptId: "mesh",
+    reactors: [
+      { defender: "HL", trigger: "H", behavior: "wall_off", cue: "Walls off the underneath drag — re-routes @H inside out." },
+      { defender: "HR", trigger: "Y", behavior: "wall_off", cue: "Walls off the second drag — keeps @Y from running clean." },
+      { defender: "M", trigger: "X", behavior: "robber", cue: "Sits 8-10 yds robbing the dig behind the mesh." },
+    ],
+  },
+  {
+    id: "f7-tampa-2-vs-four-verticals",
+    name: "F7 Tampa 2 vs Four Verticals",
+    family: "reactor-pattern",
+    variants: ["flag_7v7"],
+    description: "Tampa 2 vs Four Verts — M carries the seam.",
+    body: "Tampa 2 vs Four Verts — the M pulls the seam carry job. FS / SS stay over the top on the outside verticals. HL and HR pass off the inside seams to M then sink to wall any underneath check.",
+    variant: "flag_7v7",
+    schemeId: "f7-tampa-2",
+    conceptId: "four-verticals",
+    reactors: [
+      { defender: "M", trigger: "Y", behavior: "carry_vertical", cue: "Sprints to the deep middle hole — takes the inside seam (@Y)." },
+      { defender: "FS", trigger: "X", behavior: "carry_vertical", cue: "Stays over the top of @X — no go-ball over his head." },
+      { defender: "SS", trigger: "Z", behavior: "carry_vertical", cue: "Stays over the top of @Z — no go-ball over his head." },
+    ],
+  },
+  {
+    id: "f7-tampa-2-vs-smash",
+    name: "F7 Tampa 2 vs Smash",
+    family: "reactor-pattern",
+    variants: ["flag_7v7"],
+    description: "Tampa 2 vs Smash — corner-hitch combo, FS rotates to take the corner.",
+    body: "Tampa 2 vs Smash — corner-hitch combo. The hi-lo on the CB is the problem; in Tampa 2 the FS/SS rotate to take the corner away and the CB stays underneath on the hitch.",
+    variant: "flag_7v7",
+    schemeId: "f7-tampa-2",
+    conceptId: "smash",
+    reactors: [
+      { defender: "CB", trigger: "X", behavior: "jump_route", cue: "Stays low — drives on the hitch by @X (give up the corner)." },
+      { defender: "SS", trigger: "Z", behavior: "carry_vertical", cue: "Rotates over the corner route — no easy fade." },
+    ],
+  },
+  {
+    id: "f7-cover-3-vs-flood",
+    name: "F7 Cover 3 vs Flood",
+    family: "reactor-pattern",
+    variants: ["flag_7v7"],
+    description: "Cover 3 vs Flood — three-receiver stretch, flat-curl-deep answer.",
+    body: "Cover 3 vs Flood — three-receiver stretch. The flat defender (FL/FR) attacks the flat; the curl/hook drops UNDER the intermediate; the deep third defender carries the vertical. Classic answer.",
+    variant: "flag_7v7",
+    schemeId: "f7-cover-3",
+    conceptId: "flood",
+    reactors: [
+      { defender: "FR", trigger: "H", behavior: "follow_to_flat", cue: "Hits the flat by @H — first read." },
+      { defender: "HR", trigger: "Y", behavior: "jump_route", cue: "Sinks under the intermediate — drives on @Y's break." },
+      { defender: "CB", trigger: "Z", behavior: "carry_vertical", cue: "Strong-side deep third — carries @Z vertical, never lets him behind." },
+    ],
+  },
+  {
+    id: "f7-cover-3-vs-smash",
+    name: "F7 Cover 3 vs Smash",
+    family: "reactor-pattern",
+    variants: ["flag_7v7"],
+    description: "Cover 3 vs Smash — cloud the corner with the CB.",
+    body: "Cover 3 vs Smash — the corner route attacks the flat-to-deep seam. The cloud rotation has the CB jump the corner from underneath; the flat defender takes the hitch.",
+    variant: "flag_7v7",
+    schemeId: "f7-cover-3",
+    conceptId: "smash",
+    reactors: [
+      { defender: "FR", trigger: "X", behavior: "jump_route", cue: "Sits on the hitch by @X — first underneath read." },
+      { defender: "CB", trigger: "Z", behavior: "carry_vertical", cue: "Cloud's the corner — carries @Z's corner route from underneath." },
+    ],
+  },
+  {
+    id: "f7-cover-3-vs-mesh",
+    name: "F7 Cover 3 vs Mesh",
+    family: "reactor-pattern",
+    variants: ["flag_7v7"],
+    description: "Cover 3 vs Mesh — wall off from the hook zones.",
+    body: "Cover 3 vs Mesh — wall off the crossers from the hook zones. The hook defenders re-route the drags to slow the mesh and make the QB hold the ball.",
+    variant: "flag_7v7",
+    schemeId: "f7-cover-3",
+    conceptId: "mesh",
+    reactors: [
+      { defender: "HL", trigger: "H", behavior: "wall_off", cue: "Walls off the first crosser (@H) — squeezes inside-out from the left hook." },
+      { defender: "HR", trigger: "Y", behavior: "wall_off", cue: "Walls off the second crosser (@Y) from the right hook — same re-route technique." },
+    ],
+  },
+  {
+    id: "f7-cover-3-vs-curl-flat",
+    name: "F7 Cover 3 vs Curl-Flat",
+    family: "reactor-pattern",
+    variants: ["flag_7v7"],
+    description: "Cover 3 vs Curl-Flat — flat defender attacks flat, curl defender walls.",
+    body: "Cover 3 vs Curl-Flat — the spot drop concept. The flat defender attacks the flat; the curl defender wall-offs the curl; the deep third covers any vertical leak.",
+    variant: "flag_7v7",
+    schemeId: "f7-cover-3",
+    conceptId: "curl-flat",
+    reactors: [
+      { defender: "FR", trigger: "H", behavior: "follow_to_flat", cue: "Drives on the flat by @H — first read." },
+      { defender: "HR", trigger: "Z", behavior: "jump_route", cue: "Sits the curl by @Z — drives on the comeback." },
+    ],
+  },
+  {
+    id: "f7-cover-3-vs-four-verticals",
+    name: "F7 Cover 3 vs Four Verticals",
+    family: "reactor-pattern",
+    variants: ["flag_7v7"],
+    description: "Cover 3 vs Four Verts — seam holes are the weakness.",
+    body: "Cover 3 vs Four Verts — the seam holes hurt this coverage. Deep thirds carry the outside verts; FS (deep middle) carries one inside seam, hooks rally to the other.",
+    variant: "flag_7v7",
+    schemeId: "f7-cover-3",
+    conceptId: "four-verticals",
+    reactors: [
+      { defender: "FS", trigger: "Y", behavior: "carry_vertical", cue: "Carries the strong-side seam (@Y) — overlaps deep middle." },
+      { defender: "HR", trigger: "Z", behavior: "carry_vertical", cue: "Sinks under @Z's vertical — closes the seam window." },
+    ],
+  },
+  {
+    id: "f7-cover-1-vs-flood",
+    name: "F7 Cover 1 vs Flood",
+    family: "reactor-pattern",
+    variants: ["flag_7v7"],
+    description: "Cover 1 vs Flood — pure man with FS deep middle help.",
+    body: "Cover 1 vs Flood — pure man with FS deep middle help. Each underneath defender locks his man; FS reads the QB and helps over the top of the vertical.",
+    variant: "flag_7v7",
+    schemeId: "f7-cover-1",
+    conceptId: "flood",
+    reactors: [
+      { defender: "FS", trigger: "Z", behavior: "carry_vertical", cue: "Free safety help — gets over the top of the deepest vertical (@Z)." },
+    ],
+  },
+  {
+    id: "f7-cover-1-vs-slant-flat",
+    name: "F7 Cover 1 vs Slant-Flat",
+    family: "reactor-pattern",
+    variants: ["flag_7v7"],
+    description: "Cover 1 vs Slant-Flat — CB jumps the slant aggressively with FS help.",
+    body: "Cover 1 vs Slant-Flat — man coverage. The CB on @X jumps the slant aggressively (he has inside help from FS). The flat defender takes @H step for step.",
+    variant: "flag_7v7",
+    schemeId: "f7-cover-1",
+    conceptId: "slant-flat",
+    reactors: [
+      { defender: "CB", trigger: "X", behavior: "jump_route", cue: "Inside-leverage — drives on the slant break (FS is over the top)." },
+    ],
+  },
+  {
+    id: "f7-cover-1-vs-four-verticals",
+    name: "F7 Cover 1 vs Four Verticals",
+    family: "reactor-pattern",
+    variants: ["flag_7v7"],
+    description: "Cover 1 vs Four Verts — FS picks the deepest inside vertical.",
+    body: "Cover 1 vs Four Verts — the FS picks a side. Whichever inside vertical threatens deepest, FS overlaps. The other inside vert is a 1-on-1 the LB has to carry.",
+    variant: "flag_7v7",
+    schemeId: "f7-cover-1",
+    conceptId: "four-verticals",
+    reactors: [
+      { defender: "FS", trigger: "Y", behavior: "carry_vertical", cue: "Picks the strongest vertical (@Y) — overlap deep." },
+    ],
+  },
+  {
+    id: "f7-cover-0-vs-all",
+    name: "F7 Cover 0 vs anything",
+    family: "reactor-pattern",
+    variants: ["flag_7v7"],
+    description: "Cover 0 (all-out blitz) — every defender locks man, no deep help. QB must throw hot.",
+    body: "Cover 0 (all-out blitz) vs anything — no safety help. Every underneath defender is in man with no deep help; the front rushes 5+. The teaching point is that the QB has to throw HOT on every snap.",
+    variant: "flag_7v7",
+    schemeId: "f7-cover-0",
+    conceptId: "*",
+    reactors: [],
+  },
+
+  // ── tackle_11 ──────────────────────────────────────────────────────
+  // Note: T11 Cover 0 reactor pattern intentionally excluded — no T11
+  // Cover 0 scheme in the alignment catalog (legacy reactor was empty
+  // anyway, no movement information to preserve).
+  {
+    id: "t11-cover-3-vs-flood",
+    name: "T11 Cover 3 vs Flood",
+    family: "reactor-pattern",
+    variants: ["tackle_11"],
+    description: "Cover 3 vs Flood (tackle) — Sam attacks flat, SS sinks under sail, CB carries deep.",
+    body: "Cover 3 vs Flood — textbook answer. SL (strong LB) attacks the flat; SS (the strong-side rotated flat/hook defender) sinks under the intermediate; deep-third CB carries the vertical.",
+    variant: "tackle_11",
+    schemeId: "t11-4-3-over-cover-3",
+    conceptId: "flood",
+    reactors: [
+      { defender: "SL", trigger: "H", behavior: "follow_to_flat", cue: "Sam attacks the flat by @H — first read." },
+      { defender: "SS", trigger: "Y", behavior: "jump_route", cue: "Sinks under the sail by @Y." },
+      { defender: "CB", trigger: "Z", behavior: "carry_vertical", cue: "Deep third — carries @Z over the top." },
+    ],
+  },
+  {
+    id: "t11-cover-3-vs-smash",
+    name: "T11 Cover 3 vs Smash",
+    family: "reactor-pattern",
+    variants: ["tackle_11"],
+    description: "Cover 3 vs Smash (tackle) — cloud the corner with CB, flat defender squeezes hitch.",
+    body: "Cover 3 vs Smash — cloud the corner with the CB; the flat defender squeezes the hitch.",
+    variant: "tackle_11",
+    schemeId: "t11-4-3-over-cover-3",
+    conceptId: "smash",
+    reactors: [
+      { defender: "SL", trigger: "X", behavior: "jump_route", cue: "Sits on the hitch by @X — first read." },
+      { defender: "CB", trigger: "Z", behavior: "carry_vertical", cue: "Cloud's the corner — undercuts @Z from below." },
+    ],
+  },
+  {
+    id: "t11-cover-1-vs-flood",
+    name: "T11 Cover 1 vs Flood",
+    family: "reactor-pattern",
+    variants: ["tackle_11"],
+    description: "Cover 1 vs Flood (tackle) — man with FS help over the vertical.",
+    body: "Cover 1 vs Flood — man with FS help over the top. FS reads QB to the vertical side; everyone else locks man.",
+    variant: "tackle_11",
+    schemeId: "t11-3-4-cover-1",
+    conceptId: "flood",
+    reactors: [
+      { defender: "FS", trigger: "Z", behavior: "carry_vertical", cue: "Free safety help — gets over the top of the vertical (@Z)." },
+    ],
+  },
+  {
+    id: "t11-cover-1-vs-slant-flat",
+    name: "T11 Cover 1 vs Slant-Flat",
+    family: "reactor-pattern",
+    variants: ["tackle_11"],
+    description: "Cover 1 vs Slant-Flat (tackle) — CB plays inside leverage, drives on the slant.",
+    body: "Cover 1 vs Slant-Flat — CB on @X plays inside leverage (knows he has FS over the top), drives on the slant. The flat is locked man-on-man.",
+    variant: "tackle_11",
+    schemeId: "t11-3-4-cover-1",
+    conceptId: "slant-flat",
+    reactors: [
+      { defender: "CB", trigger: "X", behavior: "jump_route", cue: "Inside-leverage drive on the slant break." },
+    ],
+  },
+
+  // ── flag_5v5 ───────────────────────────────────────────────────────
+  {
+    id: "f5-cover-3-vs-smash",
+    name: "F5 Cover 3 vs Smash",
+    family: "reactor-pattern",
+    variants: ["flag_5v5"],
+    description: "Cover 3 vs Smash in 5v5 — cloud the corner with CB2, FR drives down on the hitch.",
+    body: "Cover 3 vs Smash in 5v5 — the corner-hitch puts CB2 in a vertical bind. Cloud the corner: CB2 carries @Z from underneath, FR drives down on the hitch by @Y. FS stays middle-third for the deep post relief.",
+    variant: "flag_5v5",
+    schemeId: "f5-cover-3",
+    conceptId: "smash",
+    reactors: [
+      { defender: "FR", trigger: "Y", behavior: "jump_route", cue: "Sits on the hitch by @Y — drives down on the break, no separation." },
+      { defender: "CB2", trigger: "Z", behavior: "carry_vertical", cue: "Cloud's the corner — undercuts @Z's corner route from below." },
+    ],
+  },
+  {
+    id: "f5-cover-3-vs-slant-flat",
+    name: "F5 Cover 3 vs Slant-Flat",
+    family: "reactor-pattern",
+    variants: ["flag_5v5"],
+    description: "Cover 3 vs Slant-Flat in 5v5 — FL drives downhill on @X's slant, FR caps the flat.",
+    body: "Cover 3 vs Slant-Flat in 5v5 — the slant attacks the hook seam, flat attacks the soft corner. FL drives downhill on @X's slant break; FR squeezes the flat. CB stays over the top on any deep release.",
+    variant: "flag_5v5",
+    schemeId: "f5-cover-3",
+    conceptId: "slant-flat",
+    reactors: [
+      { defender: "FL", trigger: "X", behavior: "jump_route", cue: "Drives downhill on @X's slant at the break — 5-yd window, attack." },
+      { defender: "FR", trigger: "Y", behavior: "follow_to_flat", cue: "Caps the flat by @Y — no easy outside catch." },
+    ],
+  },
+  {
+    id: "f5-cover-3-vs-mesh",
+    name: "F5 Cover 3 vs Mesh",
+    family: "reactor-pattern",
+    variants: ["flag_5v5"],
+    description: "Cover 3 vs Mesh in 5v5 — wall off the crossing drags from the flat zones.",
+    body: "Cover 3 vs Mesh in 5v5 — wall off the crossing drags from the flat zones. FL re-routes @X's drag inside-out; FR walls @Y as the second crosser comes through. FS stays clean over the top to take any vertical leak.",
+    variant: "flag_5v5",
+    schemeId: "f5-cover-3",
+    conceptId: "mesh",
+    reactors: [
+      { defender: "FL", trigger: "X", behavior: "wall_off", cue: "Walls off @X's drag — re-routes inside-out so the QB has to hold." },
+      { defender: "FR", trigger: "Y", behavior: "wall_off", cue: "Walls off the second crosser (@Y) from the right flat zone." },
+    ],
+  },
+  {
+    id: "f5-cover-3-vs-flood",
+    name: "F5 Cover 3 vs Flood",
+    family: "reactor-pattern",
+    variants: ["flag_5v5"],
+    description: "Cover 3 vs Flood in 5v5 — FR jumps flat, FS rotates over corner, CB2 carries vertical.",
+    body: "Cover 3 vs Flood in 5v5 — three-level stretch to one side. FR jumps the flat; FS rotates to help over the top of the corner; CB2 carries the vertical. The classic Cover-3 spot drop answer.",
+    variant: "flag_5v5",
+    schemeId: "f5-cover-3",
+    conceptId: "flood",
+    reactors: [
+      { defender: "FR", trigger: "C", behavior: "follow_to_flat", cue: "Hits the flat by @C — first underneath read." },
+      { defender: "CB2", trigger: "Z", behavior: "carry_vertical", cue: "Strong-side deep third — carries @Z, no shot over the top." },
+      { defender: "FS", trigger: "Y", behavior: "robber", cue: "Reads the intermediate — robs the sail by @Y." },
+    ],
+  },
+  {
+    id: "f5-cover-3-vs-snag",
+    name: "F5 Cover 3 vs Snag",
+    family: "reactor-pattern",
+    variants: ["flag_5v5"],
+    description: "Cover 3 vs Snag in 5v5 — FR sits flat, CB2 carries the corner, FS reads QB eyes.",
+    body: "Cover 3 vs Snag in 5v5 — the trips-side stretch puts FR in a hi-lo bind (flat by @C, corner by @Z). FR jumps the flat to take the lowest threat; CB2 carries @Z's corner; FS reads QB eyes and rotates to help.",
+    variant: "flag_5v5",
+    schemeId: "f5-cover-3",
+    conceptId: "snag",
+    reactors: [
+      { defender: "FR", trigger: "C", behavior: "follow_to_flat", cue: "Sits the flat by @C — first read; let CB2 take the corner." },
+      { defender: "CB2", trigger: "Z", behavior: "carry_vertical", cue: "Carries @Z's corner — no easy fade behind." },
+    ],
+  },
+  {
+    id: "f5-cover-3-vs-four-verticals",
+    name: "F5 Cover 3 vs Four Verticals",
+    family: "reactor-pattern",
+    variants: ["flag_5v5"],
+    description: "Cover 3 vs Four Verts in 5v5 — CB/CB2 carry outsides, FS takes most-threatening seam.",
+    body: "Cover 3 vs Four Verts in 5v5 — three deep, but four receivers (incl. @C) attack the vertical. CB carries @X; CB2 carries @Z; FS takes the most-threatening inside seam (usually @Y). FL/FR drop to underneath verticals (the @C check release).",
+    variant: "flag_5v5",
+    schemeId: "f5-cover-3",
+    conceptId: "four-verticals",
+    reactors: [
+      { defender: "CB", trigger: "X", behavior: "carry_vertical", cue: "Stays over the top of @X — no go-ball over his head." },
+      { defender: "CB2", trigger: "Z", behavior: "carry_vertical", cue: "Stays over the top of @Z — no go-ball over his head." },
+      { defender: "FS", trigger: "Y", behavior: "carry_vertical", cue: "Closes the deep middle — takes the inside seam (@Y)." },
+    ],
+  },
+  {
+    id: "f5-cover-1-vs-smash",
+    name: "F5 Cover 1 vs Smash",
+    family: "reactor-pattern",
+    variants: ["flag_5v5"],
+    description: "Cover 1 vs Smash in 5v5 — CB2 locks @Z, FS rotates for deep half help.",
+    body: "Cover 1 vs Smash in 5v5 — man-with-help. CB2 locks @Z in man, expects FS over the top on the corner route. CB stays low on @Y's hitch, drives at the break. FS reads QB eyes and rotates to the corner-side deep half.",
+    variant: "flag_5v5",
+    schemeId: "f5-cover-1",
+    conceptId: "smash",
+    reactors: [
+      { defender: "CB2", trigger: "Z", behavior: "carry_vertical", cue: "Press-trail @Z — drives the corner upfield, FS has the deep half over the top." },
+      { defender: "CB", trigger: "Y", behavior: "jump_route", cue: "Drives down on @Y's hitch at the break — inside leverage." },
+      { defender: "FS", trigger: "Z", behavior: "robber", cue: "Reads QB to the corner side — caps any deep shot over the top of @Z." },
+    ],
+  },
+  {
+    id: "f5-cover-1-vs-slant-flat",
+    name: "F5 Cover 1 vs Slant-Flat",
+    family: "reactor-pattern",
+    variants: ["flag_5v5"],
+    description: "Cover 1 vs Slant-Flat in 5v5 — CB plays inside leverage with FS help.",
+    body: "Cover 1 vs Slant-Flat in 5v5 — CB plays inside leverage on @X knowing FS is the deep-middle insurance. He drives on the slant at the break. NB tracks the flat in man.",
+    variant: "flag_5v5",
+    schemeId: "f5-cover-1",
+    conceptId: "slant-flat",
+    reactors: [
+      { defender: "CB", trigger: "X", behavior: "jump_route", cue: "Inside-leverage trail on @X — drives downhill on the slant break (FS has deep)." },
+    ],
+  },
+  {
+    id: "f5-cover-1-vs-mesh",
+    name: "F5 Cover 1 vs Mesh",
+    family: "reactor-pattern",
+    variants: ["flag_5v5"],
+    description: "Cover 1 vs Mesh in 5v5 — NB/NB2 trail through the mesh, no switch.",
+    body: "Cover 1 vs Mesh in 5v5 — the crossers test the man defenders' switch rules. Default: stay with your man across the mesh (trail technique, not switch). NB and NB2 communicate the rub and pass off if needed. CB/CB2 stay tight on @X/@Z.",
+    variant: "flag_5v5",
+    schemeId: "f5-cover-1",
+    conceptId: "mesh",
+    reactors: [
+      { defender: "NB", trigger: "X", behavior: "wall_off", cue: "Trails @X across the mesh — no clean break from the rub." },
+      { defender: "NB2", trigger: "Y", behavior: "wall_off", cue: "Trails @Y across the mesh — communicate switch only if compromised." },
+    ],
+  },
+  {
+    id: "f5-cover-1-vs-flood",
+    name: "F5 Cover 1 vs Flood",
+    family: "reactor-pattern",
+    variants: ["flag_5v5"],
+    description: "Cover 1 vs Flood in 5v5 — FS rotates over for vertical help, trust the help.",
+    body: "Cover 1 vs Flood in 5v5 — three to one side stresses the man defenders. FS rotates to the flood side for vertical help. CB/NB/CB2 stay tight in man; trust the help and don't bail on the deep route.",
+    variant: "flag_5v5",
+    schemeId: "f5-cover-1",
+    conceptId: "flood",
+    reactors: [
+      { defender: "FS", trigger: "Z", behavior: "carry_vertical", cue: "Rotates to the flood side — over-the-top help on @Z." },
+      { defender: "CB2", trigger: "Z", behavior: "carry_vertical", cue: "Press-trail @Z — FS is over the top, no need to bail." },
+    ],
+  },
+  {
+    id: "f5-cover-1-vs-snag",
+    name: "F5 Cover 1 vs Snag",
+    family: "reactor-pattern",
+    variants: ["flag_5v5"],
+    description: "Cover 1 vs Snag in 5v5 — trail technique through trips-side rubs.",
+    body: "Cover 1 vs Snag in 5v5 — the trips-side combination uses natural rubs. CB/NB2/CB2 stay tight in man on @X/@Y/@Z, communicate the rub at the LOS, and use trail technique. FS reads QB eyes for late help.",
+    variant: "flag_5v5",
+    schemeId: "f5-cover-1",
+    conceptId: "snag",
+    reactors: [
+      { defender: "CB2", trigger: "Z", behavior: "carry_vertical", cue: "Trails @Z's corner — FS has deep help on the strong side." },
+      { defender: "NB2", trigger: "Y", behavior: "jump_route", cue: "Trails @Y across the snag — drives down on the square-in break." },
+    ],
+  },
+  {
+    id: "f5-cover-1-vs-four-verticals",
+    name: "F5 Cover 1 vs Four Verticals",
+    family: "reactor-pattern",
+    variants: ["flag_5v5"],
+    description: "Cover 1 vs Four Verts in 5v5 — press-trail outsides, FS picks strongest seam.",
+    body: "Cover 1 vs Four Verts in 5v5 — the offense wants to isolate FS deep. CB/CB2 press-trail the outside verticals; NB/NB2 trail the inside seams. FS reads QB and rotates to the most-threatening seam (usually the strongside Y).",
+    variant: "flag_5v5",
+    schemeId: "f5-cover-1",
+    conceptId: "four-verticals",
+    reactors: [
+      { defender: "CB", trigger: "X", behavior: "carry_vertical", cue: "Press-trail @X up the sideline — no separation." },
+      { defender: "CB2", trigger: "Z", behavior: "carry_vertical", cue: "Press-trail @Z up the sideline — no separation." },
+      { defender: "FS", trigger: "Y", behavior: "carry_vertical", cue: "Reads QB; rotates to whichever inside seam shows first — takes @Y." },
+    ],
+  },
+];
