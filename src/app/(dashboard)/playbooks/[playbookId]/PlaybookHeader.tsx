@@ -53,6 +53,7 @@ import {
   setPlaybookPublicExampleAction,
 } from "@/app/actions/admin-examples";
 import { DownloadForOfflineButton } from "@/components/offline/DownloadForOfflineButton";
+import { InboxBell } from "@/components/layout/InboxBell";
 import { useIsNativeApp } from "@/lib/native/useIsNativeApp";
 import { useOfflineState } from "@/lib/offline/useOfflineState";
 import { nativeShare } from "@/lib/native/share";
@@ -635,6 +636,15 @@ export function PlaybookHeader({
                 <Send className="size-5" />
               </button>
             )}
+            {/* Mobile-only inbox bell. SiteHeader (which owns the bell on
+                desktop and on mobile lobby) hides itself on /playbooks/[id]
+                routes on mobile to avoid stacking with this gradient
+                banner, so without a bell here a coach inside a playbook
+                on phone has no way to see attention items from OTHER
+                playbooks. */}
+            <div className="sm:hidden">
+              <InboxBell buttonClassName={`${onAccent} ${onAccentHover}`} />
+            </div>
             {/* SiteHeader (root layout) owns the only CoachAiLauncher.
                 A second instance here would mount its own dialog through
                 createPortal AND restore open=true from sessionStorage on

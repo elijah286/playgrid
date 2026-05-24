@@ -863,3 +863,32 @@ export async function bulkDeleteAlertsAction(
 
 // Bulk RSVP lives in @/app/actions/calendar (`bulkRsvpAction`). Imported there
 // by the inbox bulk-action bar and the calendar list views.
+
+/** Just the count + urgency flag for the red badge. Drives the global
+ *  inbox bell's poll loop, which runs every ~60s while the tab is
+ *  visible — the layout already calls `listInboxAlertsAction()` for
+ *  the initial baseline, but a poller that re-fetched the full alerts
+ *  payload every minute would be wasteful (each alert carries
+ *  per-kind fields, playbook chrome, etc.). This trims the wire
+ *  response to two numbers.
+ *
+ *  Server-side cost is the same — the function delegates to
+ *  `listInboxAlertsAction` to keep the urgency and admin-notice
+ *  filtering in one place. If that becomes a hotspot, we can later
+ *  swap the implementation for a direct `select count(*)` per table. */
+export async function getInboxBadgeStateAction(): Promise<
+  { ok: true; count: number; urgent: boolean } | { ok: false; error: string }
+> {
+  const res = await listInboxAlertsAction();
+  if (!res.ok) return res;
+  // Same admin_notice gate the dashboard layout used to apply locally;
+  // safe to apply unconditionally because non-admins never receive
+  // admin_notice rows from listInboxAlertsAction in the first place
+  // (the action only inserts them when isSiteAdmin is true).
+  const active = res.alerts.filter((a) => a.status === "active");
+  const count = active.length;
+  const urgent = active.some(
+    (a) => a.kind === "rsvp_pending" || a.kind === "system_alert",
+  );
+  return { ok: true, count, urgent };
+}

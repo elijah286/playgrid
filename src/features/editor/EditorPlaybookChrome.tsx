@@ -5,6 +5,7 @@ import Image from "next/image";
 import { ArrowLeft } from "lucide-react";
 import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { SportVariant } from "@/domain/play/types";
+import { InboxBell } from "@/components/layout/InboxBell";
 
 /**
  * Slim chrome banner for the play editor — mirrors the colored playbook
@@ -129,6 +130,15 @@ export function EditorPlaybookChrome({
               {subtitle}
             </p>
           )}
+        </div>
+        {/* Mobile-only inbox bell. The SiteHeader's bell is hidden on
+            /plays/[id]/edit (SiteHeaderShell hides itself behind the
+            colored chrome on mobile to avoid stacked banners), so this
+            is the only attention surface for cross-playbook items while
+            a coach is drawing a play on phone. Desktop relies on the
+            persistent SiteHeader above this chrome. */}
+        <div className="shrink-0 sm:hidden">
+          <InboxBell buttonClassName={`${onAccent} ${onAccentHover}`} />
         </div>
       </div>
     </div>

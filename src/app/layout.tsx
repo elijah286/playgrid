@@ -19,6 +19,10 @@ import { withFullContext } from "@/lib/seo/ld-json";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getUserWithTimeout } from "@/lib/supabase/get-user-with-timeout";
+import { getCachedUserRole } from "@/lib/auth/profile-cache";
+import { listInboxAlertsAction } from "@/app/actions/inbox";
+import { InboxBadgeProvider } from "@/features/dashboard/InboxBadgeContext";
+import { InboxBadgeRefresher } from "@/components/layout/InboxBadgeRefresher";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -137,6 +141,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   let isAuthed = false;
+  let userId: string | null = null;
   if (hasSupabaseEnv()) {
     try {
       const supabase = await createClient();
@@ -145,9 +150,40 @@ export default async function RootLayout({
       // the worst case is a logged-out shell flash; the next request
       // retries the refresh and recovers. See get-user-with-timeout.ts.
       const result = await getUserWithTimeout(supabase);
-      isAuthed = result.kind === "ok" && !!result.user;
+      if (result.kind === "ok" && result.user) {
+        isAuthed = true;
+        userId = result.user.id;
+      }
     } catch {
       isAuthed = false;
+    }
+  }
+
+  // Server-render the initial inbox badge baseline so the bell can paint
+  // with the right count on first byte (rather than 0-then-pop). The
+  // InboxBadgeRefresher keeps it live thereafter via a 60s poll. Both
+  // are gated on auth — anonymous visitors don't have an inbox.
+  let inboxCount = 0;
+  let inboxUrgent = false;
+  if (isAuthed && userId) {
+    try {
+      const [role, inboxRes] = await Promise.all([
+        getCachedUserRole(userId),
+        listInboxAlertsAction(),
+      ]);
+      const isAdmin = role === "admin";
+      if (inboxRes.ok) {
+        const visible = inboxRes.alerts.filter(
+          (a) => isAdmin || a.kind !== "admin_notice",
+        );
+        const active = visible.filter((a) => a.status === "active");
+        inboxCount = active.length;
+        inboxUrgent = active.some(
+          (a) => a.kind === "rsvp_pending" || a.kind === "system_alert",
+        );
+      }
+    } catch {
+      /* best effort — badge starts at 0 and the poller catches up */
     }
   }
 
@@ -203,17 +239,23 @@ export default async function RootLayout({
           <FieldBackdrop />
           <ToastProvider>
             <TutorialProvider>
-              <ConfigBanner />
-              <SiteHeader />
-              <div className="flex flex-1 flex-col">{children}</div>
-              <SiteFooter />
-              <PageViewTracker />
-              <WebVitalsReporter />
-              <ConsentGate />
-              <RedditPixel />
-              <NativeAppShell />
-              <OfflineStatusBanner />
-              <ConnectionRecovery />
+              <InboxBadgeProvider
+                initialCount={inboxCount}
+                initialUrgent={inboxUrgent}
+              >
+                <ConfigBanner />
+                <SiteHeader />
+                <div className="flex flex-1 flex-col">{children}</div>
+                <SiteFooter />
+                <PageViewTracker />
+                <WebVitalsReporter />
+                <ConsentGate />
+                <RedditPixel />
+                <NativeAppShell />
+                <OfflineStatusBanner />
+                <ConnectionRecovery />
+                {isAuthed && <InboxBadgeRefresher />}
+              </InboxBadgeProvider>
             </TutorialProvider>
           </ToastProvider>
         </ThemeProvider>

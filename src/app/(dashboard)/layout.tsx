@@ -11,9 +11,7 @@ import { ExpirationBanner } from "@/components/billing/ExpirationBanner";
 import { NameCapturePrompt } from "@/components/account/NameCapturePrompt";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { getBetaFeatures, isBetaFeatureAvailable } from "@/lib/site/beta-features-config";
-import { listInboxAlertsAction } from "@/app/actions/inbox";
 import { OfflineAutoRefreshMount } from "@/components/offline/OfflineAutoRefreshMount";
-import { InboxBadgeProvider } from "@/features/dashboard/InboxBadgeContext";
 import { HomeBottomNav } from "./home/HomeBottomNav";
 
 // Auth is NOT enforced here. Anon visitors may reach example-playbook
@@ -56,7 +54,6 @@ export default async function DashboardLayout({
     selfRoleRow,
     entitlement,
     betaFeatures,
-    inboxRes,
   ] = await Promise.all([
     getFeedbackWidgetSettings(),
     user ? userHasCreatedPlayAction() : Promise.resolve(false),
@@ -67,7 +64,6 @@ export default async function DashboardLayout({
       : Promise.resolve({ data: null }),
     user ? getCurrentEntitlement() : Promise.resolve(null),
     getBetaFeatures(),
-    user ? listInboxAlertsAction() : Promise.resolve(null),
   ]);
 
   const isAdmin = (selfRoleRow?.data?.role as string | null) === "admin";
@@ -82,21 +78,6 @@ export default async function DashboardLayout({
     betaFeatures.team_calendar,
     { isAdmin, isEntitled: true },
   );
-  // Inbox alerts visible to the current user. Filter out admin notices
-  // for non-admins (paranoia), match the home page's badge semantics
-  // (status === "active") so the toolbar count matches the inbox tab.
-  const inboxAlerts =
-    inboxRes && inboxRes.ok
-      ? inboxRes.alerts.filter(
-          (a) => isAdmin || a.kind !== "admin_notice",
-        )
-      : [];
-  const inboxCount = inboxAlerts.filter((a) => a.status === "active").length;
-  const inboxUrgent = inboxAlerts.some(
-    (a) =>
-      a.status === "active" &&
-      (a.kind === "rsvp_pending" || a.kind === "system_alert"),
-  );
 
   return (
     // No `overflow-x-hidden` anywhere in this subtree — that property
@@ -106,36 +87,34 @@ export default async function DashboardLayout({
     // site header). The body has `overflow-x: clip` (set in globals
     // CSS via `<body class="...overflow-x-hidden">`) which prevents
     // horizontal scroll without becoming a sticky containing block.
-    <InboxBadgeProvider
-      initialCount={inboxCount}
-      initialUrgent={inboxUrgent}
-    >
-      <div className="min-h-full">
-        {expirationNotice && <ExpirationBanner notice={expirationNotice} />}
-        <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
-        <NameCapturePrompt needed={nameCaptureNeeded} />
-        <TimeOnSiteTracker />
-        {feedbackSettings.enabled && (
-          <FeedbackWidget
-            hasCreatedPlay={hasCreatedPlay}
-            touchEnabled={feedbackSettings.touchEnabled}
-          />
-        )}
-        {/* Global mobile bottom nav. Persists across every dashboard
-            route so the toolbar never disappears between page navs.
-            The component itself bails (returns null) on routes that
-            have their own toolbar (playbook detail, play editor) so
-            we don't stack two bars on top of each other. */}
-        {user && (
-          <HomeBottomNav
-            showCalendar={teamCalendarAvailable}
-            showCoachCal={coachAiAvailable || showCoachCalPromo}
-            isAdmin={isAdmin}
-          />
-        )}
-        {user && <OfflineAutoRefreshMount />}
-      </div>
-    </InboxBadgeProvider>
+    //
+    // InboxBadgeProvider now lives at the root layout so the bell can
+    // mount in the editor chrome too — see src/app/layout.tsx.
+    <div className="min-h-full">
+      {expirationNotice && <ExpirationBanner notice={expirationNotice} />}
+      <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
+      <NameCapturePrompt needed={nameCaptureNeeded} />
+      <TimeOnSiteTracker />
+      {feedbackSettings.enabled && (
+        <FeedbackWidget
+          hasCreatedPlay={hasCreatedPlay}
+          touchEnabled={feedbackSettings.touchEnabled}
+        />
+      )}
+      {/* Global mobile bottom nav. Persists across every dashboard
+          route so the toolbar never disappears between page navs.
+          The component itself bails (returns null) on routes that
+          have their own toolbar (playbook detail, play editor) so
+          we don't stack two bars on top of each other. */}
+      {user && (
+        <HomeBottomNav
+          showCalendar={teamCalendarAvailable}
+          showCoachCal={coachAiAvailable || showCoachCalPromo}
+          isAdmin={isAdmin}
+        />
+      )}
+      {user && <OfflineAutoRefreshMount />}
+    </div>
   );
 }
 

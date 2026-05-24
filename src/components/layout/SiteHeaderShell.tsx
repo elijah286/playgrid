@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { UserMenu } from "@/components/layout/UserMenu";
 import { CoachAiLauncher } from "@/features/coach-ai/CoachAiLauncher";
 import { ShareButton } from "@/components/share/ShareButton";
+import { InboxBell } from "@/components/layout/InboxBell";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
 
 type Props = {
@@ -114,6 +115,13 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
                 />
               </div>
             )}
+            {/* Global inbox bell — desktop only here. Mobile non-playbook
+                surfaces get the inbox tab in HomeBottomNav; mobile in-
+                playbook surfaces get a bell in the playbook chrome (where
+                this SiteHeader is hidden). */}
+            <div className="hidden sm:block">
+              <InboxBell />
+            </div>
             <ShareButton userId={user.id} />
             {/* Account moves to the bottom toolbar on mobile (slot 5).
                 Desktop keeps the avatar + thin divider treatment. */}

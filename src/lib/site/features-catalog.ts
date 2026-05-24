@@ -375,6 +375,15 @@ export const FEATURES: FeatureEntry[] = [
 
   // ── Roster & sharing ───────────────────────────────────────────
   {
+    id: "inbox-global-bell",
+    name: "Global inbox bell",
+    description:
+      "An inbox bell with unread badge that follows the coach everywhere — desktop site header, mobile playbook chrome, and the play editor. Items from every playbook surface in one drawer grouped by team, so a coach drawing a play in Playbook A still sees a pending RSVP or join request from Playbook B without backing out to the lobby. Refreshes every minute while the tab is open; tapping a row jumps to the right surface (RSVP items deep-link to the calendar event; others land in the full inbox tab).",
+    category: "Roster & sharing",
+    status: "ga",
+    addedDate: "2026-05-23",
+  },
+  {
     id: "roster",
     name: "Team roster",
     description:

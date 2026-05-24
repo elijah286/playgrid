@@ -11,18 +11,13 @@ import {
 
 /** Client-side optimistic state for the inbox red badge.
  *
- *  The badge is server-rendered by (dashboard)/layout.tsx — it counts
- *  active inbox alerts at request time and passes the number through to
- *  HomeBottomNav (mobile) and HomeTabNav (desktop). That's accurate but
- *  it only refreshes when the layout re-runs, so a coach who archives
- *  an alert sees the badge linger for several hundred ms while the
- *  router.refresh() round-trip completes.
- *
- *  This provider papers over that gap: it holds a set of alert keys the
- *  user has already dismissed in this session, and reports
- *  count = baseline - resolvedKeys.size. When the layout re-renders
- *  with a fresh server count, the baseline updates and the resolved set
- *  clears — the server is authoritative once it catches up.
+ *  The badge baseline starts from a server-rendered count (root layout
+ *  passes it via initialCount/initialUrgent) and stays live in two ways:
+ *  (1) `resolveOptimistically(key)` hides items the user just archived
+ *  before the network round-trip lands, (2) `updateBaseline(c, u)` lets
+ *  a background poller push a fresh server count without forcing a full
+ *  route refresh. The reported count is `baseline - resolvedKeys.size`,
+ *  so the two layers compose naturally.
  *
  *  Race condition: if the user archives during an in-flight refresh,
  *  the resolved set is cleared the moment the (stale) lower count
@@ -38,6 +33,11 @@ type InboxBadgeContextValue = {
   resolveOptimistically: (key: string) => void;
   /** Undo a previous optimistic resolve — call when the server action fails. */
   reviveOptimistically: (key: string) => void;
+  /** Push a fresh server-side baseline. Used by the poll-based refresher
+   *  to keep the badge live mid-session without a full router.refresh().
+   *  Clears the optimistic resolved set since the new baseline is
+   *  authoritative. */
+  updateBaseline: (count: number, urgent: boolean) => void;
 };
 
 const NOOP_VALUE: InboxBadgeContextValue = {
@@ -45,6 +45,7 @@ const NOOP_VALUE: InboxBadgeContextValue = {
   urgent: false,
   resolveOptimistically: () => {},
   reviveOptimistically: () => {},
+  updateBaseline: () => {},
 };
 
 const InboxBadgeContext = createContext<InboxBadgeContextValue | null>(null);
@@ -58,11 +59,17 @@ export function InboxBadgeProvider({
   initialUrgent: boolean;
   children: React.ReactNode;
 }) {
+  const [baselineCount, setBaselineCount] = useState(initialCount);
+  const [baselineUrgent, setBaselineUrgent] = useState(initialUrgent);
   const [resolvedKeys, setResolvedKeys] = useState<Set<string>>(
     () => new Set(),
   );
 
+  // Re-sync when the server-rendered props change (parent layout
+  // re-renders with a different baseline, e.g. after router.refresh()).
   useEffect(() => {
+    setBaselineCount(initialCount);
+    setBaselineUrgent(initialUrgent);
     setResolvedKeys((prev) => (prev.size === 0 ? prev : new Set()));
   }, [initialCount, initialUrgent]);
 
@@ -84,20 +91,28 @@ export function InboxBadgeProvider({
     });
   }, []);
 
+  const updateBaseline = useCallback((count: number, urgent: boolean) => {
+    setBaselineCount(count);
+    setBaselineUrgent(urgent);
+    setResolvedKeys((prev) => (prev.size === 0 ? prev : new Set()));
+  }, []);
+
   const value = useMemo<InboxBadgeContextValue>(() => {
-    const count = Math.max(0, initialCount - resolvedKeys.size);
+    const count = Math.max(0, baselineCount - resolvedKeys.size);
     return {
       count,
-      urgent: count > 0 && initialUrgent,
+      urgent: count > 0 && baselineUrgent,
       resolveOptimistically,
       reviveOptimistically,
+      updateBaseline,
     };
   }, [
-    initialCount,
-    initialUrgent,
+    baselineCount,
+    baselineUrgent,
     resolvedKeys,
     resolveOptimistically,
     reviveOptimistically,
+    updateBaseline,
   ]);
 
   return (
