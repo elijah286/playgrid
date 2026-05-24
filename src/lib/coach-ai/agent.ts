@@ -1,6 +1,7 @@
 import { chat, type ChatMessage, type ContentBlock } from "./llm";
 import { runTool, toolDefs, type ToolContext } from "./tools";
 import { validateDiagrams } from "./diagram-validate";
+import { renderSpecBlocksToFences, hasSpecBlocks } from "./spec-fence-render";
 import { projectSpecToNotes } from "./notes-from-spec";
 import { coachDiagramToPlaySpec } from "@/domain/play/specParser";
 import { cropPlaysFromSheet, expandBBox, type PlayLayoutEntry } from "./image-crop";
@@ -2456,6 +2457,34 @@ export async function runAgent(
         let textToEmit = scrubCritiqueLeak(bufferedText);
         if (!validation.ok && validatorRetried) {
           textToEmit = stripBrokenFences(textToEmit, validation.errors);
+        }
+        // PHASE 2a — Render any `\`\`\`spec` blocks Cal emitted into
+        // `\`\`\`play` fences server-side. Cal authors intent (formation
+        // + assignments); the renderer produces coordinates. This
+        // eliminates Cal's ability to hand-author wrong coordinates
+        // because Cal never writes coordinates. Spec mode is opt-in
+        // for compatible tools today; Phase 2c will make it the default
+        // and Phase 2b will reject hand-authored `\`\`\`play` fences
+        // structurally.
+        if (hasSpecBlocks(textToEmit)) {
+          const rendered = renderSpecBlocksToFences(textToEmit);
+          textToEmit = rendered.text;
+          // Mirror the rewrite onto the assistant message in `messages`
+          // so the next turn's prior-fence lookup finds the spec-
+          // rendered fence as the prior diagram. Same pattern as
+          // `applyAuthoritativeFenceRewrite` below.
+          const lastMsg = messages[messages.length - 1];
+          if (lastMsg && lastMsg.role === "assistant") {
+            if (typeof lastMsg.content === "string") {
+              lastMsg.content = renderSpecBlocksToFences(lastMsg.content).text;
+            } else {
+              for (const block of lastMsg.content) {
+                if (block.type === "text") {
+                  block.text = renderSpecBlocksToFences(block.text).text;
+                }
+              }
+            }
+          }
         }
         if (lastFenceFromTool && textToEmit) {
           const before = textToEmit;
