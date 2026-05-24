@@ -13,7 +13,12 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { validateDiagrams } from "./diagram-validate";
+import {
+  validateDiagrams,
+  extractProseDepthClaims,
+  validateProseRouteCoherence,
+} from "./diagram-validate";
+import type { CoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
 
 function makeFence(diagram: object): string {
   return ["```play", JSON.stringify(diagram), "```"].join("\n");
@@ -2212,5 +2217,129 @@ describe("validateDiagrams — color-clash gate (no two skill players share a de
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.errors.find((e) => /color clash/i.test(e) && /B|FB/.test(e))).toBeDefined();
+  });
+});
+
+describe("extractProseDepthClaims — parses '@X at N yards' patterns", () => {
+  // Surfaced 2026-05-23 ("Diamond — Crossers" play): Cal's prose said
+  // "@C runs a shallow drag underneath at 3 yards" but the actual route
+  // was all at y=0 (LOS). The prose-vs-route coherence validator parses
+  // claims like these and flags drift.
+
+  it("returns empty for prose with no depth claims", () => {
+    expect(extractProseDepthClaims("Just some text with no players.")).toEqual([]);
+    expect(extractProseDepthClaims("")).toEqual([]);
+  });
+
+  it("captures a simple '@X at N yards' claim", () => {
+    const claims = extractProseDepthClaims("@X runs a slant at 5 yards.");
+    expect(claims).toEqual([{ carrier: "X", depthYds: 5 }]);
+  });
+
+  it("captures a depth range '@Y at 5-7 yards' and uses the midpoint", () => {
+    const claims = extractProseDepthClaims("@Y runs the speed-out at 5-7 yards.");
+    expect(claims).toEqual([{ carrier: "Y", depthYds: 6 }]);
+  });
+
+  it("captures multiple claims in a paragraph", () => {
+    const prose =
+      "@X hits the speed-out at 10 yards. @Z runs a corner at 12 yards. @C drags at 3 yards.";
+    const claims = extractProseDepthClaims(prose);
+    expect(claims).toHaveLength(3);
+    expect(claims.find((c) => c.carrier === "X")?.depthYds).toBe(10);
+    expect(claims.find((c) => c.carrier === "Z")?.depthYds).toBe(12);
+    expect(claims.find((c) => c.carrier === "C")?.depthYds).toBe(3);
+  });
+
+  it("uppercases the carrier id (matches Cal's mixed case @c / @C)", () => {
+    const claims = extractProseDepthClaims("@c runs at 3 yards.");
+    expect(claims[0].carrier).toBe("C");
+  });
+
+  it("ignores @-mentions without a depth claim", () => {
+    expect(extractProseDepthClaims("@X is the primary read.")).toEqual([]);
+  });
+
+  it("doesn't match across sentence boundaries (sentence-scoped)", () => {
+    // "@X is open. @Y stops at 5 yards." should only produce a claim for Y.
+    const claims = extractProseDepthClaims("@X is open. @Y stops at 5 yards.");
+    expect(claims).toEqual([{ carrier: "Y", depthYds: 5 }]);
+  });
+});
+
+describe("validateProseRouteCoherence — flags prose-vs-route drift", () => {
+  function buildDiagram(routes: Array<{ from: string; path: [number, number][] }>): CoachDiagram {
+    return {
+      title: "Test",
+      variant: "flag_5v5" as const,
+      players: [
+        { id: "QB", x: 0, y: -5, team: "O" as const },
+        { id: "C", x: 0, y: 0, team: "O" as const },
+        { id: "X", x: -10, y: 0, team: "O" as const },
+        { id: "Z", x: 10, y: 0, team: "O" as const },
+        { id: "Y", x: 0, y: -7, team: "O" as const },
+      ],
+      routes: routes.map((r) => ({ ...r, tip: "arrow" as const, curve: false })),
+    };
+  }
+
+  it("returns no errors when prose and route depths match (within tolerance)", () => {
+    // "@X at 5 yds" + route ends at y=5 → match
+    const diagram = buildDiagram([{ from: "X", path: [[-10, 5]] }]);
+    const errors = validateProseRouteCoherence("@X runs a slant at 5 yards.", diagram);
+    expect(errors).toEqual([]);
+  });
+
+  it("returns no errors when drift is within tolerance (2.5 yd)", () => {
+    // "@X at 5 yds" + route ends at y=7 (2yd off) → within tolerance
+    const diagram = buildDiagram([{ from: "X", path: [[-10, 7]] }]);
+    const errors = validateProseRouteCoherence("@X runs a slant at 5 yards.", diagram);
+    expect(errors).toEqual([]);
+  });
+
+  it("flags drift beyond tolerance (the 2026-05-23 @C drag bug)", () => {
+    // "@C at 3 yds" + route ends at y=0 (3yd off) → exceeds 2.5yd tolerance
+    const diagram = buildDiagram([{ from: "C", path: [[-1.2, 0], [-5, 0], [-11.2, 0]] }]);
+    const errors = validateProseRouteCoherence(
+      "@C runs a shallow drag underneath at 3 yards.",
+      diagram,
+    );
+    expect(errors.length).toBe(1);
+    expect(errors[0]).toContain("@C");
+    expect(errors[0]).toContain("3 yards");
+    expect(errors[0]).toContain("y=0");
+  });
+
+  it("checks the DEEPEST waypoint when prose claims a depth (route ENDS at the depth)", () => {
+    // Route path [[-10, 2], [-10, 12]] — deepest y is 12. "@X at 12 yds" matches.
+    const diagram = buildDiagram([{ from: "X", path: [[-10, 2], [-10, 12]] }]);
+    const errors = validateProseRouteCoherence("@X runs a Go at 12 yards.", diagram);
+    expect(errors).toEqual([]);
+  });
+
+  it("doesn't flag carriers absent from the diagram", () => {
+    // If prose mentions @W (not in players) — different gate handles missing
+    // players; this gate stays silent.
+    const diagram = buildDiagram([{ from: "X", path: [[-10, 5]] }]);
+    const errors = validateProseRouteCoherence(
+      "@W runs a route at 5 yards.",
+      diagram,
+    );
+    expect(errors).toEqual([]);
+  });
+
+  it("dedupes when the same claim appears twice in prose", () => {
+    const diagram = buildDiagram([{ from: "X", path: [[-10, 0]] }]);
+    const errors = validateProseRouteCoherence(
+      "@X runs a slant at 5 yards. Later: @X breaks at 5 yards.",
+      diagram,
+    );
+    expect(errors.length).toBe(1); // single dedup'd error, not two
+  });
+
+  it("returns no errors when there are no claims at all", () => {
+    const diagram = buildDiagram([{ from: "X", path: [[-10, 0]] }]);
+    const errors = validateProseRouteCoherence("Run the play.", diagram);
+    expect(errors).toEqual([]);
   });
 });

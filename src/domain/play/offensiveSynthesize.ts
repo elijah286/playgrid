@@ -585,12 +585,25 @@ function placeFlagCenter(): SynthOffensePlayer[] {
  * (diamond, tight diamond, stack-I). Returns the receivers ONLY — the
  * caller is responsible for placing the C (or OL) + QB.
  *
- * Diamond: C at (0,0) [placed elsewhere], X wide-left LOS, Z wide-right LOS,
- * Y deep middle behind QB at (0,-7). Additional receivers (6v6/7v7) fill
- * as off-LOS slots between C and the wide WRs.
+ * Diamond (revised 2026-05-23 after coach feedback): a TRUE 4-point
+ * geometric diamond. Earlier version put X and Z on the LOS at ±10 yds,
+ * which read as a wide spread / T-shape — not a recognizable diamond. The
+ * coach surfaced "the outside receivers are too far away" and the title
+ * "Diamond" misrepresented a Spread Doubles shape. New geometry:
  *
- * Tight Diamond: same 4 points but X/Z pulled inward to ~4-5 yards from
- * center — designed for picks/rubs vs man press.
+ *   C    (0, 0)        TOP point     — on the LOS, middle
+ *   X    (-5, -3)      LEFT point    — off the LOS at intermediate depth
+ *   Z    ( 5, -3)      RIGHT point   — off the LOS at intermediate depth
+ *   Y    (0, -7)       BOTTOM point  — behind QB on the centerline
+ *
+ * The four points form a true diamond when viewed on the field. X and Z
+ * being OFF the LOS is what makes this a diamond rather than a T — they're
+ * at the lateral midpoint between C (LOS) and Y (deep). Splits scale with
+ * variant: tackle_11 / flag_7v7 spread slightly wider than 5v5 to match
+ * field width.
+ *
+ * Tight Diamond: same 4 points but X/Z compressed inward to ~3 yards for
+ * pick/rub looks vs man press.
  *
  * Stack-I: receivers stacked in a single-file column directly behind QB
  * at y=-7, -10, -13, ... Remaining receivers split wide.
@@ -601,27 +614,30 @@ function placeCustomShape(
   variant: SynthOffense["variant"],
 ): SynthOffensePlayer[] {
   const wideX = variant === "tackle_11" ? 18 : variant === "flag_7v7" ? 12 : 10;
-  const tightX = variant === "tackle_11" ? 8 : variant === "flag_7v7" ? 5 : 4;
   const players: SynthOffensePlayer[] = [];
 
   if (shape === "diamond" || shape === "tight_diamond") {
-    const outerX = shape === "tight_diamond" ? tightX : wideX;
-    // Three canonical diamond points (besides C which is placed by the
-    // variant assembler): wide-left, wide-right, deep-middle behind QB.
-    players.push({ id: "X", x: -outerX, y: 0 });
-    players.push({ id: "Z", x:  outerX, y: 0 });
+    // True 4-point diamond geometry (revised — see docstring).
+    // X/Z are OFF the LOS at intermediate depth, not on the LOS at extreme
+    // splits. This is what makes the shape READ as a diamond.
+    const isTight = shape === "tight_diamond";
+    const diamondX = isTight
+      ? (variant === "tackle_11" ? 4 : variant === "flag_7v7" ? 4 : 3)
+      : (variant === "tackle_11" ? 7 : variant === "flag_7v7" ? 6 : 5);
+    players.push({ id: "X", x: -diamondX, y: -3 });
+    players.push({ id: "Z", x:  diamondX, y: -3 });
     players.push({ id: "Y", x: 0, y: -7 });
-    // Variants with > 3 skill positions get additional slots between C and
-    // the wide WRs (off-LOS). 6v6 → +1, 7v7 → +2. Slots alternate sides
-    // (strong-first) so the diamond stays roughly balanced.
+    // Variants with > 3 skill positions get additional wide receivers split
+    // outside the diamond points (on the LOS) so the diamond core stays
+    // intact. 6v6 → +1 (one wider WR), 7v7 → +2 (one each side).
     const slotLabels = ["H", "S", "F"];
-    const slotInner = variant === "tackle_11" ? 7 : variant === "flag_7v7" ? 5 : 4;
+    const outerX = wideX; // wide-WR position, well outside the diamond
     for (let i = 0; i < skillCount - 3; i++) {
       const side = i % 2 === 0 ? 1 : -1;
       players.push({
         id: slotLabels[i] ?? `H${i + 1}`,
-        x: side * slotInner,
-        y: -1,
+        x: side * outerX,
+        y: 0,
       });
     }
     return players;

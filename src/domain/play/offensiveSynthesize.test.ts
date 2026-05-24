@@ -276,38 +276,44 @@ describe("synthesizeOffense — flag_5v5 canonical roster {Q, C, X, Y, Z}", () =
   });
 });
 
-describe("synthesizeOffense — Diamond geometry (4-point shape)", () => {
-  // Surfaced 2026-05-23: a coach asked Cal for a "Diamond" formation in
-  // flag_5v5 and got Spread Doubles instead (synthesizer fell back). The
-  // shape contract: C on LOS short-middle, X wide-left on LOS, Z wide-
-  // right on LOS, Y deep-middle behind QB. Tight Diamond pulls X/Z inward
-  // for picks/rubs. The geometric assertions below pin this shape so
-  // future refactors don't silently flatten it back to Spread Doubles.
+describe("synthesizeOffense — Diamond geometry (TRUE 4-point diamond)", () => {
+  // Revised 2026-05-23 after coach feedback ("the outside receivers are
+  // too far away"). The original Diamond placed X/Z on the LOS at ±10 yds
+  // which read as a Spread / T-shape, not a recognizable diamond. The
+  // revised geometry forms a TRUE 4-point shape: C at top (on LOS), X/Z
+  // at the lateral points (OFF the LOS, intermediate depth), Y at the
+  // bottom (deep middle behind QB). These tests pin the 4-point structure.
 
-  it("flag_5v5 Diamond: C short-middle, X/Z wide on LOS, Y behind QB", () => {
+  it("flag_5v5 Diamond: 4 distinct points (C top, X left, Z right, Y bottom)", () => {
     const synth = synthesizeOffense("flag_5v5", "Diamond");
     expect(synth, "Diamond returned null — parser doesn't recognize it").not.toBeNull();
     const byId = new Map(synth!.players.map((p) => [p.id, p]));
-    // C on LOS at center
+    // C is the TOP point — on LOS at center
     expect(byId.get("C")?.y).toBe(0);
     expect(byId.get("C")?.x).toBe(0);
-    // Wide receivers on LOS, split apart
+    // X is the LEFT point — OFF the LOS at intermediate depth (this is
+    // what makes the shape a diamond rather than a T). Should be tighter
+    // than a Spread Doubles wide receiver (~10yd) but still clearly on
+    // the left half.
     const x = byId.get("X");
+    expect(x, "X (left point) missing").toBeDefined();
+    expect(x!.y, "X should be OFF the LOS for the diamond shape").toBeLessThan(0);
+    expect(x!.y, "X depth should be between C (0) and Y (deep)").toBeGreaterThan(-7);
+    expect(x!.x, "X should be on the left half").toBeLessThan(0);
+    expect(Math.abs(x!.x), "X should NOT be a wide receiver — diamond points are compact").toBeLessThan(8);
+    // Z is the RIGHT point — mirror of X
     const z = byId.get("Z");
-    expect(x, "X (wide left) missing").toBeDefined();
-    expect(z, "Z (wide right) missing").toBeDefined();
-    expect(x!.y).toBe(0);
-    expect(z!.y).toBe(0);
-    expect(x!.x).toBeLessThan(-5); // wide left
-    expect(z!.x).toBeGreaterThan(5); // wide right
-    // Y deep behind QB (y more negative than QB at -5)
+    expect(z, "Z (right point) missing").toBeDefined();
+    expect(z!.y).toBe(x!.y); // same depth as X
+    expect(z!.x).toBe(-x!.x); // mirror x
+    // Y is the BOTTOM point — deep middle behind QB (y < QB's -5)
     const y = byId.get("Y");
     expect(y, "Y (deep back) missing").toBeDefined();
     expect(y!.y).toBeLessThan(-5);
     expect(Math.abs(y!.x)).toBeLessThan(2); // centered
   });
 
-  it("flag_5v5 Tight Diamond: wide receivers compressed inward", () => {
+  it("flag_5v5 Tight Diamond: X/Z compressed further inward", () => {
     const wide = synthesizeOffense("flag_5v5", "Diamond")!;
     const tight = synthesizeOffense("flag_5v5", "Tight Diamond")!;
     const wideX = wide.players.find((p) => p.id === "X")!.x;
@@ -317,18 +323,46 @@ describe("synthesizeOffense — Diamond geometry (4-point shape)", () => {
       Math.abs(tightX),
       `Tight X at x=${tightX} should be inside wide X at x=${wideX}`,
     ).toBeLessThan(Math.abs(wideX));
+    // Both still off-LOS (the diamond character) — Tight isn't a different
+    // shape, just a compressed version.
+    expect(tight.players.find((p) => p.id === "X")!.y).toBeLessThan(0);
   });
 
-  it("flag_7v7 Diamond: still has 4-point shape (C + X + Z + deep middle)", () => {
+  it("flag_5v5 Diamond: the four points form a true geometric diamond (4 distinct y-coords)", () => {
+    // The whole point of the new geometry: 4 distinct points at different
+    // depths. If X/Z share C's depth, it's a T not a diamond.
+    const synth = synthesizeOffense("flag_5v5", "Diamond")!;
+    const byId = new Map(synth.players.map((p) => [p.id, p]));
+    const cY = byId.get("C")!.y;
+    const xY = byId.get("X")!.y;
+    const zY = byId.get("Z")!.y;
+    const yY = byId.get("Y")!.y;
+    // C and Y bracket the diamond; X and Z sit between them in depth
+    expect(cY).toBeGreaterThan(xY); // C is above (toward LOS) X
+    expect(xY).toBe(zY); // X and Z are at the same depth
+    expect(xY).toBeGreaterThan(yY); // X is above Y
+  });
+
+  it("flag_7v7 Diamond: diamond core preserved, extras as wide receivers on LOS", () => {
     const synth = synthesizeOffense("flag_7v7", "Diamond")!;
     expect(synth.players.length).toBe(7);
     const byId = new Map(synth.players.map((p) => [p.id, p]));
+    // Diamond core still has 4 points at distinct depths
     expect(byId.get("C")?.y).toBe(0);
-    expect(byId.get("X")!.x).toBeLessThan(-5);
-    expect(byId.get("Z")!.x).toBeGreaterThan(5);
-    // At least one receiver deep behind QB
+    expect(byId.get("X")!.y).toBeLessThan(0);
+    expect(byId.get("X")!.y).toBeGreaterThan(-7);
+    expect(byId.get("Z")!.y).toBe(byId.get("X")!.y);
+    // At least one receiver deep behind QB (Y)
     const deep = synth.players.find((p) => p.y < -5 && Math.abs(p.x) < 2 && p.id !== "QB");
     expect(deep, "Diamond requires a deep-middle receiver behind QB").toBeDefined();
+    // 7v7 extras are wider WRs on the LOS, outside the diamond core
+    const wides = synth.players.filter(
+      (p) => p.y === 0 && p.id !== "C" && p.id !== "QB",
+    );
+    expect(wides.length, "7v7 Diamond should add at least one wide WR on the LOS").toBeGreaterThanOrEqual(1);
+    for (const w of wides) {
+      expect(Math.abs(w.x), `wide WR @${w.id} should be wider than the diamond X point (5yd)`).toBeGreaterThan(5);
+    }
   });
 });
 

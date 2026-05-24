@@ -319,6 +319,101 @@ function extractPlayFences(text: string): string[] {
   return fences;
 }
 
+/** Tolerance (yards) for prose-vs-route depth claims. "At 3 yards" should
+ *  match a route ending at y in [0.5, 5.5]. Loose enough for "around 3"
+ *  prose, tight enough to catch route at y=0 vs claimed y=3. */
+const PROSE_DEPTH_TOLERANCE_YDS = 2.5;
+
+/** Parse Cal's prose for explicit depth claims about specific players.
+ *  Matches patterns like:
+ *   - "@C runs a drag at 3 yards"
+ *   - "@X hits the speed-out at 10 yards"
+ *   - "@Z runs a corner at 12 yards"
+ *   - "@Y at 5-7 yards"
+ *
+ *  Returns one claim per match with the carrier id and the midpoint of the
+ *  claimed depth range (a single number becomes its own midpoint). Multiple
+ *  claims for the same carrier are all returned — the validator checks
+ *  whether the route ends within tolerance of ANY of them.
+ *
+ *  Exported for testing. */
+export function extractProseDepthClaims(prose: string): Array<{ carrier: string; depthYds: number }> {
+  const claims: Array<{ carrier: string; depthYds: number }> = [];
+  // Pattern: @CARRIER ... at N[-M] yard(s)? — the @CARRIER must come within
+  // ~80 chars of the "at N yards" claim to be considered as referring to it.
+  // The carrier id is captured separately and the depth range is parsed
+  // (single number or "N-M" range).
+  const re = /@([A-Z][A-Z0-9]*)[^.!?\n]{0,80}?\bat\s+(\d{1,2})(?:\s*[-–]\s*(\d{1,2}))?\s*y(?:ar)?d/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(prose)) !== null) {
+    const carrier = m[1].toUpperCase();
+    const low = parseInt(m[2], 10);
+    const high = m[3] ? parseInt(m[3], 10) : low;
+    if (!Number.isFinite(low) || !Number.isFinite(high)) continue;
+    claims.push({ carrier, depthYds: (low + high) / 2 });
+  }
+  return claims;
+}
+
+/** Compare prose depth claims against the diagram's actual route depths.
+ *  For each claim, look up the corresponding route's last waypoint y and
+ *  check it falls within tolerance of the claimed depth. Mismatches surface
+ *  as errors that force Cal to either fix the route or revise the prose.
+ *
+ *  Carrier IDs match suffix-tolerantly (CB2 → CB strip is preserved as-is;
+ *  we don't strip on offense because suffix collisions are rare on offense
+ *  and stripping risks matching wrong players).
+ *
+ *  Exported for testing. */
+export function validateProseRouteCoherence(
+  text: string,
+  diagram: CoachDiagram,
+): string[] {
+  const claims = extractProseDepthClaims(text);
+  if (claims.length === 0) return [];
+  const routes = Array.isArray(diagram.routes) ? diagram.routes : [];
+  if (routes.length === 0) return [];
+
+  // Build a map: carrier → route final waypoint y. When a carrier has
+  // multiple routes (rare), take the deepest waypoint across all of them
+  // since prose "at X yards" usually refers to where the receiver ENDS.
+  const finalYByCarrier = new Map<string, number>();
+  for (const r of routes) {
+    if (typeof r !== "object" || r === null) continue;
+    const from = (r as { from?: unknown }).from;
+    if (typeof from !== "string") continue;
+    const carrier = from.toUpperCase();
+    const path = (r as { path?: unknown }).path;
+    if (!Array.isArray(path) || path.length === 0) continue;
+    const last = path[path.length - 1];
+    if (!Array.isArray(last) || last.length < 2) continue;
+    const y = last[1];
+    if (typeof y !== "number" || !Number.isFinite(y)) continue;
+    const prior = finalYByCarrier.get(carrier);
+    if (prior === undefined || y > prior) finalYByCarrier.set(carrier, y);
+  }
+
+  // Dedupe claims by (carrier, depthYds) so a prose paragraph that mentions
+  // the same player twice doesn't double-fire.
+  const seen = new Set<string>();
+  const errors: string[] = [];
+  for (const claim of claims) {
+    const key = `${claim.carrier}|${claim.depthYds}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const actualY = finalYByCarrier.get(claim.carrier);
+    if (actualY === undefined) continue; // no route for this carrier — different gate handles
+    const drift = Math.abs(actualY - claim.depthYds);
+    if (drift <= PROSE_DEPTH_TOLERANCE_YDS) continue;
+    errors.push(
+      `Prose-route mismatch on @${claim.carrier}: your prose says the route is "at ${claim.depthYds} yards" but the actual path ends at y=${actualY} (off by ${drift.toFixed(1)}yd). ` +
+        `Either fix the route to end at the depth you described, or revise the prose to match the actual route. ` +
+        `For NAMED routes (Slant, Drag, Out, Corner, Post, Curl, etc.), call get_route_template to get the canonical depth — hand-authored paths drift from coach expectations.`,
+    );
+  }
+  return errors;
+}
+
 export type ValidationResult =
   | { ok: true }
   | { ok: false; errors: string[] };
@@ -762,6 +857,21 @@ export function validateDiagrams(opts: {
     // VARIANT-RULE GATE B — center eligibility. Delegated to
     // validateCenterEligibility so the same rule fires at save-time.
     for (const msg of validateCenterEligibility(json as CoachDiagram, settings, opts.variant)) {
+      errors.push(`${tag}${msg}`);
+    }
+
+    // PROSE-ROUTE COHERENCE GATE — when Cal's prose claims a player runs a
+    // route at a specific depth ("@C runs a drag at 3 yards", "@X hits the
+    // speed-out at 10 yards"), the actual route in the diagram must end at
+    // approximately that depth. Surfaced 2026-05-23: a "Diamond Crossers"
+    // play had prose describing @C's drag at 3 yards but the route's path
+    // was all at y=0 (the LOS) — Cal hand-authored the route without using
+    // get_route_template and wrote prose that didn't match the geometry.
+    // Catches the prose-vs-diagram disconnect at chat-time instead of
+    // letting the coach see incoherent output. Tolerance: 2.5 yards (loose
+    // enough for "around 3 yards" prose, tight enough to catch route at
+    // y=0 vs claimed y=3).
+    for (const msg of validateProseRouteCoherence(opts.text, json as CoachDiagram)) {
       errors.push(`${tag}${msg}`);
     }
 
