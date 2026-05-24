@@ -201,14 +201,27 @@ export function validateRouteAssignments(
     // errors (the original 2026-05-04 bug) or genuinely off-the-rails
     // hand-authored paths.
     //
-    // Skip when nonCanonical: true is set — the coach explicitly
-    // accepted an off-catalog shape.
-    if (route.nonCanonical !== true) {
+    // Skipped when:
+    //   - `nonCanonical: true` — the coach explicitly accepted an
+    //     off-catalog shape.
+    //   - `route_kind === "handoff"` — handoff arrows ARE behind the
+    //     LOS by definition; they're not forward passes. Production
+    //     bug 2026-05-25: Jet Reverse in tackle_11 failed compose_play
+    //     because the QB→B handoff arrow at the mesh point (y=-4) hit
+    //     this layer. Cal then hand-authored a fence as fallback.
+    //   - `route_kind === "carry"` — ballcarriers' paths track their
+    //     movement with the ball; starting / ending behind LOS is
+    //     normal for sweeps, reverses, mesh-points. Task #32 added a
+    //     similar exemption in Layer 1 for QB carries in flag; this
+    //     extends it to ANY carrier in Layer 4.
+    const layer4Kind = (route.route_kind ?? "").trim();
+    const layer4IsBallExchange = layer4Kind === "handoff" || layer4Kind === "carry";
+    if (route.nonCanonical !== true && !layer4IsBallExchange) {
       const deepestForwardY = computeDeepestForwardWaypointY(route);
       if (deepestForwardY !== null && deepestForwardY < BACKWARDS_ROUTE_THRESHOLD_YDS) {
         errors.push({
           carrier: route.from,
-          declaredKind: (route.route_kind ?? "").trim() || "(no route_kind)",
+          declaredKind: layer4Kind || "(no route_kind)",
           message:
             `Route from @${route.from} has its deepest forward waypoint at ${formatYds(deepestForwardY)} yds (behind the LOS). ` +
             `A forward pass to this catch point would be illegal in flag football — receivers must catch a forward pass at or past the LOS. ` +
@@ -221,13 +234,23 @@ export function validateRouteAssignments(
 
     // ── Layer 3: catalog route_kind constraints ─────────────────────
     const declared = (route.route_kind ?? "").trim();
-    // Skip empty (genuine custom routes) AND the "carry" marker —
+    // Internal ball-movement / defender-reaction route kinds that
+    // aren't pass-route families and shouldn't be looked up in the
+    // catalog. These are visualization markers emitted by the
+    // renderer / compose_defense, not coach-authored pass routes:
+    //   - "carry"      — ballcarrier path (sweeps, draws, reverses)
+    //   - "handoff"    — handoff indicator arrow at the mesh point
+    //   - "zone_drop"  — defender's zone-drop arrow (compose_defense)
+    //   - "react_*"    — defender reactor pattern (CB carries Go, etc.)
+    if (declared.startsWith("react_")) continue;
+    // Skip empty (genuine custom routes), the "carry" marker, the
+    // "handoff" marker, and "zone_drop" — none are pass-route families;
     // ballcarrier paths aren't pass-route families and the template
     // catalog doesn't include them. The Layer 1 check above already
     // OK'd carries when they came from a recognized carrier (QB or
     // the named back), so by this point a "carry"-marked route is
     // legitimate by construction.
-    if (!declared || declared === "carry") continue;
+    if (!declared || declared === "carry" || declared === "handoff" || declared === "zone_drop") continue;
 
     const template = findTemplate(declared);
     if (!template) {

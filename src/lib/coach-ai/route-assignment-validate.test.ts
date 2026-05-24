@@ -582,4 +582,63 @@ describe("validateRouteAssignments — Layer 4: forward-pass legality (illegal b
     });
     expect(result.ok).toBe(false);
   });
+
+  it("ACCEPTS a handoff arrow ending behind the LOS (handoffs ARE behind the LOS by definition)", () => {
+    // Production bug 2026-05-25: a coach asked for a Jet Reverse in
+    // tackle_11. compose_play returned the canonical skeleton, the
+    // renderer added a `route_kind: "handoff"` arrow from QB → B at
+    // the mesh point (0, -4) — exactly where it has to be. Layer 4's
+    // forward-pass legality check fired on the handoff arrow because
+    // its deepest forward waypoint was at y=-4 (behind LOS).
+    // compose_play returned an error; Cal fell back to hand-authoring
+    // and shipped a nonsensical fence. The fix: handoffs are not
+    // forward passes; Layer 4 must skip them.
+    const result = validateRouteAssignments({
+      variant: "tackle_11",
+      players: [
+        { id: "QB", x: 0, y: -1, team: "O" },
+        { id: "B", x: 4, y: -5, team: "O" },
+      ],
+      routes: [
+        {
+          from: "QB",
+          path: [
+            [0, -4],
+            [0.5, -4.5],
+          ],
+          tip: "arrow",
+          route_kind: "handoff",
+        },
+      ],
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("ACCEPTS a carry path that starts behind the LOS (RB mesh on a Sweep / Counter)", () => {
+    // Companion to the handoff test above. Carries are also not
+    // forward passes — the ballcarrier's path tracks their movement
+    // with the ball; starting behind the LOS is normal. Task #32
+    // partially addressed this for QB carries in flag (Layer 1
+    // exempts QB+carry); Layer 4 needs the same exemption for ANY
+    // carrier so non-QB run actions don't trip the gate.
+    const result = validateRouteAssignments({
+      variant: "tackle_11",
+      players: [
+        { id: "B", x: 4, y: -5, team: "O" },
+      ],
+      routes: [
+        {
+          from: "B",
+          path: [
+            [3, -3],
+            [-8, -1],
+            [-14, 8],
+          ],
+          tip: "arrow",
+          route_kind: "carry",
+        },
+      ],
+    });
+    expect(result.ok).toBe(true);
+  });
 });
