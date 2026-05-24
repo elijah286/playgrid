@@ -2557,7 +2557,10 @@ export async function runAgent(
                   "Do NOT begin your re-emit with \"I apologize\", \"you're right\", " +
                   "or any reference to a validator. Just emit the corrected " +
                   "response as if the broken one never existed.\n\n" +
-                  fenceProvenanceCritique(provenance.handAuthoredFences.length),
+                  fenceProvenanceCritique(provenance.handAuthoredFences.length, {
+                    variant: ctx.sportVariant as "flag_5v5" | "flag_6v6" | "flag_7v7" | "tackle_11" | undefined,
+                    handAuthoredFences: provenance.handAuthoredFences,
+                  }),
               },
             ],
           };

@@ -97,6 +97,43 @@ describe("compose_play — registered + returns valid fence", () => {
     expect(r.ok).toBe(false);
   });
 
+  it("formation-name-as-concept error returns an inline fill-in-the-blank spec template", async () => {
+    // Surfaced by `bespoke-route-survives` eval 2026-05-25: Cal called
+    // compose_play({concept:"Spread Doubles"}), got a recipe-style
+    // error, then hand-authored a ```play fence anyway. The fix is to
+    // include a literal ```spec template prefilled with the variant +
+    // formation Cal tried, so Cal only has to fill the assignments.
+    // This test pins the new error shape so a future "simplify the
+    // error message" refactor can't silently regress to recipe-only.
+    const tool = loadTool("compose_play");
+    const r = await tool.handler({ concept: "Spread Doubles" }, { ...TACKLE_CTX, sportVariant: "flag_7v7" });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+
+    // The error must include a literal ```spec block (the template Cal
+    // pastes), not just recipe steps.
+    expect(r.error).toContain("```spec");
+
+    // The template must include the variant Cal is in.
+    expect(r.error).toContain('"variant": "flag_7v7"');
+
+    // The template must include the formation name Cal tried.
+    expect(r.error).toContain('"name": "Spread Doubles"');
+
+    // Cal must be told NEXT-STEP, not just recipe-step.
+    expect(r.error).toMatch(/NEXT\b.+emit/i);
+
+    // The hard "no hand-authored play fence" rule must still be there.
+    expect(r.error).toMatch(/do not hand-author/i);
+
+    // The catalog families list must be there so Cal knows what
+    // strings are valid for `family`.
+    expect(r.error).toMatch(/slant.*post.*curl.*hitch.*go/i);
+
+    // The custom-route escape hatch must be referenced.
+    expect(r.error).toMatch(/"kind":\s*"custom"/);
+  });
+
   it("applies overrides on top of the canonical skeleton", async () => {
     const tool = loadTool("compose_play");
     const r = await tool.handler(

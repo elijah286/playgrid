@@ -142,25 +142,81 @@ export function validateFenceProvenance(
   return { ok: false, handAuthoredFences: handAuthored };
 }
 
+/** Shared fill-in-the-blank ```spec template + Path A/B guidance.
+ *  Used by both `fenceProvenanceCritique` (when the gate catches a
+ *  hand-authored fence) AND the diagram-validator's critique in
+ *  `agent.ts` (when a hand-authored fence fails structural checks
+ *  like "title says spread but 3 backs in backfield"). Both paths
+ *  benefit from showing Cal the exact spec syntax to copy-paste.
+ *
+ *  Single source of truth: a change to the template propagates to
+ *  every entry point that pushes Cal toward spec emission. */
+export function specEmissionGuidance(opts?: {
+  variant?: "flag_5v5" | "flag_6v6" | "flag_7v7" | "tackle_11";
+}): string {
+  const FENCE_MARKER = "```";
+  const variantStr = opts?.variant ?? "<variant>";
+
+  const specTemplate =
+    "\n\n" + FENCE_MARKER + "spec\n" +
+    "{\n" +
+    '  "schemaVersion": 1,\n' +
+    `  "variant": "${variantStr}",\n` +
+    '  "title": "<short play title>",\n' +
+    '  "playType": "offense",\n' +
+    '  "formation": { "name": "<formation>", "strength": "right" },\n' +
+    '  "assignments": [\n' +
+    '    { "player": "X", "action": { "kind": "route", "family": "Hitch" } }\n' +
+    "  ]\n" +
+    "}\n" +
+    FENCE_MARKER;
+
+  return (
+    "Two paths to a clean fence — pick the one that matches your play:" +
+    "\n\n**Path A — CATALOG CONCEPT** (Mesh, Smash, Snag, Curl-Flat, Four Verticals, Drive, Y-Cross, etc.):" +
+    '\n  1. Call `compose_play({ concept: "<name>", ... })`.' +
+    "\n  2. The tool returns both a " + FENCE_MARKER + "spec block AND a " + FENCE_MARKER + "play fence. Drop the SPEC block (Option A) into your reply verbatim. STOP." +
+    "\n\n**Path B — FORMATION + ROUTES** (Spread Doubles with hitches all around, Trips with an option route on @X, any bespoke combo not in the catalog):" +
+    "\n  1. Call `place_offense({ formation: \"<name>\" })` if you haven't already (gets you the player positions)." +
+    "\n  2. Emit this spec block (replace `<formation>`, `<short play title>`, and the `assignments[]` entries):" +
+    specTemplate +
+    "\n\nCatalog route families: Slant, Post, Curl, Hitch, Go, Out, In, Dig, Drag, Flat, Sit, Seam, Corner, Wheel, Comeback." +
+    "\nBespoke / off-catalog routes (option routes, screens, exotic combos): use `{ \"kind\": \"custom\", \"description\": \"...\", \"waypoints\": [[x,y],...] }` instead of `{ \"kind\": \"route\", \"family\": \"...\" }`." +
+    "\nOne assignment per non-QB player. In flag_5v5 the center @C is eligible — give them a route too." +
+    "\n\nRe-emit with a " + FENCE_MARKER + "spec block, NOT a " + FENCE_MARKER + "play fence."
+  );
+}
+
 /** Build the critique text the chat-time validator sends to Cal when
  *  hand-authored fences are detected. Phrased to push Cal toward the
  *  spec-emission path (the structural fix), not to try to repair the
- *  fence by hand. */
-export function fenceProvenanceCritique(handAuthoredCount: number): string {
+ *  fence by hand.
+ *
+ *  `opts.variant` is used to prefill the inline spec template's
+ *  `"variant"` field. Without it, Cal sees `"<variant>"` and must
+ *  fill it in — usually fine, but a one-character LLM mistake there
+ *  produces a render error.
+ *
+ *  `opts.handAuthoredFences` is optional context (the first 200 chars
+ *  of each rejected fence body). Currently unused for prefill, but
+ *  reserved for future extraction of formation/title hints. */
+export function fenceProvenanceCritique(
+  handAuthoredCount: number,
+  opts?: {
+    variant?: "flag_5v5" | "flag_6v6" | "flag_7v7" | "tackle_11";
+    handAuthoredFences?: string[];
+  },
+): string {
   const FENCE_MARKER = "```"; // avoids template-literal collision below
   const leadIn =
     handAuthoredCount === 1
       ? "You emitted a " + FENCE_MARKER + "play fence"
       : "You emitted " + handAuthoredCount + " " + FENCE_MARKER + "play fences";
+
   return (
     leadIn +
     ' by hand. Hand-authored fences are forbidden — they\'re the root cause of every "wrong coordinates" bug we\'ve patched (Diamond Crossers regression, Four Verticals in flag_5v5, Bunch-in-5v5-collapses-to-Doubles, prose-route mismatches).' +
-    "\n\nTo fix this: emit a " + FENCE_MARKER + "spec block instead. The harness renders it to a play fence at display time using the catalog. Cal NEVER writes coordinates; the renderer produces them." +
-    "\n\nFlow:\n" +
-    '  1. Call `compose_play({ concept: "<name>", ... })` for the play you want to draw.\n' +
-    "  2. compose_play returns BOTH a " + FENCE_MARKER + "spec block AND a " + FENCE_MARKER + "play fence in its tool result. Drop the SPEC block (NOT the fence) into your reply between " + FENCE_MARKER + "spec and " + FENCE_MARKER + ".\n" +
-    "  3. The harness intercepts the spec block before the coach sees the message and renders it to a play fence.\n" +
-    "  4. The coach sees the same diagram they'd see today; the difference is Cal didn't author any coordinates.\n\n" +
-    "Re-emit with the spec block, NOT the play fence."
+    "\n\n" +
+    specEmissionGuidance({ variant: opts?.variant })
   );
 }

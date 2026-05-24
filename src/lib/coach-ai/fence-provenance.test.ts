@@ -162,4 +162,49 @@ describe("fenceProvenanceCritique — surfaces the spec-emission path", () => {
     expect(fenceProvenanceCritique(1)).toContain("You emitted a ```play fence");
     expect(fenceProvenanceCritique(3)).toContain("You emitted 3 ```play fences");
   });
+
+  it("includes both Path A (catalog concept) and Path B (formation + routes)", () => {
+    // Surfaced by `bespoke-route-survives` eval 2026-05-25: when Cal
+    // wants a bespoke / formation-only play (not a catalog concept),
+    // compose_play can't help. The original critique only mentioned
+    // the compose_play path, so Cal would either hand-author again or
+    // call compose_play with a formation name. Both paths must be
+    // visible in the critique.
+    const c = fenceProvenanceCritique(1);
+    expect(c).toMatch(/path a.*catalog concept/i);
+    expect(c).toMatch(/path b.*formation.*routes/i);
+    expect(c).toContain("place_offense");
+  });
+
+  it("inline spec template prefills the variant when provided", () => {
+    // Without variant prefill, Cal sees `"variant": "<variant>"` and
+    // has to fill it in — one LLM mistake there produces a render
+    // error. With prefill, Cal only fills the formation + assignments.
+    const c5 = fenceProvenanceCritique(1, { variant: "flag_5v5" });
+    expect(c5).toContain('"variant": "flag_5v5"');
+
+    const c7 = fenceProvenanceCritique(1, { variant: "flag_7v7" });
+    expect(c7).toContain('"variant": "flag_7v7"');
+
+    const cTackle = fenceProvenanceCritique(1, { variant: "tackle_11" });
+    expect(cTackle).toContain('"variant": "tackle_11"');
+
+    // No variant → placeholder remains.
+    const cDefault = fenceProvenanceCritique(1);
+    expect(cDefault).toContain('"variant": "<variant>"');
+  });
+
+  it("lists catalog route families for Path B fill-in", () => {
+    const c = fenceProvenanceCritique(1);
+    // Cal needs to know what strings are valid for `family` —
+    // listing them is the difference between "Cal makes one up" and
+    // "Cal picks from a known list".
+    expect(c).toMatch(/slant.+post.+curl.+hitch.+go/i);
+  });
+
+  it("mentions the custom-route escape hatch for off-catalog shapes", () => {
+    const c = fenceProvenanceCritique(1);
+    expect(c).toMatch(/"kind":\s*"custom"/);
+    expect(c).toMatch(/waypoints/i);
+  });
 });
