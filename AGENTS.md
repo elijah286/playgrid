@@ -250,3 +250,23 @@ A new feature without tests is not "shipped" — it's "merged but undefended." T
 ```
 
 Cal NEVER produces waypoints, defender positions, or zone rectangles directly. Every geometric value originates from a catalog or synthesizer and passes through the sanitizer before display.
+
+### Phase 2b provenance gate — kill switch + log format
+
+The chat-time validator (`agent.ts`) runs `validateFenceProvenance` against every reply Cal emits. Hand-authored ```play fences fail the gate, trigger a retry critique pointing at ```spec emission, and on a second failure are stripped before the coach sees the message.
+
+**Kill switch.** Set the Cloud Run env var `COACH_CAL_PROVENANCE_GATE=off` to disable enforcement instantly without a code deploy. The gate still RUNS (so observability logs continue) but no retry/strip happens — the bad fence ships as-is. Use this if the gate misfires more than expected and we need an immediate workaround. Default: enforcement ON.
+
+**Log format.** Every gate fire (or bypass under kill switch) writes one line:
+
+```
+[coach-ai:provenance] gate FIRED — handAuthored=1 approvedFingerprints=2 attempt=first sampleBody="{ \"title\": \"Mesh\", \"variant\": \"flag_7v7\", ..."
+```
+
+- `gate FIRED` (enforcement on) vs `gate BYPASSED (kill switch on)` — which mode.
+- `handAuthored=N` — how many fences in Cal's reply failed provenance.
+- `approvedFingerprints=N` — how many fences the tracker approved this turn (tool emissions + spec renders + prior chat history).
+- `attempt=first|second` — first-attempt failures retry with a critique; second-attempt failures strip.
+- `sampleBody="..."` — first 140 chars of the failing fence body, whitespace collapsed. Enough to identify what Cal tried to author.
+
+Grep Cloud Run logs for `[coach-ai:provenance]` to measure fire rate. A consistent fire rate > a few percent of turns means Cal's training bias is dominating the prompt's spec-emission directive — that's a prompt-side fix (Phase 2c follow-up), not a gate-side one.

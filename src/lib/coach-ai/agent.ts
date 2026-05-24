@@ -2465,8 +2465,33 @@ export async function runAgent(
         // prose-route mismatches). The dedicated critique routes Cal
         // to `\`\`\`spec` emission rather than the generic "your reply
         // failed validation" loop.
+        //
+        // PHASE 2d — kill switch. Setting COACH_CAL_PROVENANCE_GATE=off
+        // disables enforcement (the gate still RUNS and still LOGS, so
+        // we can measure fire-rate in production logs even when the
+        // gate is off — see the console.warn below). Use this if the
+        // gate misfires more often than expected and we need to ship
+        // an immediate workaround without a code revert. Default:
+        // enforcement ON.
         const provenance = validateFenceProvenance(renderedText, approvedFences);
-        if (!provenance.ok && !validatorRetried) {
+        const provenanceGateEnforced = process.env.COACH_CAL_PROVENANCE_GATE !== "off";
+        if (!provenance.ok) {
+          // Always log — observability is independent of enforcement.
+          // Format: structured prefix + key facts + sample body so
+          // grep/jq can extract fire rate, attempt-pass, and the
+          // failing fence's first ~140 chars without a full payload.
+          const sampleBody = (provenance.handAuthoredFences[0] ?? "")
+            .slice(0, 140)
+            .replace(/\s+/g, " ");
+          console.warn(
+            `[coach-ai:provenance] gate ${provenanceGateEnforced ? "FIRED" : "BYPASSED (kill switch on)"} — ` +
+              `handAuthored=${provenance.handAuthoredFences.length} ` +
+              `approvedFingerprints=${approvedFences.size} ` +
+              `attempt=${validatorRetried ? "second" : "first"} ` +
+              `sampleBody="${sampleBody}"`,
+          );
+        }
+        if (provenanceGateEnforced && !provenance.ok && !validatorRetried) {
           messages.pop();
           newMessages.pop();
           const critique: ChatMessage = {
@@ -2582,8 +2607,10 @@ export async function runAgent(
         // ship a graceful "couldn't compose" instead of bad geometry.
         // Provenance errors join validation errors here — same
         // mechanical fix (strip the fence), but the apology summary
-        // uses whichever error list explains the failure.
-        if (!provenance.ok && validatorRetried) {
+        // uses whichever error list explains the failure. Skipped
+        // when the Phase 2d kill switch is on (in which case the
+        // unapproved fence ships as-is — the legacy behavior).
+        if (provenanceGateEnforced && !provenance.ok && validatorRetried) {
           textToEmit = stripBrokenFences(textToEmit, [
             "hand-authored play fence — coach must request a spec-block re-emit",
           ]);

@@ -84,15 +84,19 @@ With spec-only authoring in place, large sections of the prompt that teach "how 
 
 ### 2d — Beta gate + cutover (2-3 days)
 
-Spec-only authoring is a foundational change. Roll it out behind a feature flag so we can A/B test against the existing fence-authoring path.
+**Reframed during build (2026-05-24):** The original per-coach beta-flag plan turned out to be moot. Phase 2b's gate is harness-level (every reply Cal emits goes through it) and Phase 2c's prompt update is global — there's no "spec mode vs legacy mode" toggle to expose. Every coach is on the new path the moment 2b+2c merge.
+
+What 2d became instead: **observability + kill switch.** Goals:
+
+- **Observability** — log every provenance-gate fire so we can measure how often Cal authors hand-typed fences in production. Even when enforcement is off, the log fires. Lets us tune the prompt / catalog if Cal can't reliably emit specs.
+- **Kill switch** — env-var override that disables enforcement (but keeps logging) so the user can yank the gate in seconds if it misbehaves in prod. No code revert needed.
 
 **Deliverables:**
-- `coach-cal-spec-mode` feature flag in playbook_settings or coach_profile.
-- Branch on the flag in agent.ts: spec mode uses the new prompt + spec→fence rendering; legacy mode uses the existing path.
-- Default: spec mode ON for new playbooks; opt-out available; legacy mode for existing playbooks until we explicitly migrate.
-- Migration plan: bulk-flip the flag for existing coaches after spec mode proves stable for 1-2 weeks.
+- `agent.ts`: every `validateFenceProvenance` failure logs a structured `[coach-ai:provenance]` line with fire/bypass flag, hand-authored count, approved-fingerprint count, attempt number, and a 140-char sample of the failing fence body.
+- `COACH_CAL_PROVENANCE_GATE=off` env var disables enforcement (retry and final-strip both skip; the bad fence ships as-is — legacy behavior). Default: enforcement ON.
+- Doc updates: this roadmap reflects what shipped; `AGENTS.md` mentions the kill switch + log format so the user knows how to read Cloud Run logs and how to flip the switch.
 
-**Acceptance:** New coaches see spec-mode Cal by default; existing coaches unaffected until migration.
+**Acceptance:** Provenance failures are visible in production logs; flipping the env var on Cloud Run instantly disables enforcement without a code deploy.
 
 ## Risks + mitigations
 
