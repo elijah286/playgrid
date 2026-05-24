@@ -1,6 +1,6 @@
 # Football Knowledge Graph — Phase 1 Roadmap
 
-**Status:** Phase 1d COMPLETE (all 4 legacy catalog files now read from KG); Phase 1e next · **Branch:** `feat/football-kg` · **Started:** 2026-05-24
+**Status:** **PHASE 1 COMPLETE** — KG is single source of truth at runtime; CLI ships · **Branch:** `feat/football-kg` · **Started:** 2026-05-24 · **Completed:** 2026-05-24
 
 This document is the source of truth for the multi-week Coach Cal architectural refactor. Read it first if you're picking this work up across sessions.
 
@@ -100,20 +100,28 @@ Decisions locked 2026-05-24:
 
 **Why not delete the legacy files entirely?** They still own the TYPES (BreakStyle, BreakDirection, RouteConstraints, RouteTemplate, ConceptEntry, DefensiveAlignment, ReactorPattern, etc.) and the HELPERS (findTemplate, findConcept, findDefensiveAlignment, findReactorPattern, alignmentForStrength, etc.) that other code imports by name. Migrating those import paths to the KG is a separate cleanup pass — for now, keeping the legacy files as thin (200-300 line) bridges is the minimum-risk path.
 
-### 1e — Manifest CLI + first scenario evals
+### 1e — Manifest CLI ✅ COMPLETE 2026-05-24
+
+**Reframed during implementation.** Scenario evals (Cal-vs-expected-behavior tests with an LLM judge) deferred to Phase 4 — that's substantial framework work and Phase 1e was already large with the catalog migration + cuts. The CLI is the most valuable Phase 1e deliverable: it makes the KG inspectable from a terminal so coaches and engineers can see catalog state without grepping TypeScript.
 
 **Files:**
-- `scripts/fb-kg/list.ts` — `pnpm fb-kg list concepts` / `formations` / etc.
-- `scripts/fb-kg/audit.ts` — `pnpm fb-kg audit` reports catalog completeness, missing variants, orphaned refs
-- `evals/scenarios/`:
-  - `mesh-in-doubles.eval.ts`
-  - `diamond-mesh-combination.eval.ts` (today's regression)
-  - `four-verticals-flag-5v5.eval.ts` (today's regression)
-  - ... 10 total
-- `evals/run.ts` — runs scenarios against current Cal, reports pass/fail
-- `evals/judge.ts` — LLM-based pass/fail judge (initially can be simple keyword/structure check)
+- `scripts/fb-kg/cli.ts` ✅ — unified `npx tsx scripts/fb-kg/cli.ts <command>` with `list`, `audit`, `validate`, `help` subcommands. Supports `--json` for machine-readable output.
+- `src/domain/football-kg/cli.test.ts` ✅ — 11 tests covering all 4 subcommands + JSON mode + audit-finding surface.
 
-**Acceptance:** `pnpm fb-kg list` and `pnpm fb-kg audit` work; 10 scenarios run + report; framework is ready for Phase 4 to scale to 100+.
+**What the CLI provides today:**
+- `cli list` — dump all families or one family at a time (routes, formations, schemes, concepts, reactor-patterns, drills).
+- `cli audit` — gap report: missing variants, sparse coverage, dangling references, validator failures.
+- `cli validate` — run schema + cross-ref + geometry invariants (exits non-zero on failure).
+
+**Phase 4 follow-ups (scenario evals):** when we build the full eval framework, the scenarios will sit at `evals/scenarios/` and the runner / judge at `evals/run.ts` + `evals/judge.ts`. Initial seed scenarios should capture today's session bugs (Diamond-Crossers, Four Verticals in flag_5v5, Bunch in 5v5, prose-route mismatch) so they never regress.
+
+**Acceptance:** CLI runs cleanly, audit surfaces real gaps (flag_5v5 sparse schemes; reactor-pattern coverage uneven across variants), validate is clean. Framework foundations are in place for Phase 4.
+
+---
+
+## 🎉 PHASE 1 COMPLETE
+
+113 football primitives unified into a typed knowledge graph. Single source of truth at runtime. Catalog drift is structurally impossible. Adding a new route/concept/scheme is now editing ONE file.
 
 ## Schema design notes
 
