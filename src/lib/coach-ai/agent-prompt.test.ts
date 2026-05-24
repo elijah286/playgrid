@@ -915,3 +915,42 @@ describe("NORMAL_PROMPT — SPEC EMISSION (Phase 2c, 2026-05-24)", () => {
     expect(NORMAL_PROMPT).toMatch(/Same shape used in two places/);
   });
 });
+
+describe('NORMAL_PROMPT — "how should defense cover this play" overlay rule (2026-05-24)', () => {
+  // Surfaced 2026-05-24 in production: a coach with a Drive play open
+  // asked "show me how defense should cover this play now" and Cal
+  // composed 7 different offensive concepts (Four Verticals,
+  // Curl-Flat, Levels, ...) with custom titles instead of overlaying
+  // defenders on the anchored Drive. None of the 7 plays auto-saved
+  // cleanly; coach saw "Couldn't auto-save 6 plays" instead of an
+  // answer.
+  //
+  // The fix is a prompt rule that handles the deictic "this play" +
+  // anchored offense case — routes the request to compose_defense
+  // (with `on_play` set to the anchored play's fence), ONE call, not
+  // multiple compose_play calls.
+
+  it("names the trigger phrasings that should route to compose_defense", () => {
+    expect(NORMAL_PROMPT).toMatch(/how should defense cover this/i);
+    expect(NORMAL_PROMPT).toMatch(/show me the defense for this play|how do defenders adjust|what coverage works here/i);
+  });
+
+  it("instructs Cal to call compose_defense ONCE with on_play, not compose_play", () => {
+    expect(NORMAL_PROMPT).toMatch(/compose_defense\(\{ on_play: <the anchored play's fence>/);
+    expect(NORMAL_PROMPT).toMatch(/ONCE and drop that single fence/);
+    expect(NORMAL_PROMPT).toMatch(/DO NOT call `compose_play` to invent new offensive plays/);
+  });
+
+  it("names the 2026-05-24 regression so Cal sees the concrete failure mode", () => {
+    expect(NORMAL_PROMPT).toMatch(/Surfaced 2026-05-24/);
+    expect(NORMAL_PROMPT).toMatch(/7 different offensive concepts/);
+    expect(NORMAL_PROMPT).toMatch(/Couldn't auto-save 6 plays/);
+  });
+
+  it("clarifies the multi-coverage variant case (separate turns or plan)", () => {
+    // The escape hatch: if the coach wants alternative coverages,
+    // generate 2-3 SEPARATE compose_defense overlays — each is a
+    // coverage variant of the SAME offense, not a new offense.
+    expect(NORMAL_PROMPT).toMatch(/alternative coverages.*compose_defense overlays|compose_defense overlays.*same anchored play/);
+  });
+});
