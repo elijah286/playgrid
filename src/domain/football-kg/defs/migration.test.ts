@@ -32,6 +32,59 @@ describe("Phase 1b migrated KG — validation", () => {
   });
 });
 
+describe("Phase 1b migrated formations — coverage", () => {
+  // 17 canonical formations carried over from offensiveSynthesize.ts's
+  // parseFormationName rules + the recent flag-specific additions
+  // (Diamond, Tight Diamond, I-Formation flag).
+
+  it("has at least 17 formations (full migrated catalog)", () => {
+    expect(FOOTBALL_KG.formations.length).toBeGreaterThanOrEqual(17);
+  });
+
+  it("every formation has a unique id", () => {
+    const ids = FOOTBALL_KG.formations.map((f) => f.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("every formation has at least one of: spec, customShape, positions", () => {
+    for (const f of FOOTBALL_KG.formations) {
+      const hasMode = !!f.spec || !!f.customShape || !!f.positions;
+      expect(hasMode, `formation ${f.id} has no spec, customShape, or positions`).toBe(true);
+    }
+  });
+
+  it("custom-shape formations (Diamond, Tight Diamond, Stack-I) all exist", () => {
+    const shapes = FOOTBALL_KG.formations
+      .filter((f) => f.customShape)
+      .map((f) => f.customShape);
+    expect(shapes).toContain("diamond");
+    expect(shapes).toContain("tight_diamond");
+    expect(shapes).toContain("stack_i");
+  });
+
+  it("legacy parametric formations are present (spread, doubles, trips, bunch, empty, pro-i)", () => {
+    const ids = new Set(FOOTBALL_KG.formations.map((f) => f.id));
+    for (const expected of ["spread", "doubles", "trips", "bunch", "empty", "pro-i"]) {
+      expect(ids.has(expected), `formation "${expected}" missing from migration`).toBe(true);
+    }
+  });
+
+  it("tackle-only formations (Pro I, Pro Set, Wishbone, T, Pistol) restrict to tackle_11", () => {
+    const tackleOnly = ["pro-i", "pro-set", "wishbone", "t-formation", "pistol"];
+    for (const id of tackleOnly) {
+      const f = FOOTBALL_KG.formations.find((x) => x.id === id);
+      expect(f, `${id} missing`).toBeDefined();
+      expect(f!.variants).toEqual(["tackle_11"]);
+    }
+  });
+
+  it("flag-context I-Formation is flag-only (does NOT appear in tackle_11)", () => {
+    const flagI = FOOTBALL_KG.formations.find((f) => f.id === "i-formation-flag");
+    expect(flagI).toBeDefined();
+    expect(flagI!.variants).not.toContain("tackle_11");
+  });
+});
+
 describe("Phase 1b migrated schemes — coverage", () => {
   it("has all 19 schemes from the legacy DEFENSIVE_ALIGNMENTS catalog", () => {
     expect(FOOTBALL_KG.schemes.length).toBe(19);
