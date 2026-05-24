@@ -16,6 +16,7 @@
 import type { Scenario } from "../types";
 import { toolCalled, toolNotCalled, toolCallCount } from "../assertions/tools";
 import { fenceCount, fenceHasDefenders } from "../assertions/fence";
+import { proseContains } from "../assertions/prose";
 
 // A minimal anchored Drive play (7v7). Used as the system-prompt's
 // playDiagramText so Cal can see "this play" without a DB fetch.
@@ -72,6 +73,63 @@ const scenario: Scenario = {
     // even if Cal wants to show multiple coverages (the prompt rule
     // says "2-3 variants in separate turns").
     toolCallCount("compose_defense", { max: 2 }),
+
+    // ── Prose assertions (defense movement + behavior) ──────────────
+    // Closes the gap between `projectSpecToNotes` (unit-tested in
+    // notes-from-spec.test.ts) and Cal's freelance prose. The
+    // projector knows how to describe defenders; this asserts Cal's
+    // reply actually surfaces that knowledge for the coach.
+
+    // Defender-movement vocabulary must appear at least once. This is
+    // the most permissive cut of football-defense verbs — if Cal
+    // emitted a defense fence but didn't describe ANY movement, the
+    // reply is just a diagram dump with no coaching value.
+    proseContains(
+      /\b(cover|covers|covering|plays?|drops?|keys?|reads?|blitzes|spies|carries|passes off|robs?|shades?|shadows?|mirrors?|drives?|jumps?|sits in|walls? off|leverag(?:es?|ing)|rotat(?:es?|ing))\b/i,
+    ),
+
+    // Cal's prose must reference at least 3 distinct defenders from
+    // the shipped fence with @-tokens. We don't pin specific ids
+    // (compose_defense's roster depends on its coverage choice), but
+    // the prose must NAME defenders, not just refer to "the defense".
+    ((cap) => {
+      const f = cap.playFences[0];
+      if (!f) return { ok: false as const, description: "expected a fence", details: "no fence" };
+      const defenders = ((f.players as Array<{ id?: string; team?: string }> | undefined) ?? [])
+        .filter((p) => p?.team === "D" && p?.id);
+      const defenderIds = defenders.map((p) => p!.id!);
+      const prose = cap.assistantText.replace(/```[\s\S]*?```/g, "");
+      const referenced = defenderIds.filter((id) => {
+        const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        return new RegExp(`@${escaped}\\b`).test(prose);
+      });
+      if (referenced.length < 3) {
+        return {
+          ok: false as const,
+          description: "prose must reference ≥3 distinct defenders by @-token",
+          details: `defenders on fence: [${defenderIds.join(", ")}]; referenced in prose: [${referenced.join(", ")}]`,
+        };
+      }
+      return { ok: true as const, description: `prose references ${referenced.length}/${defenderIds.length} defenders by @-token` };
+    }),
+
+    // Cal's prose must reference at least one OFFENSIVE player by
+    // @-token. This is the "correlated to the anchored play" proof —
+    // Cal isn't reciting generic Cover 2 boilerplate, they're
+    // describing how the defense reacts to THIS play's routes.
+    ((cap) => {
+      const prose = cap.assistantText.replace(/```[\s\S]*?```/g, "");
+      const offenseIds = ["X", "Z", "H", "S", "B", "C", "Y", "QB", "Q"];
+      const found = offenseIds.filter((id) => new RegExp(`@${id}\\b`).test(prose));
+      if (found.length === 0) {
+        return {
+          ok: false as const,
+          description: "prose must correlate to the anchored offensive play (≥1 offensive @-token)",
+          details: `no @X/@Z/@H/@S/@B/@C/@Y/@Q reference in prose — looks like generic coverage description, not a read of THIS play`,
+        };
+      }
+      return { ok: true as const, description: `prose correlates to anchored play (mentions @${found[0]})` };
+    }),
   ],
 };
 
