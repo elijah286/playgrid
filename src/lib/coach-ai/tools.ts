@@ -82,6 +82,14 @@ export type ToolContext = {
    *  Plans subsystem so plan rows can be RLS-scoped to the owner.
    *  Null in non-chat call paths. */
   userId: string | null;
+  /** Phase 3 (2026-05-25) — preference overrides for callers that
+   *  can't rely on the Supabase fetch path (the eval suite running
+   *  outside a request context). When set + non-empty, the agent
+   *  uses these in lieu of fetching from `coach_ai_user_preferences`.
+   *  Production callers leave this unset. Shape matches the
+   *  `CoachPreference` type from `./user-preferences` exactly so
+   *  the agent can pass it straight to `renderPreferencesBlock`. */
+  preferenceOverrides?: Array<{ key: string; value: string; scope: "user" | "playbook"; note: string | null }>;
 };
 
 export type ToolHandler = (

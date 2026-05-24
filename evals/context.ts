@@ -43,5 +43,11 @@ export function buildEvalContext(sc: ScenarioContext): ToolContext {
     playDiagramRecap: null,
     threadId: null,
     userId: null,
+    preferenceOverrides: sc.preferences?.map((p) => ({
+      key: p.key,
+      value: p.value,
+      scope: "user" as const,
+      note: null,
+    })),
   };
 }
