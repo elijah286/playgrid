@@ -173,6 +173,103 @@ export function renderPreferencesBlock(prefs: CoachPreference[] | null): string 
 }
 
 /* ------------------------------------------------------------------ */
+/*  Label-alias application — server-side rename                       */
+/* ------------------------------------------------------------------ */
+
+/** Build the {canonicalLabel → preferredLabel} map from a list of
+ *  coach preferences. Walks both `defender_label_*` and
+ *  `offense_label_*` keys. Returns null when no aliases are set so
+ *  callers can short-circuit. */
+function buildAliasMap(prefs: CoachPreference[] | null): Map<string, string> | null {
+  if (!prefs || prefs.length === 0) return null;
+  const map = new Map<string, string>();
+  for (const p of prefs) {
+    if (p.key.startsWith("defender_label_") || p.key.startsWith("offense_label_")) {
+      const canonical = p.key.replace(/^defender_label_|^offense_label_/, "");
+      if (canonical && p.value) map.set(canonical, p.value);
+    }
+  }
+  return map.size > 0 ? map : null;
+}
+
+/** Apply a label alias to a single id. Strips trailing digits to
+ *  match suffixed variants (CB2, DT2, H2) against the base alias key
+ *  (CB, DT, H). Preserves the suffix in the renamed result so the
+ *  two defenders stay distinguishable in the diagram.
+ *
+ *  Examples (with alias map `{CB: "Corner"}`):
+ *    "FS"   → "FS"     (no match)
+ *    "CB"   → "Corner"
+ *    "CB2"  → "Corner2"
+ *    "CB3"  → "Corner3"
+ */
+function applyAliasToId(id: string, aliases: Map<string, string>): string {
+  // Exact match wins.
+  const exact = aliases.get(id);
+  if (exact !== undefined) return exact;
+  // Suffix-digit match: "CB2" → base "CB" + suffix "2".
+  const m = id.match(/^([A-Za-z]+)(\d+)$/);
+  if (m) {
+    const base = m[1];
+    const suffix = m[2];
+    const aliased = aliases.get(base);
+    if (aliased !== undefined) return aliased + suffix;
+  }
+  return id;
+}
+
+/** Fence-shape rename. Walks players, routes, zones and applies
+ *  label aliases. Returns a NEW fence object (shallow-copied players
+ *  + routes + zones); the input is not mutated. */
+export function applyLabelAliasesToFence<T extends {
+  players?: Array<Record<string, unknown>>;
+  routes?: Array<Record<string, unknown>>;
+  zones?: Array<Record<string, unknown>>;
+}>(fence: T, prefs: CoachPreference[] | null): T {
+  const aliases = buildAliasMap(prefs);
+  if (!aliases) return fence;
+  const renamedPlayers = (fence.players ?? []).map((p) => {
+    const newP: Record<string, unknown> = { ...p };
+    if (typeof p.id === "string") newP.id = applyAliasToId(p.id, aliases);
+    if (typeof p.role === "string") newP.role = applyAliasToId(p.role, aliases);
+    return newP;
+  });
+  const renamedRoutes = (fence.routes ?? []).map((r) => {
+    const newR: Record<string, unknown> = { ...r };
+    if (typeof r.from === "string") newR.from = applyAliasToId(r.from, aliases);
+    return newR;
+  });
+  const renamedZones = (fence.zones ?? []).map((z) => {
+    const newZ: Record<string, unknown> = { ...z };
+    if (typeof z.ownerLabel === "string") newZ.ownerLabel = applyAliasToId(z.ownerLabel, aliases);
+    return newZ;
+  });
+  return {
+    ...fence,
+    players: renamedPlayers,
+    routes: renamedRoutes,
+    zones: renamedZones,
+  };
+}
+
+/** Spec-shape rename. Walks assignments[].player and applies the
+ *  same alias rules. Used by compose_play / revise_play so the spec
+ *  that gets persisted alongside the fence uses the coach's
+ *  preferred labels. */
+export function applyLabelAliasesToSpec<T extends {
+  assignments?: Array<Record<string, unknown>>;
+}>(spec: T, prefs: CoachPreference[] | null): T {
+  const aliases = buildAliasMap(prefs);
+  if (!aliases) return spec;
+  const renamedAssignments = (spec.assignments ?? []).map((a) => {
+    const newA: Record<string, unknown> = { ...a };
+    if (typeof a.player === "string") newA.player = applyAliasToId(a.player, aliases);
+    return newA;
+  });
+  return { ...spec, assignments: renamedAssignments };
+}
+
+/* ------------------------------------------------------------------ */
 /*  Tools                                                              */
 /* ------------------------------------------------------------------ */
 
