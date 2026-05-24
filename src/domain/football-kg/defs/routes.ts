@@ -51,10 +51,19 @@ export const ROUTES: RouteDef[] = [
     body: "Vertical sprint from a slot or TE alignment, splitting the deep safeties. No hard break — slight inside release, then sustained vertical. Beats Cover 2 (gap between safeties) and Cover 4 (vertical the safety can't carry). Foundation route in 4 verts.",
     complexity: "basic",
     directional: true,
+    // Inside release at the stem (-0.02), then RESET to vertical (x=0
+    // at the final waypoint). Earlier version held x=-0.04 through to
+    // the end, which scaled to 2.1yd lateral drift at 18yd depth —
+    // the validator's "Seam must finish within 1.5yd vertically of
+    // the player's x" check rejected it (Four Verticals + Dagger in
+    // tackle_11, surfaced 2026-05-24 cross-variant test). The visual
+    // character ("slight inside release then vertical") is preserved
+    // because the middle waypoint still moves inside; the final point
+    // pulls back to the player's x so the route reads as vertical.
     points: [
       { x: 0, y: 0 },
-      { x: -0.04, y: 0.06 },
-      { x: -0.04, y: 0.55 },
+      { x: -0.02, y: 0.06 },
+      { x: 0, y: 0.55 },
     ],
     shapes: ["straight", "straight"],
     breakStyle: "none",

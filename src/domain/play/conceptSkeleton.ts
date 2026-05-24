@@ -549,12 +549,21 @@ function buildFlood(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRes
   //     regardless of strength — so Flood Left rendered B's flat
   //     going RIGHT (away from the flood). The override forces the
   //     flat to flood-side every time.
+  //
+  // 6v6 special case (2026-05-24): flag_6v6's synthesizer places @H
+  // on the FLOOD side (not the backside), so dragging "toward flood"
+  // would push him further outside — the route-assignment validator
+  // rejects Drags that break to the sideline. In 6v6, let the Drag
+  // default to "toward_qb" (inside) which is correct for any
+  // placement of the backsideSlot. The shallow cross still happens;
+  // it just doesn't get the side override.
+  const dragDirection = variant === "flag_6v6" ? undefined : side;
   const assignments: PlayerAssignment[] = [
     routeAt(outsideWR, "Corner", 14),       // strong-side outside, deep corner
     routeAt(slot, "Out", 8),                // strong-side slot, second-level out
     routeAt("B", "Flat", 4, side),          // RB flat to the flood side (explicit direction)
     routeAt(backsideWR, "Go", 18),          // backside outside, deep clear
-    routeAt(backsideSlot, "Drag", 3, side), // backside slot drags toward flood (cross-formation)
+    routeAt(backsideSlot, "Drag", 3, dragDirection), // shallow cross (toward flood in 7v7+tackle; toward_qb default in 6v6 where @H is on flood side)
     qbDropback(),
     ...lineBlocks(variant),
   ];
