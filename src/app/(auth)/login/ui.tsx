@@ -7,9 +7,11 @@ import { AuthFlow, type Step } from "@/features/auth/AuthFlow";
 export function LoginForm({
   appleEnabled,
   googleEnabled,
+  googleOAuthWebClientId,
 }: {
   appleEnabled: boolean;
   googleEnabled: boolean;
+  googleOAuthWebClientId: string | null;
 }) {
   const searchParams = useSearchParams();
   const nextParam = searchParams.get("next") ?? "";
@@ -68,6 +70,7 @@ export function LoginForm({
         onStepChange={setStep}
         appleEnabled={appleEnabled}
         googleEnabled={googleEnabled}
+        googleOAuthWebClientId={googleOAuthWebClientId}
       />
     </div>
   );

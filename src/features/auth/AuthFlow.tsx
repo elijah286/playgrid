@@ -56,6 +56,11 @@ export type AuthFlowProps = {
    *  surface a button that 400s because the provider isn't configured. */
   appleEnabled?: boolean;
   googleEnabled?: boolean;
+  /** Google OAuth Web Client ID from site_settings. Required for the
+   *  native Google sign-in flow on Android/iOS — when null/empty the
+   *  Google button is hidden inside the Capacitor wrapper. Web sign-in
+   *  flow ignores this value (goes through Supabase-hosted OAuth). */
+  googleOAuthWebClientId?: string | null;
 };
 
 export type Step =
@@ -86,14 +91,17 @@ export function AuthFlow({
   onStepChange,
   appleEnabled = false,
   googleEnabled = false,
+  googleOAuthWebClientId = null,
 }: AuthFlowProps) {
   const { toast } = useToast();
 
-  // Hide the Google button on native when the plugin isn't usable (env
-  // var missing, or the installed APK predates the plugin). On web the
-  // button always falls back to the Supabase-hosted OAuth flow.
+  // Hide the Google button on native when the plugin isn't usable
+  // (no client ID configured in Site Admin, or the installed APK
+  // predates the plugin). On web the button always falls back to the
+  // Supabase-hosted OAuth flow.
   const native = useIsNativeApp();
-  const hideGoogleOnNative = native && !canUseNativeGoogleAuth();
+  const hideGoogleOnNative =
+    native && !canUseNativeGoogleAuth(googleOAuthWebClientId);
 
   const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/home";
 
@@ -177,13 +185,20 @@ export function AuthFlow({
   // flow ends up in the same state as a successful web OAuth.
   async function signInWithGoogleOnNative() {
     if (submittingRef.current) return;
+    if (!googleOAuthWebClientId) {
+      setFormError("Google sign-in is not configured for the app.");
+      return;
+    }
     submittingRef.current = true;
     setPending(true);
     clearErrors();
     track({ event: "auth_oauth_started", target: "google" });
     try {
       const supabase = createClient();
-      const { isFreshSignup } = await signInWithGoogleNative(supabase);
+      const { isFreshSignup } = await signInWithGoogleNative(
+        supabase,
+        googleOAuthWebClientId,
+      );
 
       if (inviteCode) {
         await afterSignupSyncRoleAction();

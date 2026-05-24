@@ -17,6 +17,7 @@ import {
 } from "@/lib/site/coach-ai-eval-config";
 import {
   setAppleSigninEnabledAction,
+  setGoogleOauthWebClientIdAction,
   setGoogleSigninEnabledAction,
 } from "@/app/actions/admin-auth-providers";
 import type { ReferralConfig } from "@/lib/site/referral-config";
@@ -30,6 +31,7 @@ export function SiteSettingsAdminClient({
   initialReferralConfig,
   initialAppleSigninEnabled,
   initialGoogleSigninEnabled,
+  initialGoogleOAuthWebClientId,
   initialCoachCalUpgradeBannerEnabled,
   initialCoachCalVersion,
   initialCoachAiEvalDays,
@@ -42,6 +44,7 @@ export function SiteSettingsAdminClient({
   initialReferralConfig: ReferralConfig;
   initialAppleSigninEnabled: boolean;
   initialGoogleSigninEnabled: boolean;
+  initialGoogleOAuthWebClientId: string | null;
   initialCoachCalUpgradeBannerEnabled: boolean;
   initialCoachCalVersion: "v1" | "v2";
   initialCoachAiEvalDays: number;
@@ -64,6 +67,16 @@ export function SiteSettingsAdminClient({
   const [applePending, startAppleTransition] = useTransition();
   const [googleSigninEnabled, setGoogleSigninEnabled] = useState(initialGoogleSigninEnabled);
   const [googlePending, startGoogleTransition] = useTransition();
+  const [savedGoogleOauthClientId, setSavedGoogleOauthClientId] = useState(
+    initialGoogleOAuthWebClientId ?? "",
+  );
+  const [googleOauthClientIdInput, setGoogleOauthClientIdInput] = useState(
+    initialGoogleOAuthWebClientId ?? "",
+  );
+  const [googleOauthClientIdPending, startGoogleOauthClientIdTransition] =
+    useTransition();
+  const googleOauthClientIdDirty =
+    googleOauthClientIdInput.trim() !== savedGoogleOauthClientId.trim();
 
   const [coachCalBannerEnabled, setCoachCalBannerEnabled] = useState(
     initialCoachCalUpgradeBannerEnabled,
@@ -171,6 +184,25 @@ export function SiteSettingsAdminClient({
         return;
       }
       toast(next ? "Google sign-in enabled." : "Google sign-in disabled.", "success");
+    });
+  }
+
+  function saveGoogleOauthClientId() {
+    startGoogleOauthClientIdTransition(async () => {
+      const res = await setGoogleOauthWebClientIdAction(googleOauthClientIdInput);
+      if (!res.ok) {
+        toast(res.error, "error");
+        return;
+      }
+      const next = res.clientId ?? "";
+      setSavedGoogleOauthClientId(next);
+      setGoogleOauthClientIdInput(next);
+      toast(
+        next.length > 0
+          ? "Google OAuth Web Client ID saved."
+          : "Google OAuth Web Client ID cleared.",
+        "success",
+      );
     });
   }
 
@@ -569,6 +601,43 @@ export function SiteSettingsAdminClient({
           />
           <span>{googleSigninEnabled ? "On" : "Off"}</span>
         </label>
+      </div>
+
+      <div className="rounded-2xl border border-border bg-surface-raised p-4">
+        <p className="text-sm font-semibold text-foreground">
+          Google OAuth Web Client ID (native)
+        </p>
+        <p className="mt-0.5 text-xs text-muted">
+          The Web OAuth 2.0 Client ID from Google Cloud Console — the same one
+          configured in Supabase Auth → Providers → Google. Required to show
+          the Google sign-in button inside the Android/iOS app (the system
+          Google SDK requests an ID token for this client, which Supabase
+          verifies via signInWithIdToken). Leave blank to keep the button
+          hidden on native; web sign-in works either way. Also add this same
+          ID to Supabase&rsquo;s &ldquo;Authorized Client IDs&rdquo; field.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <input
+            type="text"
+            inputMode="text"
+            spellCheck={false}
+            autoComplete="off"
+            placeholder="624839566857-xxxx.apps.googleusercontent.com"
+            className="w-full max-w-xl flex-1 rounded-lg border border-border bg-surface px-3 py-2 font-mono text-xs text-foreground focus:border-primary focus:outline-none disabled:opacity-60"
+            value={googleOauthClientIdInput}
+            onChange={(e) => setGoogleOauthClientIdInput(e.target.value)}
+            disabled={googleOauthClientIdPending}
+          />
+          <Button
+            type="button"
+            variant="primary"
+            onClick={saveGoogleOauthClientId}
+            disabled={!googleOauthClientIdDirty || googleOauthClientIdPending}
+            loading={googleOauthClientIdPending}
+          >
+            Save
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">

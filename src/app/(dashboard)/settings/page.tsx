@@ -347,6 +347,7 @@ export default async function SettingsPage({
         initialReferralConfig={referralConfig}
         initialAppleSigninEnabled={authProviders.apple}
         initialGoogleSigninEnabled={authProviders.google}
+        initialGoogleOAuthWebClientId={authProviders.googleOAuthWebClientId}
         initialCoachCalUpgradeBannerEnabled={coachCalUpgradeBannerEnabled}
         initialCoachCalVersion={coachCalVersion}
         initialCoachAiEvalDays={coachAiEvalDays}

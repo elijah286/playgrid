@@ -187,6 +187,7 @@ export function SettingsClient({
   initialHideOwnerInfoAbout,
   initialAppleSigninEnabled,
   initialGoogleSigninEnabled,
+  initialGoogleOAuthWebClientId,
   initialCoachAiKbMisses,
   coachAiKbMissesError,
   initialOpexServices,
@@ -247,6 +248,7 @@ export function SettingsClient({
   initialHideOwnerInfoAbout: boolean;
   initialAppleSigninEnabled: boolean;
   initialGoogleSigninEnabled: boolean;
+  initialGoogleOAuthWebClientId: string | null;
   initialCoachAiKbMisses: KbMissRow[];
   coachAiKbMissesError: string | null;
   initialOpexServices: OpexService[];
@@ -659,6 +661,7 @@ export function SettingsClient({
               initialReferralConfig={initialReferralConfig}
               initialAppleSigninEnabled={initialAppleSigninEnabled}
               initialGoogleSigninEnabled={initialGoogleSigninEnabled}
+              initialGoogleOAuthWebClientId={initialGoogleOAuthWebClientId}
               initialCoachCalUpgradeBannerEnabled={initialCoachCalUpgradeBannerEnabled}
               initialCoachCalVersion={initialCoachCalVersion}
               initialCoachAiEvalDays={initialCoachAiEvalDays}

@@ -8,49 +8,49 @@
  * an ID token, then hands that to Supabase's `signInWithIdToken` so the
  * user ends up with a normal Supabase session — no browser, no callback.
  *
- * Initialization is lazy + memoized: the plugin only loads when the user
- * actually taps the button, keeping cold-start cost out of the boot path
- * for the (vast majority of) sessions that never touch Google sign-in.
+ * The Web Client ID is supplied at runtime (read from `site_settings`
+ * server-side and passed down as a prop) rather than baked in as an env
+ * var — that way the Site Admin can rotate it without redeploying.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const WEB_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_OAUTH_WEB_CLIENT_ID;
-
+let initializedForClientId: string | null = null;
 let initPromise: Promise<unknown> | null = null;
 
-async function ensureInitialized() {
-  if (!WEB_CLIENT_ID) {
-    throw new Error(
-      "NEXT_PUBLIC_GOOGLE_OAUTH_WEB_CLIENT_ID is not set — native Google sign-in is unavailable.",
-    );
-  }
-  if (initPromise) return initPromise;
+async function ensureInitialized(webClientId: string) {
+  // Re-initialize if the client ID changed (e.g., admin rotated it
+  // mid-session). The plugin's initialize() is safe to call multiple
+  // times; later calls overwrite the prior config.
+  if (initializedForClientId === webClientId && initPromise) return initPromise;
   initPromise = (async () => {
     const { SocialLogin } = await import("@capgo/capacitor-social-login");
     await SocialLogin.initialize({
       google: {
-        webClientId: WEB_CLIENT_ID,
-        // iOSClientId is left unset until the iOS OAuth client is created
-        // in Google Cloud (separate ClientID per platform is required by
-        // Apple's review). When we ship iOS, set it via env var here too.
+        webClientId,
+        // iOSClientId left unset until the iOS OAuth client is created
+        // in Google Cloud (separate ClientID per platform). Wire it
+        // through site_settings the same way when iOS ships.
         mode: "online",
       },
     });
     return SocialLogin;
   })();
+  initializedForClientId = webClientId;
   return initPromise;
 }
 
 /**
- * True when (a) the plugin's web client ID env var is set and (b) the
- * Capacitor native shell has the SocialLogin plugin registered. The
- * second check matters because the live website JS is fetched by every
- * installed app version — an old APK that shipped before this plugin
- * was added will load the new JS but lacks the native bridge code, so
- * we hide the button rather than crash on click.
+ * True when (a) a Web Client ID is configured in site_settings and
+ * (b) the Capacitor native shell has the SocialLogin plugin registered.
+ * The plugin check matters because the live website JS is fetched by
+ * every installed app version — an old APK that shipped before this
+ * plugin was added will load the new JS but lacks the native bridge
+ * code, so we hide the button rather than crash on click.
  */
-export function canUseNativeGoogleAuth(): boolean {
-  if (!WEB_CLIENT_ID) return false;
+export function canUseNativeGoogleAuth(
+  webClientId: string | null | undefined,
+): boolean {
+  if (!webClientId) return false;
   if (typeof window === "undefined") return false;
   const cap = (window as unknown as {
     Capacitor?: { isPluginAvailable?: (name: string) => boolean };
@@ -76,9 +76,10 @@ export type NativeGoogleSignInResult = {
  */
 export async function signInWithGoogleNative(
   supabase: SupabaseClient,
+  webClientId: string,
 ): Promise<NativeGoogleSignInResult> {
   const { SocialLogin } = await import("@capgo/capacitor-social-login");
-  await ensureInitialized();
+  await ensureInitialized(webClientId);
 
   // Nonce binds the ID token to this specific sign-in attempt so a stolen
   // token can't be replayed. Google embeds the nonce verbatim in the JWT;

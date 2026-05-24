@@ -29,6 +29,7 @@ export default async function LoginPage() {
         <LoginForm
           appleEnabled={authProviders.apple}
           googleEnabled={authProviders.google}
+          googleOAuthWebClientId={authProviders.googleOAuthWebClientId}
         />
       </Suspense>
     </div>
