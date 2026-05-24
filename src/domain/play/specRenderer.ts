@@ -626,7 +626,18 @@ function routeFromAction(
       return {
         from: carrier.id,
         path,
-        // ballcarrier paths render as solid lines without a route_kind.
+        // Explicit "carry" marker so downstream validators can
+        // distinguish a ballcarrier track from a pass route. The
+        // route-assignment validator's Layer 1 ("QB cannot have a
+        // route in flag") otherwise fires on the QB's mesh footwork
+        // in any flag run concept — surfaced 2026-05-24 by the
+        // cross-variant skeleton test where 12 flag run plays
+        // (Sweep/Dive/Power/Counter/Draw + Flea Flicker × 5v5+7v7)
+        // failed validation despite being legitimate carries.
+        // Hand-authored QB pass routes don't get this marker
+        // (specRenderer is the only emitter); their bare
+        // `{from, path}` without route_kind still trips Layer 1.
+        route_kind: "carry",
       };
     }
     case "motion":

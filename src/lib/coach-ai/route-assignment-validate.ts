@@ -140,10 +140,33 @@ export function validateRouteAssignments(
     }
 
     // ── Layer 1: variant-level rules ────────────────────────────────
-    if (isFlag && isQbCarrier(carrier)) {
+    //
+    // QB pass routes are illegal in flag (quarterbacks throw or hand
+    // off, they don't catch their own pass). But QB CARRIES are
+    // legitimate visualizations — the mesh footwork on a Sweep, the
+    // QB→handoff→catch path on a Flea Flicker, the QB Draw track
+    // (gated behind the `designed_qb_run` capability). The renderer
+    // emits `route_kind: "carry"` on every ballcarrier path
+    // (specRenderer.ts case "carry") precisely so the validator can
+    // distinguish carries from pass routes here.
+    //
+    // Bare `{from, path}` with NO route_kind is REJECTED — that's the
+    // hand-authored shape (Cal writing JSON by hand). Phase 2b mostly
+    // blocks hand-authoring upstream, but this layer is the
+    // structural safety net (and the existing pre-2b regression
+    // tests on this rule continue to pass).
+    //
+    // Surfaced 2026-05-24: the cross-variant route-assignment test
+    // found 12 pre-existing failures across flag run concepts
+    // (Sweep/Dive/Power/Counter/Draw + Flea Flicker × 5v5+7v7)
+    // because Layer 1 fired on every QB carry. Capability-gated
+    // QB Draw hit the same bug.
+    const declaredKind = (route.route_kind ?? "").trim();
+    const isCarryMarker = declaredKind === "carry";
+    if (isFlag && isQbCarrier(carrier) && !isCarryMarker) {
       errors.push({
         carrier: route.from,
-        declaredKind: (route.route_kind ?? "").trim() || "(no route_kind)",
+        declaredKind: declaredKind || "(no route_kind)",
         message:
           `In ${variant}, the QB cannot have a route — quarterbacks throw or hand off, they don't run pass routes. ` +
           `Drop the route from @${route.from} (use compose_play, which leaves QB unspecified) or, if the coach explicitly asked for a designed QB run, model it as a carry on a different player and have @${route.from} stay put.`,
@@ -198,7 +221,13 @@ export function validateRouteAssignments(
 
     // ── Layer 3: catalog route_kind constraints ─────────────────────
     const declared = (route.route_kind ?? "").trim();
-    if (!declared) continue;
+    // Skip empty (genuine custom routes) AND the "carry" marker —
+    // ballcarrier paths aren't pass-route families and the template
+    // catalog doesn't include them. The Layer 1 check above already
+    // OK'd carries when they came from a recognized carrier (QB or
+    // the named back), so by this point a "carry"-marked route is
+    // legitimate by construction.
+    if (!declared || declared === "carry") continue;
 
     const template = findTemplate(declared);
     if (!template) {

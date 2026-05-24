@@ -18,6 +18,7 @@ import { assertConcept } from "./conceptMatch";
 import { playSpecToCoachDiagram } from "./specRenderer";
 import { coachDiagramToPlayDocument } from "@/features/coach-ai/coachDiagramConverter";
 import { validateOffensiveCoverage } from "@/lib/coach-ai/play-content-validate";
+import { validateRouteAssignments } from "@/lib/coach-ai/route-assignment-validate";
 import type { CoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
 
 describe("generateConceptSkeleton — every catalog concept has a builder", () => {
@@ -267,6 +268,43 @@ describe("generateConceptSkeleton — variant-roster completeness", () => {
           `${concept.name}/${variant} fails the offensive-coverage gate:\n  ${errors.join("\n  ")}\n` +
             `\nLikely the skeleton hardcodes tackle/7v7 IDs (S/H/B) that don't exist in this variant's roster. ` +
             `See buildFleaFlicker for the variant-aware pattern (Y + C in flag_5v5).`,
+        ).toEqual([]);
+      });
+    }
+  }
+});
+
+describe("generateConceptSkeleton — every skeleton passes the route-assignment validator", () => {
+  // 2026-05-24 cross-variant audit. The companion test above
+  // (offensive-coverage) checks that every player has SOME action;
+  // this one checks that every action's geometry passes the
+  // route-assignment validator's gates (depth caps, family
+  // constraints, side direction, forward-pass legality). The two
+  // together cover both failure classes that surfaced in production
+  // (the Snag-in-5v5 roster bug AND the QB-carry / Seam-drift
+  // catalog bugs).
+  //
+  // Uses the production `validateRouteAssignments` directly so the
+  // test passes iff the validator would pass at chat-time + save-time.
+  const variants = ["flag_5v5", "flag_6v6", "flag_7v7", "tackle_11"] as const;
+  const PASS_CONCEPTS = CONCEPT_CATALOG.filter(
+    (c) => !["QB Draw", "Bubble RPO", "Jet Reverse"].includes(c.name),
+  );
+
+  for (const concept of PASS_CONCEPTS) {
+    for (const variant of variants) {
+      it(`${concept.name} in ${variant} passes route-assignment validation`, () => {
+        const result = generateConceptSkeleton(concept.name, { variant });
+        expect(result.ok, result.ok ? undefined : result.error).toBe(true);
+        if (!result.ok) return;
+        const { diagram } = playSpecToCoachDiagram(result.spec);
+        const validation = validateRouteAssignments(diagram as CoachDiagram, {
+          variant,
+        });
+        const errorMessages = validation.ok ? [] : validation.errors.map((e) => e.message);
+        expect(
+          errorMessages,
+          `${concept.name}/${variant} fails route-assignment validation:\n  ${errorMessages.join("\n  ")}`,
         ).toEqual([]);
       });
     }
