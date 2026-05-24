@@ -2664,13 +2664,18 @@ export async function runAgent(
         // substituted reply ships cleanly. Strip remains the
         // fallback when no tool fence is available.
         //
-        // Skipped entirely when the Phase 2d kill switch is on (in
-        // which case the unapproved fence ships as-is — legacy
-        // behavior).
+        // Substitution skipped when the Phase 2d kill switch is on
+        // (env var `COACH_CAL_PROVENANCE_GATE=off` OR `calVersion='v1'`)
+        // — pre-Task #35 strip-only behavior remains the fallback for
+        // graceful degradation. Forcing `lastFenceFromTool` to null
+        // routes the function into its strip branch on validator
+        // failures and leaves the bad fence in place on provenance
+        // failures (which can't happen in this mode anyway because the
+        // gate's enforcement flag is off).
         const rescue = rescueOrStripFence({
           text: textToEmit,
-          lastFenceFromTool,
-          lastFenceToolName,
+          lastFenceFromTool: provenanceGateEnforced ? lastFenceFromTool : null,
+          lastFenceToolName: provenanceGateEnforced ? lastFenceToolName : null,
           validationFailedAfterRetry: !validation.ok && validatorRetried,
           provenanceFailedAfterRetry: provenanceGateEnforced && !provenance.ok && validatorRetried,
           validationErrors: validation.ok ? [] : validation.errors,

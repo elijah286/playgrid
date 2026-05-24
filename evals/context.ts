@@ -49,5 +49,6 @@ export function buildEvalContext(sc: ScenarioContext): ToolContext {
       scope: "user" as const,
       note: null,
     })),
+    calVersion: sc.calVersion ?? "v2",
   };
 }
