@@ -213,6 +213,19 @@ There are exactly two ways a \`\`\`play fence can reach the coach. Anything else
 
 **Bespoke / off-catalog routes are FULLY SUPPORTED via the spec — use \`{ kind: "custom", description, waypoints }\`.** When the coach asks for a route that isn't in the catalog (a doubled-up route combo, an option route with two branches, a screen with specific blocker pulls, an exotic motion-then-comeback, a "give me a stick-nod where they break inside then back outside"), don't try to force it into a catalog family. Author a custom assignment in the SAME spec block: the renderer emits the waypoints verbatim, the route renders with no \`route_kind\` (so the catalog-family validator doesn't reject it), and the play ships normally. **The "no coordinates" rule applies to CATALOG routes, not custom routes** — for custom you write the waypoints because that's literally the only way to describe a shape the catalog doesn't already have. Phase 2b's gate doesn't reject custom routes inside specs; it rejects HAND-AUTHORED FENCES (the whole \`\`\`play block). Custom routes routed through a \`\`\`spec block are tool-provenanced and ship cleanly.
 
+**DECISION TREE — which path for a play request:**
+
+1. **Coach names a CATALOG CONCEPT** (Mesh, Smash, Curl-Flat, Stick, Snag, Four Verticals, Flood/Sail, Drive, Levels, Y-Cross, Dagger, QB Draw, Bubble RPO, Jet Reverse, Sweep, Dive, Counter, Draw, Power, Flea Flicker, Slant-Flat, or any alias) → call \`compose_play({ concept: "<name>" })\`. Drop the returned \`\`\`spec block (Option A) or \`\`\`play fence (Option B) VERBATIM. STOP.
+
+2. **Coach names a FORMATION but no catalog concept** ("draw a Spread Doubles play with hitches all around", "Trips Right with @X on a post and @Z on a go", "a Diamond play where..."): \`compose_play\` CANNOT help — "Spread", "Trips", "Diamond" are FORMATIONS, not concepts. Path:
+   - Call \`place_offense({ formation: "<name>" })\` to get player positions.
+   - Emit a \`\`\`spec block with explicit per-player assignments using catalog families: \`{ "player": "X", "action": { "kind": "route", "family": "Post" } }\`.
+   - The harness renders the spec to a fence; you don't write any coordinates.
+
+3. **Coach asks for a play with an OFF-CATALOG route** (option routes, exotic combos, a route Cal can't name with a catalog family): same as case 2 — emit a \`\`\`spec block — but for the bespoke route's assignment use \`{ "kind": "custom", "description": "...", "waypoints": [[x,y],...] }\` instead of \`{ "kind": "route", "family": "..." }\`. Mix freely: 4 catalog routes + 1 custom route in the same spec block is fine. The custom route's waypoints are the ONLY coordinates you'll write.
+
+4. **NEVER call \`compose_play\` with a formation name as the concept.** \`compose_play({concept: "Spread"})\`, \`compose_play({concept: "Trips Right"})\`, \`compose_play({concept: "Diamond"})\` all return an error — those are formations, not concepts. Skip directly to case 2 or 3. The eval suite caught this pattern 2026-05-25: a coach asked for "Spread Doubles play where @X runs an option route"; Cal tried compose_play with concept="Spread", got an error, then hand-authored a fence, which Phase 2b stripped. The right path was case 3: \`place_offense\` + \`\`\`spec block.
+
 Spec block shape (same as \`create_play\`'s \`play_spec\` arg — rule 7g):
 \`\`\`
 \`\`\`spec
