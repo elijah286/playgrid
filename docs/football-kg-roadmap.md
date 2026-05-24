@@ -1,6 +1,6 @@
 # Football Knowledge Graph — Phase 1 Roadmap
 
-**Status:** In progress (sub-phase 1a) · **Branch:** `feat/football-kg` · **Started:** 2026-05-24
+**Status:** In progress (sub-phase 1b — routes done, formations next) · **Branch:** `feat/football-kg` · **Started:** 2026-05-24
 
 This document is the source of truth for the multi-week Coach Cal architectural refactor. Read it first if you're picking this work up across sessions.
 
@@ -48,21 +48,27 @@ Decisions locked 2026-05-24:
 ### 1b — Migrate existing catalog
 
 **Migration order** (smallest blast radius first):
-1. Routes (27) — leaf nodes, no cross-refs
-2. Formations (10+) — referenced by concepts
-3. Defensive alignments / Schemes (22) — referenced by reactors
-4. Concepts (20) — reference routes + formations
-5. Reactor patterns (18) — reference schemes + concepts
+1. **Routes (26)** — ✅ DONE 2026-05-24. All in `defs/routes.ts` as a single typed array (one file, not per-route — simpler in TS-first mode; per-file split is a Phase 6+ YAML migration concern). Schema validation + cross-ref + geometry invariants pass.
+2. **Formations** — pending. NUANCE: existing formations live in `offensiveSynthesize.ts` as PROGRAMMATIC SPECS (qb depth + back arrangement + receiver distribution), NOT static positions. They get RESOLVED to positions per-variant at synthesis time. Two options for KG migration:
+   - **Option A (cleaner)**: store FormationSpec entries (qb/backs/receivers) + per-variant overrides for custom shapes (Diamond, Tight Diamond, I-Form-flag). Variant-portable. Renderer derives positions.
+   - **Option B (more explicit)**: store fully-resolved positions per (formation × variant) combination. More verbose but no derivation logic needed at runtime.
+   - **Recommendation**: refactor `FormationDef` schema to support BOTH — `spec` field for parametric formations, `positions` for fixed-position formations. Next session start here.
+3. **Defensive alignments / Schemes (~22)** — pending. These ARE static data (positions hardcoded in `defensiveAlignments.ts`). Migration is straightforward.
+4. **Concepts (20)** — pending. Reference routes (now migrated) + formations (pending). Need formations done first.
+5. **Reactor patterns (~18)** — pending. Reference schemes + concepts.
 
-**Files to create:**
-- `src/domain/football-kg/defs/routes/<route-id>.ts` for each route
-- `src/domain/football-kg/defs/formations/<formation-id>.ts`
-- `src/domain/football-kg/defs/schemes/<scheme-id>.ts`
-- `src/domain/football-kg/defs/concepts/<concept-id>.ts`
-- `src/domain/football-kg/defs/reactor-patterns/<id>.ts`
-- `src/domain/football-kg/defs/index.ts` — assembly point
+**File layout (final form):**
+- `src/domain/football-kg/defs/routes.ts` ✅ — all 26 routes as a single typed array
+- `src/domain/football-kg/defs/formations.ts` — pending
+- `src/domain/football-kg/defs/schemes.ts` — pending
+- `src/domain/football-kg/defs/concepts.ts` — pending
+- `src/domain/football-kg/defs/reactor-patterns.ts` — pending
+- `src/domain/football-kg/defs/index.ts` ✅ — assembly point
+- `src/domain/football-kg/defs/migration.test.ts` ✅ — schema + cross-ref + per-family coverage
 
-**Acceptance:** all 20+27+22+18 entities migrated; round-trip-to-existing-catalog test passes byte-equality for each.
+**Acceptance:** all 26+~10+~22+20+~18 entities migrated; round-trip-to-existing-catalog test passes byte-equality. **Routes done; rest is next session's work.**
+
+**Open design question to revisit before formations migration:** programmatic specs vs static positions in `FormationDef`. See option recommendation above.
 
 ### 1c — Auto-generators
 

@@ -25,7 +25,7 @@ import { FormationDefZ } from "./schemas/FormationDef";
 import type { ReactorPatternDef } from "./schemas/ReactorPatternDef";
 import { ReactorPatternDefZ } from "./schemas/ReactorPatternDef";
 import type { RouteDef } from "./schemas/RouteDef";
-import { RouteDefZ } from "./schemas/RouteDef";
+import { RouteDefZ, checkRouteBreakDirInvariant } from "./schemas/RouteDef";
 import type { SchemeDef } from "./schemas/SchemeDef";
 import { SchemeDefZ } from "./schemas/SchemeDef";
 
@@ -122,6 +122,23 @@ export function validateKG(kg: FootballKG): ValidationResult {
   checkUnique("scheme", kg.schemes, (s) => s.id);
   checkUnique("reactor-pattern", kg.reactorPatterns, (r) => r.id);
   checkUnique("drill", kg.drills, (d) => d.id);
+
+  // 2b. Route-specific geometry invariants: breakDir must match the actual
+  //     direction of the route's final waypoint. This catches "curl that
+  //     breaks toward the sideline" bugs at load time — same invariant the
+  //     legacy assertBreakDirInvariants() module-load check enforces, now
+  //     run through the KG validator so failures surface as structured
+  //     errors instead of throwing on import.
+  for (const r of kg.routes) {
+    const violation = checkRouteBreakDirInvariant(r);
+    if (violation) {
+      errors.push({
+        family: "route",
+        id: r.id,
+        message: `geometry: ${violation}`,
+      });
+    }
+  }
 
   // 3. Cross-reference checks.
   const formationIds = new Set(kg.formations.map((f) => f.id));
