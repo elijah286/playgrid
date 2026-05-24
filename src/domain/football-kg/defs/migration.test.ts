@@ -32,6 +32,48 @@ describe("Phase 1b migrated KG — validation", () => {
   });
 });
 
+describe("Phase 1b migrated schemes — coverage", () => {
+  it("has all 19 schemes from the legacy DEFENSIVE_ALIGNMENTS catalog", () => {
+    expect(FOOTBALL_KG.schemes.length).toBe(19);
+  });
+
+  it("every scheme has a unique id", () => {
+    const ids = FOOTBALL_KG.schemes.map((s) => s.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("every scheme has at least one defender", () => {
+    for (const s of FOOTBALL_KG.schemes) {
+      expect(s.defenders.length, `scheme ${s.id} has no defenders`).toBeGreaterThan(0);
+    }
+  });
+
+  it("variant coverage matches the legacy catalog (t11:7, f7:6, f6:4, f5:2)", () => {
+    const byVariant: Record<string, number> = {};
+    for (const s of FOOTBALL_KG.schemes) {
+      for (const v of s.variants) byVariant[v] = (byVariant[v] ?? 0) + 1;
+    }
+    expect(byVariant.tackle_11).toBe(7);
+    expect(byVariant.flag_7v7).toBe(6);
+    expect(byVariant.flag_6v6).toBe(4);
+    expect(byVariant.flag_5v5).toBe(2);
+  });
+
+  it("every zone-assignment references a zone defined on the same scheme", () => {
+    for (const s of FOOTBALL_KG.schemes) {
+      const zoneIds = new Set(s.zones.map((z) => z.id));
+      for (const d of s.defenders) {
+        if (d.assignment.kind === "zone") {
+          expect(
+            zoneIds.has(d.assignment.zoneId),
+            `scheme ${s.id}: defender @${d.id} references zone "${d.assignment.zoneId}" but scheme defines [${[...zoneIds].join(", ")}]`,
+          ).toBe(true);
+        }
+      }
+    }
+  });
+});
+
 describe("Phase 1b migrated routes — coverage", () => {
   // Per-route assertions that match the legacy routeTemplates.ts contract.
   // If a route's geometry drifts during a refactor, this catches it.

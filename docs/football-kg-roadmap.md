@@ -1,6 +1,6 @@
 # Football Knowledge Graph — Phase 1 Roadmap
 
-**Status:** In progress (sub-phase 1b — routes done, formations next) · **Branch:** `feat/football-kg` · **Started:** 2026-05-24
+**Status:** In progress (sub-phase 1b — routes + schemes done, formations next) · **Branch:** `feat/football-kg` · **Started:** 2026-05-24
 
 This document is the source of truth for the multi-week Coach Cal architectural refactor. Read it first if you're picking this work up across sessions.
 
@@ -53,14 +53,14 @@ Decisions locked 2026-05-24:
    - **Option A (cleaner)**: store FormationSpec entries (qb/backs/receivers) + per-variant overrides for custom shapes (Diamond, Tight Diamond, I-Form-flag). Variant-portable. Renderer derives positions.
    - **Option B (more explicit)**: store fully-resolved positions per (formation × variant) combination. More verbose but no derivation logic needed at runtime.
    - **Recommendation**: refactor `FormationDef` schema to support BOTH — `spec` field for parametric formations, `positions` for fixed-position formations. Next session start here.
-3. **Defensive alignments / Schemes (~22)** — pending. These ARE static data (positions hardcoded in `defensiveAlignments.ts`). Migration is straightforward.
+3. **Defensive alignments / Schemes (19)** — ✅ DONE. All 19 in `defs/schemes.ts` (T11:7, F7:6, F6:4, F5:2). Renamed `players`→`defenders`, single-variant entries wrapped in `variants[]`. Cross-ref test pins zone-id integrity (every zone-assignment defender references a zone defined on the scheme).
 4. **Concepts (20)** — pending. Reference routes (now migrated) + formations (pending). Need formations done first.
 5. **Reactor patterns (~18)** — pending. Reference schemes + concepts.
 
 **File layout (final form):**
 - `src/domain/football-kg/defs/routes.ts` ✅ — all 26 routes as a single typed array
 - `src/domain/football-kg/defs/formations.ts` — pending
-- `src/domain/football-kg/defs/schemes.ts` — pending
+- `src/domain/football-kg/defs/schemes.ts` ✅ — all 19 defensive alignments
 - `src/domain/football-kg/defs/concepts.ts` — pending
 - `src/domain/football-kg/defs/reactor-patterns.ts` — pending
 - `src/domain/football-kg/defs/index.ts` ✅ — assembly point
