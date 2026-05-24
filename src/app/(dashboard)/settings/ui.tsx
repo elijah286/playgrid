@@ -28,6 +28,7 @@ import { ResendSettingsClient } from "@/features/admin/ResendSettingsClient";
 import { GoogleMapsSettingsClient } from "@/features/admin/GoogleMapsSettingsClient";
 import { MaxMindSettingsClient } from "@/features/admin/MaxMindSettingsClient";
 import { RedditPixelSettingsClient } from "@/features/admin/RedditPixelSettingsClient";
+import { GoogleNativeSigninSettingsClient } from "@/features/admin/GoogleNativeSigninSettingsClient";
 import { RevenueAdminClient } from "@/features/admin/RevenueAdminClient";
 import { FeedbackAdminClient } from "@/features/admin/FeedbackAdminClient";
 import { CoachAiFeedbackTabs } from "@/features/admin/CoachAiFeedbackTabs";
@@ -618,6 +619,10 @@ export function SettingsClient({
             ) : (
               <p className="text-sm text-red-700 dark:text-red-300">{redditPixel.error}</p>
             )}
+
+            <GoogleNativeSigninSettingsClient
+              initial={{ clientId: initialGoogleOAuthWebClientId }}
+            />
           </div>
         )}
 
@@ -661,7 +666,6 @@ export function SettingsClient({
               initialReferralConfig={initialReferralConfig}
               initialAppleSigninEnabled={initialAppleSigninEnabled}
               initialGoogleSigninEnabled={initialGoogleSigninEnabled}
-              initialGoogleOAuthWebClientId={initialGoogleOAuthWebClientId}
               initialCoachCalUpgradeBannerEnabled={initialCoachCalUpgradeBannerEnabled}
               initialCoachCalVersion={initialCoachCalVersion}
               initialCoachAiEvalDays={initialCoachAiEvalDays}
