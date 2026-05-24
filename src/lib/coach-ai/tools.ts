@@ -119,6 +119,11 @@ export type CoachAiTool = {
 // tools by construction.
 
 type DefenseAlignmentZone = {
+  /** Stable id from the catalog (e.g. "flat_l", "hook_m", "deep_half_r").
+   *  Carried through from the catalog so downstream code can resolve
+   *  per-defender `{kind: "zone", zoneId}` assignments to the zone's
+   *  center / size. Set whenever the catalog entry provides it. */
+  id?: string;
   kind: "rectangle" | "ellipse";
   center: [number, number];
   size: [number, number];
@@ -185,6 +190,7 @@ function computeDefenseAlignment(
           }
         }
         return zonesForStrength(catalogMatch, strength).map((z) => ({
+          ...(z.id ? { id: z.id } : {}),
           kind: z.kind,
           center: [z.center[0], z.center[1]] as [number, number],
           size: [z.size[0], z.size[1]] as [number, number],
@@ -1339,6 +1345,97 @@ function applyReactorPattern(
   return { routes: newRoutes, cues, skipped };
 }
 
+/**
+ * Add a basic zone-drop arrow for every zone defender that doesn't
+ * already have a movement route (e.g., from a reactor pattern).
+ *
+ * Surfaced 2026-05-25 production feedback: a coach added Cover 2 to a
+ * custom play and saw zones drawn but NO defender movement — only dots.
+ * Reactor patterns cover only `(variant, coverage, concept)` triples
+ * we've explicitly authored; for unknown concepts (or custom plays
+ * without a recognized title), defenders shipped static. This helper is
+ * the universal fallback: every zone defender gets at least a small
+ * arrow showing where they go at the snap.
+ *
+ * Two cases:
+ *   1. Defender starts > 1.5 yds from the zone center → arrow to zone
+ *      center (e.g., safeties dropping from y=12 alignment to y=17 deep
+ *      half center). The arrow's length matches the actual drop.
+ *   2. Defender starts AT (or near) the zone center → short rearward
+ *      pedal (2 yds back) so the coach sees "this defender drops at
+ *      the snap" rather than a static dot. Cover 2's underneath
+ *      defenders are mostly authored at-zone-center in the catalog;
+ *      without this, they'd ship with no visible movement.
+ *
+ * Reactor pattern routes take precedence (a defender already in
+ * `existingRouteIds` is skipped). Reactors are richer — they react
+ * to specific offensive players ("CB carries the Go") — so when we
+ * have one, we use it.
+ *
+ * Defenders without a `zone` assignment are skipped: man defenders
+ * get arrow-to-target via reactor patterns when authored; blitzers
+ * and spies use their own rendering paths. This helper is strictly
+ * "fill in the zone defenders".
+ */
+function applyZoneDrops(opts: {
+  defenders: FencePlayer[];
+  /** Per-defender assignment from the alignment, indexed by fence id.
+   *  Built by the caller from alignment.players + the suffixing it
+   *  applied (CB → CB, CB2). */
+  defenderAssignments: Array<{ fenceId: string; assignment?: DefenderAssignmentSpec }>;
+  /** Zones from the alignment (must include `id` for lookup). */
+  zones: Array<{ id?: string; center: [number, number] }>;
+  /** Set of defender fence ids that already have a movement route
+   *  (from a reactor pattern). Those defenders are skipped. */
+  existingRouteIds: Set<string>;
+}): FenceRoute[] {
+  const drops: FenceRoute[] = [];
+  const zoneById = new Map<string, { center: [number, number] }>();
+  for (const z of opts.zones) {
+    if (z.id) zoneById.set(z.id, { center: z.center });
+  }
+
+  for (const da of opts.defenderAssignments) {
+    if (opts.existingRouteIds.has(da.fenceId)) continue;
+    if (!da.assignment || da.assignment.kind !== "zone") continue;
+    const zone = zoneById.get(da.assignment.zoneId);
+    if (!zone) continue;
+
+    const def = opts.defenders.find((d) => d.id === da.fenceId);
+    if (!def) continue;
+
+    const [zx, zy] = zone.center;
+    const dx = zx - def.x;
+    const dy = zy - def.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist >= 1.5) {
+      // Real drop — defender moves to zone center.
+      drops.push({
+        from: def.id,
+        path: [[zx, zy]],
+        tip: "arrow",
+        startDelaySec: 0.4,
+        route_kind: "zone_drop",
+      });
+    } else {
+      // Defender authored at zone center — show a 2yd rearward pedal
+      // so the coach can read "this player drops into a zone at snap"
+      // visually. Without this, Cover 2's underneath defenders (all
+      // five at-zone-center) would render as static dots even though
+      // the coach asked "how should they move".
+      drops.push({
+        from: def.id,
+        path: [[def.x, def.y + 2]],
+        tip: "arrow",
+        startDelaySec: 0.4,
+        route_kind: "zone_drop",
+      });
+    }
+  }
+  return drops;
+}
+
 function compareOffenseSnapshots(before: OffenseSnapshot, after: OffenseSnapshot): string | null {
   if (before.players.length !== after.players.length) {
     return `offense player count changed (${before.players.length} → ${after.players.length})`;
@@ -1421,6 +1518,14 @@ const compose_defense: CoachAiTool = {
         team: "D" as const,
       };
     });
+    // Parallel array: fence-id → original alignment assignment. Used by
+    // `applyZoneDrops` below to look up each zone defender's target
+    // zone after the catalog's `(id, assignment.zoneId)` pair has been
+    // suffixed (CB → CB / CB2) for the fence.
+    const defenderAssignments = alignment.players.map((p, i) => ({
+      fenceId: uniqueDefenders[i].id,
+      assignment: p.assignment,
+    }));
 
     const isMan = alignment.manCoverage;
     const zones = isMan
@@ -1522,9 +1627,33 @@ const compose_defense: CoachAiTool = {
       }
     }
 
+    // Surfaced 2026-05-25 production: a coach overlayed Cover 2 on a
+    // custom play and saw zones drawn but NO defender movement. Reactor
+    // patterns cover only `(variant, coverage, concept)` triples we've
+    // authored; for unknown concepts (or custom plays), defenders
+    // shipped static. `applyZoneDrops` is the universal fallback —
+    // every zone defender gets at least a short arrow showing they
+    // drop at the snap. Runs on BOTH the overlay path AND standalone
+    // defense (so "show me Cover 2" answers with movement too).
+    //
+    // Reactor pattern routes take precedence: defenders already in
+    // `reactorRouteIds` are skipped so we don't double-up arrows on
+    // the same defender.
+    const reactorRouteIds = new Set(reactorRoutes.map((r) => r.from));
+    const sanitizedDefenders = (sanitized.diagram.players as FencePlayer[]).filter(
+      (p) => p.team === "D",
+    );
+    const zoneDropRoutes = applyZoneDrops({
+      defenders: sanitizedDefenders,
+      defenderAssignments,
+      zones: alignment.zones,
+      existingRouteIds: reactorRouteIds,
+    });
+
     const finalRoutes = [
       ...(sanitized.diagram.routes ?? []),
       ...reactorRoutes,
+      ...zoneDropRoutes,
     ];
     const finalFence = {
       ...fence,
