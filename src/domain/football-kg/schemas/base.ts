@@ -57,7 +57,7 @@ export const FootballPrimitiveBaseZ = z.object({
   ),
   name: z.string().min(1).max(80),
   variants: z.array(SportVariantZ).min(1, "must apply to at least one variant"),
-  description: z.string().min(10).max(280),
+  description: z.string().min(10).max(500),
   body: z.string().min(20, "body should be substantive coaching prose"),
   aliases: z.array(z.string().min(1)).optional(),
   complexity: ComplexityZ.optional(),
