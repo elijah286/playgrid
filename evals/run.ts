@@ -101,9 +101,19 @@ async function main() {
             }
           }
         }
-        // Brief tool-call trace for context.
-        const trace = r.capture.toolCalls.map((c) => c.name).join(" → ") || "(no tools)";
-        console.log(`  trace: ${trace}`);
+        // Tool-call trace with args for context. Showing args helps
+        // diagnose "Cal called compose_play but with the wrong
+        // concept" — without args it's just a list of names.
+        console.log(`  trace (${r.capture.toolCalls.length} calls):`);
+        for (const c of r.capture.toolCalls) {
+          const argSummary = JSON.stringify(c.input).slice(0, 120);
+          console.log(`    - ${c.name}(${argSummary})`);
+        }
+        // Assistant text (truncated). Often the failure is "Cal
+        // shipped a stripped reply" — the truncated text shows
+        // whether prose survived after the fence got removed.
+        const preview = r.capture.assistantText.slice(0, 400).replace(/\n/g, " ");
+        console.log(`  reply preview: ${preview}${r.capture.assistantText.length > 400 ? "..." : ""}`);
       }
     }
   }
