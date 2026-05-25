@@ -273,7 +273,12 @@ export function PlaybookPlaySearchMenu({
               : "fixed inset-x-2 z-30 overflow-hidden rounded-xl border border-border bg-surface-raised shadow-elevated sm:inset-x-auto"
           }
         >
-          <div className="border-b border-border p-2">
+          {/* Apply `native-safe-top` only in the triggerless full-sheet
+              variant (top-0 anchored), where the search input would
+              otherwise sit under the status bar in the native app. The
+              inline popover variant floats next to its trigger, so the
+              extra top padding would be wrong there. */}
+          <div className={`${hideTrigger ? "native-safe-top " : ""}border-b border-border p-2`}>
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted" />

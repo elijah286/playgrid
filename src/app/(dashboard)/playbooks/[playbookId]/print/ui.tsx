@@ -1196,7 +1196,10 @@ export function PrintPlaybookClient({
               if (e.key === "Escape") setFullscreen(false);
             }}
           >
-            <div className="flex items-center justify-between border-b border-border px-4 py-2">
+            {/* `native-safe-top` keeps the close button below the device
+                status bar / notch when the print preview is opened
+                inside the Capacitor app. */}
+            <div className="native-safe-top flex items-center justify-between border-b border-border px-4 py-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted">
                 Preview · {pageCount} page{pageCount === 1 ? "" : "s"}
               </p>

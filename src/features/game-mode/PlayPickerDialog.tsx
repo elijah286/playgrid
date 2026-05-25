@@ -83,7 +83,11 @@ export function PlayPickerDialog({
           : "fixed inset-0 z-[60] flex flex-col bg-surface-inset"
       }
     >
-      <div className="flex items-center gap-2 border-b border-border bg-surface-raised px-3 py-2">
+      {/* `native-safe-top` only takes effect when this dialog is mounted
+          as a full-viewport overlay (not inline). It pads the top
+          toolbar below the status bar / notch in the native app so the
+          X close button stays tappable. */}
+      <div className={`${inline ? "" : "native-safe-top "}flex items-center gap-2 border-b border-border bg-surface-raised px-3 py-2`}>
         <div className="relative flex-1">
           <Search
             aria-hidden

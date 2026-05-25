@@ -1021,8 +1021,12 @@ export function GameModeClient({
         variant={(sportVariant as SportVariant | null) ?? null}
       />
       {/* Top bar — exit affordance and the play name. The X opens the end-
-          game dialog for the caller, or quietly leaves for spectators. */}
-      <div className="flex items-center gap-2 border-b border-border bg-surface-raised px-2 py-1">
+          game dialog for the caller, or quietly leaves for spectators.
+          `native-safe-top` keeps the X / fullscreen buttons below the
+          Android status bar (and iOS notch) inside the native app —
+          without it, the OS intercepts taps in that region and the user
+          gets stranded in game mode. */}
+      <div className="native-safe-top flex items-center gap-2 border-b border-border bg-surface-raised px-2 py-1">
         <button
           type="button"
           onClick={handleTopLeftClose}

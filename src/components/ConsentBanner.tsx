@@ -21,7 +21,7 @@ export default function ConsentBanner() {
     <div
       role="dialog"
       aria-label="Cookie preferences"
-      className="coach-dock-aware fixed inset-x-0 bottom-0 z-[60] mx-auto max-w-2xl px-3 pb-3 sm:px-4 sm:pb-4"
+      className="coach-dock-aware fixed inset-x-0 bottom-0 z-[60] mx-auto max-w-2xl px-3 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] sm:px-4 sm:pb-[max(env(safe-area-inset-bottom,0px),1rem)]"
     >
       <div className="rounded-lg border border-border bg-surface p-4 shadow-lg">
         <p className="text-sm text-foreground">

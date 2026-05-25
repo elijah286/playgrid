@@ -133,7 +133,8 @@ export function PlayAuthoringAutoLauncher({
   return (
     <div
       role="status"
-      className="fixed bottom-4 right-4 z-40 w-[300px] rounded-xl border border-border bg-surface-raised p-3 shadow-elevated ring-1 ring-black/5"
+      className="fixed right-4 z-40 w-[300px] rounded-xl border border-border bg-surface-raised p-3 shadow-elevated ring-1 ring-black/5"
+      style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 1rem)" }}
     >
       <button
         type="button"
