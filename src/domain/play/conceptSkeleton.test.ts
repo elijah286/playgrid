@@ -243,7 +243,12 @@ describe("generateConceptSkeleton — variant-roster completeness", () => {
   //  - flag_6v6: {Q, C, X, Y, Z, ?} (synth assigns the 6th)
   //  - flag_7v7: {Q, C, X, Y, Z, H, B} — C is snapper-only by default
   //  - tackle_11: full 11 incl. OL — linemen exempt
-  const variants = ["flag_5v5", "flag_6v6", "flag_7v7", "tackle_11"] as const;
+  // touch_7v7 is composition-identical to flag_7v7 (shared catalog,
+  // shared roster, shared defensive templates) so the same cross-
+  // variant gates apply. flag_4v4 has a 3-eligible roster that
+  // requires concept-specific adaptation — tested separately below
+  // with a filtered concept list.
+  const variants = ["flag_5v5", "flag_6v6", "flag_7v7", "touch_7v7", "tackle_11"] as const;
   const PASS_CONCEPTS = CONCEPT_CATALOG.filter(
     (c) => !["QB Draw", "Bubble RPO", "Jet Reverse"].includes(c.name),
   );
@@ -286,7 +291,12 @@ describe("generateConceptSkeleton — every skeleton passes the route-assignment
   //
   // Uses the production `validateRouteAssignments` directly so the
   // test passes iff the validator would pass at chat-time + save-time.
-  const variants = ["flag_5v5", "flag_6v6", "flag_7v7", "tackle_11"] as const;
+  // touch_7v7 is composition-identical to flag_7v7 (shared catalog,
+  // shared roster, shared defensive templates) so the same cross-
+  // variant gates apply. flag_4v4 has a 3-eligible roster that
+  // requires concept-specific adaptation — tested separately below
+  // with a filtered concept list.
+  const variants = ["flag_5v5", "flag_6v6", "flag_7v7", "touch_7v7", "tackle_11"] as const;
   const PASS_CONCEPTS = CONCEPT_CATALOG.filter(
     (c) => !["QB Draw", "Bubble RPO", "Jet Reverse"].includes(c.name),
   );
@@ -308,6 +318,57 @@ describe("generateConceptSkeleton — every skeleton passes the route-assignment
         ).toEqual([]);
       });
     }
+  }
+});
+
+describe("generateConceptSkeleton — flag_4v4 adapted concepts pass coverage + route-assignment validation", () => {
+  // 4v4 has a 3-eligible roster {Q, X, Y, Z} — no @C / @S / @H / @B.
+  // Concepts that hardcode tackle/7v7 IDs fall through to the else
+  // branch and produce routes for players that don't exist, which the
+  // synthesizer silently drops. This test pins down the concepts that
+  // HAVE 4v4-specific skeleton branches and asserts they pass both
+  // gates (offensive coverage + route-assignment validation).
+  //
+  // To add a new flag_4v4-adapted concept: append its name to
+  // FLAG_4V4_ADAPTED_CONCEPTS and ensure the builder has a
+  // `if (variant === "flag_4v4")` branch that uses flagFourRoutes().
+  const FLAG_4V4_ADAPTED_CONCEPTS = [
+    "Curl-Flat",
+    "Slant-Flat",
+    "Smash",
+    "Stick",
+    "Snag",
+    "Four Verticals",
+    "Mesh",
+  ] as const;
+
+  for (const conceptName of FLAG_4V4_ADAPTED_CONCEPTS) {
+    it(`${conceptName} in flag_4v4 passes offensive-coverage + route-assignment`, () => {
+      const result = generateConceptSkeleton(conceptName, { variant: "flag_4v4" });
+      expect(result.ok, result.ok ? undefined : result.error).toBe(true);
+      if (!result.ok) return;
+      const { diagram } = playSpecToCoachDiagram(result.spec);
+      // Coverage gate.
+      const coverageErrors = validateOffensiveCoverage(
+        diagram as CoachDiagram,
+        "flag_4v4",
+        null,
+        result.spec.playType,
+      );
+      expect(
+        coverageErrors,
+        `${conceptName}/flag_4v4 fails coverage:\n  ${coverageErrors.join("\n  ")}`,
+      ).toEqual([]);
+      // Route-assignment gate.
+      const validation = validateRouteAssignments(diagram as CoachDiagram, {
+        variant: "flag_4v4",
+      });
+      const errorMessages = validation.ok ? [] : validation.errors.map((e) => e.message);
+      expect(
+        errorMessages,
+        `${conceptName}/flag_4v4 fails route-assignment:\n  ${errorMessages.join("\n  ")}`,
+      ).toEqual([]);
+    });
   }
 });
 
