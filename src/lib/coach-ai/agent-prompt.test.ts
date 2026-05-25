@@ -990,3 +990,105 @@ describe('NORMAL_PROMPT — "how should defense cover this play" overlay rule (2
     expect(NORMAL_PROMPT).toMatch(/alternative coverages.*compose_defense overlays|compose_defense overlays.*same anchored play/);
   });
 });
+
+describe("NORMAL_PROMPT — DEFENSE-INSTALL routing rule (2026-05-25)", () => {
+  // Surfaced 2026-05-25 production: a coach with an anchored playbook
+  // containing two RUN offense plays asked Cal "can you install
+  // defenses into this playbook to illustrate this?" Cal called
+  // `compose_play` 4 times — producing OFFENSIVE plays titled "3-4 vs
+  // Dive Right" / "3-4 vs Sweep Right" that had NO defenders. The
+  // coach's intent was unambiguously defensive: install/save verb +
+  // plural "defenses" / scheme name. The compose_play tool produces
+  // OFFENSE — it's the wrong tool by construction for this request.
+  //
+  // The fix is a top-level prompt rule that makes the routing
+  // EXPLICIT: install + "defenses"/scheme name → compose_defense for
+  // EACH existing offense play. The rule has to be at the same
+  // visibility level as Rule 322 ("HOW SHOULD DEFENSE COVER THIS
+  // PLAY") because the failure mode is identical: Cal sees a verb
+  // it associates with compose_play ("install" is a save verb that
+  // Cal has been trained to pair with compose_play in N-play install
+  // flows) and never reaches the defense branch.
+
+  it("names the trigger verbs (install/save/add/create/build) paired with defensive nouns", () => {
+    // The rule must name BOTH halves of the pattern so Cal's
+    // pattern-matcher fires regardless of which side it sees first.
+    expect(NORMAL_PROMPT).toMatch(/install.*defense|install defenses/i);
+    expect(NORMAL_PROMPT).toMatch(/save-intent verbs.*defens|save.*defens|defens.*save/i);
+  });
+
+  it("routes the install-defense pattern to compose_defense, not compose_play", () => {
+    // Rule must explicitly name BOTH tools so Cal sees which one is
+    // wrong and which one is right.
+    expect(NORMAL_PROMPT).toMatch(/install.*defenses[\s\S]{0,400}compose_defense/i);
+    expect(NORMAL_PROMPT).toMatch(
+      /NOT.*compose_play|compose_play.*produces.*offense|compose_play.*is.*the wrong tool/i,
+    );
+  });
+
+  it("describes the per-offense overlay loop (one compose_defense call per anchored offense)", () => {
+    // When the coach has N offense plays open and asks to "install
+    // defenses on each", the right pattern is: one compose_defense
+    // call per offense play, with `on_play` set to that offense's
+    // fence. The prompt must describe this so Cal doesn't fall back
+    // to multiple compose_play calls (the production bug).
+    expect(NORMAL_PROMPT).toMatch(/compose_defense.*on_play.*each|each.*offense.*compose_defense|one.*compose_defense.*per/i);
+  });
+
+  it("names the 2026-05-25 regression with enough detail that Cal sees the failure mode", () => {
+    expect(NORMAL_PROMPT).toMatch(/Surfaced 2026-05-25/);
+    // Critical regression detail: the titles "3-4 vs Dive Right"
+    // suggest Cal had the defensive INTENT but used the wrong tool.
+    expect(NORMAL_PROMPT).toMatch(/3-4 vs Dive Right|titled.*3-4 vs|offensive plays.*titled/i);
+  });
+
+  it("explains that compose_play creates OFFENSE so coaches see no defenders", () => {
+    // The structural reason the bug happens: compose_play's output
+    // is the offense-only side of a play. When Cal uses it for a
+    // defensive request, the result is OFFENSE with no defenders —
+    // which is exactly what the coach won't recognize as "defense".
+    expect(NORMAL_PROMPT).toMatch(/compose_play.*produces.*offense|compose_play.*creates.*offense|compose_play.*returns.*offense/i);
+  });
+});
+
+describe("NORMAL_PROMPT — anchored playbook prohibits list_my_playbooks (2026-05-25)", () => {
+  // Surfaced 2026-05-25 production: same exchange as the defense-
+  // install bug above. The coach was anchored to "Reddit Drawings"
+  // (visible in the chat header) and Cal called `list_my_playbooks`
+  // mid-conversation — producing a "Pick a team:" chip prompt the
+  // coach had to dismiss. The system prompt's "Anchored playbook"
+  // block was right there, but Cal still tool-called the discovery
+  // tool. The fix is to make the prohibition LOUD: never call
+  // list_my_playbooks when the Anchored playbook block is populated.
+  //
+  // Note: list_my_playbooks STILL has legitimate uses (lobby mode
+  // per Rule 8a, calendar work where Cal needs cross-playbook
+  // scope, the explicit "switch to a different playbook" path per
+  // Rule 7b). The rule is: don't call it when there's already an
+  // active scope.
+
+  it("explicitly prohibits list_my_playbooks when a playbook is anchored", () => {
+    expect(NORMAL_PROMPT).toMatch(
+      /(NEVER|DO NOT|Do not).*call.*`list_my_playbooks`.*anchored|anchored.*(NEVER|DO NOT|Do not).*list_my_playbooks/,
+    );
+  });
+
+  it("preserves the legitimate lobby-mode use (Rule 8a) — exception is explicit", () => {
+    // The new prohibition rule must not break the lobby-mode rule.
+    // The new rule should say "when anchored, don't list" — but
+    // when not anchored, the existing flow still applies.
+    expect(NORMAL_PROMPT).toMatch(/Call `list_my_playbooks` first/);
+  });
+
+  it("names the production regression so Cal sees the concrete failure mode", () => {
+    expect(NORMAL_PROMPT).toMatch(/Surfaced 2026-05-25/);
+  });
+
+  it("references the tool-handler guard that backs up the prompt rule", () => {
+    // The prompt rule has a defense-in-depth backstop: the tool
+    // handler refuses with an error when called against an anchored
+    // playbook. The prompt should mention this so Cal knows the
+    // rule is structural, not advisory.
+    expect(NORMAL_PROMPT).toMatch(/handler.*refuse|refuse.*handler|tool.*reject.*anchored|reject.*anchored.*tool/i);
+  });
+});

@@ -320,7 +320,13 @@ const list_my_playbooks: CoachAiTool = {
       "List the playbooks the signed-in coach owns or belongs to. " +
       "Call this whenever the coach needs to pick a team (e.g. for scheduling, " +
       "play edits, or any other playbook-specific action) and hasn't opened one yet. " +
-      "Return the results as clickable links so the coach can navigate directly.",
+      "Return the results as clickable links so the coach can navigate directly. " +
+      "**DO NOT call this tool when a playbook is already anchored** — the handler refuses " +
+      "(returns ok:false) and the coach sees a 'Pick a team:' chip prompt mid-conversation, " +
+      "which is a regression. Read the 'Anchored playbook' block in the system prompt; if a " +
+      "playbook name is listed there, use it directly. The legitimate uses are (a) lobby mode " +
+      "(no anchor — the 'NO ANCHORED PLAYBOOK' branch in Rules 7c / 8a / 8b), and (b) explicit " +
+      "cross-playbook scheduling/switching per Rule 7b.",
     input_schema: {
       type: "object",
       properties: {},
@@ -328,7 +334,30 @@ const list_my_playbooks: CoachAiTool = {
       additionalProperties: false,
     },
   },
-  async handler(_input, _ctx) {
+  async handler(_input, ctx) {
+    // Guard (2026-05-25): refuse to surface the playbook-picker when a
+    // playbook is already anchored. Surfaced in production when a coach
+    // was clearly on a playbook (header showed "Anchored to Reddit
+    // Drawings") and Cal still called this tool mid-conversation,
+    // producing a "Pick a team:" chip prompt that confused the coach.
+    // The error message names the anchored playbook so Cal can use it
+    // directly on the next turn without re-querying.
+    if (ctx.playbookId) {
+      const pbName = ctx.playbookName ?? "(unnamed)";
+      const editScope = ctx.canEditPlaybook
+        ? "you can compose, edit, and save plays here directly"
+        : "this playbook is read-only for the current coach";
+      return {
+        ok: false,
+        error:
+          `Already anchored to "${pbName}" (id ${ctx.playbookId}) — ${editScope}. ` +
+          `DO NOT retry list_my_playbooks; use the anchored playbook directly. ` +
+          `The Anchored playbook block in the system prompt has the variant, sport, age, and ` +
+          `sanctioning-body details you need. If the coach asked you to switch to a different ` +
+          `playbook (an explicit request, not the default), call list_my_playbooks AFTER the ` +
+          `coach confirms — but the default path when anchored is to STAY in the current scope.`,
+      };
+    }
     try {
       const supabase = await createClient();
       const { data: { user } } = await supabase.auth.getUser();
