@@ -455,6 +455,38 @@ export function CoachAiLauncher({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, panelMode, contextOpen]);
 
+  // Android hardware back button — guaranteed exit path from Cal. Without
+  // this, the system back press falls through to Capacitor's default
+  // (exit the app) and the user gets stuck inside Cal if a header
+  // control is ever obscured (the original report). Only registered
+  // while Cal is open so the default back behavior is unchanged
+  // elsewhere. iOS has no hardware back button — this is a no-op there.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    let cleanup: (() => void) | null = null;
+    (async () => {
+      try {
+        const { App } = await import("@capacitor/app");
+        if (cancelled) return;
+        const handle = await App.addListener("backButton", () => {
+          if (contextOpen) { setContextOpen(false); return; }
+          closeDialog();
+        });
+        cleanup = () => { void handle.remove(); };
+      } catch {
+        /* Capacitor not available (web) — back button is irrelevant */
+      }
+    })();
+    return () => {
+      cancelled = true;
+      cleanup?.();
+    };
+    // closeDialog is a stable local fn defined inside the component; it
+    // closes over setters whose identities are stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, contextOpen]);
+
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -777,9 +809,15 @@ export function CoachAiLauncher({
                   ? "rounded-2xl ring-1 ring-black/10 shadow-2xl"
                   : "rounded-t-2xl border-t border-black/10 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] sm:rounded-2xl sm:border-0 sm:ring-1 sm:ring-black/10 sm:shadow-2xl",
               adminTrainingActive && "ring-2 ring-amber-400",
-              // Position
+              // Position. Fullscreen uses a custom class instead of
+              // `inset-2 sm:inset-4` so it can respect
+              // env(safe-area-inset-*) — otherwise on Android the status
+              // bar overlays the header and the X / minimize buttons
+              // become non-tappable (touches in the status bar area are
+              // intercepted by the OS). See `.cal-panel-fullscreen` in
+              // globals.css.
               panelMode === "fullscreen"
-                ? "inset-2 sm:inset-4"
+                ? "cal-panel-fullscreen"
                 : panelMode === "docked"
                   ? "inset-y-0 right-0 hidden lg:flex"
                   : [

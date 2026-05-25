@@ -511,6 +511,30 @@ html.coach-docked .coach-dock-aware {
   }
 }
 
+/* Coach Cal fullscreen panel. Pin to all four edges with at least a small
+ * margin, but ALWAYS clear the device's safe areas (status bar, dynamic
+ * island, home indicator, gesture bar). Without this, on Android the
+ * status bar overlays the panel header and the X / minimize buttons
+ * become non-tappable — the user gets stuck inside Cal with no exit.
+ * Using `max()` instead of `calc(... + 0.5rem)` keeps the panel flush
+ * with a small visible margin on the web (where insets are 0) without
+ * over-padding on native (where insets already exceed the desired
+ * margin). */
+.cal-panel-fullscreen {
+  top: max(env(safe-area-inset-top, 0px), 0.5rem);
+  right: max(env(safe-area-inset-right, 0px), 0.5rem);
+  bottom: max(env(safe-area-inset-bottom, 0px), 0.5rem);
+  left: max(env(safe-area-inset-left, 0px), 0.5rem);
+}
+@media (min-width: 640px) {
+  .cal-panel-fullscreen {
+    top: max(env(safe-area-inset-top, 0px), 1rem);
+    right: max(env(safe-area-inset-right, 0px), 1rem);
+    bottom: max(env(safe-area-inset-bottom, 0px), 1rem);
+    left: max(env(safe-area-inset-left, 0px), 1rem);
+  }
+}
+
 /* Field viewport height cap on desktop — keeps the diagram in view
  * alongside the toolbar + sidebar on wide screens. We cap HEIGHT only
  * (and let aspect-ratio + the natural column width drive the rendered
