@@ -96,6 +96,32 @@ export function detectConcept(spec: PlaySpec): ConceptMatchResult | null {
   return null;
 }
 
+/**
+ * Variants where the chat-time concept assertion accepts a partial
+ * route-pattern match (≥1 required slot satisfied) instead of the
+ * strict "all required slots satisfied" check.
+ *
+ * Why: variants with smaller offensive rosters (currently just 6v6)
+ * legitimately cannot produce the canonical 7v7+ shape for every
+ * concept. The 6v6 catalog skeletons adapt: Mesh becomes a single
+ * Drag + Curl, Snag becomes Corner + Flat (no Spot), Y-Cross uses
+ * Post instead of Dig, etc. These are real coach-recognizable
+ * adaptations — the validator shouldn't reject them as "not a real
+ * Mesh / Snag / Y-Cross".
+ *
+ * Surfaced 2026-05-25: 6v6 scenarios were failing at 0-2/5 on Haiku,
+ * jumping to 3-5/5 on Sonnet. Root cause was NOT model capability —
+ * it was the chat-time validator stripping legitimate 6v6 adaptations
+ * because they didn't match the 7v7-strict pattern. The "ship Sonnet
+ * for 6v6" routing rule was treating the symptom; this is the fix.
+ *
+ * Structural requirements (carry / rpo_read / ballPath) stay STRICT
+ * across all variants — a "Flea Flicker" still must have the
+ * returns-to-origin ballPath, period. Only the route-pattern check
+ * relaxes.
+ */
+const LENIENT_PATTERN_VARIANTS = new Set<string>(["flag_6v6"]);
+
 function matchConcept(spec: PlaySpec, concept: ConceptEntry): ConceptMatchResult {
   // Build all spec assignments that have a route family.
   const candidates: Array<{ assignment: PlayerAssignment; family: string; depth: number }> = [];
@@ -163,6 +189,28 @@ function matchConcept(spec: PlaySpec, concept: ConceptEntry): ConceptMatchResult
         reason: "no_spec_assignment_with_family",
       });
     }
+  }
+
+  // Variant-aware lenient match (2026-05-25). For variants in
+  // LENIENT_PATTERN_VARIANTS (currently just flag_6v6), the catalog
+  // skeleton legitimately adapts each concept to the smaller roster
+  // and can't produce every canonical required slot. Accept the
+  // partial match if AT LEAST ONE required slot was satisfied — the
+  // adaptation is what coaches running 6v6 expect. Without this,
+  // every 6v6 concept play strip-fails the chat-time validator even
+  // though the catalog returned its best 6v6 representation.
+  //
+  // Structural requirements (below) stay strict — those are
+  // genuinely defining (Flea Flicker MUST have a returns-to-origin
+  // ballPath, regardless of variant).
+  if (
+    LENIENT_PATTERN_VARIANTS.has(spec.variant) &&
+    concept.required.length > 0 &&
+    violations.length < concept.required.length
+  ) {
+    // At least one required slot was satisfied; clear the route-
+    // pattern violations and let the structural checks below run.
+    violations.length = 0;
   }
 
   // Structural requirements (carry / rpo_read / ballPath) — checked
