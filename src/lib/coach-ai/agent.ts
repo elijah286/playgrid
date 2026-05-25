@@ -2585,7 +2585,7 @@ export async function runAgent(
                   "or any reference to a validator. Just emit the corrected " +
                   "response as if the broken one never existed.\n\n" +
                   fenceProvenanceCritique(provenance.handAuthoredFences.length, {
-                    variant: ctx.sportVariant as "flag_5v5" | "flag_6v6" | "flag_7v7" | "tackle_11" | undefined,
+                    variant: ctx.sportVariant as "flag_4v4" | "flag_5v5" | "flag_6v6" | "flag_7v7" | "touch_7v7" | "tackle_11" | undefined,
                     handAuthoredFences: provenance.handAuthoredFences,
                   }),
               },

@@ -2200,7 +2200,7 @@ const place_offense: CoachAiTool = {
       if (parsed.length !== customLayout.length) {
         warnings.push("Some custom_layout entries were malformed (non-string id or non-number coord) and were dropped.");
       }
-      synth = buildCustomOffense(variant as "flag_5v5" | "flag_6v6" | "flag_7v7" | "tackle_11", parsed);
+      synth = buildCustomOffense(variant as "flag_4v4" | "flag_5v5" | "flag_6v6" | "flag_7v7" | "touch_7v7" | "tackle_11", parsed);
       if (!synth) {
         return { ok: false, error: "custom_layout failed structural check (empty or duplicate ids)." };
       }

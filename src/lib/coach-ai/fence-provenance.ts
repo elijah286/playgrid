@@ -152,7 +152,7 @@ export function validateFenceProvenance(
  *  Single source of truth: a change to the template propagates to
  *  every entry point that pushes Cal toward spec emission. */
 export function specEmissionGuidance(opts?: {
-  variant?: "flag_5v5" | "flag_6v6" | "flag_7v7" | "tackle_11";
+  variant?: "flag_4v4" | "flag_5v5" | "flag_6v6" | "flag_7v7" | "touch_7v7" | "tackle_11";
 }): string {
   const FENCE_MARKER = "```";
   const variantStr = opts?.variant ?? "<variant>";
@@ -203,7 +203,7 @@ export function specEmissionGuidance(opts?: {
 export function fenceProvenanceCritique(
   handAuthoredCount: number,
   opts?: {
-    variant?: "flag_5v5" | "flag_6v6" | "flag_7v7" | "tackle_11";
+    variant?: "flag_4v4" | "flag_5v5" | "flag_6v6" | "flag_7v7" | "touch_7v7" | "tackle_11";
     handAuthoredFences?: string[];
   },
 ): string {

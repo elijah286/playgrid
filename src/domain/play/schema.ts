@@ -209,7 +209,15 @@ const formationStateSchema = z.object({
 
 // ── Sport profile ──────────────────────────────────────────────────────
 
-const sportVariantSchema = z.enum(["flag_5v5", "flag_6v6", "flag_7v7", "tackle_11", "other"]);
+const sportVariantSchema = z.enum([
+  "flag_4v4",
+  "flag_5v5",
+  "flag_6v6",
+  "flag_7v7",
+  "touch_7v7",
+  "tackle_11",
+  "other",
+]);
 
 const sportProfileSchema = z.object({
   variant: sportVariantSchema,

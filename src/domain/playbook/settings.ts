@@ -125,9 +125,11 @@ export type PlaybookSettings = {
 
 /** Label used in UI + warnings. */
 export const SPORT_VARIANT_LABELS: Record<SportVariant, string> = {
+  flag_4v4: "4v4 Flag",
   flag_5v5: "5v5 Flag",
   flag_6v6: "6v6 Flag",
   flag_7v7: "7v7",
+  touch_7v7: "7v7 Touch",
   tackle_11: "11v11 Tackle",
   other: "Other",
 };
@@ -152,6 +154,10 @@ function baseSettingsForVariant(
 ): Omit<PlaybookSettings, "fieldDisplay"> {
   switch (variant) {
     case "flag_7v7":
+    case "touch_7v7":
+      // Touch 7v7 uses the same base settings as flag 7v7. The only
+      // difference (two-hand-touch vs flag-pull) is a rules-KB concern,
+      // not a composition / settings concern.
       return {
         rushingAllowed: false,
         rushingYards: null,
@@ -164,6 +170,27 @@ function baseSettingsForVariant(
         // by default. Coach can opt in via the rules form for leagues
         // that allow more.
         advancedCapabilities: [],
+      };
+    case "flag_4v4":
+      // Flag 4v4: 3 eligibles + QB. No-rush is the dominant league
+      // convention (most rec leagues prohibit rushing entirely; some
+      // allow 1 rusher from 5-7y — coaches can opt in via the rules
+      // form). Handoffs allowed (many leagues permit designed runs
+      // outside the no-run zone). Center-eligible varies by league —
+      // default to true since center IS eligible in i9 / NFL FLAG
+      // youth (the dominant 4v4 ruleset families).
+      return {
+        rushingAllowed: false,
+        rushingYards: null,
+        handoffsAllowed: true,
+        blockingAllowed: false,
+        centerIsEligible: true,
+        maxPlayers: 4,
+        maxThrowDepthYds: null,
+        // 4v4 leagues vary widely on QB-run rules; default to handoff
+        // only and let coaches opt in. RPO concepts are rare at 4v4
+        // levels (typically tier1_5_8) and stay opt-in.
+        advancedCapabilities: ["handoff_chain"],
       };
     case "flag_5v5":
       return {

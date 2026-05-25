@@ -413,7 +413,15 @@ export function isCustomAction(a: AssignmentAction): a is Extract<AssignmentActi
 // play_spec is provided). Anything outside this hierarchy is invalid
 // and rejected — see schema.ts header for the contract.
 
-const sportVariantSchema = z.enum(["flag_5v5", "flag_6v6", "flag_7v7", "tackle_11", "other"]);
+const sportVariantSchema = z.enum([
+  "flag_4v4",
+  "flag_5v5",
+  "flag_6v6",
+  "flag_7v7",
+  "touch_7v7",
+  "tackle_11",
+  "other",
+]);
 
 const formationRefSchema = z.object({
   name: z.string(),

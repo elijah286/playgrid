@@ -90,9 +90,11 @@ function TryRow({
 }
 
 const PLAYERS_PER_SIDE: Record<SportVariant, string> = {
+  flag_4v4: "4-on-4 flag",
   flag_5v5: "5-on-5 flag",
   flag_6v6: "6-on-6 flag",
   flag_7v7: "7-on-7 flag",
+  touch_7v7: "7-on-7 touch",
   tackle_11: "11-on-11 tackle",
   other: "this variant",
 };

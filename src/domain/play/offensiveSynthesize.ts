@@ -23,7 +23,7 @@ export type SynthOffensePlayer = {
 
 export type SynthOffense = {
   formation: string;
-  variant: "tackle_11" | "flag_7v7" | "flag_6v6" | "flag_5v5";
+  variant: "tackle_11" | "flag_7v7" | "touch_7v7" | "flag_6v6" | "flag_5v5" | "flag_4v4";
   description: string;
   players: SynthOffensePlayer[];
   /** True if the synthesizer is confident the layout matches the requested
@@ -99,7 +99,11 @@ export function parseFormationName(
   const has = (kw: string) => raw.includes(kw);
   const matches = (re: RegExp) => re.test(raw);
   const isFlag =
-    variant === "flag_5v5" || variant === "flag_6v6" || variant === "flag_7v7";
+    variant === "flag_4v4" ||
+    variant === "flag_5v5" ||
+    variant === "flag_6v6" ||
+    variant === "flag_7v7" ||
+    variant === "touch_7v7";
 
   // Diamond — 4-point shape (C short-middle, 2 wide on LOS, 1 deep middle
   // behind QB). "Tight Diamond" compresses the wide receivers inward for
@@ -678,9 +682,11 @@ function placeCustomShape(
 function totalSkill(variant: SynthOffense["variant"]): number {
   switch (variant) {
     case "tackle_11": return 5;  // 11 - 5 OL - 1 QB = 5 skill
-    case "flag_7v7":  return 5;  // 7 - 1 C - 1 QB = 5 skill
+    case "flag_7v7":
+    case "touch_7v7": return 5;  // 7 - 1 C - 1 QB = 5 skill
     case "flag_6v6":  return 4;  // 6 - 1 C - 1 QB = 4 skill
     case "flag_5v5":  return 3;  // 5 - 1 C - 1 QB = 3 skill
+    case "flag_4v4":  return 3;  // 4 - 1 QB = 3 skill (no center in canonical 4v4 roster)
   }
 }
 
@@ -830,7 +836,14 @@ export function synthesizeOffense(
   variant: string,
   formation: string,
 ): SynthOffense | null {
-  const v = (variant === "tackle_11" || variant === "flag_7v7" || variant === "flag_6v6" || variant === "flag_5v5")
+  const v = (
+    variant === "tackle_11" ||
+    variant === "flag_7v7" ||
+    variant === "touch_7v7" ||
+    variant === "flag_6v6" ||
+    variant === "flag_5v5" ||
+    variant === "flag_4v4"
+  )
     ? variant
     : null;
   if (!v) return null;
@@ -980,7 +993,14 @@ export function buildCustomOffense(
  * what you meant."
  */
 export function synthesizeOffenseFallback(variant: string): SynthOffense | null {
-  const v = (variant === "tackle_11" || variant === "flag_7v7" || variant === "flag_6v6" || variant === "flag_5v5")
+  const v = (
+    variant === "tackle_11" ||
+    variant === "flag_7v7" ||
+    variant === "touch_7v7" ||
+    variant === "flag_6v6" ||
+    variant === "flag_5v5" ||
+    variant === "flag_4v4"
+  )
     ? variant
     : null;
   if (!v) return null;

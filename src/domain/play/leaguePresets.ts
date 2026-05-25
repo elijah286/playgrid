@@ -310,7 +310,7 @@ export const LEAGUE_PRESETS: Record<LeaguePreset, LeaguePresetDefinition> = {
     id: "custom",
     label: "Custom",
     description: "Define your own field length and markings",
-    variants: ["flag_5v5", "flag_6v6", "flag_7v7", "tackle_11", "other"],
+    variants: ["flag_4v4", "flag_5v5", "flag_6v6", "flag_7v7", "touch_7v7", "tackle_11", "other"],
     structure: {
       fieldLengthYds: 50,
       fieldWidthYds: 25,
@@ -331,11 +331,17 @@ export const LEAGUE_PRESETS: Record<LeaguePreset, LeaguePresetDefinition> = {
  *  Picks the most common league for that variant. */
 export function defaultLeaguePresetForVariant(variant: SportVariant): LeaguePreset {
   switch (variant) {
+    case "flag_4v4":
+      // 4v4 has no national-sanctioning preset (i9/Upward/YMCA each
+      // configure independently). Custom is the safe default — coach
+      // tweaks per their league.
+      return "custom";
     case "flag_5v5":
       return "nfl_flag_5v5";
     case "flag_6v6":
       return "usftl_6v6";
     case "flag_7v7":
+    case "touch_7v7":
       return "ifaf_7v7";
     case "tackle_11":
       return "tackle_hs";

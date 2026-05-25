@@ -120,7 +120,13 @@ export function detectConcept(spec: PlaySpec): ConceptMatchResult | null {
  * returns-to-origin ballPath, period. Only the route-pattern check
  * relaxes.
  */
-const LENIENT_PATTERN_VARIANTS = new Set<string>(["flag_6v6"]);
+// Variants where the catalog produces legitimate ADAPTATIONS that don't
+// match the strict pattern (e.g. 1-drag Mesh, Corner-only Snag, 3 Verts
+// instead of 4). Route-slot violations relax; structural requirements
+// (carry/ballPath/rpo) stay strict.
+//   - flag_6v6 → 6 eligibles can't field every concept's full slot set
+//   - flag_4v4 → 3 eligibles same problem one tier deeper
+const LENIENT_PATTERN_VARIANTS = new Set<string>(["flag_6v6", "flag_4v4"]);
 
 function matchConcept(spec: PlaySpec, concept: ConceptEntry): ConceptMatchResult {
   // Build all spec assignments that have a route family.

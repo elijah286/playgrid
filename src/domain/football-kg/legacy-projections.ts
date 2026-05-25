@@ -129,7 +129,7 @@ export function projectConceptsToLegacy(): LegacyConceptEntry[] {
 export type LegacyDefensiveAlignment = {
   front: string;
   coverage: string;
-  variant: "tackle_11" | "flag_7v7" | "flag_6v6" | "flag_5v5";
+  variant: "tackle_11" | "flag_7v7" | "touch_7v7" | "flag_6v6" | "flag_5v5" | "flag_4v4";
   description: string;
   manCoverage?: boolean;
   players: Array<{
@@ -185,7 +185,7 @@ export function projectSchemesToLegacy(): LegacyDefensiveAlignment[] {
  *  lookup; the KG uses (variant, schemeId, conceptId) for cross-refs.
  *  This projection resolves the KG ids back to legacy strings. */
 export type LegacyReactorPattern = {
-  variant: "tackle_11" | "flag_7v7" | "flag_6v6" | "flag_5v5";
+  variant: "tackle_11" | "flag_7v7" | "touch_7v7" | "flag_6v6" | "flag_5v5" | "flag_4v4";
   coverage: string;
   concept: string;
   description: string;

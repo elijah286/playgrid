@@ -205,11 +205,23 @@ export function resolveRouteStroke(route: Route, players: Player[]): string {
  */
 export function sportProfileForVariant(variant: SportVariant): SportProfile {
   switch (variant) {
+    case "flag_4v4":
+      // 4v4 youth rec format. Field 25 yds wide (smaller than 5v5's 25 to
+      // reflect the tight-space character; some leagues use 30, but 25 is
+      // the most common rec default). Roster = QB + 3 eligibles (no
+      // center) is the canonical convention; see KB migration
+      // 20260525150000 for the cross-league survey.
+      return { variant, offensePlayerCount: 4,  defensePlayerCount: 4,  fieldWidthYds: 25, fieldLengthYds: 25, motionMustNotAdvanceTowardGoal: true };
     case "flag_5v5":
       return { variant, offensePlayerCount: 5,  defensePlayerCount: 5,  fieldWidthYds: 25, fieldLengthYds: 25, motionMustNotAdvanceTowardGoal: true };
     case "flag_6v6":
       return { variant, offensePlayerCount: 6,  defensePlayerCount: 6,  fieldWidthYds: 30, fieldLengthYds: 25, motionMustNotAdvanceTowardGoal: true };
     case "flag_7v7":
+      return { variant, offensePlayerCount: 7,  defensePlayerCount: 7,  fieldWidthYds: 30, fieldLengthYds: 25, motionMustNotAdvanceTowardGoal: true };
+    case "touch_7v7":
+      // Touch 7v7 = flag_7v7 composition (same roster, field, concepts).
+      // Difference is RULES (two-hand-touch instead of flag-pull) — that
+      // lives in KB, not in composition geometry.
       return { variant, offensePlayerCount: 7,  defensePlayerCount: 7,  fieldWidthYds: 30, fieldLengthYds: 25, motionMustNotAdvanceTowardGoal: true };
     case "other":
       return { variant, offensePlayerCount: 6,  defensePlayerCount: 6,  fieldWidthYds: 40, fieldLengthYds: 25, motionMustNotAdvanceTowardGoal: false };
@@ -229,9 +241,11 @@ export function defensePlayerCountForVariant(
 
 /** Human-readable label for each sport variant, for use in UI. */
 export const SPORT_VARIANT_LABELS: Record<SportVariant, string> = {
+  flag_4v4: "4v4 Flag",
   flag_5v5: "5v5 Flag",
   flag_6v6: "6v6 Flag",
   flag_7v7: "7v7",
+  touch_7v7: "7v7 Touch",
   other: "Other",
   tackle_11: "11v11 Tackle",
 };
@@ -344,6 +358,18 @@ export function generateOtherVariantPlayers(count: number): Player[] {
  */
 export function defaultPlayersForVariant(variant: SportVariant, playerCount?: number): Player[] {
   switch (variant) {
+    case "flag_4v4":
+      // Flag 4v4: QB + 3 eligibles (no separate center). The ball is
+      // either snapped from a center or picked up off the ground depending
+      // on league — geometry-wise the QB starts in shotgun. Three
+      // eligibles spread L / M / R (directional labels are the dominant
+      // convention in 4v4 per KB seed `conventions_numeric_vs_letter`).
+      return [
+        mkPlayer("p_qb", "QB", "Q", 0.50, 0.20),  // shotgun QB, 5 yds back
+        mkPlayer("p_x",  "WR", "X", 0.15, 0.38),  // left receiver, on line
+        mkPlayer("p_y",  "WR", "Y", 0.50, 0.38),  // middle receiver, on line (also serves as snapper in C-variant leagues)
+        mkPlayer("p_z",  "WR", "Z", 0.85, 0.38),  // right receiver, on line
+      ];
     case "flag_5v5":
       // In flag 5v5 the center is an eligible receiver — only 5 offensive
       // players, nobody is purely a blocker.
@@ -368,6 +394,8 @@ export function defaultPlayersForVariant(variant: SportVariant, playerCount?: nu
         mkPlayer("p_b",  "RB", "B", 0.60, 0.22), // RB beside QB on strong side
       ];
     case "flag_7v7":
+    case "touch_7v7":
+      // Touch 7v7 uses the same default roster as flag 7v7.
       return defaultFlagSevenPlayers();
     case "other":
       return generateOtherVariantPlayers(playerCount ?? 6);
@@ -641,6 +669,48 @@ export type DefenseTemplate = {
 
 export function defenseTemplatesForVariant(variant: SportVariant): DefenseTemplate[] {
   switch (variant) {
+    case "flag_4v4":
+      // 4v4 defense: 4 defenders covering 3 eligibles + 1 free help. Most
+      // common shells are Man-Free (3 man + 1 robber), Cover 2 (2 short +
+      // 2 deep), and Press (3 press + 1 free safety).
+      return [
+        {
+          key: "flag4_man_free",
+          displayName: "Man-Free",
+          description: "Three defenders in man, one free safety / robber over the middle",
+          variant,
+          players: [
+            mkDefender("d_cb1", "CB", "C", 0.18, 0.50),
+            mkDefender("d_cb2", "CB", "C", 0.50, 0.50),
+            mkDefender("d_cb3", "CB", "C", 0.82, 0.50),
+            mkDefender("d_fs",  "S",  "F", 0.50, 0.70),
+          ],
+        },
+        {
+          key: "flag4_cover2",
+          displayName: "Cover 2",
+          description: "Two short defenders, two deep halves",
+          variant,
+          players: [
+            mkDefender("d_cb1", "CB", "C", 0.25, 0.50),
+            mkDefender("d_cb2", "CB", "C", 0.75, 0.50),
+            mkDefender("d_fs",  "S",  "F", 0.25, 0.70),
+            mkDefender("d_ss",  "S",  "S", 0.75, 0.70),
+          ],
+        },
+        {
+          key: "flag4_press",
+          displayName: "Press",
+          description: "Three defenders press 1 yd off, one free safety deep",
+          variant,
+          players: [
+            mkDefender("d_cb1", "CB", "C", 0.18, 0.44),
+            mkDefender("d_cb2", "CB", "C", 0.50, 0.44),
+            mkDefender("d_cb3", "CB", "C", 0.82, 0.44),
+            mkDefender("d_fs",  "S",  "F", 0.50, 0.70),
+          ],
+        },
+      ];
     case "flag_5v5":
       // Normalized y: LOS = 0.4, 1 yd ≈ 0.04. 4 yds off = 0.56, 7 yds deep = 0.68, 1 yd off = 0.44.
       // Labels: outside = CB, middle = LB, others = S.
@@ -733,6 +803,8 @@ export function defenseTemplatesForVariant(variant: SportVariant): DefenseTempla
         },
       ];
     case "flag_7v7":
+    case "touch_7v7":
+      // Touch 7v7 shares the same defensive templates as flag 7v7.
       return [
         {
           key: "flag7_base",

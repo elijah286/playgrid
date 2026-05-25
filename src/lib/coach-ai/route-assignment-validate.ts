@@ -54,10 +54,18 @@ const LATERAL_COMMIT_MIN_YDS = 1.5;
  *  across both surfaces. */
 const QB_IDS = new Set(["Q", "QB"]);
 
-/** Variants where the QB never runs a route — flag football. In tackle,
- *  QB sneak / scramble / draw are legal carry actions and should not be
- *  blocked by this validator. */
-const FLAG_VARIANTS = new Set(["flag_5v5", "flag_7v7"]);
+/** Variants where the QB never runs a route — flag football + touch.
+ *  In tackle, QB sneak / scramble / draw are legal carry actions and
+ *  should not be blocked by this validator. Touch_7v7 follows flag's
+ *  forward-pass-only rule even though the contact mechanic (two-hand-
+ *  touch vs flag-pull) differs. */
+const FLAG_VARIANTS = new Set([
+  "flag_4v4",
+  "flag_5v5",
+  "flag_6v6",
+  "flag_7v7",
+  "touch_7v7",
+]);
 
 /**
  * Optional context for validation. Both fields are opt-in: legacy
