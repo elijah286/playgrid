@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { fetchAllRows } from "@/lib/supabase/paginate";
 import { getAnalyticsExcludedUserIds } from "@/lib/site/analytics-exclusions-config";
 
 export type GeoCityPoint = {
@@ -97,25 +98,21 @@ export async function getGeoSummaryAction(
   const windowStart = new Date(now - days * 24 * 60 * 60 * 1000);
 
   try {
-    const { data: adminProfiles, error: adminsErr } = await admin
-      .from("profiles")
-      .select("id")
-      .eq("role", "admin")
-      .limit(1000);
-    if (adminsErr) throw new Error(adminsErr.message);
-    const adminIds = new Set<string>((adminProfiles ?? []).map((p) => p.id as string));
+    const adminProfiles = await fetchAllRows<{ id: string }>(() =>
+      admin.from("profiles").select("id").eq("role", "admin"),
+    );
+    const adminIds = new Set<string>(adminProfiles.map((p) => p.id));
     const excludedExtra = await getAnalyticsExcludedUserIds();
     for (const id of excludedExtra) adminIds.add(id);
 
-    const { data: viewsRaw, error: viewsErr } = await admin
-      .from("page_views")
-      .select("session_id, country, region, city, latitude, longitude, user_id")
-      .eq("is_bot", false)
-      .gte("created_at", windowStart.toISOString())
-      .order("created_at", { ascending: false })
-      .limit(200000);
-    if (viewsErr) throw new Error(viewsErr.message);
-    const allViews: ViewRow[] = (viewsRaw ?? []) as ViewRow[];
+    const allViews = await fetchAllRows<ViewRow>(() =>
+      admin
+        .from("page_views")
+        .select("session_id, country, region, city, latitude, longitude, user_id")
+        .eq("is_bot", false)
+        .gte("created_at", windowStart.toISOString())
+        .order("created_at", { ascending: false }),
+    );
 
     // Same admin-session exclusion logic as the Traffic tab: drop anything
     // from a session that was ever authenticated as an admin.
@@ -126,15 +123,16 @@ export async function getGeoSummaryAction(
     const views = allViews.filter((v) => !adminSessionIds.has(v.session_id));
 
     // Signups in window so we can attribute "new users" to each city.
-    const { data: newProfilesRaw } = await admin
-      .from("profiles")
-      .select("id, role, created_at")
-      .gte("created_at", windowStart.toISOString())
-      .limit(100000);
+    const newProfilesRaw = await fetchAllRows<{ id: string; role: string | null; created_at: string }>(() =>
+      admin
+        .from("profiles")
+        .select("id, role, created_at")
+        .gte("created_at", windowStart.toISOString()),
+    );
     const signupUserIds = new Set<string>(
-      (newProfilesRaw ?? [])
-        .filter((p) => (p.role as string) !== "admin" && !adminIds.has(p.id as string))
-        .map((p) => p.id as string),
+      newProfilesRaw
+        .filter((p) => p.role !== "admin" && !adminIds.has(p.id))
+        .map((p) => p.id),
     );
 
     type CityAgg = {

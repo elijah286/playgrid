@@ -1,7 +1,16 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { RefreshCw } from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { useToast } from "@/components/ui";
 import {
   getTrafficSummaryAction,
@@ -17,6 +26,16 @@ import {
 } from "@/app/actions/admin-traffic-insights";
 
 type SubTab = "overview" | "acquisition" | "engagement" | "virality";
+type WindowKey = "7d" | "30d" | "90d";
+
+// User-facing window → days to show in chart and label tiles.
+const WINDOW_USER_DAYS: Record<WindowKey, number> = { "7d": 7, "30d": 30, "90d": 90 };
+// Days fetched from the server (2× user window for prior-period delta math
+// in OverviewAdminClient — keep the contract).
+const WINDOW_QUERY_DAYS: Record<WindowKey, number> = { "7d": 14, "30d": 60, "90d": 180 };
+
+const VIEW_COLOR = "#1769FF";
+const SIGNUP_COLOR = "#10b981";
 
 function formatInt(n: number): string {
   return n.toLocaleString("en-US");
@@ -57,52 +76,124 @@ function StatTile({
   );
 }
 
-function MiniBarChart({ data }: { data: Array<{ day: string; views: number; signups: number }> }) {
-  const w = 800;
-  const h = 120;
-  const pad = 4;
-  const n = data.length || 1;
-  const barW = (w - pad * 2) / n;
-  const maxViews = Math.max(1, ...data.map((d) => d.views));
-  const maxSignups = Math.max(1, ...data.map((d) => d.signups));
+function formatDayShort(iso: string): string {
+  // "2026-05-21" → "May 21"
+  const d = new Date(`${iso}T00:00:00Z`);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+function formatDayLong(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  return d.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function ChartTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload: { day: string; views: number; signups: number } }>;
+}) {
+  if (!active || !payload?.length) return null;
+  const row = payload[0].payload;
+  return (
+    <div className="rounded-lg border border-border bg-surface-raised px-3 py-2 text-xs shadow-lg">
+      <p className="font-semibold text-foreground">{formatDayLong(row.day)}</p>
+      <div className="mt-1.5 space-y-0.5">
+        <div className="flex items-center gap-2">
+          <span className="inline-block size-2 rounded-sm" style={{ backgroundColor: VIEW_COLOR }} />
+          <span className="text-muted">Views</span>
+          <span className="ml-auto tabular-nums text-foreground">{formatInt(row.views)}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span
+            className="inline-block size-2 rounded-sm"
+            style={{ backgroundColor: SIGNUP_COLOR }}
+          />
+          <span className="text-muted">Signups</span>
+          <span className="ml-auto tabular-nums text-foreground">{formatInt(row.signups)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TrafficChart({
+  data,
+  userDays,
+}: {
+  data: Array<{ day: string; views: number; signups: number }>;
+  userDays: number;
+}) {
+  // Slice to the user-visible window (server returns 2× for delta math).
+  const sorted = useMemo(
+    () => [...data].sort((a, b) => (a.day < b.day ? -1 : 1)).slice(-userDays),
+    [data, userDays],
+  );
+  // Show every Nth tick on the x-axis so long windows stay readable.
+  const tickInterval = userDays <= 14 ? 0 : userDays <= 35 ? 3 : 9;
 
   return (
-    <svg
-      viewBox={`0 0 ${w} ${h}`}
-      preserveAspectRatio="none"
-      className="w-full"
-      style={{ height: 120 }}
-      role="img"
-      aria-label="Views and signups by day"
-    >
-      {data.map((d, i) => {
-        const x = pad + i * barW;
-        const vH = (d.views / maxViews) * (h - 20);
-        const sH = (d.signups / maxSignups) * (h - 20);
-        const tip = `${d.day} — ${formatInt(d.views)} view${d.views === 1 ? "" : "s"}, ${formatInt(d.signups)} signup${d.signups === 1 ? "" : "s"}`;
-        return (
-          <g key={d.day}>
-            <rect
-              x={x + 1}
-              y={h - vH}
-              width={Math.max(1, barW - 2)}
-              height={vH}
-              className="fill-primary/70"
-            />
-            <rect
-              x={x + barW * 0.25}
-              y={h - sH}
-              width={Math.max(1, barW * 0.5)}
-              height={sH}
-              className="fill-emerald-400/90"
-            />
-            <rect x={x} y={0} width={barW} height={h} className="fill-transparent">
-              <title>{tip}</title>
-            </rect>
-          </g>
-        );
-      })}
-    </svg>
+    <div className="h-72 w-full">
+      <ResponsiveContainer>
+        <AreaChart data={sorted} margin={{ top: 8, right: 16, left: -10, bottom: 0 }}>
+          <defs>
+            <linearGradient id="viewsGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={VIEW_COLOR} stopOpacity={0.35} />
+              <stop offset="100%" stopColor={VIEW_COLOR} stopOpacity={0.02} />
+            </linearGradient>
+            <linearGradient id="signupsGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={SIGNUP_COLOR} stopOpacity={0.35} />
+              <stop offset="100%" stopColor={SIGNUP_COLOR} stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+          <XAxis
+            dataKey="day"
+            tickFormatter={formatDayShort}
+            interval={tickInterval}
+            tick={{ fontSize: 10, fill: "var(--color-muted)" }}
+            stroke="var(--color-border)"
+            tickLine={false}
+            axisLine={false}
+            dy={6}
+          />
+          <YAxis
+            tick={{ fontSize: 10, fill: "var(--color-muted)" }}
+            stroke="var(--color-border)"
+            tickLine={false}
+            axisLine={false}
+            allowDecimals={false}
+            width={48}
+          />
+          <Tooltip
+            content={<ChartTooltip />}
+            cursor={{ stroke: "var(--color-border)", strokeWidth: 1 }}
+          />
+          <Area
+            type="monotone"
+            dataKey="views"
+            name="Views"
+            stroke={VIEW_COLOR}
+            strokeWidth={2}
+            fill="url(#viewsGradient)"
+          />
+          <Area
+            type="monotone"
+            dataKey="signups"
+            name="Signups"
+            stroke={SIGNUP_COLOR}
+            strokeWidth={2}
+            fill="url(#signupsGradient)"
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
   );
 }
 
@@ -235,14 +326,17 @@ function SubTabs({
 export function TrafficAdminClient({
   initialSummary,
   initialError,
+  initialWindow = "30d",
 }: {
   initialSummary: TrafficSummary;
   initialError: string | null;
+  initialWindow?: WindowKey;
 }) {
   const { toast } = useToast();
   const [summary, setSummary] = useState<TrafficSummary>(initialSummary);
   const [err, setErr] = useState<string | null>(initialError);
-  const [windowDays, setWindowDays] = useState<number>(initialSummary.windowDays || 30);
+  const [windowKey, setWindowKey] = useState<WindowKey>(initialWindow);
+  const windowDays = WINDOW_USER_DAYS[windowKey];
   const [pending, startTransition] = useTransition();
   const [tab, setTab] = useState<SubTab>("overview");
   const [engagement, setEngagement] = useState<EngagementSummary | null>(null);
@@ -250,9 +344,9 @@ export function TrafficAdminClient({
   const [virality, setVirality] = useState<ViralitySummary | null>(null);
   const [viralityLoading, setViralityLoading] = useState(false);
 
-  function fetchEngagement(nextWindow: number) {
+  function fetchEngagement(nextKey: WindowKey) {
     setEngagementLoading(true);
-    getEngagementSummaryAction(nextWindow)
+    getEngagementSummaryAction(WINDOW_QUERY_DAYS[nextKey])
       .then((r) => {
         if (r.ok) setEngagement(r.summary);
         else toast(r.error, "error");
@@ -260,9 +354,9 @@ export function TrafficAdminClient({
       .finally(() => setEngagementLoading(false));
   }
 
-  function fetchVirality(nextWindow: number) {
+  function fetchVirality(nextKey: WindowKey) {
     setViralityLoading(true);
-    getViralitySummaryAction(nextWindow)
+    getViralitySummaryAction(WINDOW_QUERY_DAYS[nextKey])
       .then((r) => {
         if (r.ok) setVirality(r.summary);
         else toast(r.error, "error");
@@ -276,9 +370,9 @@ export function TrafficAdminClient({
   // instead of waiting for them to switch tabs and back. Without this,
   // the Engagement panel would just hang on "Loading…" forever after a
   // refresh because selectTab is the only thing that triggers a fetch.
-  function reload(nextWindow: number) {
+  function reload(nextKey: WindowKey) {
     startTransition(async () => {
-      const res = await getTrafficSummaryAction(nextWindow);
+      const res = await getTrafficSummaryAction(WINDOW_QUERY_DAYS[nextKey]);
       if (!res.ok) {
         setErr(res.error);
         toast(res.error, "error");
@@ -288,24 +382,24 @@ export function TrafficAdminClient({
       setSummary(res.summary);
       setEngagement(null);
       setVirality(null);
-      if (tab === "engagement") fetchEngagement(nextWindow);
-      else if (tab === "virality") fetchVirality(nextWindow);
+      if (tab === "engagement") fetchEngagement(nextKey);
+      else if (tab === "virality") fetchVirality(nextKey);
     });
   }
 
   function selectTab(next: SubTab) {
     setTab(next);
     if (next === "engagement" && !engagement && !engagementLoading) {
-      fetchEngagement(windowDays);
+      fetchEngagement(windowKey);
     }
     if (next === "virality" && !virality && !viralityLoading) {
-      fetchVirality(windowDays);
+      fetchVirality(windowKey);
     }
   }
 
   function onWindowChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const next = Number(e.target.value) || 30;
-    setWindowDays(next);
+    const next = e.target.value as WindowKey;
+    setWindowKey(next);
     reload(next);
   }
 
@@ -323,18 +417,18 @@ export function TrafficAdminClient({
         </div>
         <div className="flex items-center gap-2">
           <select
-            value={windowDays}
+            value={windowKey}
             onChange={onWindowChange}
             disabled={pending}
             className="rounded-lg border border-border bg-surface-raised px-2 py-1 text-xs text-foreground"
           >
-            <option value={7}>Last 7 days</option>
-            <option value={30}>Last 30 days</option>
-            <option value={90}>Last 90 days</option>
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+            <option value="90d">Last 90 days</option>
           </select>
           <button
             type="button"
-            onClick={() => reload(windowDays)}
+            onClick={() => reload(windowKey)}
             disabled={pending}
             className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface-raised px-2 py-1 text-xs text-foreground hover:bg-surface disabled:opacity-50"
           >
@@ -398,17 +492,23 @@ export function TrafficAdminClient({
               <p className="text-sm font-semibold text-foreground">Views &amp; signups per day</p>
               <div className="flex items-center gap-3 text-xs text-muted">
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="inline-block size-2 rounded-sm bg-primary/70" />
+                  <span
+                    className="inline-block size-2 rounded-sm"
+                    style={{ backgroundColor: VIEW_COLOR }}
+                  />
                   Views
                 </span>
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="inline-block size-2 rounded-sm bg-emerald-400/90" />
+                  <span
+                    className="inline-block size-2 rounded-sm"
+                    style={{ backgroundColor: SIGNUP_COLOR }}
+                  />
                   Signups
                 </span>
               </div>
             </div>
             <div className="mt-3">
-              <MiniBarChart data={byDay} />
+              <TrafficChart data={byDay} userDays={windowDays} />
             </div>
           </div>
         </>

@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { fetchAllRows } from "@/lib/supabase/paginate";
 
 export type FunnelStep = {
   key: string;
@@ -311,22 +312,14 @@ export async function getEngagementSummaryAction(
   const priorWindowStart = new Date(priorWindowStartMs).toISOString();
 
   try {
-    const { data: adminProfiles } = await admin
-      .from("profiles")
-      .select("id")
-      .eq("role", "admin")
-      .limit(1000);
-    const adminIds = new Set<string>((adminProfiles ?? []).map((p) => p.id as string));
+    const adminProfilesRows = await fetchAllRows<{ id: string }>(() =>
+      admin.from("profiles").select("id").eq("role", "admin"),
+    );
+    const adminIds = new Set<string>(adminProfilesRows.map((p) => p.id));
 
     // Page views (for funnel + exits + dwell + mobile cohort).
     // Pull 2× window so the prior period is in scope for comparison.
-    const { data: pvRaw } = await admin
-      .from("page_views")
-      .select("session_id, user_id, path, device, dwell_ms, is_exit, created_at")
-      .eq("is_bot", false)
-      .gte("created_at", priorWindowStart)
-      .limit(200000);
-    const pvAll = (pvRaw ?? []) as Array<{
+    type PvRow = {
       session_id: string;
       user_id: string | null;
       path: string;
@@ -334,7 +327,14 @@ export async function getEngagementSummaryAction(
       dwell_ms: number | null;
       is_exit: boolean | null;
       created_at: string;
-    }>;
+    };
+    const pvAll = await fetchAllRows<PvRow>(() =>
+      admin
+        .from("page_views")
+        .select("session_id, user_id, path, device, dwell_ms, is_exit, created_at")
+        .eq("is_bot", false)
+        .gte("created_at", priorWindowStart),
+    );
 
     const adminSessionIds = new Set<string>();
     for (const v of pvAll) {
@@ -357,42 +357,31 @@ export async function getEngagementSummaryAction(
     );
 
     // New signups in window for funnel.
-    const { data: profilesRaw } = await admin
-      .from("profiles")
-      .select("id, created_at, role")
-      .gte("created_at", windowStart)
-      .limit(100000);
-    const newSignups = (profilesRaw ?? []).filter(
-      (p) => (p.role as string) !== "admin",
+    const profilesRaw = await fetchAllRows<{ id: string; created_at: string; role: string | null }>(() =>
+      admin.from("profiles").select("id, created_at, role").gte("created_at", windowStart),
     );
-    const newSignupIds = new Set(newSignups.map((p) => p.id as string));
+    const newSignups = profilesRaw.filter((p) => p.role !== "admin");
+    const newSignupIds = new Set(newSignups.map((p) => p.id));
 
     // First-play signal: any play_version saved in window whose creator
     // is a new signup. plays itself doesn't carry created_by — version
     // rows are the authoritative authorship record (one is written for
     // every save, including the initial create).
-    const { data: playVersionsRaw, error: playVersionsErr } = await admin
-      .from("play_versions")
-      .select("created_by")
-      .gte("created_at", windowStart)
-      .limit(200000);
-    if (playVersionsErr) throw new Error(playVersionsErr.message);
+    const playVersionsRaw = await fetchAllRows<{ created_by: string | null }>(() =>
+      admin.from("play_versions").select("created_by").gte("created_at", windowStart),
+    );
     const firstPlayUsers = new Set<string>();
-    for (const v of playVersionsRaw ?? []) {
-      const uid = v.created_by as string | null;
-      if (uid && newSignupIds.has(uid)) firstPlayUsers.add(uid);
+    for (const v of playVersionsRaw) {
+      if (v.created_by && newSignupIds.has(v.created_by)) firstPlayUsers.add(v.created_by);
     }
 
     // First-share signal: any share_event in window by a new signup.
-    const { data: sharesRaw } = await admin
-      .from("share_events")
-      .select("actor_user_id")
-      .gte("created_at", windowStart)
-      .limit(100000);
+    const sharesRaw = await fetchAllRows<{ actor_user_id: string | null }>(() =>
+      admin.from("share_events").select("actor_user_id").gte("created_at", windowStart),
+    );
     const firstShareUsers = new Set<string>();
-    for (const s of sharesRaw ?? []) {
-      const uid = s.actor_user_id as string | null;
-      if (uid && newSignupIds.has(uid)) firstShareUsers.add(uid);
+    for (const s of sharesRaw) {
+      if (s.actor_user_id && newSignupIds.has(s.actor_user_id)) firstShareUsers.add(s.actor_user_id);
     }
 
     // Paid-intent signal: any /pricing view by a new signup. We session-
@@ -422,19 +411,20 @@ export async function getEngagementSummaryAction(
     // /account return-from-Stripe effect (`checkout_completed`). Same
     // session-stitching as pricing — anonymous events on a session that
     // later authenticates as a new signup still count.
-    const { data: checkoutEvRaw } = await admin
-      .from("ui_events")
-      .select("event_name, user_id, session_id")
-      .in("event_name", ["checkout_started", "checkout_completed"])
-      .gte("created_at", windowStart)
-      .limit(50000);
-    const checkoutStartedUsers = new Set<string>();
-    const checkoutCompletedUsers = new Set<string>();
-    for (const e of (checkoutEvRaw ?? []) as Array<{
+    const checkoutEvRaw = await fetchAllRows<{
       event_name: string;
       user_id: string | null;
       session_id: string;
-    }>) {
+    }>(() =>
+      admin
+        .from("ui_events")
+        .select("event_name, user_id, session_id")
+        .in("event_name", ["checkout_started", "checkout_completed"])
+        .gte("created_at", windowStart),
+    );
+    const checkoutStartedUsers = new Set<string>();
+    const checkoutCompletedUsers = new Set<string>();
+    for (const e of checkoutEvRaw) {
       const set =
         e.event_name === "checkout_started"
           ? checkoutStartedUsers
@@ -561,15 +551,18 @@ export async function getEngagementSummaryAction(
 
     // UI events. Pulled with `target` so the Coach Cal aggregator below
     // can split by surface without a second round-trip.
-    const { data: evRaw } = await admin
-      .from("ui_events")
-      .select("event_name, user_id, session_id, target")
-      .gte("created_at", windowStart)
-      .limit(100000);
-    const evRows = (evRaw ?? []).filter((e) => {
-      const uid = e.user_id as string | null;
-      return !uid || !adminIds.has(uid);
-    });
+    const evRaw = await fetchAllRows<{
+      event_name: string;
+      user_id: string | null;
+      session_id: string;
+      target: string | null;
+    }>(() =>
+      admin
+        .from("ui_events")
+        .select("event_name, user_id, session_id, target")
+        .gte("created_at", windowStart),
+    );
+    const evRows = evRaw.filter((e) => !e.user_id || !adminIds.has(e.user_id));
     const evMap = new Map<string, { count: number; users: Set<string> }>();
     for (const e of evRows) {
       const name = e.event_name as string;
@@ -692,42 +685,47 @@ export async function getViralitySummaryAction(
   const windowStart = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
   try {
-    const { data: adminProfiles } = await admin
-      .from("profiles")
-      .select("id")
-      .eq("role", "admin")
-      .limit(1000);
-    const adminIds = new Set<string>((adminProfiles ?? []).map((p) => p.id as string));
+    const adminProfilesRaw = await fetchAllRows<{ id: string }>(() =>
+      admin.from("profiles").select("id").eq("role", "admin"),
+    );
+    const adminIds = new Set<string>(adminProfilesRaw.map((p) => p.id));
 
-    const { data: shareRaw } = await admin
-      .from("share_events")
-      .select("id, actor_user_id, share_kind, channel, share_token, created_at")
-      .gte("created_at", windowStart)
-      .order("created_at", { ascending: false })
-      .limit(50000);
-    const shares = (shareRaw ?? []).filter((s) => {
-      const uid = s.actor_user_id as string | null;
-      return !uid || !adminIds.has(uid);
-    });
+    const shareRaw = await fetchAllRows<{
+      id: number;
+      actor_user_id: string | null;
+      share_kind: string;
+      channel: string | null;
+      share_token: string | null;
+      created_at: string;
+    }>(() =>
+      admin
+        .from("share_events")
+        .select("id, actor_user_id, share_kind, channel, share_token, created_at")
+        .gte("created_at", windowStart)
+        .order("created_at", { ascending: false }),
+    );
+    const shares = shareRaw.filter((s) => !s.actor_user_id || !adminIds.has(s.actor_user_id));
 
     const tokens = new Set<string>();
     for (const s of shares) {
-      const t = s.share_token as string | null;
-      if (t) tokens.add(t);
+      if (s.share_token) tokens.add(s.share_token);
     }
 
     // Inbound visits for these tokens. We pull a wider window to catch
     // visits that arrive after the share was created (typical case).
-    const { data: inboundRaw } = await admin
-      .from("page_views")
-      .select("session_id, share_token, user_id, created_at")
-      .not("share_token", "is", null)
-      .gte("created_at", windowStart)
-      .limit(100000);
-    const inbound = (inboundRaw ?? []).filter((v) => {
-      const uid = v.user_id as string | null;
-      return !uid || !adminIds.has(uid);
-    });
+    const inboundRaw = await fetchAllRows<{
+      session_id: string;
+      share_token: string | null;
+      user_id: string | null;
+      created_at: string;
+    }>(() =>
+      admin
+        .from("page_views")
+        .select("session_id, share_token, user_id, created_at")
+        .not("share_token", "is", null)
+        .gte("created_at", windowStart),
+    );
+    const inbound = inboundRaw.filter((v) => !v.user_id || !adminIds.has(v.user_id));
 
     const inboundByToken = new Map<string, { visits: number; sessions: Set<string> }>();
     const inboundSessions = new Set<string>();
@@ -743,24 +741,33 @@ export async function getViralitySummaryAction(
 
     // Signups attributable to inbound sessions: profiles whose first
     // page_view session matches an inbound session.
-    const { data: profilesRaw } = await admin
-      .from("profiles")
-      .select("id, created_at, display_name, role")
-      .gte("created_at", windowStart)
-      .limit(100000);
-    const newProfiles = (profilesRaw ?? []).filter((p) => (p.role as string) !== "admin");
-    const newProfileIds = new Set(newProfiles.map((p) => p.id as string));
+    const profilesRaw = await fetchAllRows<{
+      id: string;
+      created_at: string;
+      display_name: string | null;
+      role: string | null;
+    }>(() =>
+      admin
+        .from("profiles")
+        .select("id, created_at, display_name, role")
+        .gte("created_at", windowStart),
+    );
+    const newProfiles = profilesRaw.filter((p) => p.role !== "admin");
+    const newProfileIds = new Set(newProfiles.map((p) => p.id));
 
     // Re-pull views once just to find sessions that contain a new-signup user.
-    const { data: signupSessRaw } = await admin
-      .from("page_views")
-      .select("session_id, user_id")
-      .gte("created_at", windowStart)
-      .limit(200000);
+    const signupSessRaw = await fetchAllRows<{
+      session_id: string;
+      user_id: string | null;
+    }>(() =>
+      admin
+        .from("page_views")
+        .select("session_id, user_id")
+        .gte("created_at", windowStart),
+    );
     const signupSessions = new Set<string>();
-    for (const v of signupSessRaw ?? []) {
-      const uid = v.user_id as string | null;
-      if (uid && newProfileIds.has(uid)) signupSessions.add(v.session_id as string);
+    for (const v of signupSessRaw) {
+      if (v.user_id && newProfileIds.has(v.user_id)) signupSessions.add(v.session_id);
     }
     let inboundSignups = 0;
     for (const s of inboundSessions) if (signupSessions.has(s)) inboundSignups += 1;
@@ -909,57 +916,52 @@ export async function getAttributedSignupsByUserAction(): Promise<
   try {
     const admin = createServiceRoleClient();
 
-    const { data: adminProfiles } = await admin
-      .from("profiles")
-      .select("id")
-      .eq("role", "admin")
-      .limit(1000);
-    const adminIds = new Set<string>((adminProfiles ?? []).map((p) => p.id as string));
+    const adminProfilesRows = await fetchAllRows<{ id: string }>(() =>
+      admin.from("profiles").select("id").eq("role", "admin"),
+    );
+    const adminIds = new Set<string>(adminProfilesRows.map((p) => p.id));
 
-    const { data: profileRows } = await admin
-      .from("profiles")
-      .select("id, created_at, role")
-      .limit(200000);
-    const profileCreatedAt = new Map<string, number>();
-    for (const row of (profileRows ?? []) as Array<{
+    const profileRows = await fetchAllRows<{
       id: string;
       created_at: string | null;
       role: string | null;
-    }>) {
+    }>(() => admin.from("profiles").select("id, created_at, role"));
+    const profileCreatedAt = new Map<string, number>();
+    for (const row of profileRows) {
       if (row.role === "admin" || !row.created_at) continue;
       const ts = Date.parse(row.created_at);
       if (Number.isFinite(ts)) profileCreatedAt.set(row.id, ts);
     }
 
-    const { data: shareRows } = await admin
-      .from("share_events")
-      .select("share_token, actor_user_id, created_at")
-      .not("share_token", "is", null)
-      .not("actor_user_id", "is", null)
-      .order("created_at", { ascending: false })
-      .limit(200000);
-    // Keep the most recent owner per token (first occurrence in the desc list).
-    const tokenOwner = new Map<string, string>();
-    for (const row of (shareRows ?? []) as Array<{
+    const shareRows = await fetchAllRows<{
       share_token: string;
       actor_user_id: string;
-    }>) {
+      created_at: string | null;
+    }>(() =>
+      admin
+        .from("share_events")
+        .select("share_token, actor_user_id, created_at")
+        .not("share_token", "is", null)
+        .not("actor_user_id", "is", null)
+        .order("created_at", { ascending: false }),
+    );
+    // Keep the most recent owner per token (first occurrence in the desc list).
+    const tokenOwner = new Map<string, string>();
+    for (const row of shareRows) {
       if (!tokenOwner.has(row.share_token)) {
         tokenOwner.set(row.share_token, row.actor_user_id);
       }
     }
 
     // Sessions whose user_id resolves to a non-admin profile we've seen.
-    const { data: userViewRows } = await admin
-      .from("page_views")
-      .select("session_id, user_id")
-      .not("user_id", "is", null)
-      .limit(500000);
-    const profileBySession = new Map<string, string>();
-    for (const v of (userViewRows ?? []) as Array<{
+    const userViewRows = await fetchAllRows<{
       session_id: string;
       user_id: string;
-    }>) {
+    }>(() =>
+      admin.from("page_views").select("session_id, user_id").not("user_id", "is", null),
+    );
+    const profileBySession = new Map<string, string>();
+    for (const v of userViewRows) {
       if (!profileCreatedAt.has(v.user_id)) continue;
       if (!profileBySession.has(v.session_id)) {
         profileBySession.set(v.session_id, v.user_id);
@@ -967,19 +969,20 @@ export async function getAttributedSignupsByUserAction(): Promise<
     }
 
     // Token visits — anonymous and authed — grouped by session.
-    const { data: tokenViewRows } = await admin
-      .from("page_views")
-      .select("session_id, share_token, created_at")
-      .not("share_token", "is", null)
-      .limit(500000);
-
-    type Visit = { token: string; ts: number };
-    const visitsBySession = new Map<string, Visit[]>();
-    for (const v of (tokenViewRows ?? []) as Array<{
+    const tokenViewRows = await fetchAllRows<{
       session_id: string;
       share_token: string;
       created_at: string | null;
-    }>) {
+    }>(() =>
+      admin
+        .from("page_views")
+        .select("session_id, share_token, created_at")
+        .not("share_token", "is", null),
+    );
+
+    type Visit = { token: string; ts: number };
+    const visitsBySession = new Map<string, Visit[]>();
+    for (const v of tokenViewRows) {
       if (!profileBySession.has(v.session_id)) continue;
       const ts = v.created_at ? Date.parse(v.created_at) : NaN;
       if (!Number.isFinite(ts)) continue;
@@ -1028,21 +1031,20 @@ export async function getShareLifetimeSummaryAction(): Promise<
 
   try {
     const admin = createServiceRoleClient();
-    const { data: adminProfiles } = await admin
-      .from("profiles")
-      .select("id")
-      .eq("role", "admin")
-      .limit(1000);
-    const adminIds = new Set<string>((adminProfiles ?? []).map((p) => p.id as string));
+    const adminProfilesRows = await fetchAllRows<{ id: string }>(() =>
+      admin.from("profiles").select("id").eq("role", "admin"),
+    );
+    const adminIds = new Set<string>(adminProfilesRows.map((p) => p.id));
 
-    const { data: shareRaw } = await admin
-      .from("share_events")
-      .select("actor_user_id")
-      .not("actor_user_id", "is", null)
-      .limit(200000);
+    const shareRaw = await fetchAllRows<{ actor_user_id: string | null }>(() =>
+      admin
+        .from("share_events")
+        .select("actor_user_id")
+        .not("actor_user_id", "is", null),
+    );
     const distinct = new Set<string>();
     let total = 0;
-    for (const row of (shareRaw ?? []) as Array<{ actor_user_id: string | null }>) {
+    for (const row of shareRaw) {
       const uid = row.actor_user_id;
       if (!uid || adminIds.has(uid)) continue;
       distinct.add(uid);

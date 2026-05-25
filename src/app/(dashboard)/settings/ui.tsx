@@ -475,6 +475,7 @@ export function SettingsClient({
               <TrafficAdminClient
                 initialSummary={initialTrafficSummary}
                 initialError={trafficError}
+                initialWindow={overviewWindow === "all" ? "90d" : overviewWindow}
               />
             )}
             {analyticsSubTab === "monetization" && (

@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { fetchAllRows } from "@/lib/supabase/paginate";
 import { getAnalyticsExcludedUserIds } from "@/lib/site/analytics-exclusions-config";
 
 export type TrafficSummary = {
@@ -99,31 +100,28 @@ export async function getTrafficSummaryAction(
 
   try {
     // Admins are excluded from traffic stats so internal activity doesn't skew the numbers.
-    const { data: adminProfiles, error: adminsErr } = await admin
-      .from("profiles")
-      .select("id")
-      .eq("role", "admin")
-      .limit(1000);
-    if (adminsErr) throw new Error(adminsErr.message);
-    const adminIds = new Set<string>((adminProfiles ?? []).map((p) => p.id as string));
+    const adminProfiles = await fetchAllRows<{ id: string }>(() =>
+      admin.from("profiles").select("id").eq("role", "admin"),
+    );
+    const adminIds = new Set<string>(adminProfiles.map((p) => p.id));
 
     // Plus any user IDs the admin has explicitly excluded (own/family/test
     // accounts configured under Analytics → Settings).
     const excludedExtra = await getAnalyticsExcludedUserIds();
     for (const id of excludedExtra) adminIds.add(id);
 
-    // Pull all non-bot views in window. Volume should be manageable for an admin tool.
-    const { data: viewsRaw, error: viewsErr } = await admin
-      .from("page_views")
-      .select(
-        "session_id, path, referrer, country, device, utm_source, user_id, created_at",
-      )
-      .eq("is_bot", false)
-      .gte("created_at", windowStart.toISOString())
-      .order("created_at", { ascending: false })
-      .limit(100000);
-    if (viewsErr) throw new Error(viewsErr.message);
-    const allViews: ViewRow[] = (viewsRaw ?? []) as ViewRow[];
+    // Pull all non-bot views in window. Paginated because PostgREST caps
+    // each response at 1000 rows regardless of `.limit()`.
+    const allViews = await fetchAllRows<ViewRow>(() =>
+      admin
+        .from("page_views")
+        .select(
+          "session_id, path, referrer, country, device, utm_source, user_id, created_at",
+        )
+        .eq("is_bot", false)
+        .gte("created_at", windowStart.toISOString())
+        .order("created_at", { ascending: false }),
+    );
 
     // Exclude any session that was ever authenticated as an admin — catches
     // pre-login anonymous views from that same browser session too.
@@ -134,14 +132,14 @@ export async function getTrafficSummaryAction(
     const views = allViews.filter((v) => !adminSessionIds.has(v.session_id));
 
     // Signups in window (excluding admins).
-    const { data: newProfilesRaw, error: signupsErr } = await admin
-      .from("profiles")
-      .select("id, role, created_at")
-      .gte("created_at", windowStart.toISOString())
-      .limit(100000);
-    if (signupsErr) throw new Error(signupsErr.message);
-    const newProfiles = (newProfilesRaw ?? []).filter(
-      (p) => (p.role as string) !== "admin" && !adminIds.has(p.id as string),
+    const newProfilesRaw = await fetchAllRows<{ id: string; role: string | null; created_at: string }>(() =>
+      admin
+        .from("profiles")
+        .select("id, role, created_at")
+        .gte("created_at", windowStart.toISOString()),
+    );
+    const newProfiles = newProfilesRaw.filter(
+      (p) => p.role !== "admin" && !adminIds.has(p.id),
     );
 
     const signupUserIds = new Set<string>(newProfiles.map((p) => p.id as string));
@@ -157,26 +155,24 @@ export async function getTrafficSummaryAction(
     );
 
     // Active cohorts via user_activity_days (excluding admins).
-    const { data: active7 } = await admin
-      .from("user_activity_days")
-      .select("user_id")
-      .gte("day", sevenStart.toISOString().slice(0, 10))
-      .limit(100000);
-    const { data: active30 } = await admin
-      .from("user_activity_days")
-      .select("user_id")
-      .gte("day", thirtyStart.toISOString().slice(0, 10))
-      .limit(100000);
+    const active7 = await fetchAllRows<{ user_id: string }>(() =>
+      admin
+        .from("user_activity_days")
+        .select("user_id")
+        .gte("day", sevenStart.toISOString().slice(0, 10)),
+    );
+    const active30 = await fetchAllRows<{ user_id: string }>(() =>
+      admin
+        .from("user_activity_days")
+        .select("user_id")
+        .gte("day", thirtyStart.toISOString().slice(0, 10)),
+    );
 
     const activeLast7 = new Set(
-      (active7 ?? [])
-        .map((r) => r.user_id as string)
-        .filter((id) => !adminIds.has(id)),
+      active7.map((r) => r.user_id).filter((id) => !adminIds.has(id)),
     ).size;
     const activeLast30 = new Set(
-      (active30 ?? [])
-        .map((r) => r.user_id as string)
-        .filter((id) => !adminIds.has(id)),
+      active30.map((r) => r.user_id).filter((id) => !adminIds.has(id)),
     ).size;
 
     // Aggregate.
