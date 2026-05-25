@@ -8,9 +8,13 @@
 //
 // Strategy:
 //   - Cache-first for static build assets (/_next/static, /brand, fonts, icons)
-//   - Stale-while-revalidate for /home, /offline, and per-playbook offline
-//     navigations + their RSC payloads (the routes a coach must reach
-//     without signal)
+//   - Network-first with cache fallback for /home, /offline, and per-playbook
+//     offline navigations + their RSC payloads. Online users always get a
+//     fresh page (so the CURRENT user's playbooks render); cache only fires
+//     when the network is unreachable. Stale-while-revalidate was wrong here
+//     because /home is user-specific and the cache key has no user id —
+//     after a sign-out/sign-in, the previous user's HTML would flash before
+//     the background refresh replaced it.
 //   - Network-first for everything else (auth, API routes, server actions)
 //   - On any failed top-level navigation, fall back to /home if cached,
 //     then /offline; ERR_INTERNET_DISCONNECTED only as last resort.
@@ -18,7 +22,7 @@
 // Bump SHELL_VERSION whenever the cache contract changes (e.g. precache list).
 // On activate, old versioned caches are purged.
 
-const SHELL_VERSION = "xog-shell-v3";
+const SHELL_VERSION = "xog-shell-v4";
 const STATIC_CACHE = `${SHELL_VERSION}-static`;
 const NAV_CACHE = `${SHELL_VERSION}-nav`;
 
@@ -103,30 +107,6 @@ function isShellRsc(url, req) {
   return hasRscQuery || accept.includes("text/x-component");
 }
 
-async function staleWhileRevalidate(cacheName, request) {
-  const cache = await caches.open(cacheName);
-  const cached = await cache.match(request);
-  const networkPromise = fetch(request)
-    .then((res) => {
-      if (res && res.ok) cache.put(request, res.clone()).catch(() => {});
-      return res;
-    })
-    .catch(() => null);
-  if (cached) return cached;
-  const fresh = await networkPromise;
-  if (fresh) return fresh;
-  // Last resort: redirect to the precached /offline shell so the WebView
-  // never lands on its generic "couldn't load" page. /offline is in
-  // PRECACHE_URLS, so it's almost always cached after the first install;
-  // we only fall through to Response.error if the install itself was offline.
-  const url = new URL(request.url);
-  if (url.pathname !== "/offline") {
-    const offlineFallback = await cache.match("/offline");
-    if (offlineFallback) return Response.redirect("/offline", 302);
-  }
-  return Response.error();
-}
-
 async function cacheFirst(cacheName, request) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request);
@@ -167,15 +147,34 @@ function fetchWithTimeout(request, timeoutMs) {
   });
 }
 
+async function networkFirstWithCacheFallback(cacheName, request) {
+  const cache = await caches.open(cacheName);
+  try {
+    const res = await fetchWithTimeout(request, NAV_FETCH_TIMEOUT_MS);
+    if (res && res.ok) cache.put(request, res.clone()).catch(() => {});
+    return res;
+  } catch {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    const url = new URL(request.url);
+    if (url.pathname !== "/offline") {
+      const offlineFallback = await cache.match("/offline");
+      if (offlineFallback) return Response.redirect("/offline", 302);
+    }
+    return Response.error();
+  }
+}
+
 async function handleNavigation(request) {
   const url = new URL(request.url);
   const cache = await caches.open(NAV_CACHE);
 
-  // Shell routes (/home, /offline/*) — keep the cached copy warm. Coaches
-  // hitting these offline see the last-known shell with downloaded
-  // playbooks usable and non-downloaded ones visibly disabled.
+  // Shell routes (/home, /offline/*) — try network first so the current
+  // user's playbooks always win. Fall back to the cached copy only when
+  // offline so coaches still land on the last-known shell with downloaded
+  // tiles tappable.
   if (isShellNav(url)) {
-    return staleWhileRevalidate(NAV_CACHE, request);
+    return networkFirstWithCacheFallback(NAV_CACHE, request);
   }
 
   // Everything else: network-first. If it fails (or stalls past the
@@ -222,7 +221,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (isShellRsc(url, request)) {
-    event.respondWith(staleWhileRevalidate(NAV_CACHE, request));
+    event.respondWith(networkFirstWithCacheFallback(NAV_CACHE, request));
     return;
   }
 
