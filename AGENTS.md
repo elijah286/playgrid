@@ -270,3 +270,74 @@ The chat-time validator (`agent.ts`) runs `validateFenceProvenance` against ever
 - `sampleBody="..."` — first 140 chars of the failing fence body, whitespace collapsed. Enough to identify what Cal tried to author.
 
 Grep Cloud Run logs for `[coach-ai:provenance]` to measure fire rate. A consistent fire rate > a few percent of turns means Cal's training bias is dominating the prompt's spec-emission directive — that's a prompt-side fix (Phase 2c follow-up), not a gate-side one.
+
+## Learning Center architecture: hard rules
+
+The Learning Center (`/learn`) is the public face of the coaching KB. It has two tabs: **Using XO Gridmaker** (product education) and **Football Library** (coaching concepts — plays, formations, routes, defenses, drills, practice planning). Both tabs are ungated; anonymous users see the same content as authed users, with different CTAs.
+
+The library is *not* a separate content silo — it's a projection of the same catalog that powers Cal and the play designer. The rules below exist so that the library, Cal, and the in-app editor stay in lockstep instead of drifting into three diverging surfaces.
+
+### Rule 13 — Cal cites the Learning Center for catalog concepts
+
+When Cal answers a question that involves a catalog concept (named play, formation, route, defensive scheme, drill, practice template), the response MUST include at least one link to the corresponding Learning Center page. This turns Cal's chat output into discoverable reference material and gives coaches a "deep-dive" off-ramp without forcing another follow-up question.
+
+Implementation contract:
+
+- A `learn_link({ concept, variant? })` resolver (`src/lib/learn/links.ts`, new) returns the canonical `/learn/library/...` URL for a given concept, or `null` if the page doesn't exist yet.
+- The chat-time validator (`agent.ts`) gates: if Cal's response mentions a catalog concept (detected with the same catalog vocabulary the provenance gate uses) and contains no library link, retry with a critique pointing at `learn_link()`. On second failure, ship the response as-is (don't strip — a missing link is a UX miss, not a correctness bug like a hand-authored play fence).
+- All URLs Cal emits via `learn_link()` are validated at build time against the generated route manifest (`scripts/validate-learn-links.ts`, new). Cal cannot link to a page that doesn't exist.
+
+**Kill switch.** `COACH_CAL_LEARN_LINK_GATE=off` disables the gate without a deploy. Default: enforcement ON *only after* the library has v1 coverage for the catalog (see "Phase 0 → enforcement" below).
+
+Anti-patterns:
+- Cal explains Mesh in chat without linking to `/learn/library/plays/mesh`
+- Cal manually constructs a `/learn/...` URL instead of calling `learn_link()`
+- A new catalog entry added without a corresponding library page (build-time check fails per Rule 14)
+
+### Rule 14 — Library renders plays via the canonical play editor
+
+Any Learning Center page that displays a play, formation, route, defensive alignment, or drill MUST use the canonical `<PlayEditor>` component in `mode="library"`, fed by the same `PlaySpec` from the catalog that the in-app editor uses. The library and the app share one render path; there is no parallel "simplified" or "static" play renderer.
+
+Implementation contract:
+
+- `<PlayEditor mode="library">` renders read-only (no edits), supports hover/tap-to-inspect routes, surfaces coaching cues from `notes-from-spec.ts`, and works for unauthenticated users.
+- Authed users see "Add to my playbook" — which calls `compose_play({ concept, ... })` per Rule 8 (constructive composition). No parallel composition path.
+- Anonymous users see "Try in builder" — opens a sandbox builder pre-loaded with the concept, with a sign-up nudge after first edit.
+- The library never bypasses the sanitizer (Rule 10) because it uses the same render pipeline.
+- Library pages may not import SVG primitives, `<svg>` tags for play geometry, or pre-rendered PNG/screenshot images of plays. Enforcement: ESLint rule + grep check.
+
+Catalog → library coverage contract (extends Rule 3):
+
+Adding (or modifying) an entry in `routeTemplates.ts` / `defensiveAlignments.ts` / `offensiveSynthesize.ts` REQUIRES, in the same commit:
+
+- The catalog entry itself (Rule 3).
+- The coaching cue in `ROUTE_CUES` for routes (Rule 3).
+- A Learning Center page for the concept under `src/app/learn/library/[category]/[slug]/page.tsx`. The page may be auto-generated from the catalog via `scripts/build-library-pages.ts` (similar in spirit to `scripts/build-catalog-kb.ts`); hand-written pages are allowed for concepts that need more editorial depth.
+- A `learn_link()` registry entry mapping the concept slug to the URL.
+
+Anti-patterns:
+- A library page that hand-codes an SVG of mesh
+- A library page that renders the diagram as a static PNG at build time
+- A "simplified" library renderer that diverges from the in-app editor
+- "Add to my playbook" that constructs a `CoachDiagram` directly instead of calling `compose_play`
+- A new catalog concept shipped without a library page
+
+### Why these rules matter
+
+- **One render path.** Coach learns Mesh on the library page, clicks "Add to my playbook," sees the exact same diagram in the builder. No drift. Same way Rule 4 says "one write resolver" and Rule 8 says "one composition path," Rule 14 says "one render path."
+- **Cal's outputs become internal links.** Every Cal response that cites a concept points coaches at indexable library pages. That's the strongest possible internal-link signal Google can see, and it gives coaches a way to keep learning after a chat answer lands.
+- **Sanitization is uniform.** The library inherits Rule 10 for free — the same `sanitizeCoachDiagram` runs on library renders.
+- **Catalog discipline propagates.** Rule 3's "catalogs update in lockstep" extends to library pages. A new concept without a library page fails CI, same way a route without a cue fails CI today.
+
+### Phase 0 → enforcement (sequencing)
+
+Rules 13 and 14 are written as "MUST" but their mechanical gates flip on in stages:
+
+| Stage | Gate state | Trigger |
+|---|---|---|
+| Phase 0 | Both gates OFF, library nonexistent | — (today) |
+| Phase 1 | Library v1 shell + one fully-realized concept page (e.g. Mesh 5v5 flag) | — |
+| Phase 2 | Build-time link validator ON (`scripts/validate-learn-links.ts`); Cal can opt-in cite | Library covers ≥ 20 concepts across ≥ 2 variants |
+| Phase 3 | `COACH_CAL_LEARN_LINK_GATE=on` (Rule 13 enforced); catalog-coverage CI check ON (Rule 14 enforced) | Library covers ≥ 80% of catalog concepts |
+
+Flipping the Rule 13 gate before library coverage exists would cause Cal to spam retries and ship degraded responses. Flipping Rule 14's catalog-coverage check before the library shell exists would block every catalog PR. Sequencing matters.
