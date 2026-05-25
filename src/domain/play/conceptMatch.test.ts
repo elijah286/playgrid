@@ -383,6 +383,114 @@ describe("assertConcept — unknown concept", () => {
   });
 });
 
+describe("assertConcept — variant-aware lenient match for 6v6", () => {
+  // 6v6 has a 6-player offensive roster (no @S, no @Y) so the
+  // catalog skeletons can't produce the canonical N-route pattern
+  // for every concept. The 2026-05-25 lenient-match rule accepts
+  // partial 6v6 adaptations: ≥1 required slot satisfied → ok, with
+  // structural requirements still strict.
+
+  function buildSpec6v6(assignments: PlayerAssignment[]): PlaySpec {
+    return {
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "flag_6v6",
+      title: "Test 6v6",
+      playType: "offense",
+      formation: { name: "Spread Doubles" },
+      assignments,
+    };
+  }
+
+  it("accepts a 1-Drag adaptation of Mesh in 6v6 (canonical needs 2 Drags)", () => {
+    // 6v6 Mesh: catalog produces @H Drag + @X Curl + @Z Go + @B Flat.
+    // Only one Drag — canonical Mesh requires two. Lenient: ok.
+    const result = assertConcept(
+      buildSpec6v6([
+        { player: "H", action: { kind: "route", family: "Drag", depthYds: 2 } },
+        { player: "X", action: { kind: "route", family: "Curl", depthYds: 12 } },
+        { player: "Z", action: { kind: "route", family: "Go" } },
+        { player: "B", action: { kind: "route", family: "Flat" } },
+      ]),
+      "Mesh",
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("REJECTS a 6v6 'Mesh' with zero Drags (lenient is ≥1, not 0)", () => {
+    // No drag at all → still rejected. Lenient ≠ permissive.
+    const result = assertConcept(
+      buildSpec6v6([
+        { player: "X", action: { kind: "route", family: "Curl", depthYds: 8 } },
+        { player: "Z", action: { kind: "route", family: "Go" } },
+      ]),
+      "Mesh",
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("accepts a Corner-only 6v6 Snag (canonical needs Spot + Corner + Flat)", () => {
+    // 6v6 Snag: catalog produces @Z Corner + @B Flat + @X Go + @H Drag.
+    // No Spot. Lenient: ok (Corner + Flat are the defining stretch).
+    const result = assertConcept(
+      buildSpec6v6([
+        { player: "Z", action: { kind: "route", family: "Corner", depthYds: 13 } },
+        { player: "B", action: { kind: "route", family: "Flat" } },
+        { player: "X", action: { kind: "route", family: "Go" } },
+        { player: "H", action: { kind: "route", family: "Drag" } },
+      ]),
+      "Snag",
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("accepts 3-vertical Four Verticals in 6v6 (canonical needs 4 verts)", () => {
+    // 6v6 only has 3 outside skill players (X, Z, H) — can't produce
+    // a true 4-vert. Catalog gives 2 Go + 1 Seam + 1 Flat. Lenient: ok.
+    const result = assertConcept(
+      buildSpec6v6([
+        { player: "X", action: { kind: "route", family: "Go" } },
+        { player: "Z", action: { kind: "route", family: "Go" } },
+        { player: "H", action: { kind: "route", family: "Seam", depthYds: 17 } },
+        { player: "B", action: { kind: "route", family: "Flat" } },
+      ]),
+      "Four Verticals",
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("still REJECTS 7v7 plays that miss canonical slots (strict mode preserved)", () => {
+    // Same shape as the 6v6 Mesh adaptation, but in flag_7v7 the
+    // strict rule applies — needs both Drags.
+    const result = assertConcept(
+      buildSpec([
+        { player: "H", action: { kind: "route", family: "Drag", depthYds: 2 } },
+        { player: "X", action: { kind: "route", family: "Curl", depthYds: 12 } },
+      ]),
+      "Mesh",
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("does NOT relax structural requirements in 6v6 (Flea Flicker still needs returns-to-origin ballPath)", () => {
+    // A 6v6 play that names "Flea Flicker" but has no ballPath
+    // must still fail — structural requirements are variant-neutral.
+    const result = assertConcept(
+      {
+        schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+        variant: "flag_6v6",
+        title: "Test 6v6 Flea",
+        playType: "offense",
+        formation: { name: "Spread Doubles" },
+        assignments: [
+          { player: "X", action: { kind: "route", family: "Go" } },
+        ],
+      },
+      "Flea Flicker",
+    );
+    expect(result.ok).toBe(false);
+  });
+});
+
 describe("detectConcept — finds matching concept in spec", () => {
   it("detects Curl-Flat from a satisfying spec", () => {
     const result = detectConcept(buildSpec([
