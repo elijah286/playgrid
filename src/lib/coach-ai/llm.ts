@@ -131,16 +131,36 @@ export async function chat(opts: ChatOptions): Promise<ChatResult> {
 
 // Retry on 429 (rate limit) and 529 (overloaded) with exponential backoff.
 // Anthropic's per-minute token bucket is bursty; a short wait usually clears it.
+//
+// Observability (2026-05-25): each 429/529 fires a `[coach-ai:rate-limit]`
+// log line so Cloud Run grep can measure fire rate. Without this, scaling
+// problems were invisible until coaches noticed timeouts. Two log forms:
+//   - "retrying"  — we hit the cap and are backing off (still expecting success)
+//   - "exhausted" — we exhausted retries; the caller will surface an error
+// Production rate-limit hardening (per-coach concurrency, longer backoff,
+// graceful UX) is intentionally NOT shipped here — premature scaling work.
+// We instrument first, then prioritize based on what actually hurts.
 async function fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
   const delaysMs = [1000, 2000, 4000];
   for (let attempt = 0; ; attempt++) {
     const res = await fetch(url, init);
     if (res.status !== 429 && res.status !== 529) return res;
-    if (attempt >= delaysMs.length) return res;
     const retryAfter = Number(res.headers.get("retry-after"));
+    if (attempt >= delaysMs.length) {
+      console.warn(
+        `[coach-ai:rate-limit] exhausted retries — status=${res.status} ` +
+          `attempts=${attempt + 1} retry-after-header=${retryAfter || "(none)"} ` +
+          `caller-will-error`,
+      );
+      return res;
+    }
     const wait = Number.isFinite(retryAfter) && retryAfter > 0
       ? Math.min(retryAfter * 1000, 10_000)
       : delaysMs[attempt];
+    console.warn(
+      `[coach-ai:rate-limit] retrying — status=${res.status} attempt=${attempt + 1} ` +
+        `wait-ms=${wait} retry-after-header=${retryAfter || "(none)"}`,
+    );
     await new Promise((r) => setTimeout(r, wait));
   }
 }
