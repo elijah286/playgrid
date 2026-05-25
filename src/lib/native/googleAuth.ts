@@ -81,23 +81,23 @@ export async function signInWithGoogleNative(
   const { SocialLogin } = await import("@capgo/capacitor-social-login");
   await ensureInitialized(webClientId);
 
-  // Nonce binds the ID token to this specific sign-in attempt so a stolen
-  // token can't be replayed. Google embeds the nonce verbatim in the JWT;
-  // Supabase compares the value we pass to the JWT claim.
-  const nonce =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : Math.random().toString(36).slice(2) + Date.now().toString(36);
-
   // Don't pass `scopes` here — the @capgo plugin rejects scope requests
   // unless MainActivity.java is modified to handle the auth-code callback
   // ("You CANNOT use scopes without modifying the main activity"). For
   // signInWithIdToken we only need the bare ID token, and Google
   // automatically embeds the email + profile claims in the JWT via the
   // implicit `openid profile email` scopes — no explicit request needed.
+  //
+  // No `nonce` either: Google's Credential Manager API may or may not
+  // SHA-256 hash the nonce before embedding it in the JWT claim depending
+  // on the SDK version, and Supabase compares the value verbatim for
+  // Google providers (it doesn't hash like it does for Apple). The
+  // resulting ambiguity produces "Nonces mismatch" rejection. Matches
+  // Supabase's own React Native example for Google sign-in. Replay
+  // protection comes from the token's 1-hour expiry + HTTPS transport.
   const login = await SocialLogin.login({
     provider: "google",
-    options: { nonce },
+    options: {},
   });
 
   if (login.result.responseType !== "online" || !login.result.idToken) {
@@ -107,7 +107,6 @@ export async function signInWithGoogleNative(
   const { data, error } = await supabase.auth.signInWithIdToken({
     provider: "google",
     token: login.result.idToken,
-    nonce,
   });
   if (error) throw error;
 
