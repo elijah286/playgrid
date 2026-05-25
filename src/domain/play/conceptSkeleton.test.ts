@@ -849,7 +849,7 @@ describe("generateConceptSkeleton — Flea Flicker (trick play, ball returns to 
     const idle = [];
     for (const id of playerIds) {
       if (id === "QB" || id === "Q" || id === "Z") continue;
-      const hasRoute = diagram.routes.some((r) => r.from === id);
+      const hasRoute = (diagram.routes ?? []).some((r) => r.from === id);
       if (!hasRoute) idle.push(id);
     }
     expect(idle, `flag_5v5 Flea Flicker rendered with idle players (no route): ${idle.join(", ")}`).toEqual([]);
@@ -869,7 +869,7 @@ describe("playSpecToCoachDiagram — redundant handoff arrows are suppressed whe
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const { diagram } = playSpecToCoachDiagram(result.spec);
-    const qbRoutes = diagram.routes.filter((r) => r.from === "QB");
+    const qbRoutes = (diagram.routes ?? []).filter((r) => r.from === "QB");
     expect(
       qbRoutes,
       `QB should have exactly one route (the carry path); the handoff arrow at the mesh is redundant when the QB's path already passes through it. Got ${qbRoutes.length} routes: ${qbRoutes.map((r) => r.route_kind ?? "carry").join(", ")}`,
@@ -887,7 +887,7 @@ describe("playSpecToCoachDiagram — redundant handoff arrows are suppressed whe
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const { diagram } = playSpecToCoachDiagram(result.spec);
-    const qbHandoffArrows = diagram.routes.filter(
+    const qbHandoffArrows = (diagram.routes ?? []).filter(
       (r) => r.from === "QB" && r.route_kind === "handoff",
     );
     expect(qbHandoffArrows.length).toBeGreaterThan(0);
@@ -915,7 +915,7 @@ describe("Power concept — composable in tackle_11 (regression 2026-05-20)", ()
     if (!result.ok) return;
     const { diagram } = playSpecToCoachDiagram(result.spec);
     const playerIds = new Set(diagram.players.map((p) => p.id));
-    const orphans = diagram.routes.filter((r) => !playerIds.has(r.from));
+    const orphans = (diagram.routes ?? []).filter((r) => !playerIds.has(r.from));
     expect(
       orphans,
       `Power skeleton emitted orphan routes: ${orphans.map((r) => r.from).join(", ")}. ` +

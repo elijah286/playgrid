@@ -1625,6 +1625,7 @@ describe("validateDiagrams — phantom-write claims", () => {
       writeToolsCalledOk: [],
     });
     expect(result.ok).toBe(false);
+    if (result.ok) return; // type narrow
     expect(result.errors.some((e) => e.includes("update_play_notes"))).toBe(true);
   });
 
@@ -1646,6 +1647,7 @@ describe("validateDiagrams — phantom-write claims", () => {
       writeToolsCalledOk: [],
     });
     expect(result.ok).toBe(false);
+    if (result.ok) return; // type narrow
     expect(result.errors.some((e) => e.includes("update_play"))).toBe(true);
   });
 
@@ -1687,6 +1689,7 @@ describe("validateDiagrams — phantom-write claims", () => {
       writeToolsCalledOk: [],
     });
     expect(result.ok).toBe(false);
+    if (result.ok) return; // type narrow
     expect(result.errors.some((e) => e.includes("update_play_notes"))).toBe(true);
   });
 
@@ -1700,6 +1703,7 @@ describe("validateDiagrams — phantom-write claims", () => {
       writeToolsCalledOk: [],
     });
     expect(result.ok).toBe(false);
+    if (result.ok) return; // type narrow
     expect(result.errors.some((e) => e.includes("update_play_notes"))).toBe(true);
   });
 
@@ -1712,6 +1716,7 @@ describe("validateDiagrams — phantom-write claims", () => {
         writeToolsCalledOk: [],
       });
       expect(result.ok, `verb="${verb}" should flag`).toBe(false);
+      if (result.ok) continue; // type narrow
       expect(result.errors.some((e) => e.includes("update_play_notes")), `verb="${verb}" should reference update_play_notes`).toBe(true);
     }
   });
@@ -1737,6 +1742,7 @@ describe("validateDiagrams — phantom-write claims", () => {
       writeToolsCalledOk: [],
     });
     expect(result.ok).toBe(false);
+    if (result.ok) return; // type narrow
     expect(result.errors.some((e) => e.includes("update_play_notes"))).toBe(true);
   });
 
@@ -1758,6 +1764,7 @@ describe("validateDiagrams — phantom-write claims", () => {
         writeToolsCalledOk: [],
       });
       expect(result.ok, `phrasing="${text}" should flag`).toBe(false);
+      if (result.ok) continue; // type narrow
       expect(result.errors.some((e) => e.includes("update_play_notes")), `phrasing="${text}"`).toBe(true);
     }
   });

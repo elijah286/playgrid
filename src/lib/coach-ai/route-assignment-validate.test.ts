@@ -19,7 +19,7 @@ import type { CoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
 /** Helper: minimal diagram with a single carrier + route. */
 function single(
   carrier: { id: string; x: number; y: number },
-  route: { path: [number, number][]; route_kind?: string; curve?: boolean },
+  route: { path: [number, number][]; route_kind?: string; curve?: boolean; nonCanonical?: boolean },
 ): CoachDiagram {
   return {
     players: [

@@ -276,7 +276,7 @@ describe("sanitize — routes", () => {
       ],
       zones: [],
     });
-    const lgRoute = result.diagram.routes.find((r) => r.from === "LG");
+    const lgRoute = (result.diagram.routes ?? []).find((r) => r.from === "LG");
     expect(lgRoute).toBeDefined();
     expect(lgRoute?.path).toEqual([[1, 2], [2, 4]]);
     expect(
@@ -298,7 +298,7 @@ describe("sanitize — routes", () => {
         { from: "X", path: [[-15, 2], [-15, 2], [-10, 5]] },
       ],
     });
-    const xRoute = result.diagram.routes.find((r) => r.from === "X");
+    const xRoute = (result.diagram.routes ?? []).find((r) => r.from === "X");
     expect(xRoute?.path).toEqual([[-15, 2], [-10, 5]]);
     expect(
       result.warnings.some((w) => w.code === "route_duplicate_waypoint_dropped" && w.subject === "X"),
@@ -318,7 +318,7 @@ describe("sanitize — routes", () => {
         { from: "X", path: [[-15, 2], [-10, 5]] },
       ],
     });
-    const xRoute = result.diagram.routes.find((r) => r.from === "X");
+    const xRoute = (result.diagram.routes ?? []).find((r) => r.from === "X");
     expect(xRoute?.path).toEqual([[-15, 2], [-10, 5]]);
     expect(result.warnings.some((w) => w.code === "route_duplicate_waypoint_dropped")).toBe(false);
   });
@@ -377,7 +377,7 @@ describe("sanitize — routes", () => {
       zones: [],
     });
     expect(result.diagram.routes).toHaveLength(5);
-    expect(result.diagram.routes.map((r) => r.from)).toEqual(["B", "LG", "H", "X", "Z"]);
+    expect((result.diagram.routes ?? []).map((r) => r.from)).toEqual(["B", "LG", "H", "X", "Z"]);
     expect(
       result.warnings.some(
         (w) => w.code === "route_dropped_unknown_carrier" && w.subject === "FB",
