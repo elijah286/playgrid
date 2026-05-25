@@ -163,16 +163,18 @@ export function UsersAdminClient({
   initialUsers,
   currentUserId,
   initialExcludedEmails = [],
+  initialQuery = "",
 }: {
   initialUsers: AdminUserRow[];
   currentUserId: string;
   initialExcludedEmails?: string[];
+  initialQuery?: string;
 }) {
   const [users, setUsers] = useState(initialUsers);
   const [excludedEmails, setExcludedEmails] = useState<Set<string>>(
     new Set(initialExcludedEmails.map(e => e.toLowerCase()))
   );
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const [msg, setMsg] = useState<{ kind: "error" | "success"; text: string } | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [pending, startTransition] = useTransition();

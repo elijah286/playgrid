@@ -84,6 +84,9 @@ export type InboxAlert = {
   // pick a label/icon and the body holds the full headline (e.g.
   // "purchased Team Coach"); user_email/displayName are the subject.
   adminKind?: AdminNoticeKind;
+  /** Subject's email — used by user_signup rows to deep-link the admin
+   *  users table pre-filtered to this account. */
+  userEmail?: string | null;
 };
 
 /**
@@ -294,6 +297,8 @@ async function buildAdminNoticeAlerts(
     playbookLogoUrl: null,
     playbookColor: null,
     displayName: r.user_display_name?.trim() || r.user_email || null,
+    userId: r.user_id ?? undefined,
+    userEmail: r.user_email,
     createdAt: r.created_at,
     body: r.body,
     href: r.href,

@@ -302,6 +302,13 @@ function hrefForAlert(a: InboxAlert): string {
   if (a.kind === "rsvp_pending" && a.eventId) {
     return `/playbooks/${a.playbookId}/calendar?event=${a.eventId}`;
   }
+  // Signup notices deep-link the admin users table pre-filtered to the
+  // new account — email is the most reliable filter token; fall back to
+  // displayName if for some reason the email is missing.
+  if (a.kind === "admin_notice" && a.adminKind === "user_signup") {
+    const q = a.userEmail?.trim() || a.displayName?.trim() || "";
+    if (q) return `/settings?tab=users&q=${encodeURIComponent(q)}`;
+  }
   if (a.href) return a.href;
   return "/home?tab=inbox";
 }

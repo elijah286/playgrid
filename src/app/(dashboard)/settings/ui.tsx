@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   BarChart3,
   Brain,
@@ -276,7 +277,10 @@ export function SettingsClient({
   initialRevenueBreakdown: RevenueBreakdown | null;
   revenueBreakdownError: string | null;
 }) {
-  const [tab, setTab] = useState<Tab>("overview");
+  const searchParams = useSearchParams();
+  const urlTab = searchParams?.get("tab") ?? null;
+  const urlQuery = searchParams?.get("q") ?? null;
+  const [tab, setTab] = useState<Tab>(isTab(urlTab) ? urlTab : "overview");
   const [analyticsSubTab, setAnalyticsSubTab] = useState<
     "traffic" | "monetization"
   >("traffic");
@@ -285,15 +289,17 @@ export function SettingsClient({
 
   // Persist last-viewed tab so refreshing the page doesn't lose context.
   // localStorage is fine here — this is a single-admin tool and the
-  // selection is per-device, not per-user.
+  // selection is per-device, not per-user. ?tab= in the URL wins over
+  // localStorage so deep-links (e.g. from the inbox) land where intended.
   useEffect(() => {
+    if (isTab(urlTab)) return;
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY);
       if (isTab(stored)) setTab(stored);
     } catch {
       /* private mode / disabled storage — ignore */
     }
-  }, []);
+  }, [urlTab]);
   useEffect(() => {
     try {
       window.localStorage.setItem(STORAGE_KEY, tab);
@@ -444,6 +450,7 @@ export function SettingsClient({
                   initialUsers={initialUsers}
                   currentUserId={currentUserId}
                   initialExcludedEmails={initialExcludedEmails}
+                  initialQuery={urlQuery ?? ""}
                 />
               )
             ) : (
