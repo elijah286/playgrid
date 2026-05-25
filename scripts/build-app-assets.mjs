@@ -47,15 +47,10 @@ async function loadMonogramSvg() {
 /** Render the monogram into a square PNG of the given size, centered with
  *  padding so it doesn't kiss the edges. Background is either a solid color
  *  or transparent. `svgOverride` lets callers swap colors (e.g. the tinted
- *  variant uses an all-white monogram). */
-async function renderSquare({ size, padding, background, svgOverride }) {
-  const svg = svgOverride ?? (await loadMonogramSvg());
-  const inner = Math.round(size - padding * 2);
-  const monogram = await sharp(Buffer.from(svg))
-    .resize(inner, inner, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
-    .png()
-    .toBuffer();
-
+ *  variant uses an all-white monogram). When `solid` is true, the monogram
+ *  is omitted entirely — used for Android's adaptive-icon background layer,
+ *  which must be a flat color so it doesn't double-stamp with the foreground. */
+async function renderSquare({ size, padding, background, svgOverride, solid }) {
   const base = sharp({
     create: {
       width: size,
@@ -68,6 +63,17 @@ async function renderSquare({ size, padding, background, svgOverride }) {
     },
   });
 
+  if (solid) {
+    return base.png().toBuffer();
+  }
+
+  const svg = svgOverride ?? (await loadMonogramSvg());
+  const inner = Math.round(size - padding * 2);
+  const monogram = await sharp(Buffer.from(svg))
+    .resize(inner, inner, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png()
+    .toBuffer();
+
   return base.composite([{ input: monogram, gravity: "center" }]).png().toBuffer();
 }
 
@@ -77,7 +83,7 @@ async function main() {
   const tasks = [
     { file: "icon-only.png", size: 1024, padding: 160, background: LIGHT_BG },
     { file: "icon-foreground.png", size: 1024, padding: 220, background: "transparent" },
-    { file: "icon-background.png", size: 1024, padding: 0, background: LIGHT_BG },
+    { file: "icon-background.png", size: 1024, background: LIGHT_BG, solid: true },
     { file: "splash.png", size: 2732, padding: 900, background: LIGHT_BG },
     { file: "splash-dark.png", size: 2732, padding: 900, background: DARK_BG },
   ];
