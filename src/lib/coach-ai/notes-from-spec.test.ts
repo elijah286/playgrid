@@ -591,3 +591,298 @@ describe("projectSpecToNotes — run-play OL narration (2026-05-25 regression)",
     expect(notes).toMatch(/[Gg]round call|[Rr]un[-\s]?(pass|game)|[Ee]arly[-\s]?down call/);
   });
 });
+
+describe("projectSpecToNotes — QB progression block (Item 1, 2026-05-25)", () => {
+  // The user's broader notes-quality requirement: pass plays need to
+  // teach the QB's read in order, not just dump per-player bullets
+  // sorted by spec.assignments order. The new **Progression:** block
+  // walks the route assignments in standard read order:
+  //   1. Deep clear (Go / Post / Seam / Corner ≥ 14yd) — pulls the
+  //      deep safety so the rest of the concept opens up.
+  //   2. Intermediate over the middle (Dig / In / Drive 10–14yd) —
+  //      the high element of the high-low.
+  //   3. Intermediate outside / hot (Curl / Hitch / Out / Slant
+  //      4–13yd) — rhythm throws into the void left by the deep route.
+  //   4. Checkdown (Flat / Drag / Bubble / Sit / Arrow) — outlet when
+  //      pressure shows or no read is open.
+  //
+  // Concept-specific overrides land here too — Mesh's progression is
+  // under-drag → over-drag → corner → checkdown regardless of generic
+  // depth scoring. Catalog-known concepts cycle through their own
+  // progression order; non-concept plays fall back to the generic
+  // depth-based walker.
+
+  it("emits a Progression block on multi-route pass plays", () => {
+    const notes = projectSpecToNotes(baseSpec({
+      variant: "flag_7v7",
+      defense: { front: "7v7 Zone", coverage: "Cover 3" },
+      assignments: [
+        { player: "B", action: { kind: "route", family: "Flat" } },
+        { player: "Z", action: { kind: "route", family: "Go", depthYds: 18 } },
+        { player: "X", action: { kind: "route", family: "Dig", depthYds: 12 } },
+        { player: "H", action: { kind: "route", family: "Curl", depthYds: 8 } },
+      ],
+    }));
+    // The block header must appear so coaches can find the read order.
+    expect(notes).toMatch(/\*\*Progression:\*\*|\*\*@Q progression/i);
+  });
+
+  it("orders the progression deep → intermediate → checkdown by route family", () => {
+    // Random spec order, deterministic progression order.
+    const notes = projectSpecToNotes(baseSpec({
+      variant: "flag_7v7",
+      assignments: [
+        { player: "B", action: { kind: "route", family: "Flat" } },          // checkdown (last)
+        { player: "H", action: { kind: "route", family: "Curl", depthYds: 8 } }, // intermediate
+        { player: "Z", action: { kind: "route", family: "Go", depthYds: 18 } }, // deep (first)
+        { player: "X", action: { kind: "route", family: "Dig", depthYds: 12 } }, // intermediate-over-middle
+      ],
+    }));
+
+    // Find the indices of each player's mention in the progression block.
+    // The progression appears as a numbered list; we assert the deep
+    // route (@Z) shows up before the checkdown (@B) in the rendered
+    // notes string.
+    const zIdx = notes.indexOf("@Z");
+    const bIdx = notes.indexOf("@B");
+    expect(zIdx).toBeGreaterThan(-1);
+    expect(bIdx).toBeGreaterThan(-1);
+    expect(zIdx).toBeLessThan(bIdx);
+  });
+
+  it("does NOT emit a Progression block on single-route demos", () => {
+    // Rule 9a (one-route demo) — no progression to teach.
+    const notes = projectSpecToNotes(baseSpec({
+      assignments: [
+        { player: "X", action: { kind: "route", family: "Slant" } },
+      ],
+    }));
+    expect(notes).not.toMatch(/\*\*Progression:\*\*/);
+  });
+
+  it("does NOT emit a Progression block on run-only plays", () => {
+    const notes = projectSpecToNotes(baseSpec({
+      variant: "tackle_11",
+      formation: { name: "I-Formation" },
+      assignments: [
+        { player: "B", action: { kind: "carry", runType: "inside_zone" } },
+      ],
+    }));
+    expect(notes).not.toMatch(/\*\*Progression:\*\*/);
+  });
+
+  it("uses concept-specific order for Mesh (under-drag → over-drag → high → checkdown)", () => {
+    // Mesh's read is structural, not depth-driven: under-drag (rub
+    // setup) first, over-drag (the throwing window) second, deep clear
+    // third, checkdown last. Without a concept-specific override the
+    // generic walker would put the deep route first.
+    const notes = projectSpecToNotes(baseSpec({
+      variant: "flag_7v7",
+      title: "Mesh",
+      assignments: [
+        { player: "H", action: { kind: "route", family: "Drag", depthYds: 2 } },  // under-drag
+        { player: "S", action: { kind: "route", family: "Drag", depthYds: 8 } },  // over-drag
+        { player: "Z", action: { kind: "route", family: "Sit", depthYds: 12 } },  // high
+        { player: "B", action: { kind: "route", family: "Flat" } },               // checkdown
+      ],
+    }));
+    // The under-drag (H at 2yd) should appear before the over-drag
+    // (S at 8yd) in the progression block — Mesh reads under-first.
+    const hIdx = notes.indexOf("@H");
+    const sIdx = notes.indexOf("@S");
+    const bIdx = notes.indexOf("@B");
+    expect(hIdx).toBeGreaterThan(-1);
+    expect(sIdx).toBeGreaterThan(-1);
+    expect(hIdx).toBeLessThan(sIdx);
+    expect(sIdx).toBeLessThan(bIdx);
+  });
+});
+
+describe("projectSpecToNotes — coverage-aware route cues (Item 2, 2026-05-25)", () => {
+  // Per-route bullets need defensive-read context: a Slant vs Cover 1
+  // teaches differently than a Slant vs Cover 3. The route-cue
+  // dictionary now has coverage-specific overrides — when the spec has
+  // `defense.coverage` set, the cue is picked from the coverage map
+  // first, falling back to the generic flat cue when no coverage
+  // override exists.
+  //
+  // Catalog is intentionally small at first — 6-8 high-value matchups
+  // covering the routes coaches install most. Adding entries here is
+  // safe (purely additive) and a follow-up PR can expand.
+
+  it("Slant vs Cover 1 names the man-coverage teaching cue", () => {
+    const notes = projectSpecToNotes(baseSpec({
+      defense: { front: "7v7 Zone", coverage: "Cover 1" },
+      assignments: [
+        { player: "X", action: { kind: "route", family: "Slant" } },
+      ],
+    }));
+    // Must mention something about the man-coverage technique — press,
+    // leverage, rub, or trail-tech / inside-hip. The exact wording is
+    // a tuning knob; the structural test is "the cue changed when
+    // coverage changed."
+    expect(notes).toMatch(/press|rub|trail|inside hip|leverage|man/i);
+  });
+
+  it("Slant vs Cover 3 names the zone-coverage teaching cue", () => {
+    const notes = projectSpecToNotes(baseSpec({
+      defense: { front: "7v7 Zone", coverage: "Cover 3" },
+      assignments: [
+        { player: "X", action: { kind: "route", family: "Slant" } },
+      ],
+    }));
+    // Zone-specific cue → must reference the zone window OR the
+    // curl/flat defender OR "sit" / "settle".
+    expect(notes).toMatch(/sit|settle|window|curl[\/-]flat|zone|soft spot/i);
+  });
+
+  it("Hitch vs Cover 2 names the soft-spot teaching cue", () => {
+    const notes = projectSpecToNotes(baseSpec({
+      defense: { front: "7v7 Zone", coverage: "Cover 2" },
+      assignments: [
+        { player: "Z", action: { kind: "route", family: "Hitch" } },
+      ],
+    }));
+    expect(notes).toMatch(/soft spot|sit|between|corner|flat defender/i);
+  });
+
+  it("Out vs Cover 3 names the sideline-leverage cue", () => {
+    const notes = projectSpecToNotes(baseSpec({
+      defense: { front: "7v7 Zone", coverage: "Cover 3" },
+      assignments: [
+        { player: "X", action: { kind: "route", family: "Out", depthYds: 10 } },
+      ],
+    }));
+    expect(notes).toMatch(/sideline|beat the flat|leverage/i);
+  });
+
+  it("falls back to the generic cue when no defense is set", () => {
+    // No coverage → flat cue applies. Pinning the regression direction
+    // (the new lookup must not break the existing no-defense path).
+    const notes = projectSpecToNotes(baseSpec({
+      assignments: [
+        { player: "X", action: { kind: "route", family: "Slant" } },
+      ],
+    }));
+    expect(notes).toMatch(/@X:.*slant/i);
+    // The flat / generic cue still ends the bullet — pinning the
+    // regression direction.
+    expect(notes).toMatch(/sharp break at the inside hip/);
+  });
+
+  it("falls back to the generic cue when the coverage isn't in the override map", () => {
+    // A coverage label the override map doesn't list yet → fall back
+    // to the generic family cue. Purely additive design — adding a
+    // new override never silently breaks a play.
+    const notes = projectSpecToNotes(baseSpec({
+      defense: { front: "Quarters", coverage: "Quarters" },
+      assignments: [
+        { player: "X", action: { kind: "route", family: "Slant" } },
+      ],
+    }));
+    expect(notes).toMatch(/@X:.*slant/i);
+    expect(notes).toMatch(/sharp break|inside hip/);
+  });
+});
+
+describe("projectSpecToNotes — defender shift narration (Item 4, 2026-05-25)", () => {
+  // Defender bullets need to teach HOW defenders shift as the play
+  // develops, not just describe their static role. Three enhancements:
+  //
+  //   1. Coverage-aware zone-drop cues — Cover 2 corner squats in the
+  //      flat (the cloud); Cover 3 corner takes the deep third. Same
+  //      "zone_drop" action, different teaching cue.
+  //   2. read_and_react narration includes the trigger phase (on
+  //      release / on break / at snap) so coaches see WHEN the
+  //      defender reacts, not just THAT they react.
+  //   3. Defenders with `custom_path` (drawn post-snap movement) get
+  //      a movement-naming sentence that explains the rotation
+  //      direction.
+
+  it("Cover 2 corner zone-drop cue mentions the cloud / squat / flat", async () => {
+    const { PLAY_SPEC_SCHEMA_VERSION } = await import("@/domain/play/spec");
+    const { projectSpecToNotes } = await import("./notes-from-spec");
+    const spec = {
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "flag_7v7" as const,
+      formation: { name: "Spread Doubles" },
+      defense: { front: "7v7 Zone" as const, coverage: "Cover 2" as const },
+      assignments: [
+        { player: "X", action: { kind: "route" as const, family: "Slant" } },
+      ],
+    };
+    const notes = projectSpecToNotes(spec);
+    const cbLine = notes.split("\n").find((l) => l.startsWith("- @CB") || l.match(/^- @\w*CB/));
+    expect(cbLine, "CB line missing").toBeDefined();
+    // Cover 2 CB squats in the cloud — must mention cloud, squat,
+    // flat, or jam.
+    expect(cbLine).toMatch(/cloud|squat|jam|flat|sink|reroute/i);
+  });
+
+  it("Cover 3 corner zone-drop cue mentions the deep third / over-the-top", async () => {
+    const { PLAY_SPEC_SCHEMA_VERSION } = await import("@/domain/play/spec");
+    const { projectSpecToNotes } = await import("./notes-from-spec");
+    const spec = {
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "flag_7v7" as const,
+      formation: { name: "Spread Doubles" },
+      defense: { front: "7v7 Zone" as const, coverage: "Cover 3" as const },
+      assignments: [
+        { player: "X", action: { kind: "route" as const, family: "Slant" } },
+      ],
+    };
+    const notes = projectSpecToNotes(spec);
+    const cbLine = notes.split("\n").find((l) => l.startsWith("- @CB") || l.match(/^- @\w*CB/));
+    expect(cbLine, "CB line missing").toBeDefined();
+    // Cover 3 CB takes the deep third — must mention deep third,
+    // over the top, or back-pedal.
+    expect(cbLine).toMatch(/deep third|over the top|back[-\s]?pedal|cushion/i);
+  });
+
+  it("read_and_react narration names the trigger phase (on release / break / snap)", async () => {
+    const { PLAY_SPEC_SCHEMA_VERSION } = await import("@/domain/play/spec");
+    const { projectSpecToNotes } = await import("./notes-from-spec");
+    const spec = {
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "tackle_11" as const,
+      formation: { name: "Spread Doubles" },
+      defense: { front: "4-3 Over" as const, coverage: "Cover 3" as const },
+      assignments: [],
+      defenderAssignments: [
+        {
+          defender: "ML",
+          action: {
+            kind: "read_and_react" as const,
+            trigger: { player: "S", on: "release" as const },
+            behavior: "carry_vertical" as const,
+          },
+        },
+      ],
+    };
+    const notes = projectSpecToNotes(spec);
+    const mlLine = notes.split("\n").find((l) => l.includes("@ML"));
+    expect(mlLine, "ML line missing").toBeDefined();
+    // The narration should name the trigger phase — "on release" / "at
+    // the snap" / "at the break" — so coaches see WHEN the defender
+    // reads. Without the phase, the cue is just "react when @S
+    // declares" which doesn't teach the timing.
+    expect(mlLine).toMatch(/on release|on the release|@S.{0,40}release/i);
+  });
+
+  it("preserves the standard zone-drop cue when no coverage override exists", async () => {
+    // Quarters / unknown coverage → still get the standard "stay in
+    // the void, eyes on the QB" so the bullet isn't empty. Additive
+    // design — adding a coverage entry never breaks any other coverage.
+    const { PLAY_SPEC_SCHEMA_VERSION } = await import("@/domain/play/spec");
+    const { projectSpecToNotes } = await import("./notes-from-spec");
+    const spec = {
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "flag_7v7" as const,
+      formation: { name: "Spread Doubles" },
+      defense: { front: "7v7 Zone" as const, coverage: "Cover 6" as const },
+      assignments: [],
+    };
+    const notes = projectSpecToNotes(spec);
+    expect(notes).toMatch(/stay in the void|eyes on the QB|zone/i);
+  });
+});

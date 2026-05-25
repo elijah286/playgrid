@@ -1092,3 +1092,41 @@ describe("NORMAL_PROMPT — anchored playbook prohibits list_my_playbooks (2026-
     expect(NORMAL_PROMPT).toMatch(/handler.*refuse|refuse.*handler|tool.*reject.*anchored|reject.*anchored.*tool/i);
   });
 });
+
+describe("NORMAL_PROMPT — defense install offer (Item 3, 2026-05-25)", () => {
+  // After Cal installs a defense, it should proactively offer to show
+  // that defense against the offensive plays already in the playbook.
+  // This is a key differentiating capability — coaches install defense
+  // plays so they can teach the response to specific offensive
+  // concepts. The full value chain is install → overlay → coach reads
+  // → coach teaches the read. Stopping at "install" leaves the coach
+  // doing the matchup work manually.
+
+  it("names the offer-to-show pattern after compose_defense", () => {
+    expect(NORMAL_PROMPT).toMatch(
+      /offer to show.*defense|show.*defense.*against|defense.*vs.*your|defense.*overlay.*existing/i,
+    );
+  });
+
+  it("references list_plays as the discovery step", () => {
+    expect(NORMAL_PROMPT).toMatch(/`list_plays`.*offen|after.*compose_defense[\s\S]{0,400}list_plays/i);
+  });
+
+  it("describes the wait-for-yes pattern (don't auto-overlay)", () => {
+    expect(NORMAL_PROMPT).toMatch(
+      /offer.*wait|ask first.*yes|wait for.*confirm.*overlay|coach says yes[\s\S]{0,200}compose_defense/i,
+    );
+  });
+
+  it("names the no-offense case (empty playbook)", () => {
+    expect(NORMAL_PROMPT).toMatch(
+      /no offens|empty playbook|playbook has no.*offen|no plays.*overlay|nothing to overlay/i,
+    );
+  });
+
+  it("explicitly names this as a Cal differentiator", () => {
+    expect(NORMAL_PROMPT).toMatch(
+      /differentia|teach.*read|key.*capabilit|coaches install defenses to.*teach/i,
+    );
+  });
+});

@@ -67,7 +67,8 @@ function projectOffenseSpec(spec: PlaySpec): string {
   // read as if the line was pass-protecting — which is exactly the
   // user-reported bug (Dive Right showing 5× "pass protect").
   const isRunPlay = spec.assignments.some((a) => a.action.kind === "carry");
-  const playCtx: NarrationContext = { isRunPlay };
+  const coverage = spec.defense?.coverage?.toLowerCase();
+  const playCtx: NarrationContext = { isRunPlay, coverage };
 
   // **When-to-use lead.** Every play opens with a one-line situational
   // cue — a coach scanning the play card / playsheet must know "when do
@@ -89,6 +90,20 @@ function projectOffenseSpec(spec: PlaySpec): string {
 
   // Opener — offense-perspective (the @Q read summary).
   lines.push(openerForOffense(spec));
+
+  // **QB progression block** (Item 1, 2026-05-25). When the play has
+  // ≥ 2 routes, emit a numbered read order BEFORE the per-player
+  // bullets so coaches scanning the play see WHAT to teach the QB in
+  // sequence. Concept-known plays (Mesh, Smash, Curl-Flat, etc.) use
+  // structural read order; generic plays use depth-based scoring.
+  // Suppressed on single-route demos and run-only plays.
+  const progression = progressionLines(spec);
+  if (progression && progression.length > 0) {
+    lines.push("");
+    lines.push("**Progression:**");
+    for (const p of progression) lines.push(p);
+    lines.push("");
+  }
 
   // Per-assignment bullet. Skip `unspecified` — they add noise.
   for (const assignment of spec.assignments) {
@@ -202,6 +217,13 @@ function bulletsForDefense(spec: PlaySpec): string[] {
     if (!overridesByUid.has(key)) overridesByUid.set(key, da);
   }
 
+  // Defender context (Item 4): pick coverage-aware cues based on the
+  // spec's defense.coverage. When the spec doesn't have a coverage
+  // label, fallthrough to the generic per-action cues.
+  const defCtx: DefenderNarrationContext = {
+    coverage: spec.defense?.coverage?.toLowerCase(),
+  };
+
   const lines: string[] = [];
   for (let i = 0; i < catalogPlayers.length; i++) {
     const cp = catalogPlayers[i];
@@ -213,7 +235,7 @@ function bulletsForDefense(spec: PlaySpec): string[] {
       : defenderActionFromCatalog(cp.assignment);
     const hedge =
       override?.confidence === "low" ? "(unconfirmed) " : "";
-    const body = narrateDefender(ref, action, zoneById);
+    const body = narrateDefender(ref, action, zoneById, defCtx);
     if (body) lines.push(`${hedge}${body}`);
   }
   return lines;
@@ -232,17 +254,23 @@ function narrateDefender(
   ref: string,
   action: DefenderAction,
   zoneById: Map<string, DefensiveAlignmentZone>,
+  defCtx: DefenderNarrationContext = NO_DEF_CTX,
 ): string | null {
   switch (action.kind) {
     case "zone_drop": {
       const zone = action.zoneId ? zoneById.get(action.zoneId) : null;
       const label = zone?.label ?? action.zoneId ?? "zone";
-      const cue = DEFENDER_CUES.zone_drop;
+      // **Coverage-aware cue lookup** (Item 4, 2026-05-25). Pick a
+      // more specific cue based on coverage + zone label when one is
+      // catalogued; fall back to the generic flat cue otherwise.
+      const cue = lookupZoneDropCue(defCtx.coverage, action.zoneId, label) ?? DEFENDER_CUES.zone_drop;
       return `${ref}: drops into ${label} — ${cue}.`;
     }
     case "man_match": {
       const target = action.target ? `@${action.target}` : "his matched receiver";
-      const cue = DEFENDER_CUES.man_match;
+      // Same coverage-aware lookup for man — pressed in Cover 0 vs
+      // off-trail in Cover 1, for example.
+      const cue = lookupManMatchCue(defCtx.coverage) ?? DEFENDER_CUES.man_match;
       return `${ref}: man on ${target} — ${cue}.`;
     }
     case "blitz": {
@@ -256,14 +284,147 @@ function narrateDefender(
       return `${ref}: spy ${target} — ${cue}.`;
     }
     case "read_and_react": {
+      // **Trigger-phase narration** (Item 4, 2026-05-25). When the
+      // spec sets `trigger.on` (release / break / snap), weave the
+      // phase into the prose so coaches see WHEN the defender reads,
+      // not just THAT they react. Without this, every read_and_react
+      // line read as "react when @S declares" — coaches can't teach
+      // the timing from that.
       const cue = DEFENDER_CUES[`react_${action.behavior}` as keyof typeof DEFENDER_CUES] ?? DEFENDER_CUES.read_and_react;
       const trigger = `@${action.trigger.player}`;
-      return `${ref}: read ${trigger} — ${cue}.`;
+      const phase = phraseForTriggerPhase(action.trigger.on);
+      return `${ref}: read ${trigger}${phase} — ${cue}.`;
     }
     case "custom_path":
       return `${ref}: ${action.description}.`;
   }
 }
+
+/** Translates the structural `trigger.on` enum into a coach-readable
+ *  phrase. Empty string when unset so the caller's prose flows
+ *  naturally ("read @S — carry the vertical..."). */
+function phraseForTriggerPhase(
+  on: "release" | "break" | "snap" | undefined,
+): string {
+  if (on === "release") return "'s release";
+  if (on === "break") return " at the break";
+  if (on === "snap") return " at the snap";
+  return "";
+}
+
+/** Per-zone coverage-aware cues (Item 4, 2026-05-25). Same pattern as
+ *  `ROUTE_CUES_BY_COVERAGE` — keyed by `normalizeCoverageKey(coverage)`
+ *  → `zoneId` → cue. The fallback uses the zone LABEL when zoneId is
+ *  missing (some catalog entries carry only labels).
+ *
+ *  Authoring rules:
+ *   - Be coverage-specific. A Cover 2 corner's job (cloud / squat /
+ *     reroute #1) is fundamentally different from a Cover 3 corner's
+ *     job (deep third / cushion). The cue must teach the difference.
+ *   - Use yardage and leverage cues coaches use ("squat at 5",
+ *     "deep third with outside leverage").
+ *   - 1 sentence, no trailing period (caller adds it). */
+function lookupZoneDropCue(
+  coverage: string | undefined,
+  zoneId: string | undefined,
+  label: string,
+): string | undefined {
+  const key = normalizeCoverageKey(coverage);
+  if (!key) return undefined;
+  const byCoverage = ZONE_DROP_CUES_BY_COVERAGE[key];
+  if (!byCoverage) return undefined;
+  // Try by zoneId first (canonical), then by label (fallback). Allows
+  // the catalog to evolve its zoneId names without breaking cues.
+  if (zoneId && byCoverage[zoneId]) return byCoverage[zoneId];
+  // Match against the LABEL too — common labels: "Deep 1/3 L", "Flat R",
+  // "Hook M", "Deep 1/2 R", "Deep middle". Normalize for case + spaces.
+  const labelKey = label.toLowerCase().trim();
+  // Try a couple of label-derived shapes.
+  for (const k of Object.keys(byCoverage)) {
+    if (labelKey.includes(k.toLowerCase())) return byCoverage[k];
+  }
+  return undefined;
+}
+
+const ZONE_DROP_CUES_BY_COVERAGE: Record<string, Record<string, string>> = {
+  // Cover 2: two-deep halves, five underneath. Corners are the
+  // "cloud" — squat in the flat, reroute #1, sink under any vertical.
+  "cover 2": {
+    flat_l: "squat at 5 yds in the cloud — reroute #1 inside, sink under any vertical to the deep half",
+    flat_r: "squat at 5 yds in the cloud — reroute #1 inside, sink under any vertical to the deep half",
+    flat: "squat at 5 yds in the cloud — reroute #1 inside, sink under any vertical to the deep half",
+    hook_m: "drop to 10-12 yds in the middle — eyes on the QB, carry any seam threats vertical",
+    hook_l: "drop to the curl-flat window at 10 yds — wall off the dig, jump the hitch",
+    hook_r: "drop to the curl-flat window at 10 yds — wall off the dig, jump the hitch",
+    "deep 1/2 l": "play the left deep half — cushion outside #1, robber any inside route",
+    "deep 1/2 r": "play the right deep half — cushion outside #1, robber any inside route",
+  },
+  // Cover 3: three-deep, four underneath. Corners take the deep
+  // thirds; FS takes the deep middle.
+  "cover 3": {
+    "deep 1/3 l": "deep third with outside leverage — cushion 8 yds, beat the receiver to any post or corner",
+    "deep 1/3 r": "deep third with outside leverage — cushion 8 yds, beat the receiver to any post or corner",
+    "deep middle": "deep middle third — read #2's release, drive on any post or seam",
+    flat_l: "curl-to-flat with apex leverage — sink to 10 if no flat threat, jump the flat on release",
+    flat_r: "curl-to-flat with apex leverage — sink to 10 if no flat threat, jump the flat on release",
+    flat: "curl-to-flat with apex leverage — sink to 10 if no flat threat, jump the flat on release",
+    hook_m: "drop the middle hook — read the QB's eyes, carry vertical to the deep middle if threatened",
+    hook_l: "drop the curl-hook on the strong side — sink to 12 yds on any vertical release from #2",
+    hook_r: "drop the curl-hook on the strong side — sink to 12 yds on any vertical release from #2",
+  },
+  // Tampa 2: 2 + 1-deep variant — MLB carries the deep middle hole.
+  "tampa 2": {
+    flat_l: "squat at 5 in the cloud — reroute #1, sink under vertical",
+    flat_r: "squat at 5 in the cloud — reroute #1, sink under vertical",
+    "deep 1/2 l": "deep half over the top — robber the inside post when MLB carries the seam",
+    "deep 1/2 r": "deep half over the top — robber the inside post when MLB carries the seam",
+    hook_m: "Tampa drop — carry the seam vertical to 18 yds, robber the dig",
+  },
+  // Cover 1 (single-high man underneath). FS plays the deep middle as
+  // a robber/help; pattern-match LBs cover their assigned receivers.
+  "cover 1": {
+    "deep middle": "deep middle robber — read QB's eyes, drive on any crosser or post",
+    "deep 1/3 l": "deep middle help — pattern-match the inside vertical from #2",
+    "deep 1/3 r": "deep middle help — pattern-match the inside vertical from #2",
+  },
+  // Cover 4 (quarters). Safeties pattern-match the inside vertical;
+  // corners take #1 vertical with cushion.
+  "cover 4": {
+    "deep 1/4 l": "quarters — pattern-match #2 vertical, robber any inside-breaking route",
+    "deep 1/4 r": "quarters — pattern-match #2 vertical, robber any inside-breaking route",
+    "deep 1/3 l": "quarters bracket on #1 — cushion outside, carry vertical",
+    "deep 1/3 r": "quarters bracket on #1 — cushion outside, carry vertical",
+  },
+  quarters: {
+    "deep 1/4 l": "quarters — pattern-match #2 vertical, robber any inside-breaking route",
+    "deep 1/4 r": "quarters — pattern-match #2 vertical, robber any inside-breaking route",
+  },
+};
+
+/** Per-coverage man cues. Cover 0 = all-out blitz, no help; Cover 1 =
+ *  single-high help over the top, so corners can trail-tech and play
+ *  inside leverage. */
+function lookupManMatchCue(coverage: string | undefined): string | undefined {
+  const key = normalizeCoverageKey(coverage);
+  if (!key) return undefined;
+  return MAN_MATCH_CUES_BY_COVERAGE[key];
+}
+
+const MAN_MATCH_CUES_BY_COVERAGE: Record<string, string> = {
+  "cover 0": "no help — press and stick to the inside hip, never let the receiver under the route",
+  "cover 1": "trail technique with inside leverage — FS has help over the top, take the underneath route",
+  man: "press the release, mirror the break, find the ball after the catch point",
+};
+
+/** Defender-narration context — analogous to NarrationContext but for
+ *  the defense side of the spec. Carried as a fourth arg to
+ *  `narrateDefender`. */
+type DefenderNarrationContext = {
+  /** Lowercased coverage label from spec.defense.coverage. Used to
+   *  pick coverage-specific cues for zone_drop and man_match. */
+  coverage?: string;
+};
+const NO_DEF_CTX: DefenderNarrationContext = {};
 
 /**
  * Per-kind coaching cues for defenders. Single line, no trailing period
@@ -375,6 +536,337 @@ function openerForOffense(spec: PlaySpec): string {
   return `@Q reads ${formationLabel}${defenseLabel}: take the open window — work the progression below in order.`;
 }
 
+// ── QB progression walker (Item 1, 2026-05-25) ──────────────────────────
+//
+// Walks the route assignments of a pass play and emits a numbered
+// **Progression:** block in standard read order. Two paths:
+//
+//   1. **Concept-known** → use `CONCEPT_PROGRESSIONS[concept.name]` to
+//      pick the read order structurally (Mesh reads under-drag first
+//      regardless of depths). Each concept entry is an ordered list of
+//      `{ family, role? }` selectors; the walker resolves each selector
+//      to the matching spec assignment.
+//   2. **Generic depth-based** → priority-score each route by family +
+//      depth (deep clear → high → intermediate → checkdown) and sort.
+//
+// The block is suppressed when there are < 2 routes (no read order to
+// teach) OR when the play is run-only (no QB progression). Returns null
+// in either case and the caller skips the block.
+
+/** Generic priority score — lower = read earlier. Tuned so:
+ *  - 1xx = deep clears (Go, Post, Seam ≥ 14yd; Corner ≥ 12yd)
+ *  - 2xx = intermediate over the middle (Dig, In, Drive 10-14yd)
+ *  - 3xx = intermediate outside / rhythm (Curl, Hitch, Out, Slant, Comeback 4-13yd)
+ *  - 4xx = checkdown / outlet (Flat, Drag, Bubble, Sit, Arrow, Spot, Wheel)
+ *
+ *  Within each band, deeper routes read first — the deep clear pulls
+ *  the safety, the high element of a high-low precedes the low, etc. */
+function progressionPriority(
+  family: string,
+  effectiveDepth: number,
+): number {
+  const f = family.toLowerCase();
+  // Deep clears (band 100s). Deeper = earlier.
+  if (f === "go" || f === "post" || f === "seam" || f === "fade" || f === "skinny post") {
+    return 100 - effectiveDepth; // 18yd Go → 82, 14yd Seam → 86
+  }
+  if (f === "corner" && effectiveDepth >= 12) return 105 - effectiveDepth;
+  if (f === "comeback" && effectiveDepth >= 14) return 110 - effectiveDepth;
+  // Intermediate over the middle (band 200s). Deeper = earlier.
+  if (f === "dig" || f === "in") return 220 - effectiveDepth;
+  // Intermediate outside / rhythm (band 300s).
+  if (f === "out" || f === "z-out" || f === "quick out") return 320 - effectiveDepth;
+  if (f === "curl") return 330 - effectiveDepth;
+  if (f === "hitch") return 340 - effectiveDepth;
+  if (f === "comeback") return 335 - effectiveDepth;
+  if (f === "slant") return 350 - effectiveDepth;
+  if (f === "whip") return 345 - effectiveDepth;
+  // Wheel can be a deep outside threat; depth disambiguates.
+  if (f === "wheel" && effectiveDepth >= 12) return 115 - effectiveDepth;
+  if (f === "wheel") return 360;
+  // Checkdown / outlet (band 400s). Lower band; not yet ordered within.
+  if (f === "flat" || f === "drag" || f === "bubble" || f === "sit" ||
+      f === "arrow" || f === "spot" || f === "z-in" || f === "out & up" || f === "stop & go") {
+    return 400 + (effectiveDepth || 0);
+  }
+  // Unknown family → middle of the pack so it doesn't dominate.
+  return 500;
+}
+
+/**
+ * Concept-specific progression. Each entry is an ordered list of
+ * `{ family, role? }` selectors — the walker resolves them against the
+ * spec's route assignments in order. The `role` filter is used when the
+ * concept has multiple routes in the same family but at different
+ * depths (Mesh's two Drags) — set `role` to "under" / "over" / "low" /
+ * "high" / "outside" to pick which one is read first.
+ *
+ * Concepts NOT in this map fall back to the generic depth walker. The
+ * map is intentionally small at first — add concepts as coaches
+ * surface notes that read wrong. The catalog's `description` field on
+ * the concept entry holds the prose explanation; this is just the
+ * read-order data.
+ */
+type ProgressionSelector = {
+  family: string;
+  /** Used to disambiguate same-family routes in the same concept. */
+  role?: "under" | "over" | "low" | "high" | "inside" | "outside";
+};
+
+const CONCEPT_PROGRESSIONS: Record<string, ProgressionSelector[]> = {
+  // Mesh: under-drag (rub) → over-drag (window) → sit/curl (high) →
+  // flat/back (checkdown). Coaches want the under-drag named first so
+  // the timing of the rub-into-mesh-window is taught explicitly.
+  mesh: [
+    { family: "Drag", role: "under" },
+    { family: "Drag", role: "over" },
+    { family: "Sit" },
+    { family: "Curl" },
+    { family: "Flat" },
+  ],
+  // Curl-Flat: high-low on the flat defender. The Curl is the high,
+  // the Flat is the low — high read first.
+  "curl-flat": [
+    { family: "Curl" },
+    { family: "Flat" },
+  ],
+  // Smash: Corner over Hitch — corner pulls the safety / corner; hitch
+  // sits underneath. Corner is THE read; hitch is the throwback.
+  smash: [
+    { family: "Corner" },
+    { family: "Hitch" },
+  ],
+  // Stick: Sit (the stick) over Flat — stick is the rhythm read; flat
+  // is the outlet.
+  stick: [
+    { family: "Sit" },
+    { family: "Flat" },
+  ],
+  // Snag: Corner → Spot → Flat. Corner is the deep stretch; Spot is
+  // the middle of the triangle; Flat is the outlet.
+  snag: [
+    { family: "Corner" },
+    { family: "Spot" },
+    { family: "Flat" },
+  ],
+  // Four Verticals: read SAFETY rotation. With single-high → seams;
+  // with two-high → outside Go's. For a v1 we list seams first since
+  // that's the most common single-high look in youth/HS football.
+  "four verticals": [
+    { family: "Seam" },
+    { family: "Go" },
+  ],
+  // Flood/Sail: 3-level side stretch. Corner (high) → Curl (mid) →
+  // Flat (low). The horizontal stretch reads top-down.
+  flood: [
+    { family: "Corner" },
+    { family: "Curl" },
+    { family: "Flat" },
+  ],
+  sail: [
+    { family: "Corner" },
+    { family: "Curl" },
+    { family: "Flat" },
+  ],
+  // Drive: shallow under-drag (rub setup) → deep dig (the void).
+  drive: [
+    { family: "Drag" },
+    { family: "Dig" },
+  ],
+  // Levels: low in-route → high in-route. The high reads after low to
+  // attack the LB driving on the underneath route.
+  levels: [
+    { family: "In", role: "low" },
+    { family: "In", role: "high" },
+    { family: "Dig" },
+  ],
+  // Y-Cross: Post (clear) → Dig (the cross) → Flat (outlet). Post
+  // pulls the safety; the Dig hits the void.
+  "y-cross": [
+    { family: "Post" },
+    { family: "Dig" },
+    { family: "Flat" },
+  ],
+  // Dagger: Seam (clear) → Dig (the void). The seam runs through to
+  // pull the safety; the dig hits behind the LB and in front of the
+  // vacated zone.
+  dagger: [
+    { family: "Seam" },
+    { family: "Dig" },
+  ],
+  // Slant-Flat: Slant (rub) → Flat (mismatch). Slant first because the
+  // pick-rub timing decides whether the flat is open at all.
+  "slant-flat": [
+    { family: "Slant" },
+    { family: "Flat" },
+  ],
+};
+
+/** Resolve a list of progression selectors against the spec's route
+ *  assignments. Each selector picks the BEST matching route by family
+ *  (case-insensitive) and role (when set). Returns the matched
+ *  PlayerAssignment in selector order. Unmatched selectors are
+ *  silently skipped — the walker is permissive so partial concept
+ *  hits still produce useful output. */
+function resolveProgressionSelectors(
+  selectors: ProgressionSelector[],
+  routes: Array<PlayerAssignment & { action: Extract<AssignmentAction, { kind: "route" }> }>,
+): Array<PlayerAssignment & { action: Extract<AssignmentAction, { kind: "route" }> }> {
+  const used = new Set<string>();
+  const out: Array<PlayerAssignment & { action: Extract<AssignmentAction, { kind: "route" }> }> = [];
+  for (const sel of selectors) {
+    // Find unmatched routes whose family matches.
+    const candidates = routes.filter(
+      (r) => !used.has(r.player) && r.action.family.toLowerCase() === sel.family.toLowerCase(),
+    );
+    if (candidates.length === 0) continue;
+    // Narrowed pick type — candidates is already filtered to route
+    // assignments, so the pick inherits that narrowing.
+    type RouteAssignment = PlayerAssignment & { action: Extract<AssignmentAction, { kind: "route" }> };
+    let pick: RouteAssignment | undefined;
+    if (sel.role === "under" || sel.role === "low") {
+      // Shallower depth wins.
+      pick = [...candidates].sort((a, b) => {
+        return (depthOf(a) ?? 99) - (depthOf(b) ?? 99);
+      })[0];
+    } else if (sel.role === "over" || sel.role === "high") {
+      // Deeper depth wins.
+      pick = [...candidates].sort((a, b) => {
+        return (depthOf(b) ?? 0) - (depthOf(a) ?? 0);
+      })[0];
+    } else {
+      // No role filter → first candidate (deterministic since `routes`
+      // is iterated in spec.assignments order).
+      pick = candidates[0];
+    }
+    if (pick) {
+      used.add(pick.player);
+      out.push(pick);
+    }
+  }
+  return out;
+}
+
+function depthOf(
+  a: PlayerAssignment & { action: Extract<AssignmentAction, { kind: "route" }> },
+): number | undefined {
+  if (typeof a.action.depthYds === "number") return a.action.depthYds;
+  const t = findTemplate(a.action.family);
+  if (!t) return undefined;
+  return (t.constraints.depthRangeYds.min + t.constraints.depthRangeYds.max) / 2;
+}
+
+/**
+ * Build the QB progression block. Returns an array of lines (one per
+ * read, ordered) or null when no block should render (run-only play,
+ * single-route demo, no routes at all). The header line `**Progression:**`
+ * is the caller's responsibility — this function only produces the
+ * numbered read items.
+ */
+function progressionLines(spec: PlaySpec): string[] | null {
+  const routes = spec.assignments.filter(
+    (a): a is PlayerAssignment & { action: Extract<AssignmentAction, { kind: "route" }> } =>
+      a.action.kind === "route",
+  );
+  if (routes.length < 2) return null;
+
+  // Concept-known path — use the concept's read order if we have one.
+  const conceptHit = detectConcept(spec);
+  const conceptKey = conceptHit?.ok ? conceptHit.concept.name.toLowerCase() : null;
+  const conceptOrder = conceptKey ? CONCEPT_PROGRESSIONS[conceptKey] : null;
+
+  // Type alias: route-narrowed assignment. `progressionLines` only ever
+  // sees route assignments (we filter to kind:"route" above); narrowing
+  // here keeps `depthOf` and `action.family` accesses type-safe.
+  type RouteAssignment = PlayerAssignment & { action: Extract<AssignmentAction, { kind: "route" }> };
+
+  let ordered: RouteAssignment[];
+  if (conceptOrder) {
+    const matched = resolveProgressionSelectors(conceptOrder, routes);
+    // Append any unmatched routes via the generic walker so every route
+    // gets a numbered line (no silent drops).
+    const matchedIds = new Set(matched.map((m) => m.player));
+    const rest = routes.filter((r) => !matchedIds.has(r.player));
+    rest.sort((a, b) => {
+      const da = depthOf(a) ?? 0;
+      const db = depthOf(b) ?? 0;
+      return progressionPriority(a.action.family, da) - progressionPriority(b.action.family, db);
+    });
+    ordered = [...matched, ...rest];
+  } else {
+    // Generic path — depth-based priority sort.
+    ordered = [...routes].sort((a, b) => {
+      const da = depthOf(a) ?? 0;
+      const db = depthOf(b) ?? 0;
+      return progressionPriority(a.action.family, da) - progressionPriority(b.action.family, db);
+    });
+  }
+
+  const lines: string[] = [];
+  for (let i = 0; i < ordered.length; i++) {
+    const r = ordered[i];
+    const depth = depthOf(r);
+    const family = r.action.family.toLowerCase();
+    const ref = `@${r.player}`;
+    // One-sentence-per-read with the family + depth + situational role.
+    // The per-read role is INFERRED from progression band so coaches
+    // know WHY each route is in this position.
+    const role = readRoleLabel(i, ordered.length, family, depth);
+    const depthStr = typeof depth === "number" ? `${Math.round(depth)}-yd ` : "";
+    lines.push(`${i + 1}. **${ref} ${depthStr}${family}** — ${role}`);
+  }
+  return lines;
+}
+
+function readRoleLabel(
+  position: number,
+  total: number,
+  family: string,
+  depth: number | undefined,
+): string {
+  const isFirst = position === 0;
+  const isLast = position === total - 1;
+  const d = depth ?? 0;
+  // Deep clear roles
+  if (d >= 14 && (family === "go" || family === "seam" || family === "fade")) {
+    return "clear the deep safety; throw if the corner gives a soft shoulder.";
+  }
+  if (d >= 12 && family === "post") {
+    return "split the safeties — your home-run shot when the FS bites underneath.";
+  }
+  if (d >= 12 && family === "corner") {
+    return "back-pylon attack — vacates the curl/flat window for the next read.";
+  }
+  // Intermediate roles
+  if (family === "dig") {
+    return isFirst ? "primary read — sit in the void between the hook and the safety." : "secondary — work behind the underneath defender's drop.";
+  }
+  if (family === "curl") {
+    return "settle in the soft spot — face the QB and present hands.";
+  }
+  if (family === "hitch") {
+    return "rhythm throw — eyes back on three; take it if the corner plays off.";
+  }
+  if (family === "out" || family === "quick out" || family === "z-out") {
+    return "snap to the sideline — sideline outlet on the corner's leverage.";
+  }
+  if (family === "slant") {
+    return "quick rhythm vs press, sit vs zone — first option on a rub or pick.";
+  }
+  // Checkdown / outlet
+  if (family === "flat" || family === "arrow" || family === "bubble") {
+    return isLast ? "outlet — last in the progression; take it on pressure or no read open." : "low element of the high-low — the throw if the curl defender drops.";
+  }
+  if (family === "drag" || family === "sit" || family === "spot") {
+    return isFirst ? "primary — first read, find the void in zone and sit." : "settle in the underneath window — keep eyes on the QB.";
+  }
+  if (family === "wheel") {
+    return d >= 12 ? "deep outside threat — vertical to the boundary." : "flat then turn it up — beat the LB to the sideline.";
+  }
+  // Default fall-back
+  return isFirst ? "primary read." : isLast ? "outlet." : "secondary read.";
+}
+
 function openerForDefense(spec: PlaySpec): string {
   const defenseLabel = spec.defense
     ? `${spec.defense.front === spec.defense.coverage ? spec.defense.coverage : `${spec.defense.front} ${spec.defense.coverage}`}`
@@ -467,6 +959,12 @@ export type NarrationContext = {
    *  `narrateBlock` to switch OL/blocker defaults from pass-pro to
    *  run-block phrasing. */
   isRunPlay: boolean;
+  /** Lowercased + normalized coverage label from `spec.defense.coverage`
+   *  (or undefined if no defense is set on the spec). Used by
+   *  `narrateRoute` to look up coverage-specific teaching cues. Examples:
+   *  "cover 1", "cover 2", "cover 3", "cover 4", "tampa 2", "man", "zone".
+   *  Phase 2 (2026-05-25 follow-up). */
+  coverage?: string;
 };
 
 const NO_CTX: NarrationContext = { isRunPlay: false };
@@ -493,7 +991,7 @@ export function narrateAction(
 ): string | null {
   switch (action.kind) {
     case "route":
-      return narrateRoute(ref, action);
+      return narrateRoute(ref, action, ctx);
     case "block":
       return narrateBlock(ref, action, ctx);
     case "carry":
@@ -526,6 +1024,7 @@ export function narrateAction(
 function narrateRoute(
   ref: string,
   action: Extract<AssignmentAction, { kind: "route" }>,
+  ctx: NarrationContext = NO_CTX,
 ): string {
   const template = findTemplate(action.family);
   if (!template) {
@@ -540,14 +1039,42 @@ function narrateRoute(
   const sideLabel = sideLabelFor(template.constraints.side);
   const modifierClause = formatModifiers(action.modifiers);
 
-  // Per-family coaching cue — small fixed dictionary keyed by canonical
-  // family name. Anything not in the dictionary falls back to a generic
-  // depth+side template. Adding a route to the catalog should add a cue
-  // here in the same commit.
-  const cue = ROUTE_CUES[template.name.toLowerCase()] ?? "";
+  // **Coverage-aware cue lookup** (Item 2, 2026-05-25). When the spec's
+  // defense coverage is set, try the coverage-specific override map
+  // first. Falls back to the generic per-family cue if no override
+  // exists for this (family, coverage) pair. Purely additive: every
+  // route still gets a useful cue; the override just makes it more
+  // specific to the defensive look.
+  const familyKey = template.name.toLowerCase();
+  const coverageKey = normalizeCoverageKey(ctx.coverage);
+  const coverageOverride = coverageKey
+    ? ROUTE_CUES_BY_COVERAGE[familyKey]?.[coverageKey]
+    : undefined;
+  const cue = coverageOverride ?? ROUTE_CUES[familyKey] ?? "";
   const cuePart = cue ? ` — ${cue}` : "";
 
   return `${ref}: ${canonicalDepth}-yard ${template.name.toLowerCase()}${sideLabel}${modifierClause}${cuePart}.`;
+}
+
+/** Normalize coverage labels to the keys used in ROUTE_CUES_BY_COVERAGE.
+ *  Coaches and Cal use a few common spellings ("Cover 3", "cover3",
+ *  "C3"); we collapse them to the canonical "cover N" form. Unknown
+ *  labels return undefined so the caller falls back to the generic
+ *  per-family cue (purely additive — adding a coverage here never
+ *  breaks the existing path). */
+function normalizeCoverageKey(coverage: string | undefined): string | undefined {
+  if (!coverage) return undefined;
+  const c = coverage.toLowerCase().trim();
+  // Cover N family — match "cover 1", "cover3", "c-3", "c2", etc.
+  const coverNMatch = c.match(/(?:^|\s)c(?:over)?\s*[-\s]*([0-6])\b/);
+  if (coverNMatch) return `cover ${coverNMatch[1]}`;
+  // Tampa 2
+  if (/\btampa\s*2\b/.test(c)) return "tampa 2";
+  // Generic man / zone fallback (used by some KB chunks).
+  if (/^man\b/.test(c)) return "man";
+  if (/^zone\b/.test(c)) return "zone";
+  if (/\bquarters?\b/.test(c)) return "quarters";
+  return undefined;
 }
 
 function narrateBlock(
@@ -672,6 +1199,111 @@ const ROUTE_CUES: Record<string, string> = {
   sit: "settle in the void, face the QB",
   "z-out": "deeper out — break flat at 7 yds",
   "z-in": "deeper in — break flat at 7 yds, sit in window",
+};
+
+/**
+ * Coverage-aware route cues (Item 2, 2026-05-25). When the spec's
+ * `defense.coverage` is set, the narrator looks up an override here
+ * BEFORE falling back to the flat `ROUTE_CUES` cue. The map is keyed
+ * by `family.toLowerCase()` → `normalizeCoverageKey(coverage)` → cue.
+ *
+ * Coverage keys (mirror `normalizeCoverageKey` output):
+ *   "cover 0", "cover 1", "cover 2", "cover 3", "cover 4", "cover 6",
+ *   "tampa 2", "man", "zone", "quarters"
+ *
+ * Authoring guidance:
+ *   - Make the cue ACTIONABLE — name the defender / leverage / window
+ *     the receiver is reading. "Beat the flat defender to the sideline"
+ *     beats "stay outside."
+ *   - Match the coverage's structural property. Cover 1 (man) → release
+ *     leverage / pick / rub. Cover 2 (two-deep) → soft spot between
+ *     CB and safety. Cover 3 (single-high zone) → curl/flat defender
+ *     window. Quarters (four-deep) → safety carry / dig void.
+ *   - 1 sentence, no trailing period (caller adds it).
+ *
+ * Coverage is sparse on purpose — add entries as coaches surface notes
+ * that read wrong. Missing (family, coverage) pairs fall back to the
+ * generic flat cue. This whole map can grow without touching the
+ * call site.
+ */
+const ROUTE_CUES_BY_COVERAGE: Record<string, Record<string, string>> = {
+  slant: {
+    "cover 0": "all-out blitz vs man — hot route; slant the inside hip and look fast",
+    "cover 1": "vs press man — rub off the trail-tech corner, eyes inside on the third step",
+    "cover 2": "settle between the OLB and corner — sit vs zone, accelerate vs man",
+    "cover 3": "win inside leverage — sit in the curl/flat window the apex defender opens",
+    "tampa 2": "thread between the MLB's deep drop and the OLB — soft spot at 4-6 yds",
+    man: "vs press man — rub the trail tech, look fast on the inside hip",
+    zone: "settle in the curl/flat window — face the QB on the third step",
+  },
+  hitch: {
+    "cover 0": "hot vs blitz — quick stop, eyes back fast, square up to the QB",
+    "cover 1": "vs man — head-fake go, snap back to the throw on the third step",
+    "cover 2": "sit in the soft spot between the corner (squat) and the flat defender",
+    "cover 3": "settle outside the curl/flat defender — between him and the squatting CB",
+    man: "vs man — sell vertical first, snap back hard to the throw",
+    zone: "soft spot in the underneath zone — face the QB",
+  },
+  curl: {
+    "cover 0": "hot vs blitz — settle early, face the QB on rhythm",
+    "cover 1": "vs man — drift inside to widen the leverage, face the QB at the break",
+    "cover 2": "settle behind the OLB and in front of the corner — hands ready",
+    "cover 3": "soft spot at the curl line — between the curl/flat defender and the deep third",
+    "tampa 2": "settle behind the MLB's drop — read the QB's eyes",
+    man: "vs man — drift to widen leverage, square up at the catch",
+    zone: "find the void behind the underneath zone — settle and face the QB",
+  },
+  out: {
+    "cover 1": "vs man — speed cut to the sideline, ball arrives at the break",
+    "cover 2": "snap the head outside — beat the squat corner to the sideline",
+    "cover 3": "beat the flat defender to the sideline — leverage on his outside shoulder",
+    "tampa 2": "snap to the boundary — under the squat corner",
+    man: "win the foot race to the sideline — sharp break, eyes back",
+    zone: "snap the head to the sideline — outlet on the corner's leverage",
+  },
+  post: {
+    "cover 1": "vs single-high — split the safety and the post-safety corner; ball over the back shoulder",
+    "cover 2": "splits the safeties — throw into the deep void between the two halves",
+    "cover 3": "splits the FS and the deep third corner — back-shoulder window",
+    "tampa 2": "shot vs the MLB's deep drop — split the safeties",
+    man: "vs man — sell vertical, plant inside at the break",
+  },
+  corner: {
+    "cover 2": "back-pylon attack — sells go, snaps to the corner behind the cloud cover",
+    "cover 3": "behind the deep-third corner — leverage on his outside hip",
+    "cover 4": "split the deep corner and safety — throw to the back pylon",
+    man: "vs man — leverage break, ball to the back-pylon shoulder",
+  },
+  dig: {
+    "cover 1": "vs man — sell vertical, plant hard at 12 yds, snap inside under the post-safety",
+    "cover 2": "into the void between the two safeties — sit in the window at 12-14 yds",
+    "cover 3": "behind the MLB / hook defender, in front of the deep middle — sit in the window",
+    "cover 4": "into the dig void — work behind the OLB drop and in front of the safety carry",
+    quarters: "work behind the OLB and in front of the safety carry — sit in the soft spot",
+  },
+  go: {
+    "cover 1": "vs single-high — outrun the trail-tech corner; ball goes back-shoulder",
+    "cover 2": "beat the corner's jam, attack the seam between the deep half safeties",
+    "cover 3": "stretch the deep third corner — back-shoulder if he leverages outside",
+    "tampa 2": "split the safeties — vertical down the MLB-vacated middle",
+  },
+  seam: {
+    "cover 1": "vs single-high — split the FS from the post-safety pin; ball over the top",
+    "cover 2": "split the two safeties — vertical down the middle of the field",
+    "cover 3": "attack the seam between the deep-third defender and the curl/flat — bender if open",
+    "cover 4": "vertical down the seam — read the safety's carry; sit-down if he stops",
+  },
+  flat: {
+    "cover 2": "release flat — the corner squats; ball arrives before the safety rotates over",
+    "cover 3": "outside the curl/flat defender's drop — gets eyes back fast for the rhythm throw",
+    man: "release flat — work to outleverage your defender for separation",
+  },
+  drag: {
+    "cover 1": "vs man — find the rub off another route, accelerate after the cross",
+    "cover 2": "shallow across underneath the two-deep safeties — sit in the window if zone",
+    "cover 3": "shallow across — find the void between the dropping LBs",
+    man: "rub-and-accelerate — the under-route gets the cleanest release",
+  },
 };
 
 const RUN_CUES: Record<NonNullable<Extract<AssignmentAction, { kind: "carry" }>["runType"]>, string> = {
