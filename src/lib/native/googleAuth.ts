@@ -89,9 +89,15 @@ export async function signInWithGoogleNative(
       ? crypto.randomUUID()
       : Math.random().toString(36).slice(2) + Date.now().toString(36);
 
+  // Don't pass `scopes` here — the @capgo plugin rejects scope requests
+  // unless MainActivity.java is modified to handle the auth-code callback
+  // ("You CANNOT use scopes without modifying the main activity"). For
+  // signInWithIdToken we only need the bare ID token, and Google
+  // automatically embeds the email + profile claims in the JWT via the
+  // implicit `openid profile email` scopes — no explicit request needed.
   const login = await SocialLogin.login({
     provider: "google",
-    options: { scopes: ["email", "profile"], nonce },
+    options: { nonce },
   });
 
   if (login.result.responseType !== "online" || !login.result.idToken) {
