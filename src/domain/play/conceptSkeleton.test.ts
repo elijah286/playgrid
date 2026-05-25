@@ -340,6 +340,9 @@ describe("generateConceptSkeleton — flag_4v4 adapted concepts pass coverage + 
     "Snag",
     "Four Verticals",
     "Mesh",
+    "Flood",
+    "Drive",
+    "Levels",
   ] as const;
 
   for (const conceptName of FLAG_4V4_ADAPTED_CONCEPTS) {

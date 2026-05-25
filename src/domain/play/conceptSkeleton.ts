@@ -632,6 +632,25 @@ function buildFlood(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRes
   const side: "left" | "right" = opts.strength ?? "right";
   const outsideWR = side === "right" ? "Z" : "X";
   const backsideWR = side === "right" ? "X" : "Z";
+  if (variant === "flag_4v4") {
+    // 4v4 Flood: three levels to the strong side stretches the
+    // defense without needing 5 receivers. Outside corner (high),
+    // Y out (mid), backside WR drags toward the flood as the low.
+    // With only 3 eligibles there's no "backside clear" — the
+    // backside drag IS the low element of the flood.
+    const assignments = flagFourRoutes({
+      [outsideWR]: { family: "Corner", depthYds: 10 },
+      Y: { family: "Out", depthYds: 6 },
+      [backsideWR]: { family: "Drag", depthYds: 3 },
+    });
+    return {
+      ok: true,
+      concept: "Flood",
+      spec: baseSpec(variant, `Flood ${cap(side)}`, "Trips", side, assignments),
+      notes:
+        `Flood ${cap(side)} (4v4 3-level): @${outsideWR} corner @ 10yd (high), @Y out @ 6yd (mid), @${backsideWR} drag @ 3yd (low, crosses ${side === "right" ? "left-to-right" : "right-to-left"} into the flood). Three-level vertical stretch using all 3 eligibles.`,
+    };
+  }
   if (variant === "flag_5v5") {
     // Flood 5v5: three levels to the strong side. Outside corner @ 14
     // (high), Y out @ 8 (mid, second-level break), C flat @ 4 (low —
@@ -699,6 +718,22 @@ function buildFlood(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRes
 
 function buildDrive(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
   const variant = opts.variant;
+  if (variant === "flag_4v4") {
+    // 4v4 Drive: under-drag + over-dig high-low on the middle. With
+    // only 3 eligibles the backside is the deep clear.
+    const assignments = flagFourRoutes({
+      Y: { family: "Drag", depthYds: 3 },
+      X: { family: "Dig", depthYds: 10 },
+      Z: { family: "Go", depthYds: 12 },
+    });
+    return {
+      ok: true,
+      concept: "Drive",
+      spec: baseSpec(variant, "Drive", "Spread", undefined, assignments),
+      notes:
+        `Drive (4v4): @Y under-drag @ 3yd + @X dig @ 10yd over the top — two crossers attacking the middle at differentiated depths. @Z go @ 12yd to clear backside.`,
+    };
+  }
   if (variant === "flag_5v5") {
     const assignments = flagFiveRoutes({
       Y: { family: "Drag", depthYds: 3 },
@@ -734,6 +769,22 @@ function buildDrive(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRes
 
 function buildLevels(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
   const variant = opts.variant;
+  if (variant === "flag_4v4") {
+    // 4v4 Levels: low-in + high-dig stacked on the LB. 3-receiver
+    // adaptation drops the deep backside outlet.
+    const assignments = flagFourRoutes({
+      Y: { family: "In", depthYds: 6 },
+      X: { family: "Dig", depthYds: 10 },
+      Z: { family: "Go", depthYds: 12 },
+    });
+    return {
+      ok: true,
+      concept: "Levels",
+      spec: baseSpec(variant, "Levels", "Spread", undefined, assignments),
+      notes:
+        `Levels (4v4): @Y in @ 6yd (low) + @X dig @ 10yd (high) — high-low on the underneath LB. @Z go @ 12yd to clear.`,
+    };
+  }
   if (variant === "flag_5v5") {
     const assignments = flagFiveRoutes({
       Y: { family: "In", depthYds: 7 },
