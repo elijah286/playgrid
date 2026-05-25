@@ -186,6 +186,35 @@ function flagFiveRoutes(routes: Record<string, { family: string; depthYds: numbe
   return assignments;
 }
 
+/** Compact assignments shape for the 4v4 roster {Q, X, Y, Z} (no C).
+ *
+ *  In 4v4 there are only 3 eligible receivers. Concepts that rely on a
+ *  4th underneath option (Curl-Flat's C-flat, Snag's Spot-route, Mesh's
+ *  second drag, 4 Verts's 4th vertical) drop the extra slot and become
+ *  legitimate 3-receiver adaptations. The concept-match validator's
+ *  LENIENT_PATTERN_VARIANTS set already accepts these for flag_4v4.
+ *
+ *  Roster mapping convention (analogous to flagFiveRoutes):
+ *  - @X and @Z keep their outside-receiver roles
+ *  - @Y is the middle/slot eligible — absorbs C-equivalent roles
+ *    (snapper-as-eligible, inside-the-trips, underneath outlet)
+ *  - There is NO C / RB / FB / TE in 4v4 — caller must not pass those
+ *    keys (any non-{X,Y,Z,Q} ids are silently dropped before the
+ *    synthesizer fails on unknown players)
+ *
+ *  Caller pattern: pass {ID: {family, depthYds}} for whichever subset
+ *  of X/Y/Z gets a route. QB is added automatically. */
+function flagFourRoutes(routes: Record<string, { family: string; depthYds: number }>): PlayerAssignment[] {
+  const ALLOWED = new Set(["X", "Y", "Z"]);
+  const assignments: PlayerAssignment[] = [];
+  for (const [id, r] of Object.entries(routes)) {
+    if (!ALLOWED.has(id)) continue;
+    assignments.push(routeAt(id, r.family, r.depthYds));
+  }
+  assignments.push(qbDropback());
+  return assignments;
+}
+
 // ── Per-concept builders ────────────────────────────────────────────────
 
 function buildCurlFlat(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
@@ -195,7 +224,17 @@ function buildCurlFlat(_c: ConceptEntry, opts: ConceptSkeletonOptions): Skeleton
   const backsideWR = side === "right" ? "X" : "Z";
   let assignments: PlayerAssignment[];
   let notes: string;
-  if (variant === "flag_5v5") {
+  if (variant === "flag_4v4") {
+    // 4v4 roster {Q,X,Y,Z} — no C. The middle eligible @Y absorbs the
+    // flat (low) role that @C plays in 5v5. Three routes total + QB.
+    assignments = flagFourRoutes({
+      [outsideWR]: { family: "Curl", depthYds: 5 },
+      Y: { family: "Flat", depthYds: 4 },
+      [backsideWR]: { family: "Go", depthYds: 12 },
+    });
+    notes =
+      `Curl-Flat ${cap(side)}: @${outsideWR} curl @ 5yd (high), @Y flat @ 4yd (low) — high-low on the flat defender (4v4: middle eligible @Y is the underneath outlet). @${backsideWR} go @ 12yd to clear.`;
+  } else if (variant === "flag_5v5") {
     // 5v5 roster {Q,C,X,Y,Z}. Curl (high) on outside Z, Flat (low) on
     // C — the snapper-eligible underneath as the high-low partner. Y
     // takes the slot Sit; backside X clears.
@@ -246,7 +285,16 @@ function buildSlantFlat(_c: ConceptEntry, opts: ConceptSkeletonOptions): Skeleto
   const backsideWR = side === "right" ? "X" : "Z";
   let assignments: PlayerAssignment[];
   let notes: string;
-  if (variant === "flag_5v5") {
+  if (variant === "flag_4v4") {
+    // 4v4: same shape, @Y as the flat outlet (no C).
+    assignments = flagFourRoutes({
+      [outsideWR]: { family: "Slant", depthYds: 5 },
+      Y: { family: "Flat", depthYds: 3 },
+      [backsideWR]: { family: "Go", depthYds: 12 },
+    });
+    notes =
+      `Slant-Flat ${cap(side)}: @${outsideWR} slant @ 5yd (high), @Y flat @ 3yd (low) — high-low on the flat defender (4v4: middle eligible underneath). @${backsideWR} go @ 12yd to clear.`;
+  } else if (variant === "flag_5v5") {
     assignments = flagFiveRoutes({
       [outsideWR]: { family: "Slant", depthYds: 5 },
       C: { family: "Flat", depthYds: 3 },
@@ -287,7 +335,18 @@ function buildSmash(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRes
   const backsideWR = side === "right" ? "X" : "Z";
   let assignments: PlayerAssignment[];
   let notes: string;
-  if (variant === "flag_5v5") {
+  if (variant === "flag_4v4") {
+    // 4v4 Smash: same high-low (Hitch+Corner), backside go to clear.
+    // No 4th eligible for an additional flat — the lenient validator
+    // accepts the 3-route shape.
+    assignments = flagFourRoutes({
+      [outsideWR]: { family: "Hitch", depthYds: 5 },
+      Y: { family: "Corner", depthYds: 10 },
+      [backsideWR]: { family: "Go", depthYds: 12 },
+    });
+    notes =
+      `Smash ${cap(side)}: @${outsideWR} hitch @ 5yd (low), @Y corner @ 10yd (high) — high-low on the corner. @${backsideWR} go @ 12yd to clear backside.`;
+  } else if (variant === "flag_5v5") {
     // Smash 5v5: high-low on the corner. Y runs the corner over the
     // outside Hitch; C takes the Flat as the eligible underneath.
     assignments = flagFiveRoutes({
@@ -327,6 +386,22 @@ function buildStick(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRes
   const side: "left" | "right" = opts.strength ?? "right";
   const outsideWR = side === "right" ? "Z" : "X";
   const backsideWR = side === "right" ? "X" : "Z";
+  if (variant === "flag_4v4") {
+    // 4v4 Stick: classic 3-receiver triangle. @Y plays the stick at 6yd,
+    // outside WR runs the flat as the low element, backside WR clears.
+    const assignments = flagFourRoutes({
+      Y: { family: "Sit", depthYds: 6 },
+      [outsideWR]: { family: "Flat", depthYds: 4 },
+      [backsideWR]: { family: "Go", depthYds: 12 },
+    });
+    return {
+      ok: true,
+      concept: "Stick",
+      spec: baseSpec(variant, `Stick ${cap(side)}`, "Trips", side, assignments),
+      notes:
+        `Stick ${cap(side)}: @Y stick @ 6yd, @${outsideWR} flat @ 4yd — high-low on the flat defender (4v4 3-receiver triangle). @${backsideWR} go @ 12yd to clear backside.`,
+    };
+  }
   if (variant === "flag_5v5") {
     // Stick 5v5: Y plays the slot stick (Sit @ 6yd). C takes the Flat
     // as the eligible underneath. X/Z run quick verticals to clear.
@@ -372,7 +447,19 @@ function buildSnag(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResu
   const backsideWR = side === "right" ? "X" : "Z";
   let assignments: PlayerAssignment[];
   let notes: string;
-  if (variant === "flag_5v5") {
+  if (variant === "flag_4v4") {
+    // 4v4 Snag: only 3 eligibles, so the triangle reduces to
+    // Spot+Corner+Flat with no extra clear. Lenient validator
+    // accepts the 3-route adaptation as a valid Snag.
+    assignments = [
+      routeAt("Y", "Spot", 5),
+      routeAt(outsideWR, "Corner", 10),
+      routeAt(backsideWR, "Flat", 4),
+      qbDropback(),
+    ];
+    notes =
+      `Snag ${cap(side)}: @Y spot @ 5yd, @${outsideWR} corner @ 10yd, @${backsideWR} flat @ 4yd — 3-receiver triangle stretch (4v4 adaptation).`;
+  } else if (variant === "flag_5v5") {
     // 5v5 roster: {Q, C, X, Y, Z}. No traditional slot or back, so the
     // triangle maps to: Y=Spot (the inside short), C=Flat (the
     // snapper-eligible underneath outlet — required per the 5v5
@@ -414,6 +501,22 @@ function buildSnag(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResu
 
 function buildFourVerts(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
   const variant = opts.variant;
+  if (variant === "flag_4v4") {
+    // 4v4 "Four Verticals" → 3 Verts. Three eligibles all run vertical;
+    // QB picks the open seam. Lenient validator accepts as Four Verts.
+    const assignments = flagFourRoutes({
+      X: { family: "Go", depthYds: 12 },
+      Y: { family: "Seam", depthYds: 10 },
+      Z: { family: "Go", depthYds: 12 },
+    });
+    return {
+      ok: true,
+      concept: "Four Verticals",
+      spec: baseSpec(variant, "Four Verticals", "Trips", undefined, assignments),
+      notes:
+        `Four Verticals (4v4 scale → 3 Verts): @X+@Z go routes outside, @Y seam @ 10yd up the middle. With only 3 eligibles, the "fourth vert" simply doesn't exist — QB picks the open seam vs whatever coverage shell the defense shows.`,
+    };
+  }
   if (variant === "flag_5v5") {
     // Four Verticals in 5v5 is structurally a 3-Verts concept (only 3
     // true receivers besides QB+C): X+Z go, Y seams. C runs a quick
@@ -453,6 +556,24 @@ function buildFourVerts(_c: ConceptEntry, opts: ConceptSkeletonOptions): Skeleto
 
 function buildMesh(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
   const variant = opts.variant;
+  if (variant === "flag_4v4") {
+    // 4v4 Mesh: only 3 eligibles, so the canonical 2-drag mesh
+    // reduces to 1 drag + over-the-top. @Y runs the under-drag at 2yd
+    // (the "mesh point" / pick element); outside WRs run a curl over
+    // the top + a clear. Lenient validator accepts as a Mesh.
+    const assignments = flagFourRoutes({
+      Y: { family: "Drag", depthYds: 2 },
+      X: { family: "Curl", depthYds: 8 },
+      Z: { family: "Go", depthYds: 12 },
+    });
+    return {
+      ok: true,
+      concept: "Mesh",
+      spec: baseSpec(variant, "Mesh", "Trips", undefined, assignments),
+      notes:
+        `Mesh (4v4 1-drag): @Y under-drag @ 2yd creates the rub; @X curl @ 8yd settles over the top, @Z go @ 12yd to clear. With only 3 eligibles, the canonical 2-drag becomes a single drag + curl + clear.`,
+    };
+  }
   if (variant === "flag_5v5") {
     // Mesh 5v5: Y under-drag, C over-drag (the canonical mesh
     // crossing pair, with C as the eligible-receiver center). X curls
@@ -974,7 +1095,12 @@ function buildSingleHandoffRun(
   // `unspecified` ships a play with idle receivers. Replace with a
   // short stalk-hitch (3yd) so the receivers look like stalk-blockers
   // in shape while satisfying the gate.
-  const isFlag = variant === "flag_5v5" || variant === "flag_6v6" || variant === "flag_7v7";
+  const isFlag =
+    variant === "flag_4v4" ||
+    variant === "flag_5v5" ||
+    variant === "flag_6v6" ||
+    variant === "flag_7v7" ||
+    variant === "touch_7v7";
   const stalkAction: AssignmentAction = isFlag
     ? { kind: "route", family: "Hitch", depthYds: 3 }
     : { kind: "unspecified" };
