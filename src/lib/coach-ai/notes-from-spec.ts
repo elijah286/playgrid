@@ -59,6 +59,16 @@ export function projectSpecToNotes(spec: PlaySpec): string {
 function projectOffenseSpec(spec: PlaySpec): string {
   const lines: string[] = [];
 
+  // **Run-play detection** (2026-05-25 regression). Any `kind: "carry"`
+  // assignment marks this as a run-flavored play. The flag plumbs
+  // through `bulletFor` → `narrateAction` → `narrateBlock` so OL bullets
+  // switch from "pass protect" (the pass-game default) to a run-block
+  // phrasing on run plays. Without this, every run play's OL bullets
+  // read as if the line was pass-protecting — which is exactly the
+  // user-reported bug (Dive Right showing 5× "pass protect").
+  const isRunPlay = spec.assignments.some((a) => a.action.kind === "carry");
+  const playCtx: NarrationContext = { isRunPlay };
+
   // **When-to-use lead.** Every play opens with a one-line situational
   // cue — a coach scanning the play card / playsheet must know "when do
   // I call this?" within the first sentence. Surfaced 2026-05-04: the
@@ -82,7 +92,7 @@ function projectOffenseSpec(spec: PlaySpec): string {
 
   // Per-assignment bullet. Skip `unspecified` — they add noise.
   for (const assignment of spec.assignments) {
-    const bullet = bulletFor(assignment);
+    const bullet = bulletFor(assignment, playCtx);
     if (bullet) lines.push(`- ${bullet}`);
   }
 
@@ -441,9 +451,29 @@ function formatMeshPoint(point: [number, number]): string {
   return `${dist.toFixed(0)} yard${dist >= 1.5 ? "s" : ""} ${side} of center, ${depth}`;
 }
 
-function bulletFor(assignment: PlayerAssignment): string | null {
+/**
+ * Per-play narration context — flags that change phrasing across many
+ * assignments (e.g. "is this a run play"). Added 2026-05-25 so
+ * `narrateBlock` can pick run-block vs pass-pro defaults from a single
+ * play-type signal, rather than re-detecting from a per-assignment view.
+ *
+ * The context is computed ONCE in `projectOffenseSpec` and threaded
+ * down to each `narrateAction` call. Future flags (isPlayAction,
+ * isRPO, isScreen) plug into the same shape without touching the
+ * narrator's call sites.
+ */
+export type NarrationContext = {
+  /** True when any assignment in the spec has `kind: "carry"`. Used by
+   *  `narrateBlock` to switch OL/blocker defaults from pass-pro to
+   *  run-block phrasing. */
+  isRunPlay: boolean;
+};
+
+const NO_CTX: NarrationContext = { isRunPlay: false };
+
+function bulletFor(assignment: PlayerAssignment, ctx: NarrationContext = NO_CTX): string | null {
   const ref = `@${assignment.player}`;
-  const body = narrateAction(ref, assignment.action);
+  const body = narrateAction(ref, assignment.action, ctx);
   if (!body) return null;
   // Hedging: low-confidence assignments get prefixed with "(unconfirmed)"
   // so the coach knows Cal isn't sure. Keeps the structural meaning
@@ -456,12 +486,16 @@ function bulletFor(assignment: PlayerAssignment): string | null {
   return body;
 }
 
-export function narrateAction(ref: string, action: AssignmentAction): string | null {
+export function narrateAction(
+  ref: string,
+  action: AssignmentAction,
+  ctx: NarrationContext = NO_CTX,
+): string | null {
   switch (action.kind) {
     case "route":
       return narrateRoute(ref, action);
     case "block":
-      return narrateBlock(ref, action);
+      return narrateBlock(ref, action, ctx);
     case "carry":
       return narrateCarry(ref, action);
     case "motion":
@@ -519,8 +553,22 @@ function narrateRoute(
 function narrateBlock(
   ref: string,
   action: Extract<AssignmentAction, { kind: "block" }>,
+  ctx: NarrationContext = NO_CTX,
 ): string {
-  if (!action.target) return `${ref}: pass protect.`;
+  if (!action.target) {
+    // Default block phrasing depends on play type (2026-05-25).
+    // Run play → run-block default. Pass play → pass-pro default.
+    // OL on a Dive don't "pass protect" — they down-block, drive-block,
+    // combo-block their assigned defender to the second level. We don't
+    // have per-OL gap assignments in the spec for diagram-derived plays,
+    // so the default keeps the prose honest: it tells the coach "this is
+    // run blocking" without inventing a specific gap that may not match
+    // the actual called scheme.
+    if (ctx.isRunPlay) {
+      return `${ref}: run-block — drive your man off the ball to the playside, combo to the second level.`;
+    }
+    return `${ref}: pass protect.`;
+  }
   if (action.target === "edge") return `${ref}: protect the edge — pick up the first defender outside.`;
   if (action.target === "interior") return `${ref}: protect interior — pick up A/B-gap pressure.`;
   if (action.target === "blitz") return `${ref}: blitz pickup — find the unblocked rusher.`;
@@ -536,7 +584,15 @@ function narrateCarry(
   if (action.runType) {
     return `${ref}: ${formatRunType(action.runType)}${cuePart}.`;
   }
-  return `${ref}: take the handoff and run the called gap.`;
+  // Diagram-derived carry (no runType in spec) — give a useful default
+  // that names the universal read: press the LOS, key the first defender
+  // who shows color (the playside LB on most run schemes), and react
+  // (cut up vs scrape, bounce vs press, bend vs spill). Better than the
+  // prior generic "take the handoff and run the called gap" which gave
+  // the coach nothing to teach from. Surfaced 2026-05-25 alongside the
+  // parser fix that finally produces this branch instead of returning a
+  // misleading "Unrecognized" custom action.
+  return `${ref}: take the handoff, press the LOS, and read the playside LB — if he scrapes, cut back; if he fills, bounce.`;
 }
 
 function narrateMotion(

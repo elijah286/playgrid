@@ -184,3 +184,96 @@ describe("specParser — defender movement preservation", () => {
     expect(fs!.action.description.length).toBeGreaterThan(5);
   });
 });
+
+describe("specParser — run-play primitives (route_kind 'carry' + 'handoff')", () => {
+  // Surfaced 2026-05-25 production: a coach saw a Dive Right run play
+  // whose notes said "(unconfirmed) @QB: Unrecognized route_kind
+  // 'carry'." / "(unconfirmed) @B: Unrecognized route_kind 'carry'."
+  //
+  // Cause: `actionFromRoute` in specParser.ts treats `route_kind` as a
+  // route family name and tries to look it up in the catalog. "carry"
+  // isn't a route family — it's a run-play primitive (the ball-carrier
+  // path). The lookup fails and falls through to a custom action with
+  // the misleading "Unrecognized" description. Same applies to
+  // `route_kind: "handoff"` (the renderer-only indicator arrow between
+  // QB and ball-carrier).
+  //
+  // Fix: recognize "carry" → `{ kind: "carry", waypoints: path }`
+  // BEFORE the template lookup; recognize "handoff" → `{ kind:
+  // "unspecified" }` (the handoff indicator is metadata, not an
+  // assignment — the ballPath ledger carries the real exchange info).
+
+  function makeOffenseDiagram(overrides: Partial<CoachDiagram> = {}): CoachDiagram {
+    return {
+      variant: "tackle_11",
+      title: "Dive Right",
+      players: [
+        { id: "QB", team: "O", x: 0, y: -5 },
+        { id: "B",  team: "O", x: 0, y: -7 },
+        { id: "LT", team: "O", x: -3, y: 0 },
+        { id: "C",  team: "O", x: 0, y: 0 },
+        { id: "RT", team: "O", x: 3, y: 0 },
+      ],
+      routes: [],
+      ...overrides,
+    };
+  }
+
+  it("parses route_kind='carry' as a kind:'carry' assignment (NOT custom)", () => {
+    const spec = coachDiagramToPlaySpec(
+      makeOffenseDiagram({
+        routes: [
+          { from: "B", route_kind: "carry", path: [[1, 0], [3, 2], [5, 5]] },
+        ],
+      }),
+    );
+    const b = spec.assignments.find((a) => a.player === "B");
+    expect(b).toBeDefined();
+    if (!b) return;
+    // The whole point of the fix: kind must be "carry", not "custom"
+    // with an "Unrecognized" description.
+    expect(b.action.kind).toBe("carry");
+    if (b.action.kind !== "carry") return;
+    expect(b.action.waypoints).toEqual([[1, 0], [3, 2], [5, 5]]);
+  });
+
+  it("does NOT emit 'Unrecognized route_kind' for kind:'carry' routes", () => {
+    const spec = coachDiagramToPlaySpec(
+      makeOffenseDiagram({
+        routes: [
+          { from: "B", route_kind: "carry", path: [[1, 5]] },
+          { from: "QB", route_kind: "carry", path: [[0, -3]] },
+        ],
+      }),
+    );
+    for (const a of spec.assignments) {
+      if (a.action.kind === "custom") {
+        expect(a.action.description).not.toMatch(/Unrecognized/i);
+      }
+    }
+  });
+
+  it("parses route_kind='handoff' as an indicator (no real assignment kind)", () => {
+    // The handoff arrow is a renderer-only indicator route showing the
+    // QB → carrier exchange. It carries no per-player intent — the
+    // ballPath ledger is the source of truth for handoffs. The parser
+    // should treat handoff routes as informational, NOT as a custom
+    // action that emits "Unrecognized" in notes.
+    const spec = coachDiagramToPlaySpec(
+      makeOffenseDiagram({
+        routes: [
+          { from: "QB", route_kind: "handoff", path: [[0, -6]] },
+        ],
+      }),
+    );
+    const qb = spec.assignments.find((a) => a.player === "QB");
+    expect(qb).toBeDefined();
+    if (!qb) return;
+    // Must NOT be a custom "Unrecognized" — either unspecified, block,
+    // or absent (filtered out). The strong assertion is "no Unrecognized
+    // in the description if it ends up as custom."
+    if (qb.action.kind === "custom") {
+      expect(qb.action.description).not.toMatch(/Unrecognized/i);
+    }
+  });
+});

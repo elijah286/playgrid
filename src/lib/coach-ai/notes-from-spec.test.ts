@@ -507,3 +507,87 @@ describe("projectSpecToNotes — ballPath narration (step 6)", () => {
     expect(notes).not.toContain("**Ball flow:**");
   });
 });
+
+describe("projectSpecToNotes — run-play OL narration (2026-05-25 regression)", () => {
+  // Surfaced 2026-05-25 production: a Dive Right run play (Inside Zone)
+  // showed all 5 OL bullets as "pass protect", which is the projector's
+  // default for `kind: "block"` when `action.target` is unset. On a
+  // RUN play, OL should be doing run blocks — the prose has to switch
+  // perspective based on play type.
+  //
+  // The fix is a play-type context flag (`isRunPlay` = "any assignment
+  // has kind:'carry'") plumbed from projectOffenseSpec → narrateBlock.
+  // When isRunPlay is true, the default block phrasing switches to a
+  // run-block description ("down block" / "drive block" / "seal the
+  // playside gap") instead of "pass protect".
+  //
+  // This pairs with the parser fix (specParser.test.ts) that makes
+  // `route_kind: "carry"` produce `kind: "carry"` instead of falling
+  // through to the unrecognized-route custom action. Without the parser
+  // fix, hasCarry stays false and this whole branch never fires;
+  // without the projector fix, even a correct spec produces wrong OL
+  // notes for run plays.
+
+  it("OL on a RUN play do not say 'pass protect' (use a run-block phrasing)", () => {
+    const spec = baseSpec({
+      variant: "tackle_11",
+      formation: { name: "I-Formation" },
+      assignments: [
+        { player: "LT", action: { kind: "block" } },
+        { player: "LG", action: { kind: "block" } },
+        { player: "C", action: { kind: "block" } },
+        { player: "RG", action: { kind: "block" } },
+        { player: "RT", action: { kind: "block" } },
+        { player: "B", action: { kind: "carry", runType: "inside_zone" } },
+      ],
+    });
+    const notes = projectSpecToNotes(spec);
+    // Each OL bullet must NOT say "pass protect" — they're run-blocking.
+    expect(notes).not.toMatch(/@LT: pass protect/);
+    expect(notes).not.toMatch(/@LG: pass protect/);
+    expect(notes).not.toMatch(/@C: pass protect/);
+    expect(notes).not.toMatch(/@RG: pass protect/);
+    expect(notes).not.toMatch(/@RT: pass protect/);
+    // Must use a run-block phrasing — at least one of these terms.
+    expect(notes).toMatch(/run[-\s]?block|down[-\s]?block|drive[-\s]?block|seal|combo|reach/i);
+  });
+
+  it("OL on a PASS play still say 'pass protect' (preserves the original behavior)", () => {
+    const spec = baseSpec({
+      variant: "tackle_11",
+      formation: { name: "Empty" },
+      assignments: [
+        { player: "LT", action: { kind: "block" } },
+        { player: "X", action: { kind: "route", family: "Slant" } },
+      ],
+    });
+    const notes = projectSpecToNotes(spec);
+    // No carry in the spec → still a pass-pro default for OL.
+    expect(notes).toMatch(/@LT: pass protect/);
+  });
+
+  it("the run-play opener fires when any assignment has kind:'carry'", () => {
+    // Pairs with whenToUseForOffense — hasCarry=true should produce a
+    // run-flavored "Use when" line, not the pass-play fallback ("Best
+    // on early downs to attack the called coverage with a balanced
+    // progression"). The user's screenshot shows that exact fallback —
+    // proof that hasCarry was falsely computing to false because the
+    // spec had `kind: "custom"` carriers (parser bug, see specParser
+    // tests), or because some other code path is bypassing the spec.
+    // This test pins the projector's behavior given a CORRECT spec.
+    const spec = baseSpec({
+      variant: "tackle_11",
+      formation: { name: "I-Formation" },
+      assignments: [
+        { player: "B", action: { kind: "carry", runType: "inside_zone" } },
+      ],
+    });
+    const notes = projectSpecToNotes(spec);
+    // The pass-play default opener phrase must NOT appear.
+    expect(notes).not.toMatch(
+      /Best on early downs to attack the called coverage with a balanced progression/,
+    );
+    // A run-flavored opener should appear.
+    expect(notes).toMatch(/[Gg]round call|[Rr]un[-\s]?(pass|game)|[Ee]arly[-\s]?down call/);
+  });
+});

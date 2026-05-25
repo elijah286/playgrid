@@ -327,6 +327,36 @@ function actionFromRoute(
 ): AssignmentAction {
   const kind = (route.route_kind ?? "").trim();
   if (kind) {
+    // Run-play primitives — recognize BEFORE the route-template lookup
+    // (2026-05-25 regression). The renderer tags ballcarrier paths
+    // with `route_kind: "carry"` and the renderer-only handoff
+    // indicator with `route_kind: "handoff"`. Neither is a route
+    // family — the catalog lookup would fail and fall through to a
+    // misleading `{ kind: "custom", description: "Unrecognized
+    // route_kind \"carry\"" }` that surfaces in coach-visible notes.
+    //
+    // "carry" → real `kind: "carry"` assignment carrying the path
+    // waypoints. The runType isn't recoverable from the diagram
+    // alone (catalog-derived plays preserve it via `metadata.spec`
+    // BEFORE re-parse) — but a carry assignment with waypoints + no
+    // runType still narrates correctly via `narrateCarry`.
+    //
+    // "handoff" → no assignment; the ballPath ledger is the source
+    // of truth for exchanges. Returning `{ kind: "unspecified" }`
+    // means the projector skips the bullet (per Rule 277 in
+    // notes-from-spec.test.ts), which is the correct behavior — the
+    // handoff arrow isn't a per-player job; the QB's REAL job
+    // (carry, block, RPO read) lives on its own assignment.
+    if (kind.toLowerCase() === "carry") {
+      const action: AssignmentAction = { kind: "carry" };
+      if (route.path && route.path.length > 0) {
+        return { ...action, waypoints: route.path.map(([x, y]) => [x, y] as [number, number]) };
+      }
+      return action;
+    }
+    if (kind.toLowerCase() === "handoff") {
+      return { kind: "unspecified" };
+    }
     const template = findTemplate(kind);
     if (template) {
       // Compute depthYds from the path's deepest waypoint relative to
