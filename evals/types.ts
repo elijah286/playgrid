@@ -24,7 +24,13 @@ import type { ChatMessage } from "@/lib/coach-ai/llm";
 export type ScenarioContext = {
   /** Sport variant Cal should default to. Required because most
    *  coaching prompts only make sense in a variant context. */
-  sportVariant: "flag_5v5" | "flag_6v6" | "flag_7v7" | "tackle_11";
+  sportVariant:
+    | "flag_4v4"
+    | "flag_5v5"
+    | "flag_6v6"
+    | "flag_7v7"
+    | "touch_7v7"
+    | "tackle_11";
   /** When set, simulates an anchored playbook the coach is editing.
    *  Plays/notes/calendar tools become available to Cal. */
   playbookId?: string;
