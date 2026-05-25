@@ -74,6 +74,11 @@ type Props = {
   isPlayArchived?: boolean;
   allFormations?: SavedFormation[];
   canEdit?: boolean;
+  /** Public Learning Center rendering. Suppresses server actions that
+   *  assume a real playbook (sibling-nav refresh, rename, archive,
+   *  delete) — the library has a synthetic playbookId that isn't a UUID
+   *  and any authenticated action would fail anyway. */
+  libraryMode?: boolean;
   /** When true, the sibling-play navigation (Previous/All plays/Next) and
    *  the Copy button are hidden on small screens so the limited mobile
    *  width goes to the edit toolbar instead. Desktop always shows them. */
@@ -110,6 +115,7 @@ export function EditorHeaderBar({
   isPlayArchived = false,
   allFormations = [],
   canEdit = true,
+  libraryMode = false,
   hideMobileNav = false,
   mode,
   onToggleMode,
@@ -160,8 +166,10 @@ export function EditorHeaderBar({
   const playNumber = ix >= 0 ? ix + 1 : null;
 
   // Refresh the sibling nav when this play is renamed (server-side ordering may
-  // change). Cheap best-effort; ignore result if it fails.
+  // change). Cheap best-effort; ignore result if it fails. Skipped in library
+  // mode — the synthetic playbookId would always 400 on the UUID parse.
   useEffect(() => {
+    if (libraryMode) return;
     startTransition(async () => {
       const res = await listPlaybookPlaysForNavigationAction(playbookId);
       if (res.ok) {
@@ -170,7 +178,7 @@ export function EditorHeaderBar({
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playId]);
+  }, [playId, libraryMode]);
 
   return (
     <header className="flex flex-col border-b border-border pb-1">

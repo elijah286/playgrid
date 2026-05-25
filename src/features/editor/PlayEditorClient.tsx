@@ -182,19 +182,36 @@ type Props = {
    *  persistent banner offering Keep / Discard so the coach can promote
    *  it to a normal play or remove it. */
   isTutorialPlay?: boolean;
+  /** When true, the editor is rendering in the public Learning Center
+   *  for an unauthenticated reader (or any auth state with no edit
+   *  context). Implies `canEdit=false` and disables Cal observation
+   *  hooks (`publishLivePlayDoc`, `coach-ai-mutated` listener) so we
+   *  don't push library-render docs into Cal's live-doc store. Other
+   *  read-only modes (archived play, example preview) leave Cal hooks
+   *  active because the coach is still authed in those flows — library
+   *  is the only mode with truly no authenticated context. */
+  libraryMode?: boolean;
 };
 
 export function PlayEditorClient(props: Props) {
   const tutorialVariant = coerceVariant(props.playbookVariant);
+  // Library mode forces canEdit=false regardless of the caller's prop.
+  // The public Learning Center never has an authenticated edit context;
+  // even if the page rendered for a logged-in admin, the in-page editor
+  // is for browsing, not editing — the "Add to my playbook" CTA is the
+  // edit path.
+  const canEditEffective = props.libraryMode ? false : props.canEdit;
   // Only run the tutorial system in real editing contexts. Example previews
   // and archived playbooks are read-only or pseudo-real surfaces — auto-
   // launching a tour there would be confusing and most data-tutor anchors
-  // (formation picker, route toolbar) are hidden.
+  // (formation picker, route toolbar) are hidden. Library mode also skips
+  // the tutorial — it's a reference surface, not an onboarding one.
   const tutorialEligible =
     !props.isExamplePreview &&
     !props.isArchived &&
     !props.isPlayArchived &&
-    Boolean(props.canEdit);
+    !props.libraryMode &&
+    Boolean(canEditEffective);
   return (
     <>
       <ExamplePreviewProvider
@@ -203,9 +220,9 @@ export function PlayEditorClient(props: Props) {
         isPlayArchived={props.isPlayArchived ?? false}
         playbookId={props.playbookId}
         playId={props.playId}
-        canUnarchive={Boolean(props.canEdit) && !props.isExamplePreview}
+        canUnarchive={Boolean(canEditEffective) && !props.isExamplePreview}
       >
-        <PlayEditorClientInner {...props} />
+        <PlayEditorClientInner {...props} canEdit={canEditEffective} />
       </ExamplePreviewProvider>
       {tutorialEligible && (
         <PlayAuthoringAutoLauncher
@@ -251,6 +268,7 @@ function PlayEditorClientInner({
   initialOpponentHidden = false,
   isAdmin = false,
   isTutorialPlay = false,
+  libraryMode = false,
 }: Props) {
   const router = useRouter();
   const { toast } = useToast();
@@ -365,10 +383,15 @@ function PlayEditorClientInner({
   // net defers saves up to 30s; without this, Cal queries play_versions and
   // sees pre-rename labels / pre-recolor fills, then "corrects" the coach
   // based on stale data. Cleared on unmount or playId change.
+  // Library mode skips this entirely — the library renders synthetic playIds
+  // (e.g. "library:mesh:flag-5v5") that don't exist in play_versions, and we
+  // don't want Cal observing a public concept page as if it were the coach's
+  // own draft.
   useEffect(() => {
+    if (libraryMode) return;
     publishLivePlayDoc(playId, doc);
     return () => clearLivePlayDoc(playId);
-  }, [playId, doc]);
+  }, [playId, doc, libraryMode]);
   useEffect(() => {
     if (initialDocument === lastSyncedDocRef.current) return;
     // Active local edits — never replace. Even if `initialDocument` is
@@ -405,7 +428,9 @@ function PlayEditorClientInner({
   // window event. Listening here gives the editor a second hook so a
   // missed refresh on the chat side (route-tree edge cases, mount
   // mismatches) doesn't leave the diagram showing stale geometry.
+  // Library mode skips — public concept pages aren't reactive to Cal.
   useEffect(() => {
+    if (libraryMode) return;
     function onMutated() {
       // Mark the next reconciliation as "force apply" so the dirty-guard
       // doesn't drop Cal's update when the coach has unsaved local edits.
@@ -415,7 +440,7 @@ function PlayEditorClientInner({
     }
     window.addEventListener("coach-ai-mutated", onMutated);
     return () => window.removeEventListener("coach-ai-mutated", onMutated);
-  }, [router]);
+  }, [router, libraryMode]);
 
   // Bump a localStorage counter of distinct plays this user has opened. The
   // feedback widget gates itself on this to avoid showing for brand-new users.
@@ -2119,6 +2144,7 @@ function PlayEditorClientInner({
         allFormations={allFormations}
         canEdit={roleCanEdit}
         isPlayArchived={isPlayArchived}
+        libraryMode={libraryMode}
         hideMobileNav={isTouchDevice && mode === "edit"}
         mode={isTouchDevice ? mode : undefined}
         onToggleMode={isTouchDevice ? toggleMode : undefined}
