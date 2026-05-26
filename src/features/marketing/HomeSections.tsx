@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
+  BookOpen,
   Check,
   LayoutGrid,
   Printer,
@@ -271,6 +272,150 @@ export function FreeForSolo({ freeMaxPlays }: { freeMaxPlays: number }) {
               ))}
             </ul>
           </div>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+/* ---------- Football Library teaser ---------- */
+// Discovery surface for /learn/library. Featured concepts link to the
+// library landing page where coaches see the full category grid; the
+// individual concept pages land in Phase 1c, at which point each tile
+// becomes a direct deep-link.
+const FEATURED_CONCEPTS: Array<{
+  name: string;
+  variant: string;
+  blurb: string;
+  accent: string;
+}> = [
+  {
+    name: "Mesh",
+    variant: "5v5 Flag · Pass",
+    blurb: "Crossing in-routes that pick man coverage at 6 yards.",
+    accent: BRAND_BLUE,
+  },
+  {
+    name: "Smash",
+    variant: "7v7 Flag · Pass",
+    blurb: "Classic high-low on the corner — flag football's most reliable concept.",
+    accent: BRAND_GREEN,
+  },
+  {
+    name: "Four Verticals",
+    variant: "Tackle 11 · Pass",
+    blurb: "Stretch the field vertically. Hits the seam when the safety bites.",
+    accent: BRAND_ORANGE,
+  },
+  {
+    name: "Cover 2 (zone)",
+    variant: "Defense · all variants",
+    blurb: "Two deep safeties, five underneath. Read the QB, break on the throw.",
+    accent: BRAND_BLUE,
+  },
+  {
+    name: "Trips Right",
+    variant: "Formation · 5v5 / 7v7",
+    blurb: "Three receivers stacked to one side. Forces the defense to declare.",
+    accent: BRAND_GREEN,
+  },
+  {
+    name: "Mesh release drill",
+    variant: "Drill · all ages",
+    blurb: "Receivers cross at 6 yards, no defense. The foundation of teaching Mesh.",
+    accent: BRAND_ORANGE,
+  },
+];
+
+export function FootballLibraryTeaser() {
+  return (
+    <section
+      className="relative overflow-hidden py-14 md:py-24"
+      style={{
+        background:
+          "linear-gradient(180deg, rgba(23,105,255,0.06) 0%, transparent 70%)",
+      }}
+    >
+      <div className="mx-auto max-w-6xl px-6">
+        <Reveal>
+          <div className="flex flex-col items-start gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <SectionEyebrow icon={BookOpen} color={BRAND_BLUE}>
+                Football Library
+              </SectionEyebrow>
+              <h2 className="mt-3 text-4xl font-extrabold tracking-tight md:text-5xl">
+                Learn the game
+                <br />
+                <span style={{ color: BRAND_BLUE }}>while you build playbooks.</span>
+              </h2>
+              <p className="mt-5 max-w-2xl text-lg text-muted">
+                A free, public library of football concepts — plays, formations,
+                routes, defenses, drills, and practice plans. Each concept page
+                renders the play in the same editor you&apos;d use to design it,
+                with coaching cues and an &ldquo;Add to my playbook&rdquo; button.
+              </p>
+            </div>
+            <Link
+              href="/learn/library"
+              className="inline-flex shrink-0 items-center gap-2 rounded-lg px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-hover"
+              style={{ background: BRAND_BLUE }}
+            >
+              Browse the library
+              <ArrowRight className="size-4" />
+            </Link>
+          </div>
+        </Reveal>
+
+        <Reveal delay={100}>
+          <ul className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {FEATURED_CONCEPTS.map((c) => (
+              <li key={c.name}>
+                <Link
+                  href="/learn/library"
+                  className="group block h-full overflow-hidden rounded-2xl border border-border bg-surface-raised transition-all hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  <div
+                    aria-hidden
+                    className="relative flex h-28 items-center justify-center overflow-hidden"
+                    style={{
+                      background: `linear-gradient(135deg, ${c.accent}22 0%, ${c.accent}05 100%)`,
+                    }}
+                  >
+                    <div
+                      className="text-4xl font-extrabold tracking-tight opacity-30"
+                      style={{ color: c.accent }}
+                    >
+                      {c.name.split(" ")[0]}
+                    </div>
+                    <span
+                      className="absolute right-3 top-3 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white"
+                      style={{ background: c.accent }}
+                    >
+                      Preview
+                    </span>
+                  </div>
+                  <div className="p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">
+                      {c.variant}
+                    </p>
+                    <h3 className="mt-1 text-base font-semibold text-foreground transition-colors group-hover:text-primary">
+                      {c.name}
+                    </h3>
+                    <p className="mt-1.5 text-sm leading-relaxed text-muted">
+                      {c.blurb}
+                    </p>
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Reveal>
+
+        <Reveal delay={200}>
+          <p className="mt-8 text-center text-sm text-muted">
+            Concept pages launch in the next release. Until then, tiles take you
+            to the full library where you can browse every category.
+          </p>
         </Reveal>
       </div>
     </section>

@@ -32,6 +32,7 @@ import {
   CoachCalTeaser,
   EveryScreen,
   FinalCta,
+  FootballLibraryTeaser,
   FreeForSolo,
   PrintoutsAndWristbands,
   RealPlaybooks,
@@ -164,6 +165,7 @@ export default async function HomePage() {
           then a final CTA. */}
       <EveryScreen />
       <CoachCalTeaser />
+      <FootballLibraryTeaser />
       <FreeForSolo freeMaxPlays={freeMaxPlays} />
       <PrintoutsAndWristbands />
       <RealPlaybooks examples={examples} />

@@ -6,6 +6,7 @@ import { UserMenu } from "@/components/layout/UserMenu";
 import { CoachAiLauncher } from "@/features/coach-ai/CoachAiLauncher";
 import { ShareButton } from "@/components/share/ShareButton";
 import { InboxBell } from "@/components/layout/InboxBell";
+import { ResourcesDropdown } from "@/components/layout/ResourcesDropdown";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
 
 type Props = {
@@ -94,7 +95,8 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
           </svg>
         </Link>
         {user ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <ResourcesDropdown />
             {/* Cal launcher: trigger button visible only on desktop.
                 The bottom toolbar's CalNavButton takes over on mobile.
                 The launcher stays mounted on every viewport (the
@@ -137,6 +139,7 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
           </div>
         ) : (
           <div className="flex items-center gap-3 sm:gap-4">
+            <ResourcesDropdown />
             {/* Mobile shows Pricing + Sign in (no Share, no Get started).
                 Pricing is muted-weight so Sign in remains the primary CTA,
                 but visible enough that pricing isn't hidden behind a menu.
