@@ -1201,8 +1201,31 @@ function runPathFor(
 ): [number, number][] {
   switch (conceptName) {
     case "Sweep":
-      // Wide arc to the edge: mesh → bend outside → vertical at the numbers.
-      return [mesh, [sideSign * 6, -2], [sideSign * 10, 6]];
+      // CORRECTED 2026-05-26 (audit finding #1). The canonical Sweep
+      // path is LATERAL FIRST — the RB runs parallel to the LOS to
+      // clear the edge of the formation, THEN makes ONE decisive cut
+      // upfield after pulling blockers or the natural edge seals.
+      //
+      // The prior path `[mesh, (6,-2), (10,6)]` was a smooth diagonal
+      // from mesh to the numbers — the back was climbing while still
+      // running laterally, which a coach correctly identified as "the
+      // back ends up running up the middle." A real sweep has the back
+      // pressing the edge first.
+      //
+      // Geometry (right-strength, sideSign=1):
+      //   mesh   = (1.5, -4)  →  initial alignment behind QB, slight playside
+      //   leg 1: (4,   -3)    →  lateral movement, gained 2.5yd lateral and only 1yd shallower (basically parallel to LOS)
+      //   leg 2: (7,   -2.5)  →  continued lateral with slight forward (3yd lateral, 0.5yd up) — pressing the edge
+      //   leg 3: (8,   5)     →  the cut UPFIELD (1yd lateral, 7.5yd vertical) — the "ONE decisive cut" once the lane opens
+      //
+      // The visual signature: a J-shape, not a smooth diagonal. Coach
+      // recognizes it instantly as a sweep.
+      return [
+        mesh,
+        [sideSign * 4, -3],
+        [sideSign * 7, -2.5],
+        [sideSign * 8, 5],
+      ];
     case "Counter":
       // Jab step away, then back: mesh → cut against the grain → vertical.
       // sideSign here is the play direction; the jab is the opposite,

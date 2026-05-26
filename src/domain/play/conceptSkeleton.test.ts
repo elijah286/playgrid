@@ -733,6 +733,73 @@ describe.each([
   });
 });
 
+// ── Sweep carry-path geometry regression (audit finding #1, 2026-05-26) ──
+// A coach surfaced "your sweep looks like the back is running up the
+// middle." Root cause: the original path `[mesh, (6,-2), (10,6)]` was
+// a smooth diagonal — the back gained yards upfield AND laterally on
+// the same legs, with no truly-lateral segment. Canonical Sweep is
+// LATERAL FIRST (press the edge with parallel-to-LOS movement), then
+// ONE decisive cut upfield once the lane opens.
+//
+// This regression locks the corrected J-shape geometry. If a future
+// edit reverts to the diagonal, this test fails.
+describe("generateConceptSkeleton — Sweep carry path geometry", () => {
+  it("RB's path is lateral-first then cuts upfield (J-shape, not diagonal)", () => {
+    const result = generateConceptSkeleton("Sweep", {
+      variant: "tackle_11",
+      strength: "right",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const back = result.spec.assignments.find((a) => a.player === "B");
+    expect(back?.action.kind).toBe("carry");
+    if (back?.action.kind !== "carry") return;
+    const wp = back.action.waypoints;
+    expect(wp).toBeDefined();
+    if (!wp) return;
+    expect(wp.length).toBeGreaterThanOrEqual(4); // mesh + ≥3 path waypoints
+
+    // The defining property of the corrected geometry: between the
+    // mesh and the cut-up point, lateral progress must exceed
+    // upfield progress. The "lateral-first" portion (mesh → second-
+    // to-last waypoint) should be ~80%+ lateral movement.
+    const mesh = wp[0];
+    const beforeCut = wp[wp.length - 2];
+    const lateralBeforeCut = Math.abs(beforeCut[0] - mesh[0]);
+    const upfieldBeforeCut = Math.abs(beforeCut[1] - mesh[1]);
+    expect(
+      lateralBeforeCut,
+      `Lateral progress before the cut (${lateralBeforeCut}yd) must dominate upfield progress (${upfieldBeforeCut}yd) — Sweep is lateral first, then up`,
+    ).toBeGreaterThan(upfieldBeforeCut);
+
+    // The cut-up leg (second-to-last → last waypoint) should be the
+    // OPPOSITE: dominantly upfield, minimal lateral.
+    const final = wp[wp.length - 1];
+    const lateralOnCut = Math.abs(final[0] - beforeCut[0]);
+    const upfieldOnCut = Math.abs(final[1] - beforeCut[1]);
+    expect(
+      upfieldOnCut,
+      `The cut-upfield leg (lateral ${lateralOnCut}yd, upfield ${upfieldOnCut}yd) must be dominantly vertical`,
+    ).toBeGreaterThan(lateralOnCut);
+  });
+
+  it("works for left-strength too (mirrored geometry)", () => {
+    const result = generateConceptSkeleton("Sweep", {
+      variant: "tackle_11",
+      strength: "left",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const back = result.spec.assignments.find((a) => a.player === "B");
+    if (back?.action.kind !== "carry") return;
+    // Left strength → all x-coordinates should be negative (heading
+    // to the left sideline).
+    const wp = back.action.waypoints ?? [];
+    const lateralEnds = wp.slice(1).map((p) => p[0]);
+    expect(lateralEnds.every((x) => x <= 0)).toBe(true);
+  });
+});
+
 // ── Flea Flicker (trick play: handoff out + lateral back + deep pass) ───
 // The bug that prompted this build: Cal generated a "Flea Flicker — X
 // Deep" where Z ran a downfield route instead of taking a handoff.
