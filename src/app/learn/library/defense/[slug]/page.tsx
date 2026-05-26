@@ -11,6 +11,9 @@ import type { DefensiveAlignment } from "@/domain/play/defensiveAlignments";
 import { coachDiagramToPlayDocument, type CoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
 import { defaultSettingsForVariant } from "@/domain/playbook/settings";
 import { PlayEditorClient } from "@/features/editor/PlayEditorClient";
+import { NotesMarkdown } from "@/features/editor/NotesMarkdown";
+import { PLAY_SPEC_SCHEMA_VERSION, type PlaySpec } from "@/domain/play/spec";
+import { projectSpecToNotes } from "@/lib/coach-ai/notes-from-spec";
 import { isFootballLibraryAvailable } from "@/lib/learn/access";
 import { toLearnSlug } from "@/lib/learn/links";
 import { withFullContext } from "@/lib/seo/ld-json";
@@ -198,6 +201,43 @@ export default async function DefensePage(
     ? defaultSettingsForVariant(renderVariant)
     : null;
 
+  // Per-defender notes. Same projector Cal uses to generate chat-
+  // time defense prose: build a minimal PlaySpec with `playType:
+  // "defense"` and `defense: { front, coverage }`, run through
+  // `projectSpecToNotes` → markdown with `@LABEL` chips. The
+  // chips resolve to the defenders in `defenseDoc.layers.players`,
+  // so `NotesMarkdown` renders them as inline PlayerChips
+  // (matching the offense play pages).
+  let defenseNotes = "";
+  if (alignment && renderVariant) {
+    try {
+      const defenseSpec: PlaySpec = {
+        schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+        variant: renderVariant,
+        title: group.name,
+        playType: "defense",
+        // The notes projector keys off `defense.front` + `defense.coverage`
+        // to look up the catalog alignment and enumerate defenders.
+        // formation field is required by the PlaySpec schema even for
+        // defense; we use a placeholder offensive look since the projector
+        // ignores it for defense plays.
+        formation: { name: "Spread Doubles", strength: "right" },
+        defense: {
+          front: alignment.front,
+          coverage: alignment.coverage,
+          strength: "right",
+        },
+        assignments: [],
+      };
+      defenseNotes = projectSpecToNotes(defenseSpec);
+    } catch (err) {
+      console.warn(
+        `[library/defense] notes generation failed for ${slug} in ${renderVariant}`,
+        err,
+      );
+    }
+  }
+
   const related = groupDefenses()
     .filter((g) => g.slug !== group.slug)
     .slice(0, 6);
@@ -278,7 +318,12 @@ export default async function DefensePage(
       </header>
 
       <div className="mb-6">
-        <VariantPill />
+        {/* Variant pill scoped to THIS scheme's supported variants —
+            tackle-only fronts like 3-4 hide the flag options entirely
+            instead of showing them and 404'ing. When only one variant
+            is supported the pill renders as an informational chip
+            ("11v11 Tackle only"). */}
+        <VariantPill supportedVariants={supportedVariants} />
       </div>
 
       <div className="mb-8 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_280px]">
@@ -339,6 +384,22 @@ export default async function DefensePage(
               {renderVariant ? ` in ${VARIANT_LABEL[renderVariant]}` : ""}.
             </div>
           )}
+
+          {/* Per-defender breakdown. Same projector Cal uses for
+              chat-time defense prose — `@LABEL` mentions resolve to
+              the defenders rendered above via NotesMarkdown's chip
+              substitution (same widget the offense play notes use,
+              same render path). Hidden when the projector returns
+              empty — keeps the page tight when no catalog defense
+              ref matches the (variant, front, coverage). */}
+          {defenseDoc && defenseNotes.trim().length > 0 ? (
+            <section className="mt-6 rounded-2xl border border-border bg-surface-raised p-5">
+              <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
+                Defender breakdown
+              </h2>
+              <NotesMarkdown value={defenseNotes} players={defenseDoc.layers.players} />
+            </section>
+          ) : null}
 
           {/* Coaching context. Pull from the alignment we just
               rendered (whenToUse + weaknesses live on the scheme

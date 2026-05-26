@@ -249,16 +249,36 @@ function hexForY(variant: string | undefined | null): string {
 const STYLE_RB:   PlayerStyle = { fill: "#F26522", stroke: "#7c2d12", labelColor: "#FFFFFF" }; // halfback / primary back / role=RB
 const STYLE_FB:   PlayerStyle = { fill: "#F26522", stroke: "#7c2d12", labelColor: "#FFFFFF" }; // fullback (label "FB" with role=RB)
 const STYLE_DEF:         PlayerStyle = { fill: "#EF4444", stroke: "#991b1b", labelColor: "#FFFFFF" }; // generic — fallback when label doesn't match a role
-// Defender role palette. Triangles already mark "defender"; the hue makes
-// the role legible (corners vs safeties vs hooks vs flats) so a coach can
-// scan a Cover 3 shell and see the structure at a glance.
-const STYLE_DEF_CB:      PlayerStyle = { fill: "#DC2626", stroke: "#7f1d1d", labelColor: "#FFFFFF" }; // corners — primary red
-const STYLE_DEF_SAFETY:  PlayerStyle = { fill: "#F97316", stroke: "#7c2d12", labelColor: "#FFFFFF" }; // safeties — deep coral
-const STYLE_DEF_HOOK:    PlayerStyle = { fill: "#A855F7", stroke: "#581c87", labelColor: "#FFFFFF" }; // hook defenders — purple
-const STYLE_DEF_FLAT:    PlayerStyle = { fill: "#0EA5E9", stroke: "#075985", labelColor: "#FFFFFF" }; // flat defenders — teal
-const STYLE_DEF_LB:      PlayerStyle = { fill: "#EC4899", stroke: "#831843", labelColor: "#FFFFFF" }; // LBs / Mike — magenta
-const STYLE_DEF_NICKEL:  PlayerStyle = { fill: "#F472B6", stroke: "#9d174d", labelColor: "#FFFFFF" }; // nickel / slot DB — rose
-const STYLE_DEF_DL:      PlayerStyle = { fill: "#7F1D1D", stroke: "#450a0a", labelColor: "#FFFFFF" }; // D-line (DE/DT/NT) — dark crimson, distinct from CB primary red
+// Defender role palette (refreshed 2026-05-26 per coach feedback —
+// the prior magenta-pink-pink for OLB/ILB/Nickel + dark-crimson DL
+// were too close to the CB red and to each other; now each
+// position-group gets a distinct hue using football conventions).
+//
+//   DL (DE/DT/NT)   → slate gray — neutral big-body color, clearly
+//                                  separated from the CB red
+//   Mike (M/MIKE/MLB/ML) → purple — the LB captain, distinct color
+//   Will (WILL/WLB/WL/ILB/IL/IB/BUCK)
+//                   → indigo — interior LB
+//   Sam / OLB       → teal  — outside / edge LB, also flat defender
+//   Nickel / slot DB → pink — DB-family but visually separated from
+//                              CB red and safety yellow/orange
+//   CB              → red   — corners (unchanged)
+//   FS              → yellow — free safety (deep middle)
+//   SS              → orange — strong safety (in the box)
+//   Generic safety  → yellow — defaults to FS hue
+//
+// Hook / flat ROLE labels (HL/HR/HM/HOOK/FL/FR/FLAT) share the LB
+// position-color of whoever typically drops into the role — a hook
+// defender is usually the Mike or Will; a flat defender is usually
+// the Sam / OLB / nickel.
+const STYLE_DEF_CB:        PlayerStyle = { fill: "#DC2626", stroke: "#7f1d1d", labelColor: "#FFFFFF" }; // corners — red
+const STYLE_DEF_FS:        PlayerStyle = { fill: "#EAB308", stroke: "#713f12", labelColor: "#1f1300" }; // free safety — yellow
+const STYLE_DEF_SS:        PlayerStyle = { fill: "#F97316", stroke: "#7c2d12", labelColor: "#FFFFFF" }; // strong safety — orange
+const STYLE_DEF_MIKE:      PlayerStyle = { fill: "#9333EA", stroke: "#581c87", labelColor: "#FFFFFF" }; // Mike LB / hook M — purple
+const STYLE_DEF_WILL:      PlayerStyle = { fill: "#4338CA", stroke: "#312e81", labelColor: "#FFFFFF" }; // Will / ILB / inside LBs — indigo
+const STYLE_DEF_SAM:       PlayerStyle = { fill: "#0D9488", stroke: "#134e4a", labelColor: "#FFFFFF" }; // Sam / OLB / edge / flat — teal
+const STYLE_DEF_NICKEL:    PlayerStyle = { fill: "#EC4899", stroke: "#831843", labelColor: "#FFFFFF" }; // nickel / slot DB — pink
+const STYLE_DEF_DL:        PlayerStyle = { fill: "#475569", stroke: "#1e293b", labelColor: "#FFFFFF" }; // D-line (DE/DT/NT) — slate gray
 // Interior offensive linemen are ineligible — they should be visually muted so
 // skill-position routes pop. Gray, neutral.
 const STYLE_LINEMAN: PlayerStyle = { fill: "#94A3B8", stroke: "#475569", labelColor: "#0f172a" };
@@ -281,31 +301,56 @@ const RECEIVER_ROTATION: PlayerStyle[] = [STYLE_X, STYLE_Y_TE, STYLE_Z, STYLE_SL
 // to a role-coded style. Matches the catalog labels used in
 // src/domain/play/defensiveAlignments.ts plus common synonyms. Falls back to
 // the generic red STYLE_DEF when nothing matches.
+//
+// Order matters: more specific matches first (e.g. "MLB" matches MIKE before
+// the generic "LB" branch). Strip trailing digits so suffixed duplicates
+// (DE / DE2, OLB / OLB2) share a color.
 function defenderStyleFor(rawLabel: string): PlayerStyle {
-  const u = rawLabel.toUpperCase();
+  const u = rawLabel.toUpperCase().replace(/\d+$/, "");
+  // D-line — ends, tackles, nose tackles. Checked early so an "OLB"-
+  // adjacent "OL" can still hit the outside-LB branch below.
+  if (u === "DE" || u === "DT" || u === "DL" || u === "NT" || u === "NG" || u === "DI" || u === "EDGE") {
+    return STYLE_DEF_DL;
+  }
   // Corners — outermost, deep edges. Includes split-cloud variants.
   if (u === "CB" || u === "LC" || u === "RC" || u === "LCB" || u === "RCB") return STYLE_DEF_CB;
-  // Safeties — deep middle / split halves.
-  if (u === "FS" || u === "SS" || u === "SAFETY" || u === "FSL" || u === "FSR" || u === "SAF" || u === "SA" || u === "SA2") return STYLE_DEF_SAFETY;
-  // Hook / curl defenders — interior underneath.
-  if (u === "HL" || u === "HR" || u === "HM" || u === "HOOK" || u === "M" || u === "MIKE" || u === "MI") return STYLE_DEF_HOOK;
-  // Flat defenders — outside underneath.
-  if (u === "FL" || u === "FR" || u === "FLAT" || u === "WA" || u === "WI") return STYLE_DEF_FLAT;
-  // LBs (Will/Sam variants, generic LB).
+  // Free safety — deep middle / split high. Default for generic
+  // "safety" labels that don't specify strong/weak.
+  if (u === "FS" || u === "FSL" || u === "FSR" || u === "SAFETY" || u === "SAF" || u === "SA") return STYLE_DEF_FS;
+  // Strong safety — typically rolled down or in the box.
+  if (u === "SS") return STYLE_DEF_SS;
+  // Mike LB — the captain. Includes hook-middle (HM/HOOK) since the
+  // Mike traditionally drops to that void.
+  if (u === "MLB" || u === "MIKE" || u === "MI" || u === "M" || u === "ML" || u === "HM" || u === "HOOK") {
+    return STYLE_DEF_MIKE;
+  }
+  // Will / inside LB family + the hook-left role (HL — typically Will).
+  // Buck (BK / BUCK / MAC) is a Mike-class inside LB but distinct from
+  // Mike specifically — render as Will-color since the user wants
+  // visual separation between the two inside LBs.
   if (
-    u === "LB" || u === "WLB" || u === "SLB" || u === "MLB" ||
-    u === "WILL" || u === "SAM" || u === "WI" ||
-    u === "ILB" || u === "OLB" ||
-    // 4-4 stack labels (WL = Will, ML = Mike, BK = Buck/Mac, SL = Sam) +
-    // 3-4 inside/outside labels.
-    u === "WL" || u === "ML" || u === "SL" || u === "BK" ||
-    u === "IL" || u === "OL" || u === "BUCK" || u === "MAC"
-  ) return STYLE_DEF_LB;
+    u === "WILL" || u === "WLB" || u === "WL" ||
+    u === "ILB" || u === "IL" || u === "IB" ||
+    u === "BUCK" || u === "BK" || u === "MAC" ||
+    u === "HL"
+  ) {
+    return STYLE_DEF_WILL;
+  }
+  // Sam / outside LB family — includes the OLB edge role + flat
+  // defenders + hook-right (HR — traditionally Sam-side hook).
+  if (
+    u === "SAM" || u === "SLB" || u === "SL" ||
+    u === "OLB" || u === "OL" || u === "OB" ||
+    u === "FL" || u === "FR" || u === "FLAT" || u === "WA" || u === "WI" ||
+    u === "HR" ||
+    // Generic "LB" with no Mike/Will/Sam disambiguator — pick Sam
+    // (least likely to clash with an authored Mike or Will).
+    u === "LB"
+  ) {
+    return STYLE_DEF_SAM;
+  }
   // Nickel / slot DB.
   if (u === "NB" || u === "NICKEL" || u === "STAR" || u === "DIME") return STYLE_DEF_NICKEL;
-  // D-line — ends, tackles, nose tackles. Without a dedicated entry these
-  // fell through to the generic red and looked identical to the CBs.
-  if (u === "DE" || u === "DT" || u === "DL" || u === "NT" || u === "NG" || u === "DI" || u === "EDGE") return STYLE_DEF_DL;
   return STYLE_DEF;
 }
 

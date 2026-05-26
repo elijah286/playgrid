@@ -209,12 +209,13 @@ export default async function FormationPage(
         </Link>
       </header>
 
-      {/* Variant filter — same persistent pill the library landing
-          page uses. When the coach picks a variant here, the formation
-          diagram below re-renders in that variant (different player
-          count for 5v5 vs 7v7 vs tackle). */}
+      {/* Variant filter scoped to THIS formation's supported variants
+          — tackle-only formations like Pro I hide the flag options
+          entirely instead of showing them and 404'ing. When the coach
+          picks a variant here, the diagram below re-renders in that
+          variant (different player count for 5v5 vs 7v7 vs tackle). */}
       <div className="mb-6">
-        <VariantPill />
+        <VariantPill supportedVariants={supportedLibraryVariants} />
       </div>
 
       <div className="mb-8 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_280px]">
