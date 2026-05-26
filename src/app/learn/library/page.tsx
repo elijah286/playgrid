@@ -13,8 +13,13 @@ import { isFootballLibraryAvailable } from "@/lib/learn/access";
 import { featuredConceptOfTheDay } from "@/lib/learn/featured";
 import { toLearnSlug } from "@/lib/learn/links";
 import {
+  DEFAULT_LIBRARY_VARIANT,
+  conceptSupportsVariant,
   defaultVariantForConceptDef,
+  slugToVariant,
   variantToSlug,
+  VARIANT_LABEL,
+  type LibraryVariant,
 } from "@/lib/learn/variant";
 import { withFullContext } from "@/lib/seo/ld-json";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
@@ -45,8 +50,10 @@ const breadcrumbLd = {
 
 // Unique (front, coverage) defensive schemes — same grouping as the
 // /defense category page, but inline so we don't pay an import cost.
-function uniqueDefenseCount(): number {
-  const slugs = new Set<string>();
+// Optionally filters to a specific variant (matching the
+// defense/page.tsx grouping logic).
+function uniqueDefenseNames(variant?: LibraryVariant): string[] {
+  const slugs = new Map<string, Set<string>>();
   for (const a of DEFENSIVE_ALIGNMENTS) {
     const front = (a.front ?? "").trim();
     const coverage = (a.coverage ?? "").trim();
@@ -54,25 +61,54 @@ function uniqueDefenseCount(): number {
       !front || front.toLowerCase() === coverage.toLowerCase()
         ? coverage
         : `${front} ${coverage}`.trim();
-    slugs.add(name);
+    if (!slugs.has(name)) slugs.set(name, new Set<string>());
+    slugs.get(name)!.add(a.variant);
   }
-  return slugs.size;
+  const out: string[] = [];
+  for (const [name, variants] of slugs) {
+    if (!variant || variants.has(variant)) out.push(name);
+  }
+  return out.sort((a, b) => a.localeCompare(b));
 }
 
 type Category = {
   slug: string;
   icon: string;
   title: string;
-  meta: string;
   items: string[];
+  count: number;
+  countNoun: string;
 };
 
-export default async function LibraryLandingPage() {
+export default async function LibraryLandingPage(
+  { searchParams }: { searchParams: Promise<{ v?: string }> },
+) {
   if (!(await isFootballLibraryAvailable())) notFound();
+  const { v } = await searchParams;
+  // Active variant from URL — drives the featured concept, the
+  // thumbnail render, and the items shown in each category card.
+  // Without this, the landing page sat outside the variant filter:
+  // the VariantPill changed `?v=` but nothing on this page consumed
+  // it, so coaches saw the same featured concept + same teaser items
+  // regardless of which variant they picked.
+  const variant: LibraryVariant =
+    (v ? slugToVariant(v) : null) ?? DEFAULT_LIBRARY_VARIANT;
+  const variantSlug = variantToSlug(variant);
 
-  const featured = featuredConceptOfTheDay();
+  const featured = featuredConceptOfTheDay(new Date(), variant);
   const featuredSlug = toLearnSlug(featured.name);
-  const featuredVariant = defaultVariantForConceptDef(featured);
+  // Prefer the active variant for both the link and the thumbnail
+  // when the concept supports it — so the featured card matches what
+  // the coach selected. Falls back to the concept's default variant
+  // when the active one isn't supported (defensive; the featured
+  // pool is already variant-filtered, but a future call site that
+  // skips filtering would land here).
+  const featuredVariant: LibraryVariant | null = conceptSupportsVariant(
+    featured.variants ?? [],
+    variant,
+  )
+    ? variant
+    : defaultVariantForConceptDef(featured);
   const featuredHref = featuredVariant
     ? `/learn/library/plays/${featuredSlug}/${variantToSlug(featuredVariant)}`
     : `/learn/library/plays/${featuredSlug}`;
@@ -114,34 +150,50 @@ export default async function LibraryLandingPage() {
   // glossary) are hidden until they have content. Per user feedback —
   // "Coming soon" cards felt cluttered when the categories truly had no
   // data yet. They'll come back when their catalogs are seeded.
+  //
+  // Items + count are variant-scoped (matching what the category index
+  // pages show) so the landing card is consistent with what the coach
+  // sees after clicking through. Routes are variant-agnostic — a Slant
+  // is a Slant regardless of game type — so they don't filter.
+  const conceptsInVariant = CONCEPTS.filter((c) =>
+    (c.variants ?? []).includes(variant),
+  );
+  const formationsInVariant = FORMATIONS.filter((f) =>
+    (f.variants ?? []).includes(variant),
+  );
+  const defenseNamesInVariant = uniqueDefenseNames(variant);
   const CATEGORIES: Category[] = [
     {
       slug: "plays",
       icon: "▶",
       title: "Plays",
-      meta: `${CONCEPTS.length} concepts · all variants`,
-      items: CONCEPTS.slice(0, 4).map((c) => c.name),
+      items: conceptsInVariant.slice(0, 4).map((c) => c.name),
+      count: conceptsInVariant.length,
+      countNoun: "concepts",
     },
     {
       slug: "formations",
       icon: "▢",
       title: "Formations",
-      meta: `${FORMATIONS.length} sets · all variants`,
-      items: FORMATIONS.slice(0, 4).map((f) => f.name),
+      items: formationsInVariant.slice(0, 4).map((f) => f.name),
+      count: formationsInVariant.length,
+      countNoun: "sets",
     },
     {
       slug: "routes",
       icon: "↗",
       title: "Routes",
-      meta: `${ROUTE_TEMPLATES.length} templates`,
       items: ROUTE_TEMPLATES.slice(0, 4).map((r) => r.name),
+      count: ROUTE_TEMPLATES.length,
+      countNoun: "templates",
     },
     {
       slug: "defense",
       icon: "🛡",
       title: "Defense",
-      meta: `${uniqueDefenseCount()} schemes · all variants`,
-      items: ["Cover 1 (man)", "Cover 2 (zone)", "Cover 3", "Hot blitz"],
+      items: defenseNamesInVariant.slice(0, 4),
+      count: defenseNamesInVariant.length,
+      countNoun: "schemes",
     },
   ];
 
@@ -187,12 +239,9 @@ export default async function LibraryLandingPage() {
             href={featuredHref}
             className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover"
           >
-            Open {featured.name}
+            Open {featured.name} ({VARIANT_LABEL[variant]})
             <ArrowRight className="size-4" />
           </Link>
-          <p className="mt-2 text-[11px] text-muted">
-            Rotates daily — check back tomorrow for a different concept.
-          </p>
         </div>
         {featuredThumbnail ? (
           <div
@@ -216,36 +265,48 @@ export default async function LibraryLandingPage() {
       </p>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {CATEGORIES.map((cat) => (
-          <Link key={cat.slug} href={`/learn/library/${cat.slug}`} className="group">
-            <div className="h-full rounded-2xl border border-border bg-surface-raised p-5 transition-shadow group-hover:border-primary-light group-hover:shadow-md">
-              <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-primary-light text-base text-primary">
-                {cat.icon}
+        {CATEGORIES.map((cat) => {
+          // Routes are variant-agnostic; everything else is filtered
+          // to the active variant. The category landing page reads
+          // the same `?v=` so navigation lands on a consistent view.
+          const href =
+            cat.slug === "routes"
+              ? `/learn/library/${cat.slug}`
+              : `/learn/library/${cat.slug}?v=${variantSlug}`;
+          return (
+            <Link key={cat.slug} href={href} className="group">
+              <div className="flex h-full flex-col rounded-2xl border border-border bg-surface-raised p-5 transition-shadow group-hover:border-primary-light group-hover:shadow-md">
+                <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-primary-light text-base text-primary">
+                  {cat.icon}
+                </div>
+                <h3 className="mb-3 text-base font-semibold text-foreground">
+                  {cat.title}
+                </h3>
+                <ul className="space-y-1.5 text-xs text-muted">
+                  {cat.items.map((item) => (
+                    <li
+                      key={item}
+                      className="before:mr-1.5 before:text-primary before:content-['→']"
+                    >
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+                {/* Count sits in the card footer — coaches read this
+                  * as "there are more beyond what you see." The arrow
+                  * mirrors the per-item arrow so it reads as a
+                  * sibling "view all" affordance. */}
+                <p className="mt-auto pt-3 text-xs font-semibold text-muted transition-colors group-hover:text-primary">
+                  <span className="inline-flex items-center gap-1">
+                    {cat.count} {cat.countNoun}
+                    <ArrowRight className="size-3" />
+                  </span>
+                </p>
               </div>
-              <h3 className="text-base font-semibold text-foreground">
-                {cat.title}
-              </h3>
-              <p className="mb-3 text-xs text-muted">{cat.meta}</p>
-              <ul className="space-y-1.5 text-xs text-muted">
-                {cat.items.map((item) => (
-                  <li
-                    key={item}
-                    className="before:mr-1.5 before:text-primary before:content-['→']"
-                  >
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </Link>
-        ))}
+            </Link>
+          );
+        })}
       </div>
-
-      <p className="mt-10 text-xs text-muted">
-        Drills, practice plans, coaching articles, and a full football
-        glossary land in upcoming releases — we&apos;ll surface them here as
-        each catalog gets seeded.
-      </p>
     </div>
   );
 }
