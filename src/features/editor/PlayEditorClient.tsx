@@ -48,7 +48,7 @@ import {
   GameModeLockedDialog,
   isGameModeLocked,
 } from "@/features/game-mode/GameModeLockedDialog";
-import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
+import { usePlayAnimation, type PlayAnimation } from "@/features/animation/usePlayAnimation";
 import { AnimationOverlay } from "@/features/animation/AnimationOverlay";
 import { PlayControlsPanel } from "@/features/animation/PlayControlsPanel";
 import { OpponentOverlayCard } from "./OpponentOverlayCard";
@@ -2037,16 +2037,21 @@ function PlayEditorClientInner({
       {/* Mobile-only slim playbook banner. Replaces the SiteHeader
           (hidden via editor-hide-site-header on mobile editor) and gives
           coaches a back affordance + Cal access without leaving the
-          playbook's visual identity behind. */}
-      <EditorPlaybookChrome
-        playbookId={playbookId}
-        playbookName={playbookName ?? null}
-        playbookColor={playbookColor}
-        playbookLogoUrl={playbookLogoUrl}
-        playbookSeason={playbookSeason}
-        playbookVariant={playbookVariant}
-        playbookOwnerName={playbookOwnerName}
-      />
+          playbook's visual identity behind. Library mode owns its own
+          page-level chrome (concept header, breadcrumbs, variant pill)
+          so the playbook banner — which is tied to a real playbook —
+          would only confuse coaches reading a library reference. */}
+      {!libraryMode && (
+        <EditorPlaybookChrome
+          playbookId={playbookId}
+          playbookName={playbookName ?? null}
+          playbookColor={playbookColor}
+          playbookLogoUrl={playbookLogoUrl}
+          playbookSeason={playbookSeason}
+          playbookVariant={playbookVariant}
+          playbookOwnerName={playbookOwnerName}
+        />
+      )}
       {isNavPending && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-[1px]"
@@ -2123,34 +2128,41 @@ function PlayEditorClientInner({
       )}
       {/* Hide the full header bar on mobile while actively editing — the
           Done editing button moves to the very top so the field has as much
-          vertical room as possible. Desktop always keeps the header. */}
-      <div className={isTouchDevice && mode === "edit" ? "hidden sm:block" : ""}>
-      <EditorHeaderBar
-        playId={playId}
-        playbookId={playbookId}
-        doc={doc}
-        dispatch={dispatch}
-        initialNav={initialNav}
-        initialGroups={initialGroups}
-        onDuplicate={duplicate}
-        onNewPlay={newPlay}
-        onNavigateToPlay={navigateToPlay}
-        onSaveAsNewFormation={saveAsNewFormation}
-        onArchive={archive}
-        onDelete={deletePlay}
-        onMoveToGroup={openMoveToGroup}
-        currentGroupId={currentGroupId}
-        isArchived={isPlayArchived}
-        allFormations={allFormations}
-        canEdit={roleCanEdit}
-        isPlayArchived={isPlayArchived}
-        libraryMode={libraryMode}
-        hideMobileNav={isTouchDevice && mode === "edit"}
-        mode={isTouchDevice ? mode : undefined}
-        onToggleMode={isTouchDevice ? toggleMode : undefined}
-        tutorialVariant={coerceVariant(playbookVariant)}
-      />
-      </div>
+          vertical room as possible. Desktop always keeps the header.
+          Library mode skips it entirely: the library page wraps the
+          editor with its own concept header (name, variant pill,
+          breadcrumbs, edit affordance for admins), so the editor's
+          play-title nav would be redundant chrome that competes with
+          the page hierarchy. */}
+      {!libraryMode && (
+        <div className={isTouchDevice && mode === "edit" ? "hidden sm:block" : ""}>
+          <EditorHeaderBar
+            playId={playId}
+            playbookId={playbookId}
+            doc={doc}
+            dispatch={dispatch}
+            initialNav={initialNav}
+            initialGroups={initialGroups}
+            onDuplicate={duplicate}
+            onNewPlay={newPlay}
+            onNavigateToPlay={navigateToPlay}
+            onSaveAsNewFormation={saveAsNewFormation}
+            onArchive={archive}
+            onDelete={deletePlay}
+            onMoveToGroup={openMoveToGroup}
+            currentGroupId={currentGroupId}
+            isArchived={isPlayArchived}
+            allFormations={allFormations}
+            canEdit={roleCanEdit}
+            isPlayArchived={isPlayArchived}
+            libraryMode={libraryMode}
+            hideMobileNav={isTouchDevice && mode === "edit"}
+            mode={isTouchDevice ? mode : undefined}
+            onToggleMode={isTouchDevice ? toggleMode : undefined}
+            tutorialVariant={coerceVariant(playbookVariant)}
+          />
+        </div>
+      )}
 
       {playbookSettings &&
         doc.layers.players.length > playbookSettings.maxPlayers && (
@@ -2161,7 +2173,11 @@ function PlayEditorClientInner({
         )}
 
       {/* Routes */}
-      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div
+        className={`grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-5 ${
+          libraryMode ? "" : "lg:grid-cols-[minmax(0,1fr)_320px]"
+        }`}
+      >
           <div className="flex min-h-[260px] min-w-0 flex-col gap-3 sm:min-h-[420px]">
             {/* No max-width on this inner column — the parent
                 `.play-editor-content` wrapper already caps the entire
@@ -2421,7 +2437,7 @@ function PlayEditorClientInner({
                *  pointer-events-none — the rest of the canvas stays
                *  inert. Hidden when canEdit since taps need to reach
                *  the editing affordances underneath. */}
-              {!canEdit && (
+              {!canEdit && !libraryMode && (
                 <button
                   type="button"
                   onClick={anim.step}
@@ -2429,25 +2445,51 @@ function PlayEditorClientInner({
                   className="pointer-events-auto absolute inset-0 cursor-pointer bg-transparent"
                 />
               )}
+              {/* Library mode: minimal playback overlay anchored to the
+                  bottom-right corner of the field. Single bar with
+                  play/pause and a speed selector — the rest of the
+                  editor chrome (toolbar, sidebar, opponent picker) is
+                  hidden upstream. Tap-to-advance is also overlaid as a
+                  full-field button BELOW this bar so coaches can step
+                  through the play by tapping anywhere on grass, but the
+                  explicit play button is the discoverable affordance.
+                  z-30 keeps it above the AnimationOverlay. */}
+              {libraryMode && (
+                <>
+                  <button
+                    type="button"
+                    onClick={anim.step}
+                    aria-label="Advance play"
+                    className="pointer-events-auto absolute inset-0 z-10 cursor-pointer bg-transparent"
+                  />
+                  <LibraryPlaybackBar anim={anim} />
+                </>
+              )}
             </div>
 
             {/* Mobile: notes card immediately below the field, in
                 both view and edit modes. Desktop keeps its sidebar version
                 further down — see the `hidden sm:block` block. The card is
                 collapsible so coaches can scan a play without the notes
-                consuming half the viewport. */}
-            <div className="sm:hidden">
-              <PlayNotesCard
-                value={doc.metadata.notes ?? ""}
-                players={doc.layers.players}
-                routes={doc.layers.routes}
-                readOnly={!canEdit}
-                playName={doc.metadata.coachName}
-                onChange={(notes) =>
-                  dispatch({ type: "document.setMetadata", patch: { notes } })
-                }
-              />
-            </div>
+                consuming half the viewport. Library mode hides notes — the
+                library page renders concept-level prose (description,
+                when-to-use, common mistakes) in its own section, so the
+                editor's coach-authored notes field would duplicate or
+                conflict with editorial content. */}
+            {!libraryMode && (
+              <div className="sm:hidden">
+                <PlayNotesCard
+                  value={doc.metadata.notes ?? ""}
+                  players={doc.layers.players}
+                  routes={doc.layers.routes}
+                  readOnly={!canEdit}
+                  playName={doc.metadata.coachName}
+                  onChange={(notes) =>
+                    dispatch({ type: "document.setMetadata", patch: { notes } })
+                  }
+                />
+              </div>
+            )}
 
             {/* Route templates: surfaced directly under the field on small
                 screens when a player is selected. Desktop keeps the copy in
@@ -2471,8 +2513,10 @@ function PlayEditorClientInner({
 
             {/* Mobile playback controls — only in view mode. The Edit toggle
                 moved above the field so this section now just surfaces
-                play/animate controls. Desktop always uses the sidebar. */}
-            {mode === "view" && !isExamplePreview && (
+                play/animate controls. Desktop always uses the sidebar.
+                Library mode uses the floating overlay on the field
+                instead, so we skip this entirely. */}
+            {mode === "view" && !isExamplePreview && !libraryMode && (
               <div className="rounded-xl border border-border bg-surface-raised p-4 sm:hidden">
                 <PlayControlsPanel anim={anim} />
               </div>
@@ -2480,8 +2524,11 @@ function PlayEditorClientInner({
 
             {/* Mobile opponent card — mirrors the desktop sidebar's opponent
                 picker / vs-play card so coaches on phones can preview a
-                defense against an offense play. View mode only. */}
-            {mode === "view" && !isExamplePreview && opponentCardNode && (
+                defense against an offense play. View mode only. Hidden
+                in library mode: library pages show the canonical
+                concept, not a coach's vs-defense rehearsal — opponent
+                preview belongs in the in-app editor. */}
+            {mode === "view" && !isExamplePreview && opponentCardNode && !libraryMode && (
               <div className="flex flex-col gap-2 sm:hidden">
                 {opponentCardNode}
                 <div className="flex justify-center">
@@ -2531,61 +2578,72 @@ function PlayEditorClientInner({
                 />
               </div>
             )}
-            <div className="hidden sm:block">
-              <PlayNotesCard
-                value={doc.metadata.notes ?? ""}
-                players={doc.layers.players}
-                routes={doc.layers.routes}
-                readOnly={!canEdit}
-                playName={doc.metadata.coachName}
-                onChange={(notes) =>
-                  dispatch({ type: "document.setMetadata", patch: { notes } })
-                }
-              />
-            </div>
-          </div>
-          <aside
-            className={`${
-              mode === "edit" ? "hidden sm:flex" : "hidden sm:flex"
-            } min-h-0 flex-col gap-4 rounded-xl border border-border bg-surface-raised p-4`}
-          >
-            {(!showToolbar || !canEdit) && <PlayControlsPanel anim={anim} />}
-            {canEdit && showToolbar && selectedPlayerId != null && (
-              <TagsCard doc={doc} dispatch={dispatch} linkedFormation={linkedFormation} />
-            )}
-            {canEdit && !showToolbar && (
-              <TagsCard doc={doc} dispatch={dispatch} linkedFormation={linkedFormation} />
-            )}
-            {opponentCardNode && (
-              <div className="flex flex-col gap-2">
-                {opponentCardNode}
-                <div className="flex justify-center">
-                  <CoachCalCTA
-                    entryPoint="play_suggest_counter"
-                    context={{ values: { playName: doc.metadata.coachName?.trim() || "this play" } }}
-                  />
-                </div>
+            {!libraryMode && (
+              <div className="hidden sm:block">
+                <PlayNotesCard
+                  value={doc.metadata.notes ?? ""}
+                  players={doc.layers.players}
+                  routes={doc.layers.routes}
+                  readOnly={!canEdit}
+                  playName={doc.metadata.coachName}
+                  onChange={(notes) =>
+                    dispatch({ type: "document.setMetadata", patch: { notes } })
+                  }
+                />
               </div>
             )}
-            {!showToolbar && !isDefense && (
-              <PlayResultsCard
-                playbookId={playbookId}
-                playId={playId}
-                canUseGameMode={canUseGameMode}
-              />
-            )}
-            {canEdit && (
-              <Inspector
-                doc={doc}
-                dispatch={dispatch}
-                selectedPlayerId={selectedPlayerId}
-                selectedRouteId={selectedRouteId}
-                selectedSegmentId={selectedSegmentId}
-                activeStyle={{ stroke: activeColor, strokeWidth: activeWidth }}
-                userTemplates={userTemplates}
-              />
-            )}
-          </aside>
+          </div>
+          {/* Right-side sidebar: PlayControlsPanel (when nothing
+              selected), TagsCard, opponent picker, results, Inspector.
+              Library mode strips this entire column — coaches see just
+              the field with the floating playback overlay. Opponent
+              picker / results / inspector all assume a real playbookId
+              and would 400/500 against the synthetic "library-preview"
+              id used by library-mode renders. */}
+          {!libraryMode && (
+            <aside
+              className={`${
+                mode === "edit" ? "hidden sm:flex" : "hidden sm:flex"
+              } min-h-0 flex-col gap-4 rounded-xl border border-border bg-surface-raised p-4`}
+            >
+              {(!showToolbar || !canEdit) && <PlayControlsPanel anim={anim} />}
+              {canEdit && showToolbar && selectedPlayerId != null && (
+                <TagsCard doc={doc} dispatch={dispatch} linkedFormation={linkedFormation} />
+              )}
+              {canEdit && !showToolbar && (
+                <TagsCard doc={doc} dispatch={dispatch} linkedFormation={linkedFormation} />
+              )}
+              {opponentCardNode && (
+                <div className="flex flex-col gap-2">
+                  {opponentCardNode}
+                  <div className="flex justify-center">
+                    <CoachCalCTA
+                      entryPoint="play_suggest_counter"
+                      context={{ values: { playName: doc.metadata.coachName?.trim() || "this play" } }}
+                    />
+                  </div>
+                </div>
+              )}
+              {!showToolbar && !isDefense && (
+                <PlayResultsCard
+                  playbookId={playbookId}
+                  playId={playId}
+                  canUseGameMode={canUseGameMode}
+                />
+              )}
+              {canEdit && (
+                <Inspector
+                  doc={doc}
+                  dispatch={dispatch}
+                  selectedPlayerId={selectedPlayerId}
+                  selectedRouteId={selectedRouteId}
+                  selectedSegmentId={selectedSegmentId}
+                  activeStyle={{ stroke: activeColor, strokeWidth: activeWidth }}
+                  userTemplates={userTemplates}
+                />
+              )}
+            </aside>
+          )}
       </div>
 
       <MovePlayToGroupDialog
@@ -2670,18 +2728,112 @@ function PlayEditorClientInner({
 
       {/* Mobile-only footer. Same shape as PlaybookBottomNav. Tabs that
           aren't Cal navigate the page (no overlays) — Plays goes back
-          to the playbook's plays tab; Cal slides up over the page. */}
-      <EditorBottomNav
-        playbookId={playbookId}
-        showCoachCal={coachAiAvailable || showCoachCalPromo}
-        available={{
-          calendar: teamCalendarAvailable,
-          games: gameResultsAvailable,
-          practicePlans: practicePlansAvailable,
-          messages: teamMessagingAvailable,
+          to the playbook's plays tab; Cal slides up over the page.
+          Library mode skips it: the "Plays" tab links into the
+          synthetic library-preview playbook (which 404s), and library
+          pages have their own header navigation. */}
+      {!libraryMode && (
+        <EditorBottomNav
+          playbookId={playbookId}
+          showCoachCal={coachAiAvailable || showCoachCalPromo}
+          available={{
+            calendar: teamCalendarAvailable,
+            games: gameResultsAvailable,
+            practicePlans: practicePlansAvailable,
+            messages: teamMessagingAvailable,
+          }}
+          isAdmin={isAdmin}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Library-mode playback overlay. Anchored to the bottom-right corner
+ *  of the field-viewport (which is `position: relative`). Renders just
+ *  a play/pause button and a speed selector — no labels, no reset
+ *  affordance, no edit-mode hooks. The full-field tap-to-step button
+ *  sits underneath, so coaches can advance the play by tapping
+ *  anywhere on grass; this bar is the discoverable click-target.
+ *
+ *  Kept inline here (not lifted into PlayControlsPanel) because the
+ *  visual treatment is intentionally different — PlayControlsPanel is
+ *  a stacked vertical panel that lives in a sidebar; this is a
+ *  compact horizontal pill that floats on the field. Mixing the two
+ *  shapes inside one component would mean either prop bloat or split
+ *  CSS conditions on every line. */
+function LibraryPlaybackBar({ anim }: { anim: PlayAnimation }) {
+  const { phase, paused, togglePause, step, reset, speed, setSpeed } = anim;
+  const isRunning = phase === "motion" || phase === "play";
+  const showPause = isRunning && !paused;
+  const SPEED_OPTIONS: Array<{ value: number; label: string }> = [
+    { value: 0.5, label: "0.5×" },
+    { value: 1, label: "1×" },
+    { value: 1.5, label: "1.5×" },
+    { value: 2, label: "2×" },
+  ];
+  return (
+    <div
+      // pointer-events-auto so clicks land here even though the
+      // wrapping field-viewport blocks pointer events for view-only
+      // renders. z-30 keeps the bar above the AnimationOverlay and
+      // the full-field tap-to-step button (z-10).
+      className="pointer-events-auto absolute bottom-3 right-3 z-30 flex items-center gap-1.5 rounded-full bg-black/70 px-2 py-1.5 text-white shadow-lg backdrop-blur-sm"
+    >
+      <button
+        type="button"
+        onClick={() => {
+          // Idle → start the play (or motion, if any). Running → toggle
+          // pause. Done → reset and replay. The single button covers
+          // all three states so we don't need a separate "replay"
+          // affordance.
+          if (phase === "idle" || phase === "motion-done") step();
+          else if (phase === "done") {
+            reset();
+            // Reset is sync — kick off immediately so the coach
+            // doesn't need a second tap to start the replay.
+            setTimeout(() => step(), 0);
+          } else togglePause();
         }}
-        isAdmin={isAdmin}
-      />
+        className="inline-flex size-7 items-center justify-center rounded-full bg-white/15 text-white transition-colors hover:bg-white/25"
+        aria-label={showPause ? "Pause" : phase === "done" ? "Replay" : "Play"}
+        title={showPause ? "Pause" : phase === "done" ? "Replay" : "Play"}
+      >
+        {showPause ? (
+          <svg viewBox="0 0 24 24" className="size-3.5" fill="currentColor" aria-hidden>
+            <rect x="6" y="5" width="4" height="14" rx="1" />
+            <rect x="14" y="5" width="4" height="14" rx="1" />
+          </svg>
+        ) : phase === "done" ? (
+          <svg viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M21 12a9 9 0 1 1-3-6.7" />
+            <path d="M21 3v6h-6" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 24 24" className="size-3.5" fill="currentColor" aria-hidden>
+            <path d="M8 5v14l11-7z" />
+          </svg>
+        )}
+      </button>
+      <div className="flex items-center rounded-full bg-white/10 p-0.5 text-[10px] font-semibold">
+        {SPEED_OPTIONS.map((s) => {
+          const active = Math.abs(speed - s.value) < 0.01;
+          return (
+            <button
+              key={s.value}
+              type="button"
+              onClick={() => setSpeed(s.value)}
+              className={`rounded-full px-2 py-0.5 transition-colors ${
+                active ? "bg-white text-black" : "text-white/70 hover:text-white"
+              }`}
+              aria-pressed={active}
+              aria-label={`Speed ${s.label}`}
+            >
+              {s.label}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

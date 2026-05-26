@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowRight, BookOpen } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, Pencil } from "lucide-react";
 import { CONCEPTS } from "@/domain/football-kg/defs/concepts";
 import type { ConceptDef } from "@/domain/football-kg/schemas/ConceptDef";
 import { generateConceptSkeleton } from "@/domain/play/conceptSkeleton";
@@ -9,7 +9,7 @@ import { playSpecToCoachDiagram } from "@/domain/play/specRenderer";
 import { coachDiagramToPlayDocument } from "@/features/coach-ai/coachDiagramConverter";
 import { defaultSettingsForVariant } from "@/domain/playbook/settings";
 import { PlayEditorClient } from "@/features/editor/PlayEditorClient";
-import { isFootballLibraryAvailable } from "@/lib/learn/access";
+import { isCurrentUserSiteAdmin, isFootballLibraryAvailable } from "@/lib/learn/access";
 import { toLearnSlug } from "@/lib/learn/links";
 import { withFullContext } from "@/lib/seo/ld-json";
 import {
@@ -141,6 +141,13 @@ export default async function PlayConceptVariantPage(
   const { diagram } = playSpecToCoachDiagram(skeleton.spec);
   const doc = coachDiagramToPlayDocument(diagram);
   const playbookSettings = defaultSettingsForVariant(variant);
+  // Admins see an "Edit" link in the header that lets them open this
+  // diagram in the full editor. The override-persistence layer is
+  // Phase 2b-2; for now the link points at a draft-mode URL that lets
+  // an admin walk the diagram in the full editor (read-only) to verify
+  // correctness — the round-trip back into the library override is
+  // wired up in the follow-up.
+  const isAdmin = await isCurrentUserSiteAdmin();
 
   const canonical = `/learn/library/plays/${slug}/${variantSlug}`;
   const breadcrumbLd = {
@@ -231,13 +238,31 @@ export default async function PlayConceptVariantPage(
         </Link>
       </header>
 
-      <div className="mb-6">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <VariantNavPill
           category="plays"
           conceptSlug={slug}
           currentVariant={variant}
           supportedVariants={supported}
         />
+        {/* Admin-only "Edit this play" affordance. Lives next to the
+            variant pill (subtle text link, not a button) so it's
+            invisible to anonymous visitors but reachable for admins
+            walking the catalog spot-checking diagrams. Routes through
+            the admin override-edit page (Phase 2b-2) which opens the
+            diagram in the full editor; edits save to the
+            library_concept_overrides table that the library page
+            reads on top of the catalog. */}
+        {isAdmin && (
+          <Link
+            href={`/learn/library/admin/plays/${slug}/${variantSlug}/edit`}
+            className="inline-flex items-center gap-1 text-xs font-medium text-muted underline decoration-dotted underline-offset-4 hover:text-primary"
+            aria-label={`Edit ${concept.name} (${VARIANT_LABEL[variant]}) in the play editor`}
+          >
+            <Pencil className="size-3" />
+            Edit this play
+          </Link>
+        )}
       </div>
 
       <div className="mb-8 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_280px]">
@@ -247,10 +272,6 @@ export default async function PlayConceptVariantPage(
           </p>
 
           <div className="overflow-hidden rounded-2xl border border-border bg-surface-raised">
-            <div className="border-b border-border-light px-4 py-2 text-xs text-muted">
-              Rendered by the canonical play editor · {VARIANT_LABEL[variant]} ·
-              Click players to see their assignments
-            </div>
             <PlayEditorClient
               playId={`library:plays:${slug}:${variant}`}
               playbookId="library-preview"
@@ -324,12 +345,6 @@ export default async function PlayConceptVariantPage(
               className="mt-3 inline-flex w-full items-center justify-center rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white"
             >
               Add to my playbook
-            </Link>
-            <Link
-              href="/examples"
-              className="mt-2 inline-flex w-full items-center justify-center rounded-lg border border-surface-raised/20 px-3 py-2 text-sm font-medium text-surface-raised"
-            >
-              Try in builder
             </Link>
           </div>
 
