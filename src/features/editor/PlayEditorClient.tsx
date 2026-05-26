@@ -191,6 +191,17 @@ type Props = {
    *  active because the coach is still authed in those flows — library
    *  is the only mode with truly no authenticated context. */
   libraryMode?: boolean;
+  /** Optional save override. When provided, the editor's autosave path
+   *  routes through this callback instead of `savePlayVersionAction`.
+   *  Used by the library-override admin page: the editor still drives
+   *  edits, but the persisted target is `library_concept_overrides`
+   *  (keyed by slug+variant) rather than `play_versions` (keyed by
+   *  playId). The callback contract mirrors the action's return shape
+   *  so `runSave`'s gameLock / error handling doesn't need to fork.
+   *  Library mode is unaffected — that path skips edits entirely. */
+  saveAdapter?: (
+    doc: PlayDocument,
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
 };
 
 export function PlayEditorClient(props: Props) {
@@ -269,6 +280,7 @@ function PlayEditorClientInner({
   isAdmin = false,
   isTutorialPlay = false,
   libraryMode = false,
+  saveAdapter,
 }: Props) {
   const router = useRouter();
   const { toast } = useToast();
@@ -1213,7 +1225,14 @@ function PlayEditorClientInner({
     // resolves, we compare against the latest local reference to detect
     // whether the user kept editing while the save was in flight.
     const sentDoc = docRef.current;
-    const res = await savePlayVersionAction(playId, sentDoc);
+    // Override target (e.g. library admin edit) bypasses the
+    // playId-keyed play_versions write — there's no row in plays to
+    // update because the library doesn't synthesize one. The
+    // adapter's contract matches the default action's success / error
+    // shape so the rest of this function doesn't need to fork.
+    const res = saveAdapter
+      ? await saveAdapter(sentDoc)
+      : await savePlayVersionAction(playId, sentDoc);
     if (isGameModeLocked(res)) {
       setGameLock({
         playbookId: res.gameLock.playbookId,
@@ -1229,7 +1248,7 @@ function PlayEditorClientInner({
       toast(res.error, "error");
     }
     setIsSaving(false);
-  }, [playId, router, toast]);
+  }, [playId, router, toast, saveAdapter]);
 
   // Doc-change driven autosave scheduling. Marks dirty and schedules the
   // save: a long safety-net timer while a selection is active, the regular
@@ -1266,11 +1285,22 @@ function PlayEditorClientInner({
   // and even if the response never reaches the client, the server-side
   // write completes. Without this, navigating mid-selection within the 30s
   // safety net would lose unsaved edits.
+  // Saved into a ref so the cleanup closure always sees the latest
+  // adapter even if the parent re-renders with a new callback identity.
+  const saveAdapterRef = useRef(saveAdapter);
+  useEffect(() => {
+    saveAdapterRef.current = saveAdapter;
+  }, [saveAdapter]);
   useEffect(() => {
     return () => {
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
       if (isDirtyRef.current && canSaveRef.current) {
-        void savePlayVersionAction(playId, docRef.current);
+        const adapter = saveAdapterRef.current;
+        if (adapter) {
+          void adapter(docRef.current);
+        } else {
+          void savePlayVersionAction(playId, docRef.current);
+        }
       }
     };
   }, [playId]);

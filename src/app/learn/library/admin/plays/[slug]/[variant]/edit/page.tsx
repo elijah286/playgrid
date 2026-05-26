@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { CONCEPTS } from "@/domain/football-kg/defs/concepts";
+import { generateConceptSkeleton } from "@/domain/play/conceptSkeleton";
+import { playSpecToCoachDiagram } from "@/domain/play/specRenderer";
+import { coachDiagramToPlayDocument } from "@/features/coach-ai/coachDiagramConverter";
+import { defaultSettingsForVariant } from "@/domain/playbook/settings";
 import { isCurrentUserSiteAdmin } from "@/lib/learn/access";
+import { loadLibraryOverride } from "@/lib/learn/overrides";
 import { toLearnSlug } from "@/lib/learn/links";
 import {
   LIBRARY_VARIANTS,
@@ -12,35 +15,35 @@ import {
   variantToSlug,
   type LibraryVariant,
 } from "@/lib/learn/variant";
+import { LibraryOverrideEditor } from "./LibraryOverrideEditor";
 
-// Admin-only — no public crawling, no static generation.
+// Admin-only — no public crawling, no static generation. The page
+// reads the latest override on every request so admins always start
+// from the live state of `library_concept_overrides`.
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Edit library play (admin) · XO Gridmaker",
-  // Block search engines from indexing the admin surface, even
-  // though it's also access-gated server-side.
   robots: { index: false, follow: false },
 };
 
-/** Phase 2b-1 placeholder. The Edit affordance on each library
- *  variant page (`/learn/library/plays/[slug]/[variant]`) routes here.
- *  Phase 2b-2 replaces this stub with the real override-edit flow:
- *  loads the catalog spec, opens it in the full PlayEditor (canEdit
- *  true, libraryMode false), and persists edits to a new
- *  `library_concept_overrides` table that the library page reads
- *  on top of the catalog.
+/** Admin override-edit page. Loads the current override for
+ *  (slug, variant) — or the catalog skeleton when no override
+ *  exists — and renders the canonical play editor with full editing
+ *  affordances. Edits autosave through the `saveLibraryOverride`
+ *  action keyed by (slug, variant), distinct from the in-app
+ *  `play_versions` write path.
  *
- *  Kept as a stub now (instead of a 404) so the Edit link is
- *  discoverable in production and the URL shape stays stable across
- *  the 2b-1 → 2b-2 transition. */
+ *  Architecture note: the editor is the SAME `PlayEditorClient` the
+ *  in-app builder uses, with `libraryMode={false}` and an override
+ *  `saveAdapter` prop. Per Rule 14 (library uses the canonical
+ *  renderer), the override edit experience can't fork into a parallel
+ *  editor — one render path, one editing path. */
 export default async function LibraryAdminEditPlayPage({
   params,
 }: {
   params: Promise<{ slug: string; variant: string }>;
 }) {
-  // Admin-only — non-admins 404 (same way the rest of the library
-  // beta-gates: nothing in the URL hints that this page exists).
   if (!(await isCurrentUserSiteAdmin())) notFound();
 
   const { slug, variant: variantSlug } = await params;
@@ -53,46 +56,49 @@ export default async function LibraryAdminEditPlayPage({
   );
   if (!supported.includes(variant)) notFound();
 
-  const libraryHref = `/learn/library/plays/${slug}/${variantToSlug(variant)}`;
+  // Catalog default. If no override exists, this is the starting
+  // doc; if one exists, we use the override but still need the
+  // default around for the "Reset to catalog default" button.
+  const skeleton = generateConceptSkeleton(concept.name, {
+    variant,
+    strength: "right",
+  });
+  if (!skeleton.ok) notFound();
+  const { diagram } = playSpecToCoachDiagram(skeleton.spec);
+  const defaultDoc = coachDiagramToPlayDocument(diagram);
+  const playbookSettings = defaultSettingsForVariant(variant);
+
+  const override = await loadLibraryOverride(slug, variant);
+  // When an override exists with `coach_notes`, hoist them onto the
+  // doc's metadata so the editor's PlayNotesCard surfaces them in
+  // the editing UI (and so the doc-keyed autosave hoists them right
+  // back to `coach_notes` on the next write — a no-op round-trip
+  // that keeps both columns in sync). Without this hoist, an
+  // existing override with notes would look note-less inside the
+  // editor.
+  const baseDoc = override?.document ?? defaultDoc;
+  const startingDoc = override?.coachNotes
+    ? {
+        ...baseDoc,
+        metadata: { ...baseDoc.metadata, notes: override.coachNotes },
+      }
+    : baseDoc;
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-16 text-foreground">
-      <Link
-        href={libraryHref}
-        className="mb-6 inline-flex items-center gap-1 text-xs text-muted hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" />
-        Back to {concept.name} ({VARIANT_LABEL[variant]})
-      </Link>
-      <p className="text-xs font-semibold uppercase tracking-wide text-primary">
-        Library admin · Edit play
-      </p>
-      <h1 className="mt-1 text-3xl font-extrabold tracking-tight">
-        {concept.name}
-        <span className="ml-3 text-xl font-semibold text-muted">
-          · {VARIANT_LABEL[variant]}
-        </span>
-      </h1>
-      <p className="mt-4 text-base leading-relaxed text-muted">
-        The override-edit flow ships in the next deploy. It opens this
-        diagram in the full play editor (the same one in the in-app
-        builder), with edits persisting to the{" "}
-        <code className="rounded bg-surface-inset px-1 py-0.5 text-xs">
-          library_concept_overrides
-        </code>{" "}
-        table that the library page reads on top of the catalog. For
-        now the library page renders straight from the catalog spec.
-      </p>
-      <p className="mt-3 text-sm text-muted">
-        If you spotted a correctness issue while walking the catalog,
-        either{" "}
-        <Link href="/admin" className="text-primary underline">
-          flag it from the admin console
-        </Link>{" "}
-        or open an issue and we&apos;ll patch the catalog directly —
-        catalog edits propagate to all variant pages without an
-        override.
-      </p>
-    </main>
+    <LibraryOverrideEditor
+      slug={slug}
+      variant={variant}
+      variantSlug={variantSlug}
+      conceptName={concept.name}
+      variantLabel={VARIANT_LABEL[variant]}
+      libraryVariantSlugs={supported.map((v) => ({
+        variant: v,
+        slug: variantToSlug(v),
+        label: VARIANT_LABEL[v],
+      }))}
+      hasOverride={override != null}
+      startingDoc={startingDoc}
+      playbookSettings={playbookSettings}
+    />
   );
 }

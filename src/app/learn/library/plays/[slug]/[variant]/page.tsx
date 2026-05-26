@@ -12,6 +12,7 @@ import { PlayEditorClient } from "@/features/editor/PlayEditorClient";
 import { NotesMarkdown } from "@/features/editor/NotesMarkdown";
 import { projectSpecToNotes } from "@/lib/coach-ai/notes-from-spec";
 import { isCurrentUserSiteAdmin, isFootballLibraryAvailable } from "@/lib/learn/access";
+import { loadLibraryOverride } from "@/lib/learn/overrides";
 import { toLearnSlug } from "@/lib/learn/links";
 import { withFullContext } from "@/lib/seo/ld-json";
 import {
@@ -140,8 +141,21 @@ export default async function PlayConceptVariantPage(
     );
   }
 
+  // Read the admin override (if any) on top of the catalog skeleton.
+  // When present, `override.document` IS the rendered play document
+  // (admin-edited player positions, route shapes, etc.). When the
+  // admin also wrote custom coach_notes those replace the spec-
+  // projected default; otherwise we fall back to projecting from the
+  // catalog skeleton, which is approximate when the override touches
+  // structural elements — admins editing routes should also write
+  // notes to keep the prose aligned.
+  // Override rows key the `variant` column on the canonical
+  // underscore id (`flag_5v5`), NOT the URL hyphen slug — keeps the
+  // DB keys aligned with `LibraryVariant` ids elsewhere in the code.
+  const override = await loadLibraryOverride(slug, variant);
   const { diagram } = playSpecToCoachDiagram(skeleton.spec);
-  const doc = coachDiagramToPlayDocument(diagram);
+  const defaultDoc = coachDiagramToPlayDocument(diagram);
+  const doc = override?.document ?? defaultDoc;
   const playbookSettings = defaultSettingsForVariant(variant);
   // Spec-derived coaching notes. Same projector Cal uses to generate
   // per-play prose, fed the same skeleton the diagram is rendered from
@@ -149,14 +163,14 @@ export default async function PlayConceptVariantPage(
   // version is one PlaySpec, projected two ways: visual + text). The
   // `@LABEL` mentions in the output match player labels on `doc`, so
   // `NotesMarkdown` renders them as inline `PlayerChip`s, the same
-  // widget used in the in-app editor.
-  const coachingNotes = projectSpecToNotes(skeleton.spec);
-  // Admins see an "Edit" link in the header that lets them open this
-  // diagram in the full editor. The override-persistence layer is
-  // Phase 2b-2; for now the link points at a draft-mode URL that lets
-  // an admin walk the diagram in the full editor (read-only) to verify
-  // correctness — the round-trip back into the library override is
-  // wired up in the follow-up.
+  // widget used in the in-app editor. Custom admin notes take
+  // precedence when present.
+  const coachingNotes = override?.coachNotes ?? projectSpecToNotes(skeleton.spec);
+  // Admins see an "Edit" link in the header that opens the play in
+  // the canonical editor (`/learn/library/admin/plays/[slug]/[variant]/edit`).
+  // Edits there save to `library_concept_overrides`, which this page
+  // reads on next render — keeping the catalog skeleton as the
+  // default while letting admins patch individual variants.
   const isAdmin = await isCurrentUserSiteAdmin();
 
   const canonical = `/learn/library/plays/${slug}/${variantSlug}`;
