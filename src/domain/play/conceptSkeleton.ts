@@ -575,14 +575,31 @@ function buildMesh(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResu
     };
   }
   if (variant === "flag_5v5") {
-    // Mesh 5v5: Y under-drag, C over-drag (the canonical mesh
-    // crossing pair, with C as the eligible-receiver center). X curls
-    // over the top, Z clears. Same 2yd + 8yd differentiated depths so
-    // the cross is visually unambiguous (the 2026-05-02 lesson).
+    // Mesh 5v5: CORRECTED 2026-05-26 (audit finding #2). A coach
+    // surfaced that the prior version had @C running an over-drag
+    // — which is wrong because the center has no clean release
+    // angle from the snap point and can't cross the formation
+    // cleanly within the 7-second clock. The canonical 5v5 Mesh
+    // crossing pair is RB (@Y) + an outside WR (@X), with @C
+    // playing a short underneath sit (the eligible-center outlet).
+    //
+    // Routes:
+    //   @Y drag @ 2yd  — under-crosser (RB releases from backfield)
+    //   @X drag @ 8yd  — over-crosser (outside WR with the release
+    //                    angle the center didn't have)
+    //   @C sit @ 5yd   — short underneath outlet (the eligible
+    //                    center's natural role given his snap-point
+    //                    starting position)
+    //   @Z go @ 18yd   — clears the strong side
+    //
+    // 2yd + 8yd depth differential preserved from the 2026-05-02
+    // visual-separation lesson — keeps the cross unambiguous in
+    // the chat preview. The depth-realism trade is documented
+    // separately (audit finding #9).
     const assignments = flagFiveRoutes({
       Y: { family: "Drag", depthYds: 2 },
-      C: { family: "Drag", depthYds: 8 },
-      X: { family: "Curl", depthYds: 12 },
+      X: { family: "Drag", depthYds: 8 },
+      C: { family: "Sit", depthYds: 5 },
       Z: { family: "Go", depthYds: 18 },
     });
     return {
@@ -590,7 +607,7 @@ function buildMesh(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResu
       concept: "Mesh",
       spec: baseSpec(variant, "Mesh", "Spread Doubles", undefined, assignments),
       notes:
-        `Mesh (5v5): @Y under-drag @ 2yd + @C over-drag @ 8yd — 6yd visual separation (5v5: C is the eligible inside-pair partner). @X curl @ 12yd, @Z go @ 18yd to clear.`,
+        `Mesh (5v5): @Y under-drag @ 2yd + @X over-drag @ 8yd — 6yd visual separation; the RB and outside WR cross from opposite sides (the center @C has no clean release angle from the snap point, so he runs @C sit @ 5yd as the underneath outlet). @Z go @ 18yd clears the strong side.`,
     };
   }
   // Inside slots run the differentiated drags (H under, S over). Outside

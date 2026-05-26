@@ -187,6 +187,41 @@ describe("generateConceptSkeleton — Mesh: differentiated drag depths", () => {
   });
 });
 
+// ── Mesh 5v5 crossing-pair correctness (audit finding #2, 2026-05-26) ──
+// Coach feedback: "the mesh on a flag play is not a mesh — the running
+// back should be meshing with one of the outside receivers." The prior
+// 5v5 build used @C (center) as the over-drag, which violates the
+// canonical convention: in 5v5 the center has no clean release angle
+// from the snap point and can't cross the formation cleanly within
+// the 7-second clock. The crossing pair should be the RB + an outside
+// WR; the center plays a short underneath sit.
+describe("generateConceptSkeleton — Mesh in flag_5v5 crossing pair", () => {
+  it("the center (@C) does NOT run a drag — outside WR is the over-crosser", () => {
+    const result = generateConceptSkeleton("Mesh", { variant: "flag_5v5" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const center = result.spec.assignments.find((a) => a.player === "C");
+    expect(
+      center?.action.kind === "route" && center.action.family,
+      "@C in 5v5 Mesh must NOT run a Drag — no clean release angle from snap point",
+    ).not.toBe("Drag");
+  });
+
+  it("the two drag-runners are @Y (RB) + an outside WR (@X or @Z)", () => {
+    const result = generateConceptSkeleton("Mesh", { variant: "flag_5v5" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const dragRunners = result.spec.assignments
+      .filter((a) => a.action.kind === "route" && a.action.family === "Drag")
+      .map((a) => a.player);
+    expect(dragRunners).toHaveLength(2);
+    expect(dragRunners).toContain("Y"); // RB always one of the crossers
+    // The other crosser is an outside WR, not the center.
+    const otherCrosser = dragRunners.find((p) => p !== "Y");
+    expect(["X", "Z"]).toContain(otherCrosser);
+  });
+});
+
 describe("generateConceptSkeleton — flag_6v6 end-to-end", () => {
   // Smoke test that the new flag_6v6 variant composes legal plays for the
   // pass-concept skeletons (the ones a 6v6 coach would actually call). The
