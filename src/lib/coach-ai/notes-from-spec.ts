@@ -631,12 +631,13 @@ function progressionPriority(
   if (f === "corner" && effectiveDepth >= 12) return 105 - effectiveDepth;
   if (f === "comeback" && effectiveDepth >= 14) return 110 - effectiveDepth;
   // Intermediate over the middle (band 200s). Deeper = earlier.
-  if (f === "dig" || f === "in") return 220 - effectiveDepth;
+  if (f === "dig" || f === "in" || f === "z-in") return 220 - effectiveDepth;
   // Intermediate outside / rhythm (band 300s).
-  if (f === "out" || f === "z-out" || f === "quick out") return 320 - effectiveDepth;
-  if (f === "curl") return 330 - effectiveDepth;
-  if (f === "hitch") return 340 - effectiveDepth;
-  if (f === "comeback") return 335 - effectiveDepth;
+  if (f === "out" || f === "quick out") return 320 - effectiveDepth;
+  if (f === "z-out") return 315 - effectiveDepth; // deeper double-break out
+  if (f === "curl" || f === "hook in") return 330 - effectiveDepth;
+  if (f === "hitch" || f === "quick in") return 340 - effectiveDepth;
+  if (f === "comeback" || f === "hook out") return 335 - effectiveDepth;
   if (f === "slant") return 350 - effectiveDepth;
   if (f === "whip") return 345 - effectiveDepth;
   // Wheel can be a deep outside threat; depth disambiguates.
@@ -644,7 +645,7 @@ function progressionPriority(
   if (f === "wheel") return 360;
   // Checkdown / outlet (band 400s). Lower band; not yet ordered within.
   if (f === "flat" || f === "drag" || f === "bubble" || f === "sit" ||
-      f === "arrow" || f === "spot" || f === "z-in" || f === "out & up" || f === "stop & go") {
+      f === "arrow" || f === "spot" || f === "out & up" || f === "stop & go") {
     return 400 + (effectiveDepth || 0);
   }
   // Unknown family → middle of the pack so it doesn't dominate.
@@ -919,8 +920,20 @@ function readRoleLabel(
   if (family === "hitch") {
     return "rhythm throw — eyes back on three; take it if the corner plays off.";
   }
-  if (family === "out" || family === "quick out" || family === "z-out") {
+  if (family === "out" || family === "quick out") {
     return "snap to the sideline — sideline outlet on the corner's leverage.";
+  }
+  if (family === "hook out") {
+    return "sell the vertical, hook back to the sideline — come back hard to the throw.";
+  }
+  if (family === "hook in") {
+    return "sell the vertical, hook back inside — settle in the soft spot between defenders.";
+  }
+  if (family === "quick in") {
+    return "quick inside cut — beat the inside leverage, look it in across the middle.";
+  }
+  if (family === "z-out" || family === "z-in") {
+    return "two-move route — commit defenders to the first break, then attack the second.";
   }
   if (family === "slant") {
     return "quick rhythm vs press, sit vs zone — first option on a rub or pick.";
@@ -1288,8 +1301,11 @@ const ROUTE_CUES: Record<string, string> = {
   "out & up": "sell the out, then up the sideline",
   arrow: "slight angle to the flat, gain depth gradually",
   sit: "settle in the void, face the QB",
-  "z-out": "deeper out — break flat at 7 yds",
-  "z-in": "deeper in — break flat at 7 yds, sit in window",
+  "z-out": "stem vertical, break inside, then continue upfield and back outside — double-move beats trailing man",
+  "z-in": "stem vertical, break outside, then continue upfield and back inside — cross the defender's face on the second break",
+  "hook in": "7-yd stem, U-turn back inside — settle facing the middle, find the soft spot",
+  "hook out": "7-yd stem, U-turn back outside — work back to the sideline, stop the clock",
+  "quick in": "quick inside cut at 4-5 yds — inside mirror of the quick out, get the ball fast",
 };
 
 /**
