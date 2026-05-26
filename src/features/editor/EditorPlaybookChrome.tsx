@@ -59,23 +59,15 @@ export function EditorPlaybookChrome({
     .filter(Boolean)
     .join(" · ");
   return (
+    // Mirrors PlaybookHeader's edge-to-edge pattern. The gradient
+    // extends behind the status bar via `native-safe-top`
+    // (env(safe-area-inset-top) is added as padding INSIDE the
+    // gradient on Capacitor), and the negative margins cancel the
+    // editor layout's mobile padding (`px-3 py-5`) so there is no
+    // white frame above or beside the banner. Desktop drops the
+    // negative top offset and uses the desktop layout's `px-6`.
     <div
-      // Outer sticky wrapper — bg-surface frame above and below the
-      // gradient. Top padding includes env(safe-area-inset-top) so on
-      // iPhone there's a substantial bg-surface strip behind the iOS
-      // status-bar / URL-bar zone when sticky-pinned. Without this,
-      // when the user scrolls and the chrome pins at top:0, the
-      // gradient ends up at viewport-top:0 and iOS Safari samples it
-      // for URL-bar tint — turning the URL bar red. The pt
-      // intentionally does NOT get cancelled by the inner gradient
-      // (no -mt-3) so the dark strip stays visible.
-      //
-      // Desktop drops the sticky + dark frame: gradient sits in
-      // normal flow below the SiteHeader.
-      className="sticky top-0 z-30 -mx-6 bg-surface px-6 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] sm:static sm:z-auto sm:bg-transparent sm:p-0"
-    >
-    <div
-      className="-mx-6 sm:mx-0"
+      className="native-safe-top relative -mx-3 -mt-5 sm:-mx-6 sm:mt-0"
       style={{ backgroundImage: gradient, backgroundColor: accentColor }}
     >
       <div className="flex items-center gap-2 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">
@@ -141,7 +133,6 @@ export function EditorPlaybookChrome({
           <InboxBell buttonClassName={`${onAccent} ${onAccentHover}`} />
         </div>
       </div>
-    </div>
     </div>
   );
 }

@@ -25,7 +25,7 @@ export default async function EditorLayout({ children }: { children: React.React
 
   return (
     <div className="flex min-h-full flex-col bg-surface-inset">
-      <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-6 py-5">
+      <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-3 py-5 sm:px-6">
         {children}
       </div>
       <TimeOnSiteTracker />
