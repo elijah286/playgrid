@@ -14,7 +14,11 @@ import { PlayEditorClient } from "@/features/editor/PlayEditorClient";
 import { isFootballLibraryAvailable } from "@/lib/learn/access";
 import { toLearnSlug } from "@/lib/learn/links";
 import { withFullContext } from "@/lib/seo/ld-json";
-import { DEFAULT_LIBRARY_VARIANT } from "@/lib/learn/variant";
+import {
+  DEFAULT_LIBRARY_VARIANT,
+  defaultVariantForConceptDef,
+  variantToSlug,
+} from "@/lib/learn/variant";
 
 export const dynamicParams = false;
 export const revalidate = 3600;
@@ -76,12 +80,14 @@ export default async function RoutePage(
   // demo's backdrop.
   const variant = DEFAULT_LIBRARY_VARIANT;
 
-  // Synthesize a minimal play that runs THIS route on the strong-
-  // side outside WR (@Z), with the rest of the formation idle. The
-  // canonical renderer (playSpecToCoachDiagram) places the receiver
-  // and draws the route from the catalog template at the chosen
-  // depth. Result is the same render path the in-app builder uses
-  // (Rule 14: one render path).
+  // Synthesize a minimal play that runs THIS route on the outside
+  // weak-side WR (@X), with the rest of the formation idle. We use
+  // X (not Z) because X renders in red — easier to spot against the
+  // green field than Z's blue — and a coach reading a route page
+  // only cares about ONE receiver running THE route. The canonical
+  // renderer (playSpecToCoachDiagram) places the receiver and draws
+  // the route from the catalog template at the chosen depth. Same
+  // render path the in-app builder uses (Rule 14: one render path).
   const depth = defaultDepthFor(route);
   const spec: PlaySpec = {
     schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
@@ -91,7 +97,7 @@ export default async function RoutePage(
     formation: { name: "Spread Doubles", strength: "right" },
     assignments: [
       {
-        player: "Z",
+        player: "X",
         confidence: "high",
         action: { kind: "route", family: route.name, depthYds: depth },
       },
@@ -100,7 +106,21 @@ export default async function RoutePage(
   let routeDoc: ReturnType<typeof coachDiagramToPlayDocument> | null = null;
   try {
     const { diagram } = playSpecToCoachDiagram(spec);
-    routeDoc = coachDiagramToPlayDocument(diagram);
+    // Drop the rest of the formation so the field shows ONLY the
+    // receiver running the route and the QB. Routes are taught
+    // relative to the QB, and the extra receivers (Y, Z, C) crowd
+    // the diagram without adding teaching value — a coach reading
+    // "Corner" wants to see the corner break, not what the slot is
+    // doing. Filtering happens on the rendered diagram (not the
+    // spec) so the renderer still gets a real formation to compute
+    // X's starting position from.
+    const KEEP = new Set(["QB", "X"]);
+    const slimDiagram = {
+      ...diagram,
+      players: diagram.players.filter((p) => KEEP.has(p.id)),
+      routes: (diagram.routes ?? []).filter((r) => KEEP.has(r.from)),
+    };
+    routeDoc = coachDiagramToPlayDocument(slimDiagram);
   } catch (err) {
     console.warn(
       `[library/routes] render failed for ${slug} in ${variant}`,
@@ -109,14 +129,24 @@ export default async function RoutePage(
   }
   const playbookSettings = defaultSettingsForVariant(variant);
 
-  // Concepts that use this route family — shown as a "used by" rail.
+  // Concepts that use this route family — shown as a "used by"
+  // rail. Each name links to the concept's library page so a coach
+  // reading the Corner route can jump straight to Smash / Snag /
+  // Flood without going back through the concept index. Variant
+  // comes from the concept's default (routes are variant-agnostic
+  // but concept pages aren't).
   const usedBy = CONCEPTS.filter((c) =>
     c.pattern.some((p) => p.family.toLowerCase() === route.name.toLowerCase()),
-  ).map((c) => c.name);
-  const usedByLine =
-    usedBy.length > 0
-      ? `${usedBy.slice(0, 6).join(", ")}${usedBy.length > 6 ? `, +${usedBy.length - 6} more` : ""}`
-      : null;
+  ).map((c) => {
+    const conceptSlug = toLearnSlug(c.name);
+    const defaultV = defaultVariantForConceptDef(c);
+    const href = defaultV
+      ? `/learn/library/plays/${conceptSlug}/${variantToSlug(defaultV)}`
+      : `/learn/library/plays/${conceptSlug}`;
+    return { name: c.name, href };
+  });
+  const usedByVisible = usedBy.slice(0, 6);
+  const usedByOverflow = usedBy.length - usedByVisible.length;
 
   // Related routes: same family fingerprint by complexity for now.
   // Cheap heuristic; once we have route tags we'll do proper overlap.
@@ -230,15 +260,28 @@ export default async function RoutePage(
           )}
 
           <p className="mt-4 text-xs text-muted">
-            Demo rendered on @Z (strong-side outside WR) at {depth}yd depth — the
-            catalog default. The same route family scales to any depth a play
-            calls for; concepts that use this route may set a different depth.
+            Demo rendered on @X (outside WR) at {depth}yd depth — the catalog
+            default. Only the route runner and the QB are shown so the break
+            stays the focus; the same route family scales to any depth a play
+            calls for, and concepts that use this route may set a different
+            depth.
           </p>
 
-          {usedByLine ? (
+          {usedBy.length > 0 ? (
             <p className="mt-6 rounded-xl border border-border bg-surface-raised px-4 py-3 text-sm text-muted">
               <strong className="font-semibold text-foreground">Concepts that use this route: </strong>
-              {usedByLine}
+              {usedByVisible.map((c, i) => (
+                <span key={c.name}>
+                  <Link
+                    href={c.href}
+                    className="text-primary hover:underline"
+                  >
+                    {c.name}
+                  </Link>
+                  {i < usedByVisible.length - 1 ? ", " : ""}
+                </span>
+              ))}
+              {usedByOverflow > 0 ? `, +${usedByOverflow} more` : ""}
             </p>
           ) : null}
         </div>
