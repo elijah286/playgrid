@@ -109,11 +109,25 @@ const CATEGORIES: Category[] = [
 
 export default function LibraryLandingPage() {
   return (
-    <>
+    <div className="mx-auto max-w-6xl px-6 py-10 text-foreground">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(withFullContext(breadcrumbLd)) }}
       />
+
+      <header className="mb-8">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+          Resources
+        </p>
+        <h1 className="mt-1 text-3xl font-extrabold tracking-tight">
+          Football library
+        </h1>
+        <p className="mt-2 max-w-2xl text-sm text-muted">
+          A free, browsable library of football concepts — plays, formations,
+          routes, defenses, drills, and practice plans. Each concept will
+          render in the same canonical editor that powers the play designer.
+        </p>
+      </header>
 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <VariantPill />
@@ -158,10 +172,10 @@ export default function LibraryLandingPage() {
       <p className="mt-10 text-xs text-muted">
         The library is in active development. Concept pages render plays via
         the canonical XO play editor — same diagrams the builder shows,
-        every concept will have an "Add to my playbook" button for signed-in
-        coaches.
+        every concept will have an &ldquo;Add to my playbook&rdquo; button for
+        signed-in coaches.
       </p>
-    </>
+    </div>
   );
 }
 

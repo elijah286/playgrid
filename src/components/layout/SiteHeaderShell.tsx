@@ -49,9 +49,10 @@ const PLAYBOOK_DETAIL_RE = /^\/playbooks\/[^/]+(?:\/.*)?$/;
 export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAiAvailable, showCoachCalPromo, coachAiEvalDays, coachAiImageUploadAvailable, userTier, coachProTrialUsed }: Props) {
   const pathname = usePathname();
   const hideOnMobile = PLAYBOOK_DETAIL_RE.test(pathname);
-  // Pricing link is a landing-page-only nav affordance. Everywhere else
-  // we keep the header minimal.
-  const showPricingLink = pathname === "/";
+  // Pricing is a top-level nav affordance on every public page — the
+  // earlier homepage-only gate hid Pricing on /learn and similar surfaces
+  // and coaches lost track of where to find it.
+  const showPricingLink = true;
 
   return (
     <header
@@ -138,36 +139,44 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
             </div>
           </div>
         ) : (
-          <div className="flex items-center gap-3 sm:gap-4">
-            <ResourcesDropdown />
-            {/* Mobile shows Pricing + Sign in (no Share, no Get started).
-                Pricing is muted-weight so Sign in remains the primary CTA,
-                but visible enough that pricing isn't hidden behind a menu.
-                Desktop adds Share and the Get started button. */}
-            {showPricingLink && (
-              <Link
-                href="/pricing"
-                data-web-only
-                className="whitespace-nowrap text-sm text-muted hover:text-foreground transition-colors"
-              >
-                Pricing
-              </Link>
-            )}
-            <div className="hidden sm:block">
-              <ShareButton userId={null} />
+          // Right side splits into two clusters with a vertical divider:
+          //   [ Resources ▾   Pricing ]  |  [ Sign in   Get started ]
+          //   ─── nav ───                  ─── auth ───
+          // The bare ShareButton icon is intentionally NOT rendered on
+          // anonymous public pages — first-time visitors have no content
+          // to share and the icon's purpose isn't self-evident. The
+          // authed header still has it where it belongs.
+          <div className="flex items-center gap-3 sm:gap-6">
+            <div className="flex items-center gap-3 sm:gap-5">
+              <ResourcesDropdown />
+              {showPricingLink && (
+                <Link
+                  href="/pricing"
+                  data-web-only
+                  className="whitespace-nowrap text-sm text-muted hover:text-foreground transition-colors"
+                >
+                  Pricing
+                </Link>
+              )}
             </div>
-            <Link
-              href="/login"
-              className="whitespace-nowrap text-sm font-semibold text-foreground hover:text-primary transition-colors"
-            >
-              Sign in
-            </Link>
-            <Link
-              href="/login?mode=signup"
-              className="hidden rounded-lg bg-primary px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-hover sm:inline-flex"
-            >
-              Get started
-            </Link>
+            <span
+              aria-hidden
+              className="hidden h-5 w-px bg-border sm:block"
+            />
+            <div className="flex items-center gap-3">
+              <Link
+                href="/login"
+                className="whitespace-nowrap text-sm font-semibold text-foreground hover:text-primary transition-colors"
+              >
+                Sign in
+              </Link>
+              <Link
+                href="/login?mode=signup"
+                className="hidden rounded-lg bg-primary px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-hover sm:inline-flex"
+              >
+                Get started
+              </Link>
+            </div>
           </div>
         )}
       </div>

@@ -6,8 +6,21 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
 const ITEMS = [
-  { href: "/learn", label: "Learn", description: "Tutorials + football library" },
-  { href: "/examples", label: "Examples", description: "Real playbooks to remix" },
+  {
+    href: "/learn/library",
+    label: "Football library",
+    description: "Plays, drills, and coaching concepts",
+  },
+  {
+    href: "/learn/using-xo",
+    label: "App tutorials",
+    description: "Hands-on walkthroughs of the editor",
+  },
+  {
+    href: "/examples",
+    label: "Examples",
+    description: "Real playbooks to remix",
+  },
   { href: "/faq", label: "FAQ", description: "How XO Gridmaker works" },
 ] as const;
 
