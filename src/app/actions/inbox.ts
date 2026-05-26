@@ -105,39 +105,34 @@ export async function listInboxAlertsAction(): Promise<
 > {
   if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
   const supabase = await createClient();
+
+  // Phase 1 — auth (must be first)
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in." };
 
-  const { data: profileRow } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-  const isSiteAdmin = profileRow?.role === "admin";
-
-  const [ownedRowsRes, memberRowsRes] = await Promise.all([
+  // Phase 2 — profile + both playbook-membership lists in parallel
+  const [profileRes, ownedRowsRes, memberRowsRes] = await Promise.all([
+    supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
     supabase
       .from("playbook_members")
-      .select(
-        "playbook_id, playbooks!inner(id, name, logo_url, color, is_archived)",
-      )
+      .select("playbook_id, playbooks!inner(id, name, logo_url, color, is_archived)")
       .eq("user_id", user.id)
       .eq("role", "owner")
       .eq("status", "active")
       .eq("playbooks.is_archived", false),
     supabase
       .from("playbook_members")
-      .select(
-        "playbook_id, playbooks!inner(id, name, logo_url, color, is_archived)",
-      )
+      .select("playbook_id, playbooks!inner(id, name, logo_url, color, is_archived)")
       .eq("user_id", user.id)
       .eq("status", "active")
       .eq("playbooks.is_archived", false),
   ]);
   if (ownedRowsRes.error) return { ok: false, error: ownedRowsRes.error.message };
   if (memberRowsRes.error) return { ok: false, error: memberRowsRes.error.message };
+
+  const isSiteAdmin = profileRes.data?.role === "admin";
 
   type PbJoinRow = {
     playbook_id: string;
@@ -170,61 +165,101 @@ export async function listInboxAlertsAction(): Promise<
   const ownedIds = Array.from(ownerBookById.keys());
   const memberIds = Array.from(memberBookById.keys());
 
+  // Phase 3 — all per-category queries fire in parallel:
+  //   • owner members + claims (if any owned playbooks)
+  //   • upcoming calendar events for RSVP check (date-filtered; RSVPs fetched in phase 4)
+  //   • emailed copy-share invites
+  //   • admin system notices (site-admin only)
+  // Note: RSVPs need event IDs, so that one follow-up query is deferred to phase 4.
+  const now = new Date();
+  const horizon = new Date(now.getTime() + RSVP_LOOKAHEAD_DAYS * 24 * 60 * 60 * 1000);
+  // For non-recurring events only load those that could still be upcoming.
+  // Recurring events are always loaded regardless of starts_at because any
+  // starts_at value may produce future occurrences via the rrule.
+  const eventsCutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+
+  const [
+    membersRes,
+    claimsRes,
+    eventsRes,
+    shareAlerts,
+    adminAlerts,
+  ] = await Promise.all([
+    ownedIds.length > 0
+      ? supabase
+          .from("playbook_members")
+          .select(
+            "playbook_id, user_id, role, status, created_at, coach_upgrade_requested_at, profiles:user_id(display_name)",
+          )
+          .in("playbook_id", ownedIds)
+          .or("status.eq.pending,coach_upgrade_requested_at.not.is.null")
+      : Promise.resolve({ data: [], error: null }),
+    ownedIds.length > 0
+      ? supabase
+          .from("roster_claims")
+          .select(
+            "id, member_id, user_id, requested_at, note, member:member_id!inner(playbook_id, label, jersey_number, positions), profiles:user_id(display_name)",
+          )
+          .eq("status", "pending")
+          .in("member.playbook_id", ownedIds)
+      : Promise.resolve({ data: [], error: null }),
+    memberIds.length > 0
+      ? supabase
+          .from("playbook_events")
+          .select(
+            "id, playbook_id, type, title, starts_at, recurrence_rule, recurrence_exdate, deleted_at",
+          )
+          .in("playbook_id", memberIds)
+          .is("deleted_at", null)
+          // Skip past one-time events entirely; keep all recurring ones.
+          .or(`recurrence_rule.not.is.null,starts_at.gt.${eventsCutoff}`)
+          .lt("starts_at", horizon.toISOString())
+      : Promise.resolve({ data: [] as unknown[], error: null }),
+    buildPendingCopySendAlerts(supabase, user.id),
+    isSiteAdmin ? buildAdminNoticeAlerts(supabase) : Promise.resolve([] as InboxAlert[]),
+  ]);
+
+  if (membersRes.error) return { ok: false, error: membersRes.error.message };
+  if (claimsRes.error) return { ok: false, error: claimsRes.error.message };
+  if (eventsRes.error) return { ok: false, error: eventsRes.error.message };
+
+  // Phase 4 — RSVP responses (needs event IDs from phase 3)
+  const eventIds = ((eventsRes.data ?? []) as { id: string }[]).map((e) => e.id);
+  const existingRsvpsRes = eventIds.length > 0
+    ? await supabase
+        .from("playbook_event_rsvps")
+        .select("event_id, occurrence_date")
+        .eq("user_id", user.id)
+        .in("event_id", eventIds)
+    : { data: [] as unknown[], error: null };
+
+  // Assemble all alerts from raw query results.
   const alerts: InboxAlert[] = [];
+  appendOwnerAlerts(alerts, ownerBookById, membersRes.data, claimsRes.data);
 
-  // ─── Owner-side alerts ───────────────────────────────────────────────
-  if (ownedIds.length > 0) {
-    const [membersRes, claimsRes] = await Promise.all([
-      supabase
-        .from("playbook_members")
-        .select(
-          "playbook_id, user_id, role, status, created_at, coach_upgrade_requested_at, profiles:user_id(display_name)",
-        )
-        .in("playbook_id", ownedIds)
-        .or("status.eq.pending,coach_upgrade_requested_at.not.is.null"),
-      supabase
-        .from("roster_claims")
-        .select(
-          "id, member_id, user_id, requested_at, note, member:member_id!inner(playbook_id, label, jersey_number, positions), profiles:user_id(display_name)",
-        )
-        .eq("status", "pending")
-        .in("member.playbook_id", ownedIds),
-    ]);
-    if (membersRes.error) return { ok: false, error: membersRes.error.message };
-    if (claimsRes.error) return { ok: false, error: claimsRes.error.message };
-
-    appendOwnerAlerts(alerts, ownerBookById, membersRes.data, claimsRes.data);
-  }
-
-  // ─── Player-side alerts: outstanding RSVPs ───────────────────────────
-  if (memberIds.length > 0) {
-    const rsvpAlerts = await buildRsvpPendingAlerts(
-      supabase,
-      user.id,
-      memberIds,
+  const responded = new Set(
+    ((existingRsvpsRes.data ?? []) as { event_id: string; occurrence_date: string }[]).map(
+      (r) => `${r.event_id}|${r.occurrence_date}`,
+    ),
+  );
+  alerts.push(
+    ...buildRsvpAlertsFromRows(
+      (eventsRes.data ?? []) as Parameters<typeof buildRsvpAlertsFromRows>[0],
+      responded,
       memberBookById,
-    );
-    alerts.push(...rsvpAlerts);
-  }
+      now,
+      horizon,
+    ),
+  );
 
-  // ─── Emailed copy invites: a coach sent you a playbook ───────────────
-  const shareAlerts = await buildPendingCopySendAlerts(supabase, user.id);
   alerts.push(...shareAlerts);
-
-  // ─── Site-admin alerts: system notices ───────────────────────────────
-  if (isSiteAdmin) {
-    const adminAlerts = await buildAdminNoticeAlerts(supabase);
-    alerts.push(...adminAlerts);
-  }
+  alerts.push(...adminAlerts);
 
   // ─── Per-user state overlay (archive / delete) ───────────────────────
-  // Look up inbox_state for every (kind, sourceId) we just produced. Drop
-  // 'deleted' rows entirely; tag 'archived' rows so the UI can filter them
-  // into the Archived view; everything else defaults to 'active'.
-  const stateBySource = await loadInboxStateOverlay(supabase, user.id, alerts);
+  const stateMap = await loadInboxStateOverlay(supabase, user.id, alerts);
   const filtered: InboxAlert[] = [];
   for (const a of alerts) {
-    const overlay = stateBySource.get(stateOverlayKey(a.kind, a.sourceId));
+    const overlay = stateMap.get(stateOverlayKey(a.kind, a.sourceId));
     if (overlay === "deleted") continue;
     filtered.push({ ...a, status: overlay === "archived" ? "archived" : "active" });
   }
@@ -494,48 +529,25 @@ async function buildPendingCopySendAlerts(
   return out;
 }
 
-async function buildRsvpPendingAlerts(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  userId: string,
-  playbookIds: string[],
+type RsvpEventRow = {
+  id: string;
+  playbook_id: string;
+  type: "practice" | "game" | "scrimmage" | "other";
+  title: string;
+  starts_at: string;
+  recurrence_rule: string | null;
+  recurrence_exdate: string[] | null;
+};
+
+function buildRsvpAlertsFromRows(
+  events: RsvpEventRow[],
+  responded: Set<string>,
   bookById: Map<string, { name: string; logo_url: string | null; color: string | null }>,
-): Promise<InboxAlert[]> {
-  const { data: events, error } = await supabase
-    .from("playbook_events")
-    .select(
-      "id, playbook_id, type, title, starts_at, recurrence_rule, recurrence_exdate, deleted_at",
-    )
-    .in("playbook_id", playbookIds)
-    .is("deleted_at", null);
-  if (error || !events || events.length === 0) return [];
-
-  type EventRow = {
-    id: string;
-    playbook_id: string;
-    type: "practice" | "game" | "scrimmage" | "other";
-    title: string;
-    starts_at: string;
-    recurrence_rule: string | null;
-    recurrence_exdate: string[] | null;
-  };
-
-  const now = new Date();
-  const horizon = new Date(now.getTime() + RSVP_LOOKAHEAD_DAYS * 24 * 60 * 60 * 1000);
-
-  const eventIds = (events as EventRow[]).map((e) => e.id);
-  const { data: existingRsvps } = await supabase
-    .from("playbook_event_rsvps")
-    .select("event_id, occurrence_date")
-    .eq("user_id", userId)
-    .in("event_id", eventIds);
-  const responded = new Set(
-    ((existingRsvps ?? []) as { event_id: string; occurrence_date: string }[]).map(
-      (r) => `${r.event_id}|${r.occurrence_date}`,
-    ),
-  );
-
+  now: Date,
+  horizon: Date,
+): InboxAlert[] {
   const out: InboxAlert[] = [];
-  for (const e of events as EventRow[]) {
+  for (const e of events) {
     const book = bookById.get(e.playbook_id);
     if (!book) continue;
     const occurrences = expandRecurrence({
@@ -546,11 +558,8 @@ async function buildRsvpPendingAlerts(
       windowEnd: horizon,
     });
     for (const occ of occurrences) {
-      const startMs = new Date(occ.startsAt).getTime();
-      // Skip occurrences that already started (RSVP locked).
-      if (startMs <= now.getTime()) continue;
-      const k = `${e.id}|${occ.occurrenceDate}`;
-      if (responded.has(k)) continue;
+      if (new Date(occ.startsAt).getTime() <= now.getTime()) continue;
+      if (responded.has(`${e.id}|${occ.occurrenceDate}`)) continue;
       const sourceId = `${e.id}|${occ.occurrenceDate}`;
       out.push({
         key: `rsvp:${e.id}:${occ.occurrenceDate}`,
@@ -562,8 +571,6 @@ async function buildRsvpPendingAlerts(
         playbookLogoUrl: book.logo_url,
         playbookColor: book.color,
         displayName: null,
-        // For sort: use the event's start-time (sooner-first surfaces via
-        // newest sort because b > a on dates further in the future).
         createdAt: occ.startsAt,
         eventId: e.id,
         occurrenceDate: occ.occurrenceDate,
