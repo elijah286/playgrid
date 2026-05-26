@@ -2750,11 +2750,16 @@ function PlayEditorClientInner({
 }
 
 /** Library-mode playback overlay. Anchored to the bottom-right corner
- *  of the field-viewport (which is `position: relative`). Renders just
- *  a play/pause button and a speed selector — no labels, no reset
- *  affordance, no edit-mode hooks. The full-field tap-to-step button
- *  sits underneath, so coaches can advance the play by tapping
- *  anywhere on grass; this bar is the discoverable click-target.
+ *  of the field-viewport (which is `position: relative`). Renders the
+ *  play/pause/replay button, an always-visible reset, and a speed
+ *  selector. The full-field tap-to-step button sits underneath, so
+ *  coaches can advance the play by tapping anywhere on grass; this bar
+ *  is the discoverable click-target.
+ *
+ *  Reset is always visible (per coach feedback): mid-play scrubbing —
+ *  pause, rewind, replay — is the most common debugging pattern, and
+ *  hiding reset until the play has fully run meant coaches had to wait
+ *  the full animation through before they could go back to frame 0.
  *
  *  Kept inline here (not lifted into PlayControlsPanel) because the
  *  visual treatment is intentionally different — PlayControlsPanel is
@@ -2766,6 +2771,10 @@ function LibraryPlaybackBar({ anim }: { anim: PlayAnimation }) {
   const { phase, paused, togglePause, step, reset, speed, setSpeed } = anim;
   const isRunning = phase === "motion" || phase === "play";
   const showPause = isRunning && !paused;
+  // Reset is dead UI before any frame has advanced — disable rather
+  // than hide so the layout stays stable (no horizontal pop when the
+  // play starts running). The reset itself is purely synchronous.
+  const canReset = phase !== "idle";
   const SPEED_OPTIONS: Array<{ value: number; label: string }> = [
     { value: 0.5, label: "0.5×" },
     { value: 1, label: "1×" },
@@ -2814,6 +2823,24 @@ function LibraryPlaybackBar({ anim }: { anim: PlayAnimation }) {
             <path d="M8 5v14l11-7z" />
           </svg>
         )}
+      </button>
+      <button
+        type="button"
+        onClick={reset}
+        disabled={!canReset}
+        className="inline-flex size-7 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
+        aria-label="Reset to start"
+        title="Reset to start"
+      >
+        {/* Rewind-to-start glyph — left arrow + bar — chosen over a
+            circular-arrow reload icon because reset here means "scrub
+            back to frame 0," not "reload the page." Coaches reading
+            this read it the same way they read the leftmost button on
+            a video player. */}
+        <svg viewBox="0 0 24 24" className="size-3.5" fill="currentColor" aria-hidden>
+          <rect x="5" y="6" width="2" height="12" rx="0.5" />
+          <path d="M19 5v14L9 12z" />
+        </svg>
       </button>
       <div className="flex items-center rounded-full bg-white/10 p-0.5 text-[10px] font-semibold">
         {SPEED_OPTIONS.map((s) => {

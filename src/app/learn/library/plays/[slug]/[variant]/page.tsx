@@ -9,6 +9,8 @@ import { playSpecToCoachDiagram } from "@/domain/play/specRenderer";
 import { coachDiagramToPlayDocument } from "@/features/coach-ai/coachDiagramConverter";
 import { defaultSettingsForVariant } from "@/domain/playbook/settings";
 import { PlayEditorClient } from "@/features/editor/PlayEditorClient";
+import { NotesMarkdown } from "@/features/editor/NotesMarkdown";
+import { projectSpecToNotes } from "@/lib/coach-ai/notes-from-spec";
 import { isCurrentUserSiteAdmin, isFootballLibraryAvailable } from "@/lib/learn/access";
 import { toLearnSlug } from "@/lib/learn/links";
 import { withFullContext } from "@/lib/seo/ld-json";
@@ -141,6 +143,14 @@ export default async function PlayConceptVariantPage(
   const { diagram } = playSpecToCoachDiagram(skeleton.spec);
   const doc = coachDiagramToPlayDocument(diagram);
   const playbookSettings = defaultSettingsForVariant(variant);
+  // Spec-derived coaching notes. Same projector Cal uses to generate
+  // per-play prose, fed the same skeleton the diagram is rendered from
+  // — so the bullets and the diagram cannot drift apart (a concept
+  // version is one PlaySpec, projected two ways: visual + text). The
+  // `@LABEL` mentions in the output match player labels on `doc`, so
+  // `NotesMarkdown` renders them as inline `PlayerChip`s, the same
+  // widget used in the in-app editor.
+  const coachingNotes = projectSpecToNotes(skeleton.spec);
   // Admins see an "Edit" link in the header that lets them open this
   // diagram in the full editor. The override-persistence layer is
   // Phase 2b-2; for now the link points at a draft-mode URL that lets
@@ -287,6 +297,27 @@ export default async function PlayConceptVariantPage(
               libraryMode={true}
             />
           </div>
+
+          {/* Per-player coaching breakdown. Generated from the same
+              PlaySpec the diagram is rendered from, using the exact
+              projector that emits Cal's chat-time play notes — so the
+              `@LABEL` mentions resolve to the players actually on the
+              field, the QB read order matches the diagram, and the
+              concept's tactical opener lines up with the catalog's
+              `description`. Players appear as `PlayerChip`s, matching
+              the in-app editor's notes display.
+              Hidden when the projector returns an empty string (no
+              recognized concept + no assignments — shouldn't happen
+              for catalog plays, but we keep the guard so the section
+              doesn't render an empty card). */}
+          {coachingNotes.trim().length > 0 && (
+            <section className="mt-6 rounded-2xl border border-border bg-surface-raised p-5">
+              <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
+                Coaching breakdown
+              </h2>
+              <NotesMarkdown value={coachingNotes} players={doc.layers.players} />
+            </section>
+          )}
 
           {concept.whenToUse ? (
             <section className="mt-8">
