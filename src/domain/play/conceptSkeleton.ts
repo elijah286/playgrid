@@ -800,43 +800,64 @@ function buildDrive(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRes
 }
 
 function buildLevels(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
+  // CORRECTED 2026-05-26 (audit finding #6). Canonical Levels has
+  // BOTH in-breakers on the SAME side, stacked to high-low the
+  // hook/curl defender (and the corner). The prior implementation
+  // put the In route on the slot and the Dig on the BACKSIDE
+  // outside WR — opposite sides — which loses the same-side high-
+  // low stretch the concept depends on.
+  //
+  // Fix: route the dig to the STRONG-SIDE outside WR (above the
+  // strong-side slot's in-route), and clear the backside with the
+  // weak-side outside WR. Same-side stack of in-breakers.
   const variant = opts.variant;
+  const side: "left" | "right" = opts.strength ?? "right";
+  const strongOutside = side === "right" ? "Z" : "X";
+  const backsideOutside = side === "right" ? "X" : "Z";
   if (variant === "flag_4v4") {
-    // 4v4 Levels: low-in + high-dig stacked on the LB. 3-receiver
-    // adaptation drops the deep backside outlet.
+    // 4v4 Levels: in 4v4, @Y is the only inside receiver, so he
+    // takes the low in-route. The strong outside takes the dig.
+    // Backside clear pulls the deep defender.
     const assignments = flagFourRoutes({
       Y: { family: "In", depthYds: 6 },
-      X: { family: "Dig", depthYds: 10 },
-      Z: { family: "Go", depthYds: 12 },
+      [strongOutside]: { family: "Dig", depthYds: 10 },
+      [backsideOutside]: { family: "Go", depthYds: 12 },
     });
     return {
       ok: true,
       concept: "Levels",
-      spec: baseSpec(variant, "Levels", "Spread", undefined, assignments),
+      spec: baseSpec(variant, `Levels ${cap(side)}`, "Spread", side, assignments),
       notes:
-        `Levels (4v4): @Y in @ 6yd (low) + @X dig @ 10yd (high) — high-low on the underneath LB. @Z go @ 12yd to clear.`,
+        `Levels ${cap(side)} (4v4): @Y in @ 6yd (low) + @${strongOutside} dig @ 10yd (high) — both in-breaking on the strong side. @${backsideOutside} go @ 12yd to clear backside.`,
     };
   }
   if (variant === "flag_5v5") {
+    // 5v5 Levels: @Y is the inside/RB and takes the low In. Strong-
+    // side outside takes the Dig at 12. Backside clear; @C eligible
+    // underneath sit.
     const assignments = flagFiveRoutes({
       Y: { family: "In", depthYds: 7 },
-      X: { family: "Dig", depthYds: 12 },
-      Z: { family: "Go", depthYds: 18 },
+      [strongOutside]: { family: "Dig", depthYds: 12 },
+      [backsideOutside]: { family: "Go", depthYds: 18 },
       C: { family: "Sit", depthYds: 5 },
     });
     return {
       ok: true,
       concept: "Levels",
-      spec: baseSpec(variant, "Levels", "Spread Doubles", undefined, assignments),
+      spec: baseSpec(variant, `Levels ${cap(side)}`, "Spread Doubles", side, assignments),
       notes:
-        `Levels (5v5): @Y in @ 7yd (low) + @X dig @ 12yd (high) — high-low on the underneath LB. @Z deep clear; @C sits @ 5yd.`,
+        `Levels ${cap(side)} (5v5): @Y in @ 7yd (low) + @${strongOutside} dig @ 12yd (high) — both in-breaking on the strong side. @${backsideOutside} clears backside; @C sits @ 5yd as the eligible underneath.`,
     };
   }
+  // 7v7+/tackle: strong slot runs the low In; strong outside runs the
+  // Dig over the top; backside outside clears.
+  const strongSlot = side === "right" ? "S" : "H";
+  const backsideSlot = side === "right" ? "H" : "S";
   const assignments: PlayerAssignment[] = [
-    routeAt("H", "In", 7),      // low in
-    routeAt("X", "Dig", 12),    // high dig (over the in)
-    routeAt("Z", "Go", 18),     // backside clear
-    routeAt("S", "Sit", 6),
+    routeAt(strongSlot, "In", 7),         // low in (strong side)
+    routeAt(strongOutside, "Dig", 12),    // high dig (over the in, SAME side)
+    routeAt(backsideOutside, "Go", 18),   // backside clear
+    routeAt(backsideSlot, "Sit", 6),      // backside outlet
     routeAt("B", "Flat", 4),
     qbDropback(),
     ...lineBlocks(variant),
@@ -844,9 +865,9 @@ function buildLevels(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRe
   return {
     ok: true,
     concept: "Levels",
-    spec: baseSpec(variant, "Levels", "Spread Doubles", undefined, assignments),
+    spec: baseSpec(variant, `Levels ${cap(side)}`, "Spread Doubles", side, assignments),
     notes:
-      `Levels: H in @ 7yd (low) + X dig @ 12yd (high) — high-low on the underneath LB. Z deep clear, B checkdown.`,
+      `Levels ${cap(side)}: @${strongSlot} in @ 7yd (low) + @${strongOutside} dig @ 12yd (high) — both in-breaking on the strong side, high-low on the hook/curl defender. @${backsideOutside} clears, @B checkdown.`,
   };
 }
 

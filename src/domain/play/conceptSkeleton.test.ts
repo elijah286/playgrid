@@ -222,6 +222,61 @@ describe("generateConceptSkeleton — Mesh in flag_5v5 crossing pair", () => {
   });
 });
 
+// ── Levels: both in-breakers on the SAME side (audit #6) ──
+// Canonical Levels stacks an In and a Dig on the SAME side of the
+// formation to high-low the hook/curl defender. The prior build put
+// the In on the slot and the Dig on the backside outside — opposite
+// sides — which loses the same-side stretch the concept needs.
+describe("generateConceptSkeleton — Levels both in-breakers same side", () => {
+  it("right-strength: strong-side outside WR (@Z) runs the Dig; backside (@X) clears", () => {
+    const result = generateConceptSkeleton("Levels", {
+      variant: "tackle_11",
+      strength: "right",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const dig = result.spec.assignments.find(
+      (a) => a.action.kind === "route" && a.action.family === "Dig",
+    );
+    expect(dig?.player, "Right-strength Levels: Dig should be on @Z, not @X").toBe("Z");
+    // Backside @X should be a clear (Go), not a Dig.
+    const x = result.spec.assignments.find((a) => a.player === "X");
+    expect(x?.action.kind === "route" && x.action.family).toBe("Go");
+  });
+
+  it("left-strength mirrors: @X runs the Dig; @Z clears", () => {
+    const result = generateConceptSkeleton("Levels", {
+      variant: "tackle_11",
+      strength: "left",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const dig = result.spec.assignments.find(
+      (a) => a.action.kind === "route" && a.action.family === "Dig",
+    );
+    expect(dig?.player).toBe("X");
+    const z = result.spec.assignments.find((a) => a.player === "Z");
+    expect(z?.action.kind === "route" && z.action.family).toBe("Go");
+  });
+
+  it("flag_5v5: dig + in on strong side, backside clears", () => {
+    const result = generateConceptSkeleton("Levels", {
+      variant: "flag_5v5",
+      strength: "right",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const dig = result.spec.assignments.find(
+      (a) => a.action.kind === "route" && a.action.family === "Dig",
+    );
+    expect(dig?.player).toBe("Z"); // strong-side outside WR
+    const inRoute = result.spec.assignments.find(
+      (a) => a.action.kind === "route" && a.action.family === "In",
+    );
+    expect(inRoute?.player).toBe("Y"); // 5v5's only inside receiver
+  });
+});
+
 // ── QB Draw / Draw receivers run vertical clears (audit #4) ──
 // Canonical: both Draw concepts need the receivers to pull LBs and
 // safeties AWAY from the run lane. Hitches at 3-5yd keep defenders
