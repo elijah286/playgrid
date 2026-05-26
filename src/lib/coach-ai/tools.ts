@@ -24,6 +24,7 @@ import { findTemplate as findRouteTemplate } from "@/domain/play/routeTemplates"
 import { sanitizeCoachDiagram } from "@/domain/play/sanitize";
 import { generateConceptSkeleton } from "@/domain/play/conceptSkeleton";
 import { resolveConceptSkeleton } from "@/lib/learn/concept-resolver";
+import { resolveDefensiveAlignment } from "@/lib/learn/defense-resolver";
 import { playSpecToCoachDiagram, reactivePathFor } from "@/domain/play/specRenderer";
 import {
   findReactorPattern,
@@ -161,13 +162,17 @@ type DefenseAlignmentResult =
     }
   | { ok: false; error: string };
 
-function computeDefenseAlignment(
+async function computeDefenseAlignment(
   variant: string,
   front: string,
   coverage: string,
   strength: "left" | "right",
-): DefenseAlignmentResult {
-  const catalogMatch = findDefensiveAlignment(variant, front, coverage);
+): Promise<DefenseAlignmentResult> {
+  // Consult the override layer first so admin edits saved through
+  // the library defense editor flow into every Cal-facing surface
+  // (compose_defense, place_defense). Falls through to the synch-
+  // ronous catalog lookup when no override exists.
+  const catalogMatch = await resolveDefensiveAlignment(variant, front, coverage);
   if (catalogMatch) {
     return {
       ok: true,
@@ -1539,7 +1544,7 @@ const compose_defense: CoachAiTool = {
     const onPlayRaw = typeof input.on_play === "string" ? input.on_play.trim() : "";
 
     const variant = (ctx.sportVariant as "tackle_11" | "flag_7v7" | "flag_5v5" | undefined) ?? "flag_7v7";
-    const alignment = computeDefenseAlignment(variant, front, coverage, strength);
+    const alignment = await computeDefenseAlignment(variant, front, coverage, strength);
     if (!alignment.ok) return alignment;
 
     // Suffix duplicate ids — same logic as place_defense.
@@ -1989,7 +1994,7 @@ const place_defense: CoachAiTool = {
       input.strength === "left" ? "left" : "right";
 
     const variant = ctx.sportVariant ?? "flag_7v7";
-    const alignment = computeDefenseAlignment(variant, front, coverage, strength);
+    const alignment = await computeDefenseAlignment(variant, front, coverage, strength);
     if (!alignment.ok) return alignment;
 
     // Suffix duplicate role labels so every player has a unique diagram

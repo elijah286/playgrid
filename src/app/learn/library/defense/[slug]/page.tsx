@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowRight, BookOpen } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, Pencil } from "lucide-react";
 import {
   DEFENSIVE_ALIGNMENTS,
   alignmentWithAssignments,
@@ -14,7 +14,8 @@ import { PlayEditorClient } from "@/features/editor/PlayEditorClient";
 import { NotesMarkdown } from "@/features/editor/NotesMarkdown";
 import { PLAY_SPEC_SCHEMA_VERSION, type PlaySpec } from "@/domain/play/spec";
 import { projectSpecToNotes } from "@/lib/coach-ai/notes-from-spec";
-import { isFootballLibraryAvailable } from "@/lib/learn/access";
+import { isCurrentUserSiteAdmin, isFootballLibraryAvailable } from "@/lib/learn/access";
+import { loadLibraryOverride } from "@/lib/learn/overrides";
 import { toLearnSlug } from "@/lib/learn/links";
 import { withFullContext } from "@/lib/seo/ld-json";
 import {
@@ -151,11 +152,22 @@ export default async function DefensePage(
     : null;
   const alignment = renderVariant ? group.byVariant[renderVariant] : null;
 
+  // Read the admin override (if any) for the same (slug, variant).
+  // When present, the override's PlayDocument IS the rendered defense
+  // diagram (admin-edited positions, zones, custom prose). Falls
+  // back to the catalog alignment when no override exists.
+  const override = renderVariant
+    ? await loadLibraryOverride(slug, renderVariant)
+    : null;
+  const isAdmin = await isCurrentUserSiteAdmin();
+
   // Build a defender-only PlayDocument for the alignment render.
   // DefensiveAlignment.players are in yards (strength="right" by
   // default), zones in the same coord system. Wrap as a
   // defense-focused CoachDiagram (focus="D" tints offense players
-  // gray) and run through the canonical converter.
+  // gray) and run through the canonical converter. If an override
+  // exists, its document is used directly — the catalog defaults
+  // are only the starting point.
   let defenseDoc: ReturnType<typeof coachDiagramToPlayDocument> | null = null;
   if (alignment) {
     const defenders = alignmentWithAssignments(alignment, "right");
@@ -185,7 +197,8 @@ export default async function DefensePage(
       })),
     };
     try {
-      defenseDoc = coachDiagramToPlayDocument(diagram);
+      const defaultDoc = coachDiagramToPlayDocument(diagram);
+      defenseDoc = override?.document ?? defaultDoc;
     } catch (err) {
       // Server-side log so admins notice when a catalog alignment
       // can't render; the user-facing fallback panel below still
@@ -200,6 +213,15 @@ export default async function DefensePage(
   const playbookSettings = renderVariant
     ? defaultSettingsForVariant(renderVariant)
     : null;
+
+  // Metadata overrides — same shape as the offense play page. Each
+  // field falls through to the catalog alignment when null.
+  const displayedDescription =
+    override?.descriptionOverride ?? alignment?.description ?? group.description;
+  const displayedWhenToUse =
+    override?.whenToUseOverride ?? alignment?.whenToUse ?? null;
+  const displayedWeaknesses =
+    override?.commonMistakesOverride ?? alignment?.weaknesses ?? null;
 
   // Per-defender notes. Same projector Cal uses to generate chat-
   // time defense prose: build a minimal PlaySpec with `playType:
@@ -317,19 +339,35 @@ export default async function DefensePage(
         </Link>
       </header>
 
-      <div className="mb-6">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         {/* Variant pill scoped to THIS scheme's supported variants —
             tackle-only fronts like 3-4 hide the flag options entirely
             instead of showing them and 404'ing. When only one variant
             is supported the pill renders as an informational chip
             ("11v11 Tackle only"). */}
         <VariantPill supportedVariants={supportedVariants} />
+        {/* Admin-only "Edit this defense" affordance. Lives next to
+            the variant pill (subtle text link, not a button) so
+            it's invisible to anonymous visitors but reachable for
+            admins spot-checking alignments. Routes to the override
+            edit page — edits flow to Cal's defense tools via
+            resolveDefensiveAlignment. */}
+        {isAdmin && renderVariant ? (
+          <Link
+            href={`/learn/library/admin/defense/${slug}/${variantToSlug(renderVariant)}/edit`}
+            className="inline-flex items-center gap-1 text-xs font-medium text-muted underline decoration-dotted underline-offset-4 hover:text-primary"
+            aria-label={`Edit ${group.name} (${VARIANT_LABEL[renderVariant]}) in the defense editor`}
+          >
+            <Pencil className="size-3" />
+            Edit this defense
+          </Link>
+        ) : null}
       </div>
 
       <div className="mb-8 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_280px]">
         <div>
           <p className="mb-6 text-lg leading-relaxed text-foreground">
-            {group.description}
+            {displayedDescription}
           </p>
 
           {defenseDoc && renderVariant && playbookSettings ? (
@@ -406,20 +444,20 @@ export default async function DefensePage(
               KG def, projected through legacy DefensiveAlignment).
               Hidden when the scheme has no guidance authored — better
               an empty space than a placeholder. */}
-          {alignment?.whenToUse ? (
+          {displayedWhenToUse ? (
             <section className="mt-8">
               <h2 className="text-xl font-bold tracking-tight">When to call it</h2>
               <p className="mt-2 text-base leading-relaxed text-muted">
-                {alignment.whenToUse}
+                {displayedWhenToUse}
               </p>
             </section>
           ) : null}
 
-          {alignment?.weaknesses && alignment.weaknesses.length > 0 ? (
+          {displayedWeaknesses && displayedWeaknesses.length > 0 ? (
             <section className="mt-8">
               <h2 className="text-xl font-bold tracking-tight">Known weaknesses</h2>
               <ul className="mt-2 space-y-1.5 pl-6">
-                {alignment.weaknesses.map((w) => (
+                {displayedWeaknesses.map((w) => (
                   <li key={w} className="list-disc text-base leading-relaxed text-muted">
                     {w}
                   </li>
