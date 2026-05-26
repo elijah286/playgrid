@@ -39,6 +39,9 @@ type Props = {
    * promise "no charge today" to someone who'd be billed immediately.
    */
   coachProTrialUsed?: boolean;
+  /** Beta gate for the public Football Library. When false, the
+   *  Resources dropdown's "Football library" entry is hidden. */
+  footballLibraryAvailable?: boolean;
 };
 
 // Routes where the playbook banner takes over the top of the screen on
@@ -46,7 +49,7 @@ type Props = {
 // stacked headers. Desktop always shows both.
 const PLAYBOOK_DETAIL_RE = /^\/playbooks\/[^/]+(?:\/.*)?$/;
 
-export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAiAvailable, showCoachCalPromo, coachAiEvalDays, coachAiImageUploadAvailable, userTier, coachProTrialUsed }: Props) {
+export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAiAvailable, showCoachCalPromo, coachAiEvalDays, coachAiImageUploadAvailable, userTier, coachProTrialUsed, footballLibraryAvailable }: Props) {
   const pathname = usePathname();
   const hideOnMobile = PLAYBOOK_DETAIL_RE.test(pathname);
   // Pricing is a top-level nav affordance on every public page — the
@@ -97,7 +100,7 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
         </Link>
         {user ? (
           <div className="flex items-center gap-2 sm:gap-4">
-            <ResourcesDropdown />
+            <ResourcesDropdown footballLibraryAvailable={footballLibraryAvailable ?? false} />
             {/* Cal launcher: trigger button visible only on desktop.
                 The bottom toolbar's CalNavButton takes over on mobile.
                 The launcher stays mounted on every viewport (the
@@ -148,7 +151,7 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
           // authed header still has it where it belongs.
           <div className="flex items-center gap-3 sm:gap-6">
             <div className="flex items-center gap-3 sm:gap-5">
-              <ResourcesDropdown />
+              <ResourcesDropdown footballLibraryAvailable={footballLibraryAvailable ?? false} />
               {showPricingLink && (
                 <Link
                   href="/pricing"

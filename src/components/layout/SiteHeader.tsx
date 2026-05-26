@@ -9,6 +9,7 @@ import {
   getBetaFeatures,
   isBetaFeatureAvailable,
 } from "@/lib/site/beta-features-config";
+import { isFootballLibraryAvailable } from "@/lib/learn/access";
 
 export async function SiteHeader() {
   let user: { id: string; email: string | null } | null = null;
@@ -21,6 +22,7 @@ export async function SiteHeader() {
   let userTier: SubscriptionTier | null = null;
   let coachProTrialUsed = false;
   const coachAiEvalDays = await getCoachAiEvalDays();
+  const footballLibraryAvailable = await isFootballLibraryAvailable();
 
   if (hasSupabaseEnv()) {
     try {
@@ -95,6 +97,7 @@ export async function SiteHeader() {
       coachAiImageUploadAvailable={coachAiImageUploadAvailable}
       userTier={userTier}
       coachProTrialUsed={coachProTrialUsed}
+      footballLibraryAvailable={footballLibraryAvailable}
     />
   );
 }
