@@ -222,6 +222,37 @@ describe("generateConceptSkeleton — Mesh in flag_5v5 crossing pair", () => {
   });
 });
 
+// ── Flood 5v5: @C flat has direction override (audit #13) ──
+// Center lines up at x≈0; without direction override the Flat
+// template infers ambiguously. Override forces flat to flood side.
+describe("generateConceptSkeleton — Flood 5v5 @C flat direction", () => {
+  it("right-strength: @C flat has direction='right'", () => {
+    const result = generateConceptSkeleton("Flood", {
+      variant: "flag_5v5",
+      strength: "right",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const center = result.spec.assignments.find((a) => a.player === "C");
+    expect(center?.action.kind).toBe("route");
+    if (center?.action.kind !== "route") return;
+    expect(center.action.family).toBe("Flat");
+    expect(center.action.direction).toBe("right");
+  });
+
+  it("left-strength mirrors: @C flat has direction='left'", () => {
+    const result = generateConceptSkeleton("Flood", {
+      variant: "flag_5v5",
+      strength: "left",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const center = result.spec.assignments.find((a) => a.player === "C");
+    if (center?.action.kind !== "route") return;
+    expect(center.action.direction).toBe("left");
+  });
+});
+
 // ── Mesh 4v4: true 2-drag crossing pair (audit #10) ──
 // Prior implementation was 1-drag + curl + clear — not actually
 // Mesh. With 3 eligibles {X, Y, Z} a true 4v4 mesh uses BOTH

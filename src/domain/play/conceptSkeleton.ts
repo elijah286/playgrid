@@ -711,10 +711,19 @@ function buildFlood(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRes
     // Flood 5v5: three levels to the strong side. Outside corner @ 14
     // (high), Y out @ 8 (mid, second-level break), C flat @ 4 (low —
     // eligible underneath). Backside X clears.
+    //
+    // CORRECTED 2026-05-26 (audit finding #13). @C's flat needs an
+    // explicit `direction: side` override because the center lines
+    // up at x≈0 (centered on the snap) — without the override the
+    // Flat template infers direction from the player's natural x,
+    // which is ambiguous for a center. The override forces the
+    // flat to the FLOOD side, so all three levels stack on the
+    // same side as canonical Flood requires. Mirrors the fix
+    // applied to tackle's @B flat in the same builder.
     const assignments = flagFiveRoutes({
       [outsideWR]: { family: "Corner", depthYds: 14 },
       Y: { family: "Out", depthYds: 8 },
-      C: { family: "Flat", depthYds: 4 },
+      C: { family: "Flat", depthYds: 4, direction: side },
       [backsideWR]: { family: "Go", depthYds: 18 },
     });
     return {
@@ -722,7 +731,7 @@ function buildFlood(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRes
       concept: "Flood",
       spec: baseSpec(variant, `Flood ${cap(side)}`, "Spread Doubles", side, assignments),
       notes:
-        `Flood ${cap(side)} (5v5): @${outsideWR} corner @ 14yd (deep), @Y out @ 8yd (mid), @C flat @ 4yd (low — eligible underneath). @${backsideWR} go @ 18yd to clear backside. Three strong-side levels stretch the corner + flat defender.`,
+        `Flood ${cap(side)} (5v5): @${outsideWR} corner @ 14yd (deep), @Y out @ 8yd (mid), @C flat @ 4yd (low — eligible underneath, releases to the ${side} flood side). @${backsideWR} go @ 18yd to clear backside. Three strong-side levels stretch the corner + flat defender.`,
     };
   }
   const slot = side === "right" ? "S" : "H";
