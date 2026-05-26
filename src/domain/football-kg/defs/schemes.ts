@@ -495,8 +495,8 @@ export const SCHEMES: SchemeDef[] = [
     name: "6v6 Zone · Cover 3",
     family: "scheme",
     variants: ["flag_6v6"],
-    description: "6v6 zone shell — 3 deep (two corners + free safety), 2 underneath (flat/hook on each side), edge rusher off the line.",
-    body: "6v6 zone shell — 3 deep (two corners + free safety), 2 underneath (flat/hook on each side), edge rusher off the line.",
+    description: "6v6 zone shell — 3 deep (two corners + free safety), 2 underneath (flat/hook on each side), one rusher staged behind the 7-yard rush line.",
+    body: "6v6 zone shell — 3 deep (two corners + free safety), 2 underneath (flat/hook on each side), one rusher staged behind the 7-yard rush line.",
     complexity: "basic",
     front: "6v6 Zone",
     coverage: "Cover 3",
@@ -507,7 +507,7 @@ export const SCHEMES: SchemeDef[] = [
       "Quick crossers in the middle — the lone hook defender has too much horizontal space to cover.",
     ],
     defenders: [
-      { id: "E",  x:  4,  y: 2,  assignment: { kind: "blitz", gap: "edge" } },
+      { id: "R",  x:  4,  y: 7,  assignment: { kind: "blitz", gap: "edge" } },
       { id: "FL", x: -8,  y: 4,  assignment: { kind: "zone", zoneId: "flat_l" } },
       { id: "FR", x:  8,  y: 4,  assignment: { kind: "zone", zoneId: "flat_r" } },
       { id: "CB", x: -11, y: 11, assignment: { kind: "zone", zoneId: "deep_third_l" } },
@@ -527,8 +527,8 @@ export const SCHEMES: SchemeDef[] = [
     name: "6v6 Zone · Cover 2",
     family: "scheme",
     variants: ["flag_6v6"],
-    description: "6v6 Cover 2 — two safeties split the deep halves, three underneath in zones (two flats + a middle hook), edge rusher off the line.",
-    body: "6v6 Cover 2 — two safeties split the deep halves, three underneath in zones (two flats + a middle hook), edge rusher off the line.",
+    description: "6v6 Cover 2 — two safeties split the deep halves, three underneath in zones (two flats + a middle hook), one rusher staged behind the 7-yard rush line.",
+    body: "6v6 Cover 2 — two safeties split the deep halves, three underneath in zones (two flats + a middle hook), one rusher staged behind the 7-yard rush line.",
     complexity: "basic",
     front: "6v6 Zone",
     coverage: "Cover 2",
@@ -539,7 +539,7 @@ export const SCHEMES: SchemeDef[] = [
       "Drives between the hashes — only one underneath defender to cover the entire middle.",
     ],
     defenders: [
-      { id: "E",  x:  4,  y: 2,  assignment: { kind: "blitz", gap: "edge" } },
+      { id: "R",  x:  4,  y: 7,  assignment: { kind: "blitz", gap: "edge" } },
       { id: "CB", x: -10, y: 5,  assignment: { kind: "zone", zoneId: "flat_l" } },
       { id: "HM", x:  0,  y: 5,  assignment: { kind: "zone", zoneId: "hook_m" } },
       { id: "CB", x: 10,  y: 5,  assignment: { kind: "zone", zoneId: "flat_r" } },
@@ -559,8 +559,8 @@ export const SCHEMES: SchemeDef[] = [
     name: "6v6 Man · Cover 1",
     family: "scheme",
     variants: ["flag_6v6"],
-    description: "6v6 man-free — four defenders in man on the four skill receivers, one free safety deep, edge rusher off the line.",
-    body: "6v6 man-free — four defenders in man on the four skill receivers, one free safety deep, edge rusher off the line.",
+    description: "6v6 man-free — four defenders in man on the four skill receivers, one free safety deep, one rusher staged behind the 7-yard rush line.",
+    body: "6v6 man-free — four defenders in man on the four skill receivers, one free safety deep, one rusher staged behind the 7-yard rush line.",
     complexity: "basic",
     front: "6v6 Man",
     coverage: "Cover 1",
@@ -572,7 +572,7 @@ export const SCHEMES: SchemeDef[] = [
     ],
     manCoverage: true,
     defenders: [
-      { id: "E",  x:  4,  y: 2,  assignment: { kind: "blitz", gap: "edge" } },
+      { id: "R",  x:  4,  y: 7,  assignment: { kind: "blitz", gap: "edge" } },
       { id: "CB", x: -10, y: 5,  assignment: { kind: "man", target: "X" } },
       { id: "NB", x: -4,  y: 5,  assignment: { kind: "man", target: "Y" } },
       { id: "NB", x:  4,  y: 5,  assignment: { kind: "man", target: "S" } },
@@ -588,8 +588,8 @@ export const SCHEMES: SchemeDef[] = [
     name: "6v6 Man · Cover 0",
     family: "scheme",
     variants: ["flag_6v6"],
-    description: "6v6 Cover 0 — every defender in pure man, no deep help. Edge rusher disrupts the QB.",
-    body: "6v6 Cover 0 — every defender in pure man, no deep help. Edge rusher disrupts the QB; used to bait an aggressive throw or on critical down/distance.",
+    description: "6v6 Cover 0 — every defender in pure man, no deep help. One rusher (staged behind the 7-yard rush line) disrupts the QB.",
+    body: "6v6 Cover 0 — every defender in pure man, no deep help. One rusher (staged behind the 7-yard rush line) disrupts the QB; used to bait an aggressive throw or on critical down/distance.",
     complexity: "advanced",
     front: "6v6 Man",
     coverage: "Cover 0",
@@ -601,7 +601,7 @@ export const SCHEMES: SchemeDef[] = [
     ],
     manCoverage: true,
     defenders: [
-      { id: "E",  x:  4,  y: 2,  assignment: { kind: "blitz", gap: "edge" } },
+      { id: "R",  x:  4,  y: 7,  assignment: { kind: "blitz", gap: "edge" } },
       { id: "CB", x: -10, y: 5,  assignment: { kind: "man", target: "X" } },
       { id: "NB", x: -4,  y: 5,  assignment: { kind: "man", target: "Y" } },
       { id: "NB", x:  4,  y: 5,  assignment: { kind: "man", target: "S" } },
@@ -663,13 +663,116 @@ export const SCHEMES: SchemeDef[] = [
     manCoverage: true,
     defenders: [
       { id: "CB", x: -8,  y: 5,  assignment: { kind: "man", target: "X" } },
-      { id: "NB", x: -3,  y: 5,  assignment: { kind: "man", target: "H" } },
-      { id: "NB", x:  3,  y: 5,  assignment: { kind: "man", target: "S" } },
+      // CORRECTED 2026-05-26 — was H/S which don't exist in flag_5v5
+      // (Spread Doubles roster is X, Y, Z, C; no inside slots labeled H/S).
+      // Now covers @C (eligible center) and @Y (slot/back hybrid).
+      { id: "NB", x: -3,  y: 5,  assignment: { kind: "man", target: "C" } },
+      { id: "NB", x:  3,  y: 5,  assignment: { kind: "man", target: "Y" } },
       { id: "CB", x:  8,  y: 5,  assignment: { kind: "man", target: "Z" } },
       { id: "FS", x:  0,  y: 12, assignment: { kind: "zone", zoneId: "deep_middle" } },
     ],
     zones: [
       { id: "deep_middle", kind: "ellipse", center: [0, 17], size: [20, 16], label: "Deep middle (FS)" },
+    ],
+  },
+  // ── 5v5 rushing defenses (added 2026-05-26) ────────────────────────
+  //
+  // The 5v5 catalog previously had only "drop everyone" defenses (Cover
+  // 1 + Cover 3), which is unusual at every level of real flag football.
+  // Most 5v5 calls include 1 rusher; aggressive calls send 2. Per USA
+  // Football's 5v5 rulebook the rusher must be behind the 7-yard line
+  // pre-snap; defenders in front of the line can't cross the LOS until
+  // the ball leaves the QB's hand. The R/R2 labels render with a
+  // distinct color (slate) so coaches can spot rushers immediately, and
+  // the rush line itself draws automatically on defense pages.
+  //
+  // Naming follows the existing pattern (`<variant> <type> · <coverage>`)
+  // with the rusher count + "Blitz" suffix added where it isn't implicit
+  // in the coverage shell. Cover 0 already implies all-out pressure;
+  // Cover 2 with a rusher is a standard balanced call.
+  {
+    id: "f5-cover-0",
+    name: "5v5 Man · Cover 0 (1 Rush)",
+    family: "scheme",
+    variants: ["flag_5v5"],
+    description: "5v5 all-out pressure — 1 rusher staged behind the 7-yard rush line, 4 in man across the board, no deep help.",
+    body: "5v5 all-out pressure — one rusher staged behind the 7-yard rush line attacks the QB; the other four defenders are in pure man on the four eligible receivers. NO safety help; any 1-on-1 deep win is a touchdown. Use when you need a sack or a stop on critical down/distance and trust your DBs to win their reps.",
+    complexity: "advanced",
+    front: "5v5 Man",
+    coverage: "Cover 0 Blitz",
+    whenToUse: "Third-and-long with the offense in passing posture. The rusher pressures the QB into a quick decision; the man defenders need to win their reps before the QB scrambles. Rare on neutral downs — the deep ball is uncontested.",
+    weaknesses: [
+      "Hot routes / quick game — any 3-step throw beats the rush; the QB releases before the rusher arrives.",
+      "Picks and rubs from mesh / snag — no safety help means a missed switch is a wide-open receiver.",
+      "Any 1-on-1 deep win — without ANY safety help, vertical mismatches go uncontested.",
+    ],
+    manCoverage: true,
+    defenders: [
+      { id: "R",  x:  0,  y: 7, assignment: { kind: "blitz", gap: "edge" } },
+      { id: "CB", x: -8,  y: 5, assignment: { kind: "man", target: "X" } },
+      { id: "NB", x: -3,  y: 5, assignment: { kind: "man", target: "C" } },
+      { id: "NB", x:  3,  y: 5, assignment: { kind: "man", target: "Y" } },
+      { id: "CB", x:  8,  y: 5, assignment: { kind: "man", target: "Z" } },
+    ],
+    zones: [],
+  },
+  {
+    id: "f5-cover-2",
+    name: "5v5 Zone · Cover 2 (1 Rush)",
+    family: "scheme",
+    variants: ["flag_5v5"],
+    description: "5v5 Cover 2 with one rusher — two deep halves, two flat corners, one rusher staged behind the 7-yard rush line. The deep shell traded the middle hook for pressure on the QB.",
+    body: "5v5 Cover 2 with a rusher — two safeties split the deep halves of the field, two corners squat the flats, one rusher (staged behind the 7-yard rush line) attacks the QB. With only 5 defenders total in 5v5, the trade-off is the middle hook window — the offense gets a free 5–8yd middle if they hit it before the rusher arrives.",
+    complexity: "intermediate",
+    front: "5v5 Zone",
+    coverage: "Cover 2",
+    whenToUse: "5v5 balanced look — pressure with one rusher while still capping deep with two safeties. Best vs offenses that live on quick perimeter game; the two-safety shell discourages the deep shot.",
+    weaknesses: [
+      "Middle hook window — no underneath defender between the corners; crossers / drag / dig at 5–8yd are open until the rusher arrives.",
+      "Smash on the boundary — Cover 2 corner-to-flat conflict surfaces here the same way as in 7v7.",
+      "4 verts from a spread look — only 2 deep defenders covering the seams + numbers.",
+    ],
+    defenders: [
+      { id: "R",  x:  0,  y: 7,  assignment: { kind: "blitz", gap: "edge" } },
+      { id: "CB", x: -10, y: 4,  assignment: { kind: "zone", zoneId: "flat_l" } },
+      { id: "CB", x:  10, y: 4,  assignment: { kind: "zone", zoneId: "flat_r" } },
+      { id: "FS", x: -6,  y: 12, assignment: { kind: "zone", zoneId: "deep_half_l" } },
+      { id: "SS", x:  6,  y: 12, assignment: { kind: "zone", zoneId: "deep_half_r" } },
+    ],
+    zones: [
+      { id: "flat_l", kind: "ellipse", center: [-10, 4], size: [9, 8], label: "Flat L" },
+      { id: "flat_r", kind: "ellipse", center: [ 10, 4], size: [9, 8], label: "Flat R" },
+      { id: "deep_half_l", kind: "ellipse", center: [-7, 17], size: [14, 16], label: "Deep 1/2 L" },
+      { id: "deep_half_r", kind: "ellipse", center: [ 7, 17], size: [14, 16], label: "Deep 1/2 R" },
+    ],
+  },
+  {
+    id: "f5-2-rush-zone",
+    name: "5v5 Zone · 2-1-2 (2 Rush)",
+    family: "scheme",
+    variants: ["flag_5v5"],
+    description: "5v5 aggressive zone — 2 rushers staged behind the 7-yard line, 1 mid-zone spy, 2 deep safeties. Highest-risk pressure look in 5v5.",
+    body: "Two rushers attack the QB from behind the 7-yard rush line; one defender plays a mid-zone spy (watching the QB scramble + the underneath middle), two safeties split the deep halves. Aggressive — only 3 defenders in coverage against 4 receivers, so the offense has a numerical advantage somewhere. Use sparingly to disrupt rhythm.",
+    complexity: "advanced",
+    front: "5v5 Zone",
+    coverage: "2-1-2 Blitz",
+    whenToUse: "Pressure call to disrupt a hot QB or force a 4th down. The two rushers cut the QB's throwing window in half; the spy takes away the scramble. Don't sit in this — it's a change-up, not a base call.",
+    weaknesses: [
+      "4 receivers vs 3 coverage defenders — the offense has someone uncovered every snap; the rush has to win or the QB finds the open man.",
+      "Quick mesh / drive routes — only one underneath defender can't cover both sides of the field.",
+      "Vertical from the slot — the safeties have to widen for outside verts; an inside seam splits them.",
+    ],
+    defenders: [
+      { id: "R",  x: -4, y: 7,  assignment: { kind: "blitz", gap: "edge" } },
+      { id: "R2", x:  4, y: 7,  assignment: { kind: "blitz", gap: "edge" } },
+      { id: "HM", x:  0, y: 5,  assignment: { kind: "zone", zoneId: "hook_m" } },
+      { id: "FS", x: -6, y: 12, assignment: { kind: "zone", zoneId: "deep_half_l" } },
+      { id: "SS", x:  6, y: 12, assignment: { kind: "zone", zoneId: "deep_half_r" } },
+    ],
+    zones: [
+      { id: "hook_m", kind: "ellipse", center: [ 0, 5], size: [12, 8], label: "Hook M (spy)" },
+      { id: "deep_half_l", kind: "ellipse", center: [-7, 17], size: [14, 16], label: "Deep 1/2 L" },
+      { id: "deep_half_r", kind: "ellipse", center: [ 7, 17], size: [14, 16], label: "Deep 1/2 R" },
     ],
   },
 ];

@@ -229,6 +229,7 @@ export function FieldSizeControls({
   playbookColor = null,
 }: Props) {
   const isDefense = doc.metadata.playType === "defense";
+  const isTackle = doc.sportProfile.variant === "tackle_11";
 
   return (
     <div
@@ -253,6 +254,7 @@ export function FieldSizeControls({
         doc={doc}
         dispatch={dispatch}
         isDefense={isDefense}
+        isTackle={isTackle}
         fieldStructure={fieldStructure}
         playbookId={playbookId}
         playbookSettings={playbookSettings}
@@ -270,6 +272,7 @@ export function FieldSizeControls({
         doc={doc}
         fieldStructure={fieldStructure}
         isDefense={isDefense}
+        isTackle={isTackle}
         playbookColor={playbookColor}
       />
       <div className="ml-auto">
@@ -293,11 +296,13 @@ function FieldLegend({
   doc,
   fieldStructure,
   isDefense,
+  isTackle,
   playbookColor,
 }: {
   doc: PlayDocument;
   fieldStructure: FieldStructure | null;
   isDefense: boolean;
+  isTackle: boolean;
   playbookColor: string | null;
 }) {
   const teamColor = playbookColor || "#F26522";
@@ -417,10 +422,9 @@ function FieldLegend({
       });
     }
   }
-  // Rush line: available on any play type. Renderer falls back to true on
-  // defense for legacy plays (default-on); on offense it's opt-in via the
-  // Markings toggle.
+  // Rush line: flag only — never shown for tackle football.
   if (
+    !isTackle &&
     (doc.showRushLine ?? isDefense) &&
     (doc.showRushLine !== false)
   ) {
@@ -895,6 +899,7 @@ function MarkingsControl({
   doc,
   dispatch,
   isDefense,
+  isTackle,
   fieldStructure,
   playbookId,
   playbookSettings,
@@ -903,6 +908,7 @@ function MarkingsControl({
   doc: PlayDocument;
   dispatch: (c: PlayCommand) => void;
   isDefense: boolean;
+  isTackle: boolean;
   fieldStructure: FieldStructure | null;
   playbookId?: string;
   playbookSettings?: PlaybookSettings;
@@ -934,7 +940,7 @@ function MarkingsControl({
     showDownMarkers && downMarkers.length > 0,
     showYardNumbers,
     hashOn,
-    isDefense && showRushLine,
+    isDefense && !isTackle && showRushLine,
   ].filter(Boolean).length;
 
   // Helper that patches `customStructure` and persists. Used by both
@@ -1139,30 +1145,32 @@ function MarkingsControl({
                 }
               />
             </div>
-            <div className="my-1 h-px bg-border" />
-            <CheckboxRow
-              label="Rush line"
-              checked={showRushLine}
-              onChange={(v) =>
-                dispatch({ type: "document.setShowRushLine", showRushLine: v })
-              }
-              rightSlot={
-                showRushLine && (
-                  <YardSpinner
-                    label=""
-                    value={rushLineYards}
-                    min={4}
-                    max={15}
-                    onChange={(v) =>
-                      dispatch({
-                        type: "document.setRushLineYards",
-                        rushLineYards: v,
-                      })
-                    }
-                  />
-                )
-              }
-            />
+            {!isTackle && <div className="my-1 h-px bg-border" />}
+            {!isTackle && (
+              <CheckboxRow
+                label="Rush line"
+                checked={showRushLine}
+                onChange={(v) =>
+                  dispatch({ type: "document.setShowRushLine", showRushLine: v })
+                }
+                rightSlot={
+                  showRushLine && (
+                    <YardSpinner
+                      label=""
+                      value={rushLineYards}
+                      min={4}
+                      max={15}
+                      onChange={(v) =>
+                        dispatch({
+                          type: "document.setRushLineYards",
+                          rushLineYards: v,
+                        })
+                      }
+                    />
+                  )
+                }
+              />
+            )}
           </div>
         </Panel>
       )}

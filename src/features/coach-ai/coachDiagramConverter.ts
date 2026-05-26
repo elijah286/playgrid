@@ -309,7 +309,14 @@ function defenderStyleFor(rawLabel: string): PlayerStyle {
   const u = rawLabel.toUpperCase().replace(/\d+$/, "");
   // D-line — ends, tackles, nose tackles. Checked early so an "OLB"-
   // adjacent "OL" can still hit the outside-LB branch below.
-  if (u === "DE" || u === "DT" || u === "DL" || u === "NT" || u === "NG" || u === "DI" || u === "EDGE") {
+  // Flag rushers (R / RUSH / RUSHER) share the DL slate color because
+  // they play the same role in flag football — staged behind the
+  // 7-yard rush line, attacking the QB at the snap. Slate distinguishes
+  // them visually from the red corners that flank them in coverage.
+  if (
+    u === "DE" || u === "DT" || u === "DL" || u === "NT" || u === "NG" || u === "DI" || u === "EDGE" ||
+    u === "R" || u === "RUSH" || u === "RUSHER" || u === "BLITZER"
+  ) {
     return STYLE_DEF_DL;
   }
   // Corners — outermost, deep edges. Includes split-cloud variants.

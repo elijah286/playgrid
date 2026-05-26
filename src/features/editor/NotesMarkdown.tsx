@@ -38,6 +38,9 @@ export function NotesMarkdown({
   const playersByLabel = new Map<string, Player>();
   for (const p of players) {
     if (p.label) playersByLabel.set(p.label.toUpperCase(), p);
+    // Also index by id so suffixed defender refs like @DT2 resolve even
+    // though the displayed label inside the triangle is still "DT".
+    if (p.id && p.id !== p.label) playersByLabel.set(p.id.toUpperCase(), p);
   }
 
   const replaceMentions = (node: React.ReactNode, keyPrefix = "atl"): React.ReactNode => {
