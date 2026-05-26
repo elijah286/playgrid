@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Pencil } from "lucide-react";
 import { ROUTE_TEMPLATES } from "@/domain/play/routeTemplates";
 import { CONCEPTS } from "@/domain/football-kg/defs/concepts";
 import type { RouteTemplate } from "@/domain/play/routeTemplates";
@@ -11,7 +11,8 @@ import { playSpecToCoachDiagram } from "@/domain/play/specRenderer";
 import { coachDiagramToPlayDocument } from "@/features/coach-ai/coachDiagramConverter";
 import { defaultSettingsForVariant } from "@/domain/playbook/settings";
 import { PlayEditorClient } from "@/features/editor/PlayEditorClient";
-import { isFootballLibraryAvailable } from "@/lib/learn/access";
+import { isCurrentUserSiteAdmin, isFootballLibraryAvailable } from "@/lib/learn/access";
+import { loadLibraryOverride } from "@/lib/learn/overrides";
 import { toLearnSlug } from "@/lib/learn/links";
 import { withFullContext } from "@/lib/seo/ld-json";
 import {
@@ -137,6 +138,19 @@ export default async function RoutePage(
   }
   const playbookSettings = defaultSettingsForVariant(variant);
 
+  // Apply admin override on top of the catalog default. Routes are
+  // variant-agnostic, so the override row is keyed by `(slug, variant)`
+  // using the canonical demo variant (flag_5v5). When a site admin has
+  // edited the route via the admin editor, this PlayDocument replaces
+  // the catalog-rendered demo. Reading the override calls Supabase
+  // (which reads cookies), so the page becomes per-request rendered —
+  // route changes show up immediately after an admin save.
+  const override = await loadLibraryOverride(slug, variant);
+  if (override) {
+    routeDoc = override.document;
+  }
+  const isAdmin = await isCurrentUserSiteAdmin();
+
   // Concepts that use this route family — shown as a "used by"
   // rail. Each name links to the concept's library page so a coach
   // reading the Corner route can jump straight to Smash / Snag /
@@ -230,13 +244,28 @@ export default async function RoutePage(
             ))}
           </div>
         </div>
-        <Link
-          href="/learn/library/routes"
-          className="inline-flex items-center gap-1 text-xs text-muted hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="size-3.5" />
-          All routes
-        </Link>
+        <div className="flex flex-col items-end gap-2">
+          <Link
+            href="/learn/library/routes"
+            className="inline-flex items-center gap-1 text-xs text-muted hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="size-3.5" />
+            All routes
+          </Link>
+          {/* Admin-only edit affordance. Opens the canonical play
+              editor on the route's demo diagram; edits autosave to
+              library_concept_overrides keyed by (slug, flag_5v5). */}
+          {isAdmin && (
+            <Link
+              href={`/learn/library/admin/routes/${slug}/edit`}
+              className="inline-flex items-center gap-1 text-xs font-medium text-muted underline decoration-dotted underline-offset-4 hover:text-primary"
+              aria-label={`Edit ${route.name} route in the play editor`}
+            >
+              <Pencil className="size-3" />
+              {override ? "Edit override" : "Edit this route"}
+            </Link>
+          )}
+        </div>
       </header>
 
       <div className="mb-8 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_280px]">

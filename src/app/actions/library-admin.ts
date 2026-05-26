@@ -44,6 +44,12 @@ export async function saveLibraryOverrideAction(input: {
     // default variant from the same catalog).
     revalidatePath(`/learn/library/plays/${input.slug}/${variantSlugFor(input.variant)}`);
     revalidatePath(`/learn/library/plays/${input.slug}`);
+    // Routes share the same override table, keyed on (slug, flag_5v5).
+    // Revalidating the routes path here is a no-op when the slug
+    // wasn't actually a route — Next.js handles unknown paths
+    // gracefully — and it's cheaper than threading an "item type"
+    // param through every action call.
+    revalidatePath(`/learn/library/routes/${input.slug}`);
   }
   return result;
 }
@@ -69,6 +75,12 @@ export async function saveLibraryMetadataAction(input: {
   if (result.ok) {
     revalidatePath(`/learn/library/plays/${input.slug}/${variantSlugFor(input.variant)}`);
     revalidatePath(`/learn/library/plays/${input.slug}`);
+    // Routes share the same override table, keyed on (slug, flag_5v5).
+    // Revalidating the routes path here is a no-op when the slug
+    // wasn't actually a route — Next.js handles unknown paths
+    // gracefully — and it's cheaper than threading an "item type"
+    // param through every action call.
+    revalidatePath(`/learn/library/routes/${input.slug}`);
   }
   return result;
 }
@@ -83,6 +95,12 @@ export async function deleteLibraryOverrideAction(input: {
   if (result.ok) {
     revalidatePath(`/learn/library/plays/${input.slug}/${variantSlugFor(input.variant)}`);
     revalidatePath(`/learn/library/plays/${input.slug}`);
+    // Routes share the same override table, keyed on (slug, flag_5v5).
+    // Revalidating the routes path here is a no-op when the slug
+    // wasn't actually a route — Next.js handles unknown paths
+    // gracefully — and it's cheaper than threading an "item type"
+    // param through every action call.
+    revalidatePath(`/learn/library/routes/${input.slug}`);
   }
   return result;
 }
