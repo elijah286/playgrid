@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ROUTE_TEMPLATES } from "@/domain/play/routeTemplates";
 import { CONCEPTS } from "@/domain/football-kg/defs/concepts";
 import type { RouteTemplate } from "@/domain/play/routeTemplates";
+import { isFootballLibraryAvailable } from "@/lib/learn/access";
 import { toLearnSlug } from "@/lib/learn/links";
 import { LibraryEntityPage } from "../../_LibraryEntityPage";
 
@@ -40,6 +41,7 @@ export async function generateMetadata(
 export default async function RoutePage(
   { params }: { params: Promise<{ slug: string }> },
 ) {
+  if (!(await isFootballLibraryAvailable())) notFound();
   const { slug } = await params;
   const route = findRouteBySlug(slug);
   if (!route) notFound();

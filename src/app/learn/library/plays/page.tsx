@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { CONCEPTS } from "@/domain/football-kg/defs/concepts";
+import { isFootballLibraryAvailable } from "@/lib/learn/access";
 import { toLearnSlug } from "@/lib/learn/links";
 import { withFullContext } from "@/lib/seo/ld-json";
 
@@ -28,7 +30,9 @@ const COMPLEXITY_TONE: Record<string, string> = {
   advanced: "bg-rose-500/10 text-rose-700 dark:text-rose-400",
 };
 
-export default function PlaysIndexPage() {
+export default async function PlaysIndexPage() {
+  if (!(await isFootballLibraryAvailable())) notFound();
+
   // Group concepts by complexity so basic plays surface first — coaches
   // browsing the catalog usually want install-friendly stuff before deep
   // cuts.

@@ -10,6 +10,7 @@ import { coachDiagramToPlayDocument } from "@/features/coach-ai/coachDiagramConv
 import { defaultSettingsForVariant } from "@/domain/playbook/settings";
 import type { SportVariant } from "@/domain/play/types";
 import { PlayEditorClient } from "@/features/editor/PlayEditorClient";
+import { isFootballLibraryAvailable } from "@/lib/learn/access";
 import { toLearnSlug } from "@/lib/learn/links";
 import { withFullContext } from "@/lib/seo/ld-json";
 
@@ -69,6 +70,7 @@ export async function generateMetadata(
 export default async function PlayConceptPage(
   { params }: { params: Promise<{ slug: string }> },
 ) {
+  if (!(await isFootballLibraryAvailable())) notFound();
   const { slug } = await params;
   const concept = findConceptBySlug(slug);
   if (!concept) notFound();

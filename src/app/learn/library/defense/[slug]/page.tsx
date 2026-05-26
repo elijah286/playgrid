@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { DEFENSIVE_ALIGNMENTS } from "@/domain/play/defensiveAlignments";
 import type { DefensiveAlignment } from "@/domain/play/defensiveAlignments";
+import { isFootballLibraryAvailable } from "@/lib/learn/access";
 import { toLearnSlug } from "@/lib/learn/links";
 import { LibraryEntityPage } from "../../_LibraryEntityPage";
 
@@ -86,6 +87,7 @@ export async function generateMetadata(
 export default async function DefensePage(
   { params }: { params: Promise<{ slug: string }> },
 ) {
+  if (!(await isFootballLibraryAvailable())) notFound();
   const { slug } = await params;
   const group = findGroupBySlug(slug);
   if (!group) notFound();

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { DEFENSIVE_ALIGNMENTS } from "@/domain/play/defensiveAlignments";
 import type { DefensiveAlignment } from "@/domain/play/defensiveAlignments";
+import { isFootballLibraryAvailable } from "@/lib/learn/access";
 import { toLearnSlug } from "@/lib/learn/links";
 import { CategoryIndex } from "../_CategoryIndex";
 
@@ -25,7 +27,9 @@ const VARIANT_LABEL: Record<string, string> = {
   tackle_11: "11v11 Tackle",
 };
 
-export default function DefenseIndexPage() {
+export default async function DefenseIndexPage() {
+  if (!(await isFootballLibraryAvailable())) notFound();
+
   // Same grouping logic as the slug page — one entry per unique
   // (front, coverage) pair, with variants rolled up as chips.
   const groups = new Map<

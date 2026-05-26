@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { FORMATIONS } from "@/domain/football-kg/defs/formations";
+import { isFootballLibraryAvailable } from "@/lib/learn/access";
 import { toLearnSlug } from "@/lib/learn/links";
 import { CategoryIndex } from "../_CategoryIndex";
 
@@ -10,7 +12,9 @@ export const metadata: Metadata = {
   alternates: { canonical: "/learn/library/formations" },
 };
 
-export default function FormationsIndexPage() {
+export default async function FormationsIndexPage() {
+  if (!(await isFootballLibraryAvailable())) notFound();
+
   const sorted = [...FORMATIONS].sort((a, b) => {
     const order = { basic: 0, intermediate: 1, advanced: 2 } as const;
     const ai = order[a.complexity as keyof typeof order] ?? 1;

@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { ROUTE_TEMPLATES } from "@/domain/play/routeTemplates";
+import { isFootballLibraryAvailable } from "@/lib/learn/access";
 import { toLearnSlug } from "@/lib/learn/links";
 import { CategoryIndex } from "../_CategoryIndex";
 
@@ -10,7 +12,9 @@ export const metadata: Metadata = {
   alternates: { canonical: "/learn/library/routes" },
 };
 
-export default function RoutesIndexPage() {
+export default async function RoutesIndexPage() {
+  if (!(await isFootballLibraryAvailable())) notFound();
+
   const sorted = [...ROUTE_TEMPLATES].sort((a, b) => a.name.localeCompare(b.name));
 
   return (

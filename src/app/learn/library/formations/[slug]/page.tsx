@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { FORMATIONS } from "@/domain/football-kg/defs/formations";
 import { CONCEPTS } from "@/domain/football-kg/defs/concepts";
 import type { FormationDef } from "@/domain/football-kg/schemas/FormationDef";
+import { isFootballLibraryAvailable } from "@/lib/learn/access";
 import { toLearnSlug } from "@/lib/learn/links";
 import { LibraryEntityPage } from "../../_LibraryEntityPage";
 
@@ -48,6 +49,7 @@ export async function generateMetadata(
 export default async function FormationPage(
   { params }: { params: Promise<{ slug: string }> },
 ) {
+  if (!(await isFootballLibraryAvailable())) notFound();
   const { slug } = await params;
   const formation = findFormationBySlug(slug);
   if (!formation) notFound();
