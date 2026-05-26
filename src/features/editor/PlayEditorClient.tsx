@@ -2194,7 +2194,8 @@ function PlayEditorClientInner({
         </div>
       )}
 
-      {playbookSettings &&
+      {!libraryMode &&
+        playbookSettings &&
         doc.layers.players.length > playbookSettings.maxPlayers && (
           <p className="-mt-1 text-xs font-medium text-danger">
             {doc.layers.players.length} players on the field — this playbook
