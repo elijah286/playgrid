@@ -5,32 +5,38 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
-const ITEMS = [
-  {
-    href: "/learn/library",
-    label: "Football library",
-    description: "Plays, drills, and coaching concepts",
-  },
+type Item = { href: string; label: string; description: string };
+
+const APP_ITEMS: Item[] = [
   {
     href: "/learn/using-xo",
     label: "App tutorials",
     description: "Hands-on walkthroughs of the editor",
   },
-  {
-    href: "/examples",
-    label: "Examples",
-    description: "Real playbooks to remix",
-  },
+  { href: "/examples", label: "Examples", description: "Real playbooks to remix" },
   { href: "/faq", label: "FAQ", description: "How XO Gridmaker works" },
-] as const;
+];
 
-/** Header nav dropdown grouping the free educational/reference content
- *  (Learn, Examples, FAQ). Hidden on mobile — the footer's full nav is
- *  the primary discovery surface there. */
-export function ResourcesDropdown() {
+const LIBRARY_ITEM: Item = {
+  href: "/learn/library",
+  label: "Football library",
+  description: "Plays, drills, and coaching concepts",
+};
+
+/** Header nav dropdown grouping the free educational/reference content.
+ *  The Football Library entry is beta-gated — included only when
+ *  footballLibraryAvailable=true. Hidden on mobile (footer covers it). */
+export function ResourcesDropdown({
+  footballLibraryAvailable = false,
+}: {
+  footballLibraryAvailable?: boolean;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const items = footballLibraryAvailable
+    ? [LIBRARY_ITEM, ...APP_ITEMS]
+    : APP_ITEMS;
 
   // Click outside + Escape close. Standard menu pattern; using refs +
   // listeners rather than onBlur so clicks on menu items don't dismiss
@@ -51,7 +57,7 @@ export function ResourcesDropdown() {
     };
   }, [open]);
 
-  const activeSection = ITEMS.some((it) => pathname.startsWith(it.href));
+  const activeSection = items.some((it) => pathname.startsWith(it.href));
 
   return (
     <div ref={wrapRef} className="relative hidden sm:block">
@@ -78,7 +84,7 @@ export function ResourcesDropdown() {
           className="absolute right-0 top-full z-40 mt-2 w-64 overflow-hidden rounded-xl border border-border bg-surface-raised shadow-lg ring-1 ring-black/[0.03]"
         >
           <ul className="py-1">
-            {ITEMS.map((it) => {
+            {items.map((it) => {
               const active = pathname.startsWith(it.href);
               return (
                 <li key={it.href} role="none">
