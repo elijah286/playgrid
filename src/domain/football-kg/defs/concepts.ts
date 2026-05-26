@@ -171,8 +171,8 @@ export const CONCEPTS: ConceptDef[] = [
     name: "Mesh",
     family: "concept",
     variants: [...ALL_VARIANTS],
-    description: "Two crossing drags at differentiated depths — under-drag ~2yd + over-drag ~7-8yd.",
-    body: "Two crossing drags that 'mesh' past each other at differentiated depths — one UNDER (~2 yds) and one OVER (~7-8 yds). The depth differentiation + meaningful absolute depth is what makes them mesh visibly: same depth = collision; close depths = visually-collided in the chat preview; both crammed at the LOS = invisible cross. Cal MUST set depthYds explicitly on each drag (e.g. 2 and 8) so the over-drag passes CLEARLY ABOVE the under-drag with unambiguous visible separation. Natural pick / rub action vs man, finds soft spots in zone.",
+    description: "Two crossing drags meshing at 5-6 yards with 1 yard of vertical separation.",
+    body: "Two shallow crossing drags from opposite sides of the formation that 'mesh' past each other at 5-6 yards — one runner is the UNDER (at 5yd), the other is the OVER (at 6yd), giving 1 yard of visible separation at the mesh point. The depth differential is small but real: same depth = collision; ~1yd differential at canonical 5-6 yd depth = natural rub for the under-drag and a free release for the over-drag. Cal MUST set depthYds explicitly on each drag (e.g. 5 and 6) so the over-drag passes CLEARLY ABOVE the under-drag. Natural pick / rub action vs man, finds soft spots in zone.",
     aliases: ["Mesh Concept"],
     complexity: "basic",
     defaultFormation: { id: "doubles", strength: "right" },
@@ -181,9 +181,9 @@ export const CONCEPTS: ConceptDef[] = [
     ],
     whenToUse: "Best vs man coverage — the natural rub at the cross gives both crossers a free release. Also reliable as a check-down vs blitz because the drags break inside out of the rush. Avoid vs Cover 2 with a deep middle safety; the underneath shells smother the crossers.",
     commonMistakes: [
-      "Crossers at the same depth — they collide and defenders stay glued. Depth differential should be at least 2 yards.",
+      "Crossers at the same depth — they collide and defenders stay glued. Aim for ~1 yard of vertical separation at the mesh point (e.g. 5 and 6).",
       "QB locks onto the first crosser; the second crosser comes open a half-tick later behind the rub.",
-      "Tightening the cross too close to the LOS — defenders can re-route from underneath. Cross at 5-7 yards minimum.",
+      "Tightening the cross too close to the LOS — defenders can re-route from underneath. Cross at 5-6 yards, not below.",
       "No check-down outlet. Mesh wants an RB or center as a hot route against blitz.",
     ],
     reads: [
@@ -191,9 +191,15 @@ export const CONCEPTS: ConceptDef[] = [
       { progression: 2, player: "Under-drag", window: "first crosser behind the LBs", coverage: "vs man" },
       { progression: 3, player: "Over-drag", window: "second crosser behind the rub", coverage: "vs man" },
     ],
+    // Canonical Mesh depths: BOTH drags at 5-6yd with at least 1yd
+    // of separation. Pattern enforces differentiation via NON-
+    // OVERLAPPING ranges per slot: under-drag in [4, 5.5], over-drag
+    // in [5.5, 7]. Same-depth drags (e.g. 5/5 or 6/6) fail because
+    // only one slot is satisfied — preserves the "collision = not a
+    // mesh" gate. The skeleton emits the canonical 5+6.
     pattern: [
-      { role: "any", family: "Drag", depthRangeYds: { min: 2, max: 3.5 } },
-      { role: "any", family: "Drag", depthRangeYds: { min: 6, max: 9 } },
+      { role: "any", family: "Drag", depthRangeYds: { min: 4, max: 5.5 } },
+      { role: "any", family: "Drag", depthRangeYds: { min: 5.5, max: 7 } },
     ],
   },
   {

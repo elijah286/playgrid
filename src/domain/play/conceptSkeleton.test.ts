@@ -173,8 +173,12 @@ describe("generateConceptSkeleton — @B Flat depth clears the LOS for backfield
   });
 });
 
-describe("generateConceptSkeleton — Mesh: differentiated drag depths", () => {
-  it("the two drags have different depthYds (one under, one over)", () => {
+describe("generateConceptSkeleton — Mesh: canonical 5/6 drag depths (audit #9)", () => {
+  it("the two drags are at canonical 5yd and 6yd (1yd separation at mesh point)", () => {
+    // Updated 2026-05-26 from the prior 2/8 visual-workaround depths
+    // back to canonical Air Raid 5/6 with 1yd of vertical separation.
+    // The play editor's depth precision is sufficient to distinguish
+    // the two routes cleanly.
     const result = generateConceptSkeleton("Mesh", { variant: "tackle_11" });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -182,8 +186,39 @@ describe("generateConceptSkeleton — Mesh: differentiated drag depths", () => {
       (a) => a.action.kind === "route" && a.action.family === "Drag",
     );
     expect(drags).toHaveLength(2);
-    const depths = drags.map((d) => (d.action.kind === "route" ? d.action.depthYds : undefined));
-    expect(new Set(depths).size).toBe(2); // must be DIFFERENT depths
+    const depths = drags
+      .map((d) => (d.action.kind === "route" ? d.action.depthYds : undefined))
+      .filter((d): d is number => typeof d === "number")
+      .sort((a, b) => a - b);
+    expect(depths).toEqual([5, 6]);
+  });
+
+  it("flag_5v5 mesh uses 5+6 depths (RB + outside WR cross)", () => {
+    const result = generateConceptSkeleton("Mesh", { variant: "flag_5v5" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const drags = result.spec.assignments.filter(
+      (a) => a.action.kind === "route" && a.action.family === "Drag",
+    );
+    const depths = drags
+      .map((d) => (d.action.kind === "route" ? d.action.depthYds : undefined))
+      .filter((d): d is number => typeof d === "number")
+      .sort((a, b) => a - b);
+    expect(depths).toEqual([5, 6]);
+  });
+
+  it("flag_4v4 mesh uses 5+6 depths", () => {
+    const result = generateConceptSkeleton("Mesh", { variant: "flag_4v4" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const drags = result.spec.assignments.filter(
+      (a) => a.action.kind === "route" && a.action.family === "Drag",
+    );
+    const depths = drags
+      .map((d) => (d.action.kind === "route" ? d.action.depthYds : undefined))
+      .filter((d): d is number => typeof d === "number")
+      .sort((a, b) => a - b);
+    expect(depths).toEqual([5, 6]);
   });
 });
 

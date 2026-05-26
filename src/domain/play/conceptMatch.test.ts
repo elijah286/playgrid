@@ -166,25 +166,26 @@ describe("assertConcept — Smash, Stick, Snag, Four Verts, Mesh", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("Mesh: two DIFFERENTIATED drags pass (one under at 2yd, one over at 8yd)", () => {
-    // Slot ranges are [2, 3.5] (under) and [6, 9] (over) so the two
-    // drags must be at different MEANINGFUL depths AND with enough
-    // visible separation (~6yd) that the chat preview's compressed
-    // aspect doesn't read the cross as a collision. Depths 2 and 8
-    // hit one slot each.
+  it("Mesh: two DIFFERENTIATED drags pass (canonical 5yd + 6yd, 1yd separation)", () => {
+    // Updated 2026-05-26 from prior 2/8 visual-workaround depths back
+    // to canonical Air Raid 5/6. Slot ranges are [4, 5.5] (under) and
+    // [5.5, 7] (over) — non-overlapping enforces ≥0yd separation
+    // (5.5/5.5 = boundary, all other pairs differ). Depths 5 + 6 hit
+    // one slot each cleanly.
     const result = assertConcept(
       buildSpec([
-        { player: "X", action: { kind: "route", family: "Drag", depthYds: 2 } },
-        { player: "Z", action: { kind: "route", family: "Drag", depthYds: 8 } },
+        { player: "X", action: { kind: "route", family: "Drag", depthYds: 5 } },
+        { player: "Z", action: { kind: "route", family: "Drag", depthYds: 6 } },
       ]),
       "Mesh",
     );
     expect(result.ok).toBe(true);
   });
 
-  it("Mesh: REJECTS two drags at the same depth (collision, not a mesh)", () => {
-    // The whole point of the catalog change: two drags at the SAME
-    // depth render as a collision, not a mesh. Force differentiation.
+  it("Mesh: REJECTS two drags at the same depth in the under range (collision)", () => {
+    // Two drags at 4yd both fit the [4, 5.5] under-slot but neither
+    // fits the [5.5, 7] over-slot → fail. Same-depth rejection
+    // preserved via non-overlapping ranges.
     const result = assertConcept(
       buildSpec([
         { player: "X", action: { kind: "route", family: "Drag", depthYds: 4 } },
@@ -195,27 +196,22 @@ describe("assertConcept — Smash, Stick, Snag, Four Verts, Mesh", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("Mesh: REJECTS two drags both at 2yd (the image-1 production case)", () => {
-    // 2026-05-02: a coach surfaced a Cal-generated mesh where BOTH H
-    // and S were described as "drag to 2 yards" — same depth, no
-    // visible cross. Slot 1 [2, 3.5] is satisfied by one drag at 2yd,
-    // but slot 2 [4.5, 6] is not satisfied by anything → reject. Pins
-    // that the exact reproduction case fails the gate.
+  it("Mesh: REJECTS two drags at the same depth in the over range (collision)", () => {
+    // 6/6 — both fit over-slot, neither fits under-slot. Fail.
     const result = assertConcept(
       buildSpec([
-        { player: "H", action: { kind: "route", family: "Drag", depthYds: 2 } },
-        { player: "S", action: { kind: "route", family: "Drag", depthYds: 2 } },
+        { player: "H", action: { kind: "route", family: "Drag", depthYds: 6 } },
+        { player: "S", action: { kind: "route", family: "Drag", depthYds: 6 } },
       ]),
       "Mesh",
     );
     expect(result.ok).toBe(false);
   });
 
-  it("Mesh: REJECTS two drags both crammed at LOS (1yd, 2yd) — invisible cross", () => {
-    // 2026-05-02: tightened slot floors to [2, 3.5] and [4.5, 6] so
-    // shallow drags that overlap with the OL row are rejected. A 1yd
-    // drag fits no slot; a 2yd drag fits the under slot but a 1yd drag
-    // doesn't satisfy any slot.
+  it("Mesh: REJECTS two drags both crammed at LOS (1yd, 2yd) — below canonical", () => {
+    // Both depths are below the under-slot floor of 4yd. Was once
+    // accepted as "under-drag at 2yd" in the rendering-workaround
+    // era; now rejected because the canonical mesh is at 5-6yd.
     const result = assertConcept(
       buildSpec([
         { player: "X", action: { kind: "route", family: "Drag", depthYds: 1 } },
@@ -404,9 +400,11 @@ describe("assertConcept — variant-aware lenient match for 6v6", () => {
   it("accepts a 1-Drag adaptation of Mesh in 6v6 (canonical needs 2 Drags)", () => {
     // 6v6 Mesh: catalog produces @H Drag + @X Curl + @Z Go + @B Flat.
     // Only one Drag — canonical Mesh requires two. Lenient: ok.
+    // 2026-05-26: depth bumped to canonical 5yd (was 2yd from the
+    // visual-workaround era).
     const result = assertConcept(
       buildSpec6v6([
-        { player: "H", action: { kind: "route", family: "Drag", depthYds: 2 } },
+        { player: "H", action: { kind: "route", family: "Drag", depthYds: 5 } },
         { player: "X", action: { kind: "route", family: "Curl", depthYds: 12 } },
         { player: "Z", action: { kind: "route", family: "Go" } },
         { player: "B", action: { kind: "route", family: "Flat" } },

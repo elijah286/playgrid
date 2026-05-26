@@ -4,8 +4,11 @@
  * landing pads (AGENTS.md Rules 8, 9, 11):
  *
  *   - compose_play: ONLY way to produce a catalog-concept play.
- *     Mesh test pins H@2yd / S@6yd staggered depths because that's
- *     the production failure that motivated the refactor.
+ *     Mesh test pins H@5yd / S@6yd staggered depths — canonical Air
+ *     Raid mesh with 1yd of vertical separation at the mesh point
+ *     (updated 2026-05-26 from the prior 2/8 rendering workaround
+ *     back to football-correct geometry; the play editor's depth
+ *     precision is sufficient to distinguish the two cleanly).
  *
  *   - revise_play: identity-preserving batched edits. Tests pin
  *     that players[] is byte-equal across mods, that batched mods
@@ -63,7 +66,7 @@ describe("compose_play — registered + returns valid fence", () => {
     expect(loadTool("compose_play")).toBeDefined();
   });
 
-  it("Mesh: returns a fence with H@2yd and S@6yd staggered (the regression)", async () => {
+  it("Mesh: returns a fence with H@5yd and S@6yd staggered (canonical 1yd separation)", async () => {
     const tool = loadTool("compose_play");
     const r = await tool.handler({ concept: "Mesh" }, TACKLE_CTX);
     expect(r.ok).toBe(true);
@@ -77,9 +80,12 @@ describe("compose_play — registered + returns valid fence", () => {
     if (!hRoute || !sRoute) return;
     const hMaxY = Math.max(...hRoute.path.map((p) => p[1]));
     const sMaxY = Math.max(...sRoute.path.map((p) => p[1]));
-    // Skeleton outputs depth 2 + depth 6 → carrier at y=-1, max y
-    // ≈ 1 (under) and ≈ 5 (over). At least 3yd separation.
-    expect(Math.abs(sMaxY - hMaxY)).toBeGreaterThanOrEqual(3);
+    // Skeleton outputs canonical depth 5 + depth 6 → carrier at
+    // y≈-1, max y ≈ 4 (under) and ≈ 5 (over). At least 0.5yd
+    // separation visible in the rendered diagram, with both
+    // drags clearly above the OL row (which sits at y=0).
+    expect(Math.abs(sMaxY - hMaxY)).toBeGreaterThanOrEqual(0.5);
+    expect(Math.abs(sMaxY - hMaxY)).toBeLessThanOrEqual(2.5);
   });
 
   it("Flood Right: side-flooding concept produces 3 routes ending on the right", async () => {

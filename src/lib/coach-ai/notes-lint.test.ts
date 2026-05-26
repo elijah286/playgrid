@@ -322,9 +322,12 @@ describe("lintProseDepthAgainstSpec — clause-level scoping (the screenshot reg
   it("catches @S confabulation when an unrelated @X depth is in the same sentence", () => {
     const skel = generateConceptSkeleton("Mesh", { variant: "tackle_11" });
     if (!skel.ok) throw new Error("skeleton failed");
+    // Updated 2026-05-26: Mesh canonical depths are 5+6 (was 2+8 in
+    // the rendering-workaround era). Prose still confabulates @S to
+    // a wrong depth (claims 2yd, spec says 6yd).
     const prose =
-      "@H runs the under-drag at 2 yards, @S runs the over-drag at 2 yards as well " +
-      "(both shallow crossers), with @X settling in the hole between safeties at 5 " +
+      "@H runs the under-drag at 5 yards, @S runs the over-drag at 2 yards as well " +
+      "(both shallow crossers), with @X settling in the hole between safeties at 12 " +
       "yards for the intermediate void.";
     const result = lintProseDepthAgainstSpec(prose, skel.spec);
     expect(result.ok).toBe(false);
@@ -332,18 +335,18 @@ describe("lintProseDepthAgainstSpec — clause-level scoping (the screenshot reg
     const sIssue = result.issues.find((i) => i.player === "S");
     expect(sIssue).toBeDefined();
     expect(sIssue?.proseDepthYds).toBe(2);
-    // Mesh skeleton over-drag is 8yd (bumped from 6yd 2026-05-02 for
-    // visual separation). The lint catches @S claim of "2 yards" vs
-    // spec @ 8yd.
-    expect(sIssue?.expectedDepthYds).toBe(8);
+    // Mesh skeleton over-drag is 6yd canonical (down from the 8yd
+    // visual-workaround). The lint catches @S claim of "2 yards" vs
+    // spec @ 6yd.
+    expect(sIssue?.expectedDepthYds).toBe(6);
   });
 
   it("does NOT split intra-word hyphens (under-drag stays one clause)", () => {
     const skel = generateConceptSkeleton("Mesh", { variant: "tackle_11" });
     if (!skel.ok) throw new Error("skeleton failed");
-    // Correct prose — H at 2yd matches spec; should pass.
+    // Correct prose — H at 5yd matches canonical spec; should pass.
     const result = lintProseDepthAgainstSpec(
-      "@H runs the under-drag at 2 yards as the shallow cross.",
+      "@H runs the under-drag at 5 yards as the shallow cross.",
       skel.spec,
     );
     expect(result.ok).toBe(true);

@@ -680,14 +680,14 @@ describe("projectSpecToNotes — QB progression block (Item 1, 2026-05-25)", () 
       variant: "flag_7v7",
       title: "Mesh",
       assignments: [
-        { player: "H", action: { kind: "route", family: "Drag", depthYds: 2 } },  // under-drag
-        { player: "S", action: { kind: "route", family: "Drag", depthYds: 8 } },  // over-drag
+        { player: "H", action: { kind: "route", family: "Drag", depthYds: 5 } },  // under-drag (canonical)
+        { player: "S", action: { kind: "route", family: "Drag", depthYds: 6 } },  // over-drag (1yd above)
         { player: "Z", action: { kind: "route", family: "Sit", depthYds: 12 } },  // high
         { player: "B", action: { kind: "route", family: "Flat" } },               // checkdown
       ],
     }));
-    // The under-drag (H at 2yd) should appear before the over-drag
-    // (S at 8yd) in the progression block — Mesh reads under-first.
+    // The under-drag (H at 5yd) should appear before the over-drag
+    // (S at 6yd) in the progression block — Mesh reads under-first.
     const hIdx = notes.indexOf("@H");
     const sIdx = notes.indexOf("@S");
     const bIdx = notes.indexOf("@B");

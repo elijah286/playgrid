@@ -585,24 +585,19 @@ function buildFourVerts(_c: ConceptEntry, opts: ConceptSkeletonOptions): Skeleto
 
 function buildMesh(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
   const variant = opts.variant;
+  // Canonical Mesh depths (audit finding #9, 2026-05-26): BOTH
+  // drags at 5-6yd with 1yd of vertical separation at the mesh
+  // point. The prior 2/8 was a deliberate rendering workaround
+  // from 2026-05-02 (3+5 and 2+6 were visually unclear in the
+  // chat preview); the play editor's depth precision is now
+  // sufficient to distinguish 5 vs 6 cleanly, so we revert to
+  // the football-correct geometry.
   if (variant === "flag_4v4") {
-    // CORRECTED 2026-05-26 (audit finding #10). The prior 4v4 Mesh
-    // was a 1-drag + curl + clear — i.e., NOT a Mesh (Mesh requires
-    // two crossers). With 3 eligibles {X, Y, Z}, a true 4v4 Mesh
-    // uses BOTH outside WRs as the crossing pair (opposite-side
-    // releases give the classic rub), and @Y plays the over-the-top
-    // sit as the eligible underneath outlet.
-    //
-    // Routes:
-    //   @X drag @ 2yd  — under-crosser (from one side)
-    //   @Z drag @ 8yd  — over-crosser (from the opposite side)
-    //   @Y curl @ 10yd — over-the-top outlet (the "Y-option" of mesh)
-    //
-    // 2/8 depth differential preserved (same visual-separation
-    // argument as 5v5/7v7).
+    // 4v4 Mesh: two outside WRs cross at 5+6; @Y is the over-the-
+    // top outlet.
     const assignments = flagFourRoutes({
-      X: { family: "Drag", depthYds: 2 },
-      Z: { family: "Drag", depthYds: 8 },
+      X: { family: "Drag", depthYds: 5 },
+      Z: { family: "Drag", depthYds: 6 },
       Y: { family: "Curl", depthYds: 10 },
     });
     return {
@@ -610,34 +605,16 @@ function buildMesh(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResu
       concept: "Mesh",
       spec: baseSpec(variant, "Mesh", "Trips", undefined, assignments),
       notes:
-        `Mesh (4v4): @X under-drag @ 2yd + @Z over-drag @ 8yd — the two outside WRs cross from opposite sides, 6yd visual separation. @Y curl @ 10yd over the top as the eligible underneath outlet.`,
+        `Mesh (4v4): @X under-drag @ 5yd + @Z over-drag @ 6yd — the two outside WRs cross from opposite sides with 1yd of vertical separation at the mesh point. @Y curl @ 10yd over the top as the eligible underneath outlet.`,
     };
   }
   if (variant === "flag_5v5") {
-    // Mesh 5v5: CORRECTED 2026-05-26 (audit finding #2). A coach
-    // surfaced that the prior version had @C running an over-drag
-    // — which is wrong because the center has no clean release
-    // angle from the snap point and can't cross the formation
-    // cleanly within the 7-second clock. The canonical 5v5 Mesh
-    // crossing pair is RB (@Y) + an outside WR (@X), with @C
-    // playing a short underneath sit (the eligible-center outlet).
-    //
-    // Routes:
-    //   @Y drag @ 2yd  — under-crosser (RB releases from backfield)
-    //   @X drag @ 8yd  — over-crosser (outside WR with the release
-    //                    angle the center didn't have)
-    //   @C sit @ 5yd   — short underneath outlet (the eligible
-    //                    center's natural role given his snap-point
-    //                    starting position)
-    //   @Z go @ 18yd   — clears the strong side
-    //
-    // 2yd + 8yd depth differential preserved from the 2026-05-02
-    // visual-separation lesson — keeps the cross unambiguous in
-    // the chat preview. The depth-realism trade is documented
-    // separately (audit finding #9).
+    // Mesh 5v5: @Y (RB) + @X (outside WR) cross at 5+6; @C plays
+    // the underneath sit (no clean release angle to cross from the
+    // snap point); @Z clears.
     const assignments = flagFiveRoutes({
-      Y: { family: "Drag", depthYds: 2 },
-      X: { family: "Drag", depthYds: 8 },
+      Y: { family: "Drag", depthYds: 5 },
+      X: { family: "Drag", depthYds: 6 },
       C: { family: "Sit", depthYds: 5 },
       Z: { family: "Go", depthYds: 18 },
     });
@@ -646,23 +623,14 @@ function buildMesh(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResu
       concept: "Mesh",
       spec: baseSpec(variant, "Mesh", "Spread Doubles", undefined, assignments),
       notes:
-        `Mesh (5v5): @Y under-drag @ 2yd + @X over-drag @ 8yd — 6yd visual separation; the RB and outside WR cross from opposite sides (the center @C has no clean release angle from the snap point, so he runs @C sit @ 5yd as the underneath outlet). @Z go @ 18yd clears the strong side.`,
+        `Mesh (5v5): @Y under-drag @ 5yd + @X over-drag @ 6yd — RB and outside WR cross from opposite sides with 1yd of vertical separation at the mesh point. @C sits @ 5yd as the eligible underneath outlet (center has no clean release angle from the snap point); @Z go @ 18yd clears the strong side.`,
     };
   }
-  // Inside slots run the differentiated drags (H under, S over). Outside
-  // X/Z run a sit + clear over the top.
-  //
-  // Depth choice — 2 + 8: catalog ranges are [2, 3.5] (under) and
-  // [6, 9] (over). Visual-separation history:
-  //   3 + 5  →  ~2yd gap, visually swallowed by token width
-  //   2 + 6  →  4yd gap, still read as collided in chat preview
-  //   2 + 8  →  6yd gap, unambiguously stacked. Coaches won't
-  //              mistake the cross for a collision (surfaced
-  //              twice in 2026-05-02 sessions).
-  // Both still satisfy concept_mesh's slot constraints.
+  // 7v7+/tackle: inside slots run the crossing drags (H under, S over).
+  // X curls over the top, Z clears, B is the flat outlet.
   const assignments: PlayerAssignment[] = [
-    routeAt("H", "Drag", 2),    // under-drag (low end of [2, 3.5])
-    routeAt("S", "Drag", 8),    // over-drag (mid of [6, 9])
+    routeAt("H", "Drag", 5),    // under-drag
+    routeAt("S", "Drag", 6),    // over-drag (1yd above the under)
     // X runs a Curl @ 12yd: deeper than the over-drag, settles facing
     // the QB. Was Sit @ 12 before 2026-05-20 but Sit's canonical range
     // is [3, 7] — that combination tripped the save-time route-
@@ -679,7 +647,7 @@ function buildMesh(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResu
     concept: "Mesh",
     spec: baseSpec(variant, "Mesh", "Spread Doubles", undefined, assignments),
     notes:
-      `Mesh: H under-drag @ 2yd + S over-drag @ 8yd — 6yd visual separation makes the cross unambiguous. X sits @ 12yd over the top, Z clears with go @ 18yd, B is the flat outlet.`,
+      `Mesh: H under-drag @ 5yd + S over-drag @ 6yd — 1yd of vertical separation at the mesh point, canonical Air Raid depths. X sits @ 12yd over the top, Z clears with go @ 18yd, B is the flat outlet.`,
   };
 }
 
