@@ -166,6 +166,18 @@ export default async function PlayConceptVariantPage(
   // widget used in the in-app editor. Custom admin notes take
   // precedence when present.
   const coachingNotes = override?.coachNotes ?? projectSpecToNotes(skeleton.spec);
+  // Concept-level metadata overrides (Phase B, 2026-05-26). Admins
+  // can correct catalog prose via the override editor when the
+  // ConceptDef wording is wrong / unclear / missing nuance. Each
+  // field falls back to the code-level ConceptDef when null.
+  const conceptDescription =
+    override?.descriptionOverride ?? concept.description;
+  const conceptBody =
+    override?.bodyOverride ?? concept.body ?? concept.description;
+  const conceptWhenToUse =
+    override?.whenToUseOverride ?? concept.whenToUse;
+  const conceptCommonMistakes =
+    override?.commonMistakesOverride ?? concept.commonMistakes ?? [];
   // Admins see an "Edit" link in the header that opens the play in
   // the canonical editor (`/learn/library/admin/plays/[slug]/[variant]/edit`).
   // Edits there save to `library_concept_overrides`, which this page
@@ -189,7 +201,7 @@ export default async function PlayConceptVariantPage(
     "@context": "https://schema.org",
     "@type": "TechArticle",
     headline: `${concept.name} (${VARIANT_LABEL[variant]}) — football concept`,
-    description: concept.description,
+    description: conceptDescription,
     articleSection: "Football library",
     keywords: [
       concept.name,
@@ -292,7 +304,7 @@ export default async function PlayConceptVariantPage(
       <div className="mb-8 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_280px]">
         <div>
           <p className="mb-6 text-lg leading-relaxed text-foreground">
-            {concept.body ?? concept.description}
+            {conceptBody}
           </p>
 
           <div className="overflow-hidden rounded-2xl border border-border bg-surface-raised">
@@ -333,20 +345,20 @@ export default async function PlayConceptVariantPage(
             </section>
           )}
 
-          {concept.whenToUse ? (
+          {conceptWhenToUse ? (
             <section className="mt-8">
               <h2 className="text-xl font-bold tracking-tight">When to call it</h2>
               <p className="mt-2 text-base leading-relaxed text-muted">
-                {concept.whenToUse}
+                {conceptWhenToUse}
               </p>
             </section>
           ) : null}
 
-          {(concept.commonMistakes ?? []).length > 0 ? (
+          {conceptCommonMistakes.length > 0 ? (
             <section className="mt-8">
               <h2 className="text-xl font-bold tracking-tight">Common mistakes</h2>
               <ul className="mt-2 space-y-1.5 pl-6">
-                {(concept.commonMistakes ?? []).map((m) => (
+                {conceptCommonMistakes.map((m) => (
                   <li key={m} className="list-disc text-base leading-relaxed text-muted">
                     {m}
                   </li>

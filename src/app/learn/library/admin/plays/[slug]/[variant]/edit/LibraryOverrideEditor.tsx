@@ -6,12 +6,14 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ExternalLink, RotateCcw } from "lucide-react";
 import {
   saveLibraryOverrideAction,
+  saveLibraryMetadataAction,
   deleteLibraryOverrideAction,
 } from "@/app/actions/library-admin";
 import type { PlayDocument } from "@/domain/play/types";
 import type { PlaybookSettings } from "@/domain/playbook/settings";
 import type { LibraryVariant } from "@/lib/learn/variant";
 import { PlayEditorClient } from "@/features/editor/PlayEditorClient";
+import { MetadataEditor } from "./MetadataEditor";
 
 /** Client wrapper for the admin override editor. Owns:
  *
@@ -23,6 +25,10 @@ import { PlayEditorClient } from "@/features/editor/PlayEditorClient";
  *  - The variant-switcher dropdown, so an admin walking the concept
  *    catalog can jump between (5v5, 7v7, etc.) without bouncing back
  *    to the public page.
+ *  - The concept-level metadata form (Phase B, 2026-05-26) for
+ *    description, body, when-to-use, and common mistakes. Its save
+ *    button routes through `saveLibraryMetadataAction` and operates
+ *    independently of the play-doc autosave.
  *
  *  The editor itself stays the SAME `PlayEditorClient` the in-app
  *  builder uses (Rule 14: one render path). `libraryMode={false}` so
@@ -38,6 +44,9 @@ export function LibraryOverrideEditor({
   libraryVariantSlugs,
   hasOverride,
   startingDoc,
+  defaultDoc,
+  catalogDefaults,
+  initialMetadata,
   playbookSettings,
 }: {
   slug: string;
@@ -53,6 +62,28 @@ export function LibraryOverrideEditor({
    *  the override row's `coach_notes` column, so we don't need to
    *  pass the notes separately. */
   startingDoc: PlayDocument;
+  /** Catalog-default document for this (slug, variant). Used to seed
+   *  the override row when an admin saves metadata before they've
+   *  edited the diagram — the row needs a non-null `document`
+   *  column, so we seed with the catalog default. */
+  defaultDoc: PlayDocument;
+  /** Catalog-default metadata strings, shown as placeholders in the
+   *  metadata form so an admin knows what the public page currently
+   *  renders when their override field is empty. */
+  catalogDefaults: {
+    description: string;
+    body: string;
+    whenToUse: string;
+    commonMistakes: string[];
+  };
+  /** Existing overrides for the metadata fields. Null means "use the
+   *  catalog default" (catalogDefaults provide the placeholder). */
+  initialMetadata: {
+    descriptionOverride: string | null;
+    bodyOverride: string | null;
+    whenToUseOverride: string | null;
+    commonMistakesOverride: string[] | null;
+  };
   playbookSettings: PlaybookSettings;
 }) {
   const router = useRouter();
@@ -82,6 +113,35 @@ export function LibraryOverrideEditor({
       return res;
     },
     [slug, variant],
+  );
+
+  // Metadata save — routes through the metadata-only action that
+  // auto-creates the override row with the catalog default doc when
+  // none exists yet.
+  const saveMetadata = useCallback(
+    async (metadata: {
+      descriptionOverride: string | null;
+      bodyOverride: string | null;
+      whenToUseOverride: string | null;
+      commonMistakesOverride: string[] | null;
+    }) => {
+      const res = await saveLibraryMetadataAction({
+        slug,
+        variant,
+        metadata,
+        seedDocument: defaultDoc,
+      });
+      if (res.ok) {
+        setOverrideExists(true);
+        setStatusMsg(`Saved metadata · ${new Date().toLocaleTimeString()}`);
+        // Re-fetch the server component so subsequent renders pick
+        // up the new metadata. We don't reload — the play editor's
+        // local state is independent.
+        router.refresh();
+      }
+      return res;
+    },
+    [slug, variant, defaultDoc, router],
   );
 
   const handleResetToCatalog = useCallback(() => {
@@ -198,6 +258,17 @@ export function LibraryOverrideEditor({
           )}
         </p>
       </header>
+
+      {/* Metadata editor — concept-level prose. Independent save
+          path from the play-doc autosave below. Collapsible so the
+          field surface area doesn't dominate the page; admins
+          editing the diagram only see a slim header until they
+          expand it. */}
+      <MetadataEditor
+        catalogDefaults={catalogDefaults}
+        initialMetadata={initialMetadata}
+        onSave={saveMetadata}
+      />
 
       {/* Canonical play editor. `libraryMode={false}` so the admin
           sees the full editing chrome. `playId` uses a stable

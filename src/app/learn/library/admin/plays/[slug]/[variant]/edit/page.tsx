@@ -84,6 +84,26 @@ export default async function LibraryAdminEditPlayPage({
       }
     : baseDoc;
 
+  // Catalog defaults for the metadata fields. These are the
+  // fallbacks shown in the form when no override exists yet; they
+  // also serve as the placeholder so admins can see "what the page
+  // currently shows" without needing to type the override from
+  // scratch when they only want a small tweak.
+  const catalogDefaults = {
+    description: concept.description,
+    body: concept.body ?? concept.description,
+    whenToUse: concept.whenToUse ?? "",
+    commonMistakes: concept.commonMistakes ?? [],
+  };
+  // Current overrides (null when not set; the form uses null to
+  // mean "use catalog default").
+  const initialMetadata = {
+    descriptionOverride: override?.descriptionOverride ?? null,
+    bodyOverride: override?.bodyOverride ?? null,
+    whenToUseOverride: override?.whenToUseOverride ?? null,
+    commonMistakesOverride: override?.commonMistakesOverride ?? null,
+  };
+
   return (
     <LibraryOverrideEditor
       slug={slug}
@@ -98,6 +118,12 @@ export default async function LibraryAdminEditPlayPage({
       }))}
       hasOverride={override != null}
       startingDoc={startingDoc}
+      // The catalog default doc is passed separately so the metadata
+      // form can seed a row with it when the admin saves metadata
+      // before touching the play diagram.
+      defaultDoc={defaultDoc}
+      catalogDefaults={catalogDefaults}
+      initialMetadata={initialMetadata}
       playbookSettings={playbookSettings}
     />
   );

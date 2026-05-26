@@ -10,29 +10,63 @@ import { revalidatePath } from "next/cache";
 import type { PlayDocument } from "@/domain/play/types";
 import {
   saveLibraryOverride,
+  saveLibraryMetadata,
   deleteLibraryOverride,
+  type LibraryMetadataPatch,
 } from "@/lib/learn/overrides";
 
 /** Save an override edit. Returns ok/error; the caller renders an
  *  inline toast. After a successful save, the public library page
  *  for that (slug, variant) is revalidated so the next visitor sees
- *  the override on the first request (no manual refresh). */
+ *  the override on the first request (no manual refresh).
+ *
+ *  `metadata` is optional. When omitted, only the document + coach
+ *  notes are written (existing metadata columns are preserved). When
+ *  passed, each metadata field follows the LibraryMetadataPatch
+ *  convention: undefined → skip, null → clear, string → set. */
 export async function saveLibraryOverrideAction(input: {
   slug: string;
   variant: string;
   document: PlayDocument;
   coachNotes: string | null;
+  metadata?: LibraryMetadataPatch;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const result = await saveLibraryOverride(
     input.slug,
     input.variant,
     input.document,
     input.coachNotes,
+    input.metadata,
   );
   if (result.ok) {
     // Re-render both the public variant page (override takes effect
     // immediately) and the variant-less redirect (which derives its
     // default variant from the same catalog).
+    revalidatePath(`/learn/library/plays/${input.slug}/${variantSlugFor(input.variant)}`);
+    revalidatePath(`/learn/library/plays/${input.slug}`);
+  }
+  return result;
+}
+
+/** Save ONLY the concept-level metadata override (description, body,
+ *  when-to-use, common mistakes) without touching the play document.
+ *  When no override row exists yet, `seedDocument` is used to create
+ *  the row (typically the catalog-default doc for this (slug,
+ *  variant)). When a row exists, the seed is ignored — only the
+ *  metadata columns are touched. */
+export async function saveLibraryMetadataAction(input: {
+  slug: string;
+  variant: string;
+  metadata: LibraryMetadataPatch;
+  seedDocument: PlayDocument;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const result = await saveLibraryMetadata(
+    input.slug,
+    input.variant,
+    input.metadata,
+    input.seedDocument,
+  );
+  if (result.ok) {
     revalidatePath(`/learn/library/plays/${input.slug}/${variantSlugFor(input.variant)}`);
     revalidatePath(`/learn/library/plays/${input.slug}`);
   }
