@@ -11,7 +11,8 @@ export type BetaFeatureKey =
   | "play_comments"
   | "version_history"
   | "team_messaging"
-  | "coach_ai_image_upload";
+  | "coach_ai_image_upload"
+  | "football_library";
 export type BetaFeatureScope = "off" | "me" | "all" | "custom";
 
 export type BetaFeatures = Record<BetaFeatureKey, BetaFeatureScope>;
@@ -28,6 +29,11 @@ const DEFAULTS: BetaFeatures = {
   // pipeline is still unreliable. Default "off"; the admin sets
   // scope="me" via the admin UI for site-admin-only testing.
   coach_ai_image_upload: "off",
+  // Football Library — /learn/library and every concept/route page
+  // under it. Hidden from anonymous + non-admin users until the
+  // editorial pass is fuller; admins see the full library so they
+  // can review content in production.
+  football_library: "me",
 };
 
 /** Safe "everything off" fallback for callers that need a value even when
