@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowRight, BookOpen } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { ROUTE_TEMPLATES } from "@/domain/play/routeTemplates";
 import { CONCEPTS } from "@/domain/football-kg/defs/concepts";
 import type { RouteTemplate } from "@/domain/play/routeTemplates";
@@ -19,6 +19,7 @@ import {
   defaultVariantForConceptDef,
   variantToSlug,
 } from "@/lib/learn/variant";
+import { RouteGrid, type RouteGridItem } from "./RouteGrid";
 
 export const dynamicParams = false;
 export const revalidate = 3600;
@@ -106,55 +107,27 @@ export default async function RoutePage(
   let routeDoc: ReturnType<typeof coachDiagramToPlayDocument> | null = null;
   try {
     const { diagram } = playSpecToCoachDiagram(spec);
-    // Drop the rest of the formation so the field shows ONLY the
-    // receiver running the route and the QB. Routes are taught
-    // relative to the QB, and the extra receivers (Y, Z, C) crowd
-    // the diagram without adding teaching value — a coach reading
-    // "Corner" wants to see the corner break, not what the slot is
-    // doing. Filtering happens on the rendered diagram (not the
-    // spec) so the renderer still gets a real formation to compute
-    // X's starting position from.
-    //
-    // We also slide X toward the middle so the demo doesn't crowd
-    // against the sideline. In a real Spread Doubles look X starts
-    // wide (≈ −10 yd from center), but for a one-receiver teaching
-    // diagram a slot-style alignment reads better — there's more
-    // canvas to draw the break into without clipping the route at
-    // the field edge. The route's path is shifted by the same delta
-    // so the geometry still connects to the receiver.
-    const RECEIVER_SHIFT_X = 5; // pull X 5 yards inward (toward the hash)
+    // Keep only the route runner and QB — the other receivers crowd the
+    // diagram without adding teaching value. Filtering on the rendered
+    // diagram (not the spec) lets the renderer place X at its real
+    // formation position, so the route geometry is accurate.
     const KEEP = new Set(["QB", "X"]);
     const slimDiagram = {
       ...diagram,
-      players: diagram.players
-        .filter((p) => KEEP.has(p.id))
-        .map((p) => (p.id === "X" ? { ...p, x: p.x + RECEIVER_SHIFT_X } : p)),
-      routes: (diagram.routes ?? [])
-        .filter((r) => KEEP.has(r.from))
-        .map((r) =>
-          r.from === "X"
-            ? {
-                ...r,
-                path: r.path.map(
-                  ([x, y]) => [x + RECEIVER_SHIFT_X, y] as [number, number],
-                ),
-              }
-            : r,
-        ),
+      players: diagram.players.filter((p) => KEEP.has(p.id)),
+      routes: (diagram.routes ?? []).filter((r) => KEEP.has(r.from)),
     };
     const baseDoc = coachDiagramToPlayDocument(slimDiagram);
-    // Bare-field demo: no grid noise, no LOS, white background.
-    // The route page is teaching ONE route — the field markings are
-    // a distraction. New `showYardLines` flag (added in this commit)
-    // gates the horizontal 5-yard stripes; the others were already
-    // toggleable.
+    // Clean demo field: white background, LOS shown for reference,
+    // no grid noise or no-run zone bands (those are 5v5-specific).
     routeDoc = {
       ...baseDoc,
       fieldBackground: "white",
       showHashMarks: false,
       showYardNumbers: false,
       showYardLines: false,
-      lineOfScrimmage: "none",
+      showNoRunZones: false,
+      lineOfScrimmage: "line",
     };
   } catch (err) {
     console.warn(
@@ -183,11 +156,12 @@ export default async function RoutePage(
   const usedByVisible = usedBy.slice(0, 6);
   const usedByOverflow = usedBy.length - usedByVisible.length;
 
-  // Related routes: same family fingerprint by complexity for now.
-  // Cheap heuristic; once we have route tags we'll do proper overlap.
-  const related = ROUTE_TEMPLATES.filter((r) => r.name !== route.name)
-    .slice(0, 6)
-    .map((r) => ({ name: r.name, slug: toLearnSlug(r.name) }));
+  const allRoutes: RouteGridItem[] = ROUTE_TEMPLATES.map((r) => ({
+    name: r.name,
+    slug: toLearnSlug(r.name),
+    points: r.points,
+    shapes: r.shapes,
+  }));
 
   const breadcrumbLd = {
     "@context": "https://schema.org",
@@ -321,28 +295,8 @@ export default async function RoutePage(
           ) : null}
         </div>
 
-        <aside className="space-y-4">
-          {related.length > 0 ? (
-            <div className="rounded-2xl border border-border bg-surface-raised p-4">
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">
-                <BookOpen className="mr-1 inline size-3.5" />
-                Related routes
-              </h4>
-              <ul className="mt-2 space-y-1.5">
-                {related.map((r) => (
-                  <li key={r.slug}>
-                    <Link
-                      href={`/learn/library/routes/${r.slug}`}
-                      className="flex items-center justify-between text-sm hover:text-primary"
-                    >
-                      <span>{r.name}</span>
-                      <ArrowRight className="size-3.5 text-muted" />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
+        <aside>
+          <RouteGrid routes={allRoutes} currentSlug={slug} />
         </aside>
       </div>
     </article>
