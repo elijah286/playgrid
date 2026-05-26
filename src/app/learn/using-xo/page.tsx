@@ -54,17 +54,22 @@ export default async function UsingXoPage() {
     TUTORIAL_LIST[0]?.id;
 
   return (
-    <article className="mx-auto max-w-2xl text-foreground">
+    <article className="mx-auto max-w-2xl px-6 py-10 text-foreground">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(withFullContext(breadcrumbLd)) }}
       />
-      <header className="mb-5">
-        <h2 className="text-xl font-extrabold tracking-tight">Guided tutorials</h2>
-        <p className="mt-1.5 text-sm text-muted">
-          Interactive walkthroughs of the most-used flows. Take them in any
-          order. Anonymous users can read the summaries; sign in to launch a
-          tutorial inside one of your playbooks.
+      <header className="mb-6">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+          Resources
+        </p>
+        <h1 className="mt-1 text-3xl font-extrabold tracking-tight">
+          App tutorials
+        </h1>
+        <p className="mt-2 text-sm text-muted">
+          Interactive walkthroughs of the most-used flows in the XO Gridmaker
+          editor. Take them in any order. Anonymous visitors can read the
+          summaries; sign in to launch a tutorial inside one of your playbooks.
         </p>
       </header>
 
