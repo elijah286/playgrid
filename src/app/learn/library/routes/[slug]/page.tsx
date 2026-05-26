@@ -125,7 +125,7 @@ export default async function RoutePage(
       fieldBackground: "white",
       showHashMarks: false,
       showYardNumbers: false,
-      showYardLines: false,
+      showYardLines: true,
       showNoRunZones: false,
       lineOfScrimmage: "line",
     };
