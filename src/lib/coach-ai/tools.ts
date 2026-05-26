@@ -23,6 +23,7 @@ import { applyLabelAliasesToFence, applyLabelAliasesToSpec } from "./user-prefer
 import { findTemplate as findRouteTemplate } from "@/domain/play/routeTemplates";
 import { sanitizeCoachDiagram } from "@/domain/play/sanitize";
 import { generateConceptSkeleton } from "@/domain/play/conceptSkeleton";
+import { resolveConceptSkeleton } from "@/lib/learn/concept-resolver";
 import { playSpecToCoachDiagram, reactivePathFor } from "@/domain/play/specRenderer";
 import {
   findReactorPattern,
@@ -654,10 +655,11 @@ const get_concept_skeleton: CoachAiTool = {
     const variant = (ctx.sportVariant as "tackle_11" | "flag_7v7" | "flag_5v5" | undefined) ?? "flag_7v7";
 
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { generateConceptSkeleton } = require("@/domain/play/conceptSkeleton") as typeof import("@/domain/play/conceptSkeleton");
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { playSpecToCoachDiagram } = require("@/domain/play/specRenderer") as typeof import("@/domain/play/specRenderer");
-    const result = generateConceptSkeleton(concept, { variant, strength });
+    // Use the override-aware resolver so admin edits flow through
+    // both compose_play (above) and the legacy get_concept_skeleton
+    // path identically.
+    const result = await resolveConceptSkeleton(concept, { variant, strength });
 
     if (!result.ok) {
       return {
@@ -982,7 +984,13 @@ const compose_play: CoachAiTool = {
 
     const variant = (ctx.sportVariant as "tackle_11" | "flag_7v7" | "flag_5v5" | undefined) ?? "flag_7v7";
 
-    const result = generateConceptSkeleton(concept, { variant, strength });
+    // Resolve via the override-aware path so that admin edits saved
+    // through the library editor become the canonical spec Cal
+    // composes from. Falls through to `generateConceptSkeleton` when
+    // no override exists or when the override exists but is in a
+    // strength the resolver can't mirror (today: left strength
+    // requests fall through; see concept-resolver.ts).
+    const result = await resolveConceptSkeleton(concept, { variant, strength });
     if (!result.ok) {
       // Build an inline fill-in-the-blank spec template, prefilled with
       // the variant Cal is in + the formation Cal tried to use. This
