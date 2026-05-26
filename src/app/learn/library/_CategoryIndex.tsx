@@ -15,6 +15,10 @@ export type CategoryIndexProps = {
   }>;
   /** Trailing note (e.g. "Diagram rendering coming soon"). */
   note?: string;
+  /** Routes are variant-agnostic — a Slant is a Slant — so the
+   *  routes category index doesn't show the variant filter. Plays,
+   *  formations, and defense pages keep it. */
+  hideVariantPill?: boolean;
 };
 
 export function CategoryIndex({
@@ -23,6 +27,7 @@ export function CategoryIndex({
   description,
   entities,
   note,
+  hideVariantPill = false,
 }: CategoryIndexProps) {
   const categoryHref = `/learn/library/${category}`;
 
@@ -61,10 +66,13 @@ export function CategoryIndex({
 
       {/* Variant filter — same persistent pill the library landing
           uses. Tracked on the URL so navigation between library
-          pages preserves the coach's selection. */}
-      <div className="mb-6">
-        <VariantPill />
-      </div>
+          pages preserves the coach's selection. Hidden on routes
+          (variant-agnostic content). */}
+      {!hideVariantPill && (
+        <div className="mb-6">
+          <VariantPill />
+        </div>
+      )}
 
       <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {entities.map((e) => (

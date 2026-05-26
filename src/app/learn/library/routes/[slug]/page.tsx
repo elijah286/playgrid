@@ -14,12 +14,7 @@ import { PlayEditorClient } from "@/features/editor/PlayEditorClient";
 import { isFootballLibraryAvailable } from "@/lib/learn/access";
 import { toLearnSlug } from "@/lib/learn/links";
 import { withFullContext } from "@/lib/seo/ld-json";
-import {
-  VARIANT_LABEL,
-  slugToVariant,
-  type LibraryVariant,
-} from "@/lib/learn/variant";
-import { DEFAULT_LIBRARY_VARIANT, VariantPill } from "../../VariantPill";
+import { DEFAULT_LIBRARY_VARIANT } from "../../VariantPill";
 
 export const dynamicParams = false;
 export const revalidate = 3600;
@@ -66,27 +61,20 @@ export async function generateMetadata(
 }
 
 export default async function RoutePage(
-  {
-    params,
-    searchParams,
-  }: {
-    params: Promise<{ slug: string }>;
-    searchParams: Promise<{ v?: string }>;
-  },
+  { params }: { params: Promise<{ slug: string }> },
 ) {
   if (!(await isFootballLibraryAvailable())) notFound();
   const { slug } = await params;
-  const { v } = await searchParams;
   const route = findRouteBySlug(slug);
   if (!route) notFound();
 
-  // Variant from URL, defaulting to flag_5v5. Routes are declared
-  // for ALL_VARIANTS in the catalog — a Slant is a Slant regardless
-  // of variant — but the rendered diagram's field dimensions and
-  // companion-receiver positions depend on the variant, so we
-  // respect the coach's persistent variant choice here too.
-  const variant: LibraryVariant =
-    (v ? slugToVariant(v) : null) ?? DEFAULT_LIBRARY_VARIANT;
+  // Routes are variant-agnostic — a Slant is a Slant regardless of
+  // game type — so the route pages don't show the variant pill the
+  // way play/formation/defense pages do. The render still needs a
+  // variant internally (for the field width + roster the synthesizer
+  // produces), so we use the library default (5v5 Flag) as the
+  // demo's backdrop.
+  const variant = DEFAULT_LIBRARY_VARIANT;
 
   // Synthesize a minimal play that runs THIS route on the strong-
   // side outside WR (@Z), with the rest of the formation idle. The
@@ -95,7 +83,6 @@ export default async function RoutePage(
   // depth. Result is the same render path the in-app builder uses
   // (Rule 14: one render path).
   const depth = defaultDepthFor(route);
-  const targetPlayer = variant === "flag_5v5" ? "Z" : "Z";
   const spec: PlaySpec = {
     schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
     variant,
@@ -104,7 +91,7 @@ export default async function RoutePage(
     formation: { name: "Spread Doubles", strength: "right" },
     assignments: [
       {
-        player: targetPlayer,
+        player: "Z",
         confidence: "high",
         action: { kind: "route", family: route.name, depthYds: depth },
       },
@@ -213,10 +200,6 @@ export default async function RoutePage(
         </Link>
       </header>
 
-      <div className="mb-6">
-        <VariantPill />
-      </div>
-
       <div className="mb-8 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_280px]">
         <div>
           <p className="mb-6 text-lg leading-relaxed text-foreground">
@@ -242,7 +225,7 @@ export default async function RoutePage(
             </div>
           ) : (
             <div className="rounded-2xl border border-border bg-surface-raised p-8 text-center text-sm text-muted">
-              No diagram available for the {route.name} route in {VARIANT_LABEL[variant]}.
+              No diagram available for the {route.name} route.
             </div>
           )}
 
