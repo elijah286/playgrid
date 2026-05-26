@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { CONCEPTS } from "@/domain/football-kg/defs/concepts";
 import { FORMATIONS } from "@/domain/football-kg/defs/formations";
 import { ROUTE_TEMPLATES } from "@/domain/play/routeTemplates";
 import { DEFENSIVE_ALIGNMENTS } from "@/domain/play/defensiveAlignments";
+import { isFootballLibraryAvailable } from "@/lib/learn/access";
+import { featuredConceptOfTheDay } from "@/lib/learn/featured";
 import { toLearnSlug } from "@/lib/learn/links";
 import { withFullContext } from "@/lib/seo/ld-json";
 import { VariantPill } from "./VariantPill";
@@ -56,7 +59,12 @@ type Category = {
   items: string[];
 };
 
-export default function LibraryLandingPage() {
+export default async function LibraryLandingPage() {
+  if (!(await isFootballLibraryAvailable())) notFound();
+
+  const featured = featuredConceptOfTheDay();
+  const featuredSlug = toLearnSlug(featured.name);
+
   // Empty categories (drills, practice plans, coaching articles,
   // glossary) are hidden until they have content. Per user feedback —
   // "Coming soon" cards felt cluttered when the categories truly had no
@@ -120,23 +128,26 @@ export default function LibraryLandingPage() {
       <section className="mb-8 grid grid-cols-1 items-center gap-6 rounded-2xl border border-primary-light bg-gradient-to-br from-primary/[0.05] to-emerald-400/[0.05] p-6 md:grid-cols-[1fr_auto]">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-primary">
-            Featured concept
+            Featured concept · today
           </p>
           <h2 className="mt-1.5 text-xl font-extrabold tracking-tight">
-            Mesh — the 5v5 Flag answer to man coverage
+            {featured.name}
           </h2>
           <p className="mt-1.5 max-w-xl text-sm text-muted">
-            Two crossing in-routes at 6 yards against man, with the flat as the
-            cheap completion against zone. Renders live in the canonical play
-            editor with coaching cues for every receiver.
+            {featured.description} Renders live in the canonical play editor
+            with coaching cues, when-to-call guidance, and common mistakes to
+            avoid.
           </p>
           <Link
-            href="/learn/library/plays/mesh"
+            href={`/learn/library/plays/${featuredSlug}`}
             className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover"
           >
-            Open Mesh
+            Open {featured.name}
             <ArrowRight className="size-4" />
           </Link>
+          <p className="mt-2 text-[11px] text-muted">
+            Rotates daily — check back tomorrow for a different concept.
+          </p>
         </div>
         <div
           aria-hidden
