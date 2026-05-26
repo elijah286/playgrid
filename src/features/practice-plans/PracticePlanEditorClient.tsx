@@ -209,14 +209,14 @@ export function PracticePlanEditorClient({
     <div className="flex h-screen flex-col bg-background">
       <TutorialDeepLinkLauncher variant={variant} />
       {/* Header */}
-      <header className="flex items-center justify-between gap-4 border-b border-border bg-surface px-4 py-2">
-        <div className="flex min-w-0 items-center gap-3">
+      <header className="flex items-center justify-between gap-2 border-b border-border bg-surface px-3 py-2 sm:gap-4 sm:px-4">
+        <div className="flex min-w-0 items-center gap-1.5 sm:gap-3">
           <Link
             href={`/playbooks/${playbookId}?tab=practice_plans`}
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-muted hover:bg-surface-inset hover:text-foreground"
+            className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-sm text-muted hover:bg-surface-inset hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back
+            <span className="hidden sm:inline">Back</span>
           </Link>
           <input
             type="text"
@@ -225,13 +225,13 @@ export function PracticePlanEditorClient({
             data-tutor="plan-title"
             className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-base font-semibold hover:border-border focus:border-primary focus:outline-none"
           />
-          <span className="whitespace-nowrap text-xs text-muted">
+          <span className="hidden whitespace-nowrap text-xs text-muted sm:block">
             {totalDuration > 0 ? `Total ${formatOffset(totalDuration)}` : "No blocks"}
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           {savedAt && (
-            <span className="text-xs text-muted">
+            <span className="hidden text-xs text-muted sm:block">
               Saved {savedAt.toLocaleTimeString()}
             </span>
           )}
@@ -240,25 +240,25 @@ export function PracticePlanEditorClient({
             target="_blank"
             rel="noreferrer"
             data-tutor="plan-print-button"
-            className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-semibold hover:bg-surface-inset"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-sm font-semibold hover:bg-surface-inset sm:px-3"
             title="Open print view (save as PDF in print dialog)"
           >
             <Printer className="h-4 w-4" />
-            Print
+            <span className="hidden sm:inline">Print</span>
           </a>
           <button
             type="button"
             onClick={handleSave}
             disabled={saving}
             data-tutor="plan-save-button"
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-2 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 sm:px-3"
           >
             {saving ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Save className="h-4 w-4" />
             )}
-            Save
+            <span className="hidden sm:inline">Save</span>
           </button>
         </div>
       </header>
@@ -269,10 +269,13 @@ export function PracticePlanEditorClient({
         </div>
       )}
 
-      {/* Body: split view — timeline blocks (1/3) + lane editor (2/3) */}
-      <div className="flex min-h-0 flex-1">
-        {/* Left: timeline */}
-        <aside className="w-[380px] shrink-0 overflow-y-auto border-r border-border bg-surface/50 p-3">
+      {/* Body: split view — timeline blocks (left/top) + lane editor (right/bottom).
+          On mobile: stacked vertically; timeline capped at 35vh so the editor is
+          visible below it without scrolling the page. On lg+: side-by-side. */}
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        {/* Timeline panel */}
+        <aside className="max-h-[35vh] w-full shrink-0 overflow-y-auto border-b border-border bg-surface/50 p-3 lg:max-h-none lg:w-[340px] lg:border-b-0 lg:border-r xl:w-[380px]">
+
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
               Timeline
@@ -342,10 +345,10 @@ export function PracticePlanEditorClient({
         </aside>
 
         {/* Right: block + lane editor */}
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-6">
           {!selectedBlock ? (
             <div className="flex h-full items-center justify-center text-sm text-muted">
-              Select a block on the left, or add a new one to get started.
+              Select a block above, or add a new one to get started.
             </div>
           ) : (
             <div className="mx-auto max-w-3xl space-y-6">
