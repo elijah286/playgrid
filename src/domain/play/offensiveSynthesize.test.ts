@@ -602,3 +602,127 @@ describe("synthesizeOffense — no overlapping player positions", () => {
     },
   );
 });
+
+describe("synthesizeOffense — Bunch / Stack / Trips Bunch are structurally distinct", () => {
+  // Pre-2026-05-26: Bunch, Stack, and Trips Bunch all routed through the
+  // same `bunchSide` spec and produced identical geometry. Coach surfaced
+  // it from the library page (all three formations rendered the same
+  // diagram). This test pins each shape's distinguishing structural
+  // property so the three formations stay visually + semantically distinct.
+
+  it("Bunch (tackle_11): 3 strong-side receivers cluster within ~5yd in x", () => {
+    const synth = synthesizeOffense("tackle_11", "Bunch Right")!;
+    // Strong-side receivers: positive x, off-OL row, not the back (B is at y=-5).
+    const strongRcvrs = synth.players.filter(
+      (p) =>
+        p.x > 0 &&
+        !["LT", "LG", "C", "RG", "RT", "QB", "B"].includes(p.id) &&
+        Math.abs(p.x) > 1,
+    );
+    expect(strongRcvrs.length, "Bunch needs ≥3 receivers on the strong side").toBeGreaterThanOrEqual(3);
+    const xs = strongRcvrs.map((p) => p.x).sort((a, b) => a - b);
+    const span = xs[xs.length - 1] - xs[0];
+    expect(
+      span,
+      `Bunch strong-side x-span ${span}yd should be ≤5yd (true cluster); got ${JSON.stringify(strongRcvrs.map((p) => `${p.id}@${p.x}`))}`,
+    ).toBeLessThanOrEqual(5);
+  });
+
+  it("Bunch (tackle_11): has a backside isolated WR", () => {
+    const synth = synthesizeOffense("tackle_11", "Bunch Right")!;
+    const backside = synth.players.find(
+      (p) => p.x < -8 && p.y === 0 && !["LT", "LG"].includes(p.id),
+    );
+    expect(backside, "Bunch should have a backside iso WR (X) on the weak side").toBeDefined();
+  });
+
+  it("Stack (tackle_11): two receivers share the same x (vertical column)", () => {
+    const synth = synthesizeOffense("tackle_11", "Stack Right")!;
+    const strongRcvrs = synth.players.filter(
+      (p) =>
+        p.x > 8 &&
+        !["LT", "LG", "C", "RG", "RT", "QB", "B"].includes(p.id),
+    );
+    expect(strongRcvrs.length).toBeGreaterThanOrEqual(2);
+    // At least two strong-side receivers must share an x within 0.5yd
+    // (the vertical-stack signature). Bunch fails this because its
+    // three receivers spread across ±2yd of the point.
+    const xs = strongRcvrs.map((p) => p.x);
+    const hasStack = xs.some((a, i) => xs.some((b, j) => i !== j && Math.abs(a - b) < 0.5));
+    expect(
+      hasStack,
+      `Stack should have two receivers at the same x; got ${JSON.stringify(strongRcvrs.map((p) => `${p.id}@${p.x}`))}`,
+    ).toBe(true);
+  });
+
+  it("Stack ≠ Bunch (geometry diverges)", () => {
+    // Different shapes must produce different player positions. The pre-fix
+    // versions of both formations went through the same code path with the
+    // same spec and emitted byte-identical layouts.
+    const bunch = synthesizeOffense("tackle_11", "Bunch Right")!;
+    const stack = synthesizeOffense("tackle_11", "Stack Right")!;
+    const bunchKey = bunch.players
+      .map((p) => `${p.id}@${p.x},${p.y}`)
+      .sort()
+      .join("|");
+    const stackKey = stack.players
+      .map((p) => `${p.id}@${p.x},${p.y}`)
+      .sort()
+      .join("|");
+    expect(stackKey, "Stack and Bunch must produce different layouts").not.toBe(bunchKey);
+  });
+
+  it("Trips Bunch ≠ Trips (compression diverges)", () => {
+    const trips = synthesizeOffense("tackle_11", "Trips Right")!;
+    const tripsBunch = synthesizeOffense("tackle_11", "Trips Bunch Right")!;
+    const tripsKey = trips.players.map((p) => `${p.id}@${p.x},${p.y}`).sort().join("|");
+    const tbKey = tripsBunch.players.map((p) => `${p.id}@${p.x},${p.y}`).sort().join("|");
+    expect(tbKey, "Trips Bunch must differ from Trips").not.toBe(tripsKey);
+  });
+
+  it("Trips Bunch (tackle_11): tighter strong-side cluster than Bunch", () => {
+    // Trips Bunch shares Bunch's roster (3 strong-side + backside iso)
+    // but compresses the wings closer to the point. This is the shape
+    // Snag and other triangle concepts assume.
+    const synth = synthesizeOffense("tackle_11", "Trips Bunch Right")!;
+    const strongRcvrs = synth.players.filter(
+      (p) => p.x > 8 && !["LT", "LG"].includes(p.id),
+    );
+    expect(strongRcvrs.length).toBeGreaterThanOrEqual(3);
+    const xs = strongRcvrs.map((p) => p.x).sort((a, b) => a - b);
+    const span = xs[xs.length - 1] - xs[0];
+    expect(
+      span,
+      `Trips Bunch wing span ${span}yd should be ≤3yd; got ${JSON.stringify(strongRcvrs.map((p) => `${p.id}@${p.x}`))}`,
+    ).toBeLessThanOrEqual(3);
+  });
+});
+
+describe("Formation catalog — variant restrictions match what the synthesizer can render cleanly", () => {
+  // Catalog-side guard: every variant listed in a FormationDef.variants[]
+  // must produce a valid (non-duplicate-suffix, full-roster) layout from
+  // the synthesizer. If a formation lists a variant where the synthesizer
+  // can only produce e.g. Y, Y2, Y3 (the 5v5 dup-rename artifact), the
+  // library page will render a broken diagram. This test catches that.
+
+  it("every formation × listed variant produces a clean roster (no Y2/Y3-style duplicates)", async () => {
+    const { FORMATIONS } = (await import("../football-kg/defs/formations")) as {
+      FORMATIONS: Array<{ name: string; variants?: readonly string[] }>;
+    };
+    for (const f of FORMATIONS) {
+      for (const variant of f.variants ?? []) {
+        if (variant === "touch_7v7" || variant === "flag_4v4") continue; // not library-rendered
+        const synth = synthesizeOffense(variant, f.name);
+        if (!synth) continue; // some catalog entries route through other code paths
+        // No numeric-suffix labels (Y2, Y3, ...) — those mean a structural
+        // collision the synthesizer had to paper over.
+        for (const p of synth.players) {
+          expect(
+            p.id,
+            `${f.name} / ${variant}: numeric-suffix label "${p.id}" indicates this formation can't fit this variant cleanly`,
+          ).not.toMatch(/\d$/);
+        }
+      }
+    }
+  });
+});

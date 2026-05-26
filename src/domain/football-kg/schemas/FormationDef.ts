@@ -79,9 +79,22 @@ export const FormationSpecZ = z.object({
 /** Non-parametric layouts with dedicated placement logic. Each shape
  *  has a hardcoded variant-aware placer in the renderer
  *  (placeCustomShape in offensiveSynthesize.ts). */
-export type CustomShape = "diamond" | "tight_diamond" | "stack_i";
+export type CustomShape =
+  | "diamond"
+  | "tight_diamond"
+  | "stack_i"
+  | "bunch"
+  | "stack"
+  | "trips_bunch";
 
-export const CustomShapeZ = z.enum(["diamond", "tight_diamond", "stack_i"]);
+export const CustomShapeZ = z.enum([
+  "diamond",
+  "tight_diamond",
+  "stack_i",
+  "bunch",
+  "stack",
+  "trips_bunch",
+]);
 
 export type FormationDef = FootballPrimitiveBase & {
   family: "formation";

@@ -55,7 +55,13 @@ type ReceiverDistribution =
  *  When set, the receivers distribution is ignored and a dedicated placement
  *  function (`placeCustomShape`) is used. Added 2026-05-23 for flag-specific
  *  shapes coaches asked for (diamond, tight diamond, flag I-form stack). */
-type CustomShape = "diamond" | "tight_diamond" | "stack_i";
+type CustomShape =
+  | "diamond"
+  | "tight_diamond"
+  | "stack_i"
+  | "bunch"
+  | "stack"
+  | "trips_bunch";
 
 type FormationSpec = {
   qb: QBDepth;
@@ -201,7 +207,9 @@ export function parseFormationName(
     };
   }
 
-  // Pistol — QB at -4, 1 back behind QB.
+  // Pistol — QB at -4, 1 back behind QB. 11 personnel (1 RB + 1 TE + 3 WRs)
+  // is canonically asymmetric; the TE strong-side + slot makes the strong
+  // side three-eligible.
   if (has("pistol")) {
     return {
       qb: "pistol",
@@ -212,7 +220,8 @@ export function parseFormationName(
     };
   }
 
-  // Singleback / Ace — QB under center, 1 RB at -5.
+  // Singleback / Ace — QB under center, 1 RB at -5. 11 personnel asymmetric
+  // (TE + slot strong-side, single WR weak).
   if (matches(/\b(single[\s-]?back|ace)\b/)) {
     return {
       qb: "under_center",
@@ -223,8 +232,12 @@ export function parseFormationName(
     };
   }
 
-  // Trips (3x1) — three receivers one side, one backside.
-  if (matches(/\btrips\b/)) {
+  // Trips (3x1) — three receivers one side, one backside. Must come AFTER
+  // the Trips Bunch branch below so "Trips Bunch Right" doesn't match
+  // here first — but since pattern walks top-down, we check for "bunch"
+  // co-occurring with "trips" here and let the dedicated Trips Bunch
+  // branch handle it.
+  if (matches(/\btrips\b/) && !has("bunch")) {
     return {
       qb: "shotgun",
       backs: "single",
@@ -262,29 +275,50 @@ export function parseFormationName(
     };
   }
 
-  // Bunch — 3 receivers tight to one side.
+  // Trips Bunch — 3 receivers compressed to one side, NO backside iso WR.
+  // Distinct from Bunch (which is 3 bunched + 1 backside iso). Must match
+  // BEFORE plain Bunch so "Trips Bunch" doesn't trigger the Bunch branch.
+  if (matches(/\btrips[\s-]?bunch\b/) || (matches(/\btrips\b/) && matches(/\bbunch\b/))) {
+    return {
+      qb: "shotgun",
+      backs: "single",
+      // Placeholder distribution — actual placement comes from placeCustomShape.
+      receivers: { left: 0, right: 3, te: 0 },
+      customShape: "trips_bunch",
+      strength,
+      derivedName: `Trips Bunch ${strength === "right" ? "Right" : "Left"}`,
+    };
+  }
+
+  // Bunch — 3 receivers clustered tight (≤3yd apart) on one side, 1 isolated
+  // WR backside, 1 back. The bunch is a "point + 2 wings" triangle: the
+  // point on the LOS, the two wings at -1yd just inside/outside the point.
+  // Geometry comes from placeCustomShape("bunch") so receivers actually
+  // cluster (the previous {left:1, right:3, bunchSide} approach left them
+  // spanning 11+ yds because the offset was only -3 on inner slots).
   if (has("bunch")) {
     return {
       qb: "shotgun",
       backs: "single",
-      receivers:
-        strength === "right"
-          ? { left: 1, right: 3, te: 0, bunchSide: "right" }
-          : { left: 3, right: 1, te: 0, bunchSide: "left" },
+      // Placeholder distribution — overridden by placeCustomShape.
+      receivers: { left: 1, right: 3, te: 0 },
+      customShape: "bunch",
       strength,
       derivedName: `Bunch ${strength === "right" ? "Right" : "Left"}`,
     };
   }
 
-  // Stack — same as bunch but vertically stacked. Treat as bunch geometry.
+  // Stack — two receivers vertically aligned (one directly behind the other)
+  // at the outside spot; third receiver isolated on the opposite side. The
+  // stack disguises route distribution pre-snap. Distinct from Bunch (which
+  // clusters 3 receivers horizontally) — Stack is a 2-receiver vertical
+  // column.
   if (has("stack")) {
     return {
       qb: "shotgun",
       backs: "single",
-      receivers:
-        strength === "right"
-          ? { left: 1, right: 3, te: 0, bunchSide: "right" }
-          : { left: 3, right: 1, te: 0, bunchSide: "left" },
+      receivers: { left: 1, right: 2, te: 0 },
+      customShape: "stack",
       strength,
       derivedName: `Stack ${strength === "right" ? "Right" : "Left"}`,
     };
@@ -670,6 +704,91 @@ function placeCustomShape(
     for (let i = 2; i < remaining; i++) {
       const side = i % 2 === 0 ? 1 : -1;
       players.push({ id: innerLabels[i - 2] ?? `S${i}`, x: side * slotInner, y: -1 });
+    }
+    return players;
+  }
+
+  // Bunch — 3 receivers clustered tight on the strong side (point + 2 wings),
+  // 1 isolated WR backside. The point sits on the LOS at ~wideX − 2 (a touch
+  // inside the typical outer-WR position so the cluster doesn't crowd the
+  // sideline); the two wings sit 1yd off the line at ±2yd in x from the
+  // point. Backside iso WR sits at the standard outer-WR x on the LOS.
+  //
+  // Variants:
+  //   tackle_11 / flag_7v7: full point+2 wings + backside iso (4 receivers)
+  //   flag_6v6: point+2 wings + backside iso (4 receivers — full bunch)
+  //   flag_5v5: NOT SUPPORTED (only 3 receivers; restricted by catalog)
+  //
+  // skillCount = total receivers available after QB + (OL or C) + back.
+  if (shape === "bunch") {
+    const pointX = wideX - 2;
+    const wingDx = 2;
+    const insideSlotX = variant === "tackle_11" ? -11 : -wideX + 4;
+    // Place receivers in priority order, stopping at skillCount so we
+    // never overflow the variant's roster. Priority: point on LOS,
+    // backside iso, the two wings, then an inside slot on the iso side
+    // for 5-skill variants. The point + backside iso are the 2 most
+    // important markers (a Snag/Mesh-style concept reads off Z and X
+    // first; the wings fill in once the variant has room).
+    const candidates: Array<{ id: string; x: number; y: number }> = [
+      { id: "Z", x:  pointX,           y:  0 },
+      { id: "X", x: -wideX,            y:  0 },
+      { id: "H", x:  pointX - wingDx,  y: -1 },
+      { id: "S", x:  pointX + wingDx,  y: -1 },
+      { id: "F", x:  insideSlotX,      y: -1 },
+    ];
+    for (let i = 0; i < Math.min(skillCount, candidates.length); i++) {
+      players.push(candidates[i]);
+    }
+    return players;
+  }
+
+  // Stack — two receivers vertically stacked on the strong side, one
+  // isolated backside. Front receiver on the LOS at the outer-WR x; back
+  // receiver 2yd directly behind at the same x. Disguises route
+  // distribution pre-snap (defender can't read which receiver goes where).
+  //
+  // Variants:
+  //   tackle_11 / flag_7v7: stack + backside X + inside slot on iso side
+  //   flag_6v6: stack + backside X (4 receivers)
+  //   flag_5v5: NOT SUPPORTED (need at least 3 receivers AND a backside iso)
+  if (shape === "stack") {
+    const stackX = wideX - 1; // point slightly inside outer-WR x
+    const insideSlotX = variant === "tackle_11" ? -11 : -wideX + 4;
+    // Priority: front of stack, backside iso, back of stack (the
+    // disguise pair needs both halves; only emit "H behind Z" when
+    // there's roster room for it), then inside slot on iso side.
+    const candidates: Array<{ id: string; x: number; y: number }> = [
+      { id: "Z", x:  stackX,      y:  0 }, // front of stack, on LOS
+      { id: "X", x: -wideX,       y:  0 }, // backside iso WR
+      { id: "H", x:  stackX,      y: -2 }, // back of stack, 2yd behind
+      { id: "S", x:  insideSlotX, y: -1 }, // inside slot on iso side
+    ];
+    for (let i = 0; i < Math.min(skillCount, candidates.length); i++) {
+      players.push(candidates[i]);
+    }
+    return players;
+  }
+
+  // Trips Bunch — a tighter version of Bunch. Three receivers compressed
+  // to one side (within ~2yd of each other — true triangle stack) + 1
+  // backside isolated WR. Identical roster shape to Bunch, just a more
+  // aggressive compression of the strong-side cluster. Concepts like Snag
+  // depend on Trips Bunch having an X iso, so we keep the same priority
+  // order as Bunch with tighter wing spacing.
+  if (shape === "trips_bunch") {
+    const pointX = wideX - 2;
+    const wingDx = 1; // tighter than Bunch's 2yd wings — true triangle stack
+    const insideSlotX = variant === "tackle_11" ? -11 : -wideX + 4;
+    const candidates: Array<{ id: string; x: number; y: number }> = [
+      { id: "Z", x:  pointX,           y:  0 },
+      { id: "X", x: -wideX,            y:  0 },
+      { id: "H", x:  pointX - wingDx,  y: -1 },
+      { id: "S", x:  pointX + wingDx,  y: -1 },
+      { id: "F", x:  insideSlotX,      y: -1 },
+    ];
+    for (let i = 0; i < Math.min(skillCount, candidates.length); i++) {
+      players.push(candidates[i]);
     }
     return players;
   }
