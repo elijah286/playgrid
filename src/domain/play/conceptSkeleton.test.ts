@@ -1426,3 +1426,65 @@ describe("Power concept — composable in tackle_11 (regression 2026-05-20)", ()
     expect(backCarry.action.runType).toBe("power");
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/*  VARIANT × CONCEPT COVERAGE                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Defense in depth (audit 2026-05-26).
+ *
+ * The "6v6 Flood doesn't actually flood" bug surfaced because every 6v6
+ * concept builder fell through to the 7v7+/tackle code path, referencing
+ * @S (the second slot) — which doesn't exist in 6v6's roster {QB, C, B,
+ * X, Z, H}. The renderer warned `assignment_player_missing` and
+ * silently dropped the route, so coaches saw 4 routes when the spec
+ * called for 5. The notes still mentioned @S because the projector
+ * read from `spec.assignments` (where @S existed), not the rendered
+ * diagram.
+ *
+ * This test pins the invariant that the bug class violates: every
+ * concept builder's output must render WITHOUT dropping any
+ * non-QB assignment. "Q → QB" is whitelisted because qbDropback()
+ * emits the legacy label and the renderer aliases.
+ *
+ * If a new builder ships with a missing variant branch, this test
+ * fails at the EXACT (concept, variant) tuple — surfacing it in CI
+ * instead of letting it slip into a coach's library page.
+ */
+import { CONCEPTS } from "@/domain/football-kg/defs/concepts";
+import type { SportVariant } from "./types";
+
+describe("Concept × variant coverage — no skeleton silently drops assignments", () => {
+  for (const concept of CONCEPTS) {
+    const variants = (concept.variants ?? []) as readonly SportVariant[];
+    for (const variant of variants) {
+      it(`${concept.name} in ${variant}: renders without dropped assignments`, () => {
+        const skeleton = generateConceptSkeleton(concept.name, {
+          variant,
+          strength: "right",
+        });
+        // Concepts may have no builder yet (skip those — covered by
+        // the structural coverage test above).
+        if (!skeleton.ok) return;
+        const { warnings } = playSpecToCoachDiagram(skeleton.spec);
+        const drops = (warnings ?? []).filter(
+          (w) =>
+            w.code === "assignment_player_missing" &&
+            // qbDropback() uses "Q" but the renderer places "QB" —
+            // an unspecified action; the only effect is a warning,
+            // not a missing route.
+            !w.message.includes('"Q"'),
+        );
+        expect(
+          drops,
+          drops.length === 0
+            ? undefined
+            : `Concept "${concept.name}" in ${variant} dropped: ${drops
+                .map((w) => w.message)
+                .join(" | ")}`,
+        ).toHaveLength(0);
+      });
+    }
+  }
+});

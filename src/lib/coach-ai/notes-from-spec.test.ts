@@ -152,7 +152,11 @@ describe("projectSpecToNotes — opener", () => {
 });
 
 describe("projectSpecToNotes — route bullets", () => {
-  it("emits one bullet per route assignment", () => {
+  it("covers every route assignment in the notes (progression OR bullet)", () => {
+    // 2026-05-26 — multi-route specs now emit a numbered Progression
+    // block instead of per-assignment bullets (the two used to
+    // duplicate). The invariant the test pins is still the same:
+    // every route is represented somewhere in the output.
     const notes = projectSpecToNotes(baseSpec({
       assignments: [
         { player: "X", action: { kind: "route", family: "Slant" } },
@@ -160,8 +164,17 @@ describe("projectSpecToNotes — route bullets", () => {
         { player: "H", action: { kind: "route", family: "Hitch" } },
       ],
     }));
-    const bulletLines = notes.split("\n").filter((l) => l.startsWith("- "));
-    expect(bulletLines).toHaveLength(3);
+    // Progression items look like "1. **@X 5-yd slant** — ...".
+    // Bullets look like "- @X: ...". Either counts as coverage.
+    const routeLines = notes
+      .split("\n")
+      .filter(
+        (l) => /^\d+\.\s/.test(l) || l.startsWith("- "),
+      );
+    expect(routeLines.length).toBeGreaterThanOrEqual(3);
+    for (const id of ["X", "Z", "H"]) {
+      expect(notes).toMatch(new RegExp(`@${id}\\b`));
+    }
   });
 
   it("references each player by @Label", () => {
@@ -171,8 +184,11 @@ describe("projectSpecToNotes — route bullets", () => {
         { player: "Z", action: { kind: "route", family: "Post" } },
       ],
     }));
-    expect(notes).toMatch(/@X:/);
-    expect(notes).toMatch(/@Z:/);
+    // Multi-route specs now emit a Progression block — @X / @Z appear
+    // in those numbered lines instead of the per-assignment bullets,
+    // so match the word boundary rather than the legacy "@X:" form.
+    expect(notes).toMatch(/@X\b/);
+    expect(notes).toMatch(/@Z\b/);
   });
 
   it("includes the route family name in lower-case", () => {
@@ -237,17 +253,23 @@ describe("projectSpecToNotes — route bullets", () => {
 
 describe("projectSpecToNotes — non-route actions", () => {
   it("narrates blocks", () => {
+    // @LT only exists in tackle_11's OL — use a tackle spec so the
+    // assignment isn't filtered out as a ghost player.
     const notes = projectSpecToNotes(baseSpec({
+      variant: "tackle_11",
       assignments: [{ player: "LT", action: { kind: "block" } }],
     }));
     expect(notes).toMatch(/@LT: pass protect/);
   });
 
   it("narrates targeted blocks", () => {
+    // @S exists in flag_7v7 Spread Doubles; the original test used @F
+    // (fullback) which doesn't render in this formation and got
+    // filtered out by the 2026-05-26 ghost-player guard.
     const notes = projectSpecToNotes(baseSpec({
-      assignments: [{ player: "F", action: { kind: "block", target: "edge" } }],
+      assignments: [{ player: "S", action: { kind: "block", target: "edge" } }],
     }));
-    expect(notes).toMatch(/@F:.*edge/);
+    expect(notes).toMatch(/@S:.*edge/);
   });
 
   it("narrates ballcarrier with run type", () => {
@@ -265,13 +287,16 @@ describe("projectSpecToNotes — non-route actions", () => {
   });
 
   it("narrates custom actions verbatim from description", () => {
+    // @Y doesn't render in flag_7v7 Spread Doubles (roster uses @H
+    // and @S for the slots). Switched to @S so the assignment
+    // survives the 2026-05-26 ghost-player filter.
     const notes = projectSpecToNotes(baseSpec({
       assignments: [{
-        player: "Y",
+        player: "S",
         action: { kind: "custom", description: "leak out late as a 6th protector" },
       }],
     }));
-    expect(notes).toMatch(/@Y: leak out late/);
+    expect(notes).toMatch(/@S: leak out late/);
   });
 
   it("OMITS unspecified-action players (no fabricated bullet)", () => {
@@ -314,15 +339,23 @@ describe("projectSpecToNotes — confidence hedging", () => {
     expect(notes).not.toMatch(/\(unconfirmed\)/);
   });
 
-  it("hedges only the low-confidence bullet in a mixed-confidence spec", () => {
+  it("hedges only the low-confidence read in a mixed-confidence spec", () => {
+    // 2026-05-26: multi-route specs emit a Progression block (route
+    // bullets are suppressed). Confidence now lives on the
+    // progression line — low-confidence reads get an `(unconfirmed)`
+    // prefix; high-confidence reads don't.
     const notes = projectSpecToNotes(baseSpec({
       assignments: [
         { player: "X", action: { kind: "route", family: "Slant" }, confidence: "high" },
         { player: "Z", action: { kind: "route", family: "Post" }, confidence: "low" },
       ],
     }));
-    const xLine = notes.split("\n").find((l) => l.startsWith("- ") && l.includes("@X"));
-    const zLine = notes.split("\n").find((l) => l.startsWith("- ") && l.includes("@Z"));
+    const xLine = notes
+      .split("\n")
+      .find((l) => /^\d+\.\s/.test(l) && l.includes("@X"));
+    const zLine = notes
+      .split("\n")
+      .find((l) => /^\d+\.\s/.test(l) && l.includes("@Z"));
     expect(xLine).not.toMatch(/\(unconfirmed\)/);
     expect(zLine).toMatch(/\(unconfirmed\)/);
   });

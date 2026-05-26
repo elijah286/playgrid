@@ -89,11 +89,68 @@ export function assertConcept(spec: PlaySpec, conceptName: string): ConceptMatch
  * play with its canonical concept name when the assignments fit.
  */
 export function detectConcept(spec: PlaySpec): ConceptMatchResult | null {
+  // Collect every match, then pick the most-specific one.
+  //
+  // Why not just return the first match (the original 2026-05-25
+  // behavior)? In lenient variants (flag_6v6, flag_4v4) a spec can
+  // satisfy MULTIPLE concepts because the matcher accepts a partial
+  // route-slot fit. Example surfaced 2026-05-26: 6v6 Flood (Corner +
+  // Out + Flat + Go + Sit) also satisfies Curl-Flat's 1-of-2 partial
+  // (only the Flat slot hits), so detectConcept used to label a
+  // Flood diagram as "Curl-Flat" — confusing coaches reading the
+  // library page header.
+  //
+  // Specificity heuristic: the concept with the MOST required slots
+  // satisfied by the spec wins. Flood (3 satisfied) beats Curl-Flat
+  // (1 satisfied) on the same input. Tie-break by catalog order so
+  // results stay deterministic for identical specificity scores.
+  const matches: Array<{ result: ConceptMatchResult; satisfied: number }> = [];
   for (const concept of CONCEPT_CATALOG) {
     const result = matchConcept(spec, concept);
-    if (result.ok) return result;
+    if (!result.ok) continue;
+    // Count how many of the concept's required route slots actually
+    // have a satisfying assignment in the spec (family + depth in
+    // range). For non-lenient variants this always equals
+    // concept.required.length; for lenient variants it can be less.
+    const satisfied = countSatisfiedRequiredSlots(spec, concept);
+    matches.push({ result, satisfied });
   }
-  return null;
+  if (matches.length === 0) return null;
+  matches.sort((a, b) => b.satisfied - a.satisfied);
+  return matches[0].result;
+}
+
+/** Count how many of a concept's required slots the spec satisfies
+ *  on family + depth. Used as the specificity score in
+ *  `detectConcept` — a higher count is a more specific match. */
+function countSatisfiedRequiredSlots(spec: PlaySpec, concept: ConceptEntry): number {
+  let satisfied = 0;
+  const used = new Set<number>();
+  const candidates = spec.assignments
+    .filter((a) => a.action.kind === "route")
+    .map((a) => {
+      // Narrow the action kind for the family + depth lookup.
+      if (a.action.kind !== "route") return null;
+      const t = findTemplate(a.action.family);
+      if (!t) return null;
+      const range = t.constraints.depthRangeYds;
+      const depth = a.action.depthYds ?? Math.round((range.min + range.max) / 2);
+      return { family: t.name, depth };
+    })
+    .filter((c): c is { family: string; depth: number } => c !== null);
+  for (const req of concept.required) {
+    for (let i = 0; i < candidates.length; i++) {
+      if (used.has(i)) continue;
+      const c = candidates[i];
+      if (c.family.toLowerCase() !== req.family.toLowerCase()) continue;
+      if (c.depth >= req.depthRangeYds.min && c.depth <= req.depthRangeYds.max) {
+        used.add(i);
+        satisfied++;
+        break;
+      }
+    }
+  }
+  return satisfied;
 }
 
 /**

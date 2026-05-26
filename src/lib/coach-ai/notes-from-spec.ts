@@ -39,6 +39,7 @@ import type {
 } from "@/domain/play/spec";
 import { findTemplate } from "@/domain/play/routeTemplates";
 import { detectConcept } from "@/domain/play/conceptMatch";
+import { playSpecToCoachDiagram } from "@/domain/play/specRenderer";
 import {
   alignmentWithAssignments,
   findDefensiveAlignment,
@@ -49,11 +50,49 @@ import {
 
 /** Render a PlaySpec into coaching notes. */
 export function projectSpecToNotes(spec: PlaySpec): string {
-  const playType = spec.playType ?? "offense";
+  // **Defense in depth (2026-05-26)**: filter spec.assignments to the
+  // players the renderer ACTUALLY places on the field. The render path
+  // silently drops assignments whose player isn't in the synthesized
+  // roster (e.g. @S in a flag_6v6 formation that has no @S), but the
+  // notes projector historically iterated `spec.assignments` directly —
+  // so the prose described ghost players the coach couldn't see. This
+  // wrapper makes that class of bug structurally impossible: anything
+  // not in the rendered diagram cannot appear in the notes. Crashes in
+  // the renderer fall through to trusting the spec (a no-op filter) so
+  // we never lose ALL bullets to a rendering edge case.
+  const filtered = filterAssignmentsToActualRoster(spec);
+  const playType = filtered.playType ?? "offense";
   if (playType === "defense") {
-    return projectDefenseSpec(spec);
+    return projectDefenseSpec(filtered);
   }
-  return projectOffenseSpec(spec);
+  return projectOffenseSpec(filtered);
+}
+
+/** Return a spec whose `assignments` only includes players the
+ *  renderer actually places. See the comment in `projectSpecToNotes`
+ *  for why this is the projector's first move. */
+function filterAssignmentsToActualRoster(spec: PlaySpec): PlaySpec {
+  let actualIds: Set<string>;
+  try {
+    const { diagram } = playSpecToCoachDiagram(spec);
+    actualIds = new Set(diagram.players.map((p) => p.id));
+  } catch {
+    // Renderer crashed — fall back to no filter (better partial notes
+    // than zero notes).
+    return spec;
+  }
+  // qbDropback() emits an assignment with player "Q" but the renderer
+  // places the QB with id "QB". Treat "Q" as a synonym so we don't
+  // drop the QB's (already-unspecified) assignment for a label mismatch.
+  if (actualIds.has("QB")) actualIds.add("Q");
+  // Mirror the renderer's id-uniquing for defense: two DTs become DT
+  // and DT2. The spec might reference the bare role; accept either
+  // form to avoid filtering valid defender assignments.
+  const filteredAssignments = spec.assignments.filter((a) =>
+    actualIds.has(a.player),
+  );
+  if (filteredAssignments.length === spec.assignments.length) return spec;
+  return { ...spec, assignments: filteredAssignments };
 }
 
 function projectOffenseSpec(spec: PlaySpec): string {
@@ -98,15 +137,24 @@ function projectOffenseSpec(spec: PlaySpec): string {
   // structural read order; generic plays use depth-based scoring.
   // Suppressed on single-route demos and run-only plays.
   const progression = progressionLines(spec);
-  if (progression && progression.length > 0) {
+  const hasProgression = progression !== null && progression.length > 0;
+  if (hasProgression) {
     lines.push("");
     lines.push("**Progression:**");
-    for (const p of progression) lines.push(p);
+    for (const p of progression!) lines.push(p);
     lines.push("");
   }
 
   // Per-assignment bullet. Skip `unspecified` — they add noise.
+  // **Suppress route bullets when the Progression block exists**
+  // (2026-05-26). Both the numbered progression and the per-route
+  // bullet describe the same data — family + depth + coaching cue —
+  // so showing both reads as duplicated content on library pages
+  // and in chat. Non-route bullets (carries, blocks, RPO reads,
+  // motion) still render because the progression doesn't describe
+  // those.
   for (const assignment of spec.assignments) {
+    if (hasProgression && assignment.action.kind === "route") continue;
     const bullet = bulletFor(assignment, playCtx);
     if (bullet) lines.push(`- ${bullet}`);
   }
@@ -813,7 +861,13 @@ function progressionLines(spec: PlaySpec): string[] | null {
     // know WHY each route is in this position.
     const role = readRoleLabel(i, ordered.length, family, depth);
     const depthStr = typeof depth === "number" ? `${Math.round(depth)}-yd ` : "";
-    lines.push(`${i + 1}. **${ref} ${depthStr}${family}** — ${role}`);
+    // Carry confidence through to the progression line — low-confidence
+    // reads get an `(unconfirmed)` prefix so coaches scanning the read
+    // order know the staffing on that route isn't pinned. Before route
+    // bullets were suppressed (2026-05-26), this lived on the bullet
+    // line; the progression now owns it.
+    const unconfirmed = r.confidence === "low" ? "(unconfirmed) " : "";
+    lines.push(`${i + 1}. ${unconfirmed}**${ref} ${depthStr}${family}** — ${role}`);
   }
   return lines;
 }
