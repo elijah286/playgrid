@@ -89,40 +89,134 @@ export function assertConcept(spec: PlaySpec, conceptName: string): ConceptMatch
  * play with its canonical concept name when the assignments fit.
  */
 export function detectConcept(spec: PlaySpec): ConceptMatchResult | null {
-  // Collect every match, then pick the most-specific one.
+  // Collect every concept the spec satisfies, then pick the most-
+  // specific by a 3-axis score.
   //
-  // Why not just return the first match (the original 2026-05-25
-  // behavior)? In lenient variants (flag_6v6, flag_4v4) a spec can
-  // satisfy MULTIPLE concepts because the matcher accepts a partial
-  // route-slot fit. Example surfaced 2026-05-26: 6v6 Flood (Corner +
-  // Out + Flat + Go + Sit) also satisfies Curl-Flat's 1-of-2 partial
-  // (only the Flat slot hits), so detectConcept used to label a
-  // Flood diagram as "Curl-Flat" — confusing coaches reading the
-  // library page header.
-  //
-  // Specificity heuristic: the concept with the MOST required slots
-  // satisfied by the spec wins. Flood (3 satisfied) beats Curl-Flat
-  // (1 satisfied) on the same input. Tie-break by catalog order so
-  // results stay deterministic for identical specificity scores.
-  const matches: Array<{ result: ConceptMatchResult; satisfied: number }> = [];
+  // History:
+  //   2026-05-25: catalog-order first-match (broke 6v6 Flood → Curl-Flat
+  //               because Curl-Flat's 1-of-2 partial matched earlier).
+  //   2026-05-26: tie-break by satisfied-route-slot count (helped 6v6
+  //               Flood but didn't help run plays or trick plays whose
+  //               `required` is empty — they always scored 0 and lost
+  //               to whatever partial-matched first).
+  //   2026-05-26 (this revision): three-axis specificity:
+  //     1. Total structural+route score (structural ×5, slots ×1).
+  //        Structural requirements (carry / rpo_read / ballPath shape)
+  //        are MORE specific than route family hits — only one or two
+  //        concepts have each structural signature, but many concepts
+  //        share route slots (every play with a slot Sit + back Flat
+  //        partial-matches Stick). Multiplying structural by 5 reflects
+  //        that uniqueness. Without this, QB Draw / Sweep / Flea
+  //        Flicker etc. (all `required: []`) score 0 and lose to any
+  //        concept that grabs a single satisfying route.
+  //     2. Complexity tier (advanced > intermediate > basic). Breaks
+  //        ties between two concepts whose route patterns BOTH fully
+  //        match — typically a basic concept (Stick: Sit + Flat) is
+  //        being matched as a subset of a more complex one (Drive:
+  //        Drag + Dig + Sit + Flat). The advanced/intermediate
+  //        concept is the more specific call.
+  //     3. Catalog order (stable sort tail). Ensures deterministic
+  //        output when score + complexity tie.
+  const matches: ConceptScore[] = [];
   for (const concept of CONCEPT_CATALOG) {
     const result = matchConcept(spec, concept);
     if (!result.ok) continue;
-    // Count how many of the concept's required route slots actually
-    // have a satisfying assignment in the spec (family + depth in
-    // range). For non-lenient variants this always equals
-    // concept.required.length; for lenient variants it can be less.
-    const satisfied = countSatisfiedRequiredSlots(spec, concept);
-    matches.push({ result, satisfied });
+    matches.push(scoreConcept(spec, concept, result));
   }
   if (matches.length === 0) return null;
-  matches.sort((a, b) => b.satisfied - a.satisfied);
+  matches.sort(compareConceptScores);
   return matches[0].result;
 }
 
-/** Count how many of a concept's required slots the spec satisfies
- *  on family + depth. Used as the specificity score in
- *  `detectConcept` — a higher count is a more specific match. */
+type ConceptScore = {
+  result: ConceptMatchResult;
+  satisfiedRouteSlots: number;
+  unsatisfiedRouteSlots: number;
+  satisfiedStructural: number;
+  complexity: ConceptEntry["complexity"];
+};
+
+function scoreConcept(
+  spec: PlaySpec,
+  concept: ConceptEntry,
+  result: ConceptMatchResult,
+): ConceptScore {
+  const satisfiedRouteSlots = countSatisfiedRequiredSlots(spec, concept);
+  return {
+    result,
+    satisfiedRouteSlots,
+    unsatisfiedRouteSlots: concept.required.length - satisfiedRouteSlots,
+    // If `matchConcept` returned ok=true, every declared structural
+    // requirement was satisfied (it short-circuits on the first
+    // failure). So the count of satisfied structural reqs equals the
+    // number of keys on the concept's structural object.
+    satisfiedStructural: concept.structural ? Object.keys(concept.structural).length : 0,
+    complexity: concept.complexity,
+  };
+}
+
+/** Comparator for ConceptScore. Higher specificity wins → returns
+ *  negative when `a` is more specific than `b` (so it sorts to the
+ *  front). Four axes in priority order:
+ *    1. Total weighted score DESC (route slots ×1 + structural ×5).
+ *       Structural requirements (carry / rpo_read / ballPath shape)
+ *       are FAR more distinctive than individual route slots — only
+ *       one or two concepts have each, while route slots like Sit /
+ *       Flat appear as "supporting" routes in many concepts. The
+ *       ×5 weight ensures a QB Draw or Flea Flicker (0 route slots
+ *       + 1–2 structural reqs) outranks any pass concept that happens
+ *       to partial-match the spec's incidental route bullets.
+ *       Also: a concept with MORE satisfied slots is a more specific
+ *       fit, e.g. 6v6 Four Verts (3 satisfied) > Stick (2 satisfied)
+ *       even when Stick's full pattern is a subset of the spec.
+ *    2. Unsatisfied route slots ASC — a FULL match (e.g. Smash 2/2)
+ *       beats a PARTIAL match (e.g. Snag 2/3 in lenient mode) when
+ *       the raw satisfied count ties. Without this, partial matches
+ *       on bigger concepts would outrank full matches on smaller
+ *       ones that happen to score the same.
+ *    3. Complexity tier DESC (advanced > intermediate > basic).
+ *       Breaks ties between two concepts whose route patterns BOTH
+ *       fully match — typically a basic concept is being subset-
+ *       matched as part of a more complex one (Stick: Sit+Flat as
+ *       subset of Drive: Drag+Dig+Sit+Flat). The more-complex call
+ *       is more specific.
+ *    4. Catalog order (stable sort tail) — deterministic output. */
+function compareConceptScores(a: ConceptScore, b: ConceptScore): number {
+  const aTotal = totalScore(a);
+  const bTotal = totalScore(b);
+  if (aTotal !== bTotal) return bTotal - aTotal;
+  if (a.unsatisfiedRouteSlots !== b.unsatisfiedRouteSlots) {
+    return a.unsatisfiedRouteSlots - b.unsatisfiedRouteSlots;
+  }
+  const aCx = complexityRank(a.complexity);
+  const bCx = complexityRank(b.complexity);
+  if (aCx !== bCx) return bCx - aCx;
+  return 0; // catalog order via stable sort
+}
+
+/** Weighted specificity score. Structural requirements are ×5
+ *  because they're far more distinctive than route slots — only a
+ *  handful of concepts have each (carry / rpo_read / ballPath shape),
+ *  while route slots like Sit / Flat appear across many concepts as
+ *  "supporting" routes. Without the weight, run/trick plays with
+ *  empty `required` would always lose to passing concepts that
+ *  partial-match a single slot. */
+function totalScore(s: ConceptScore): number {
+  return s.satisfiedRouteSlots + s.satisfiedStructural * 5;
+}
+
+function complexityRank(c: ConceptEntry["complexity"]): number {
+  switch (c) {
+    case "advanced": return 3;
+    case "intermediate": return 2;
+    case "basic": return 1;
+    default: return 0;
+  }
+}
+
+/** Count how many of a concept's required route slots the spec
+ *  satisfies on family + depth. Used as the route-slot component of
+ *  the specificity score in `detectConcept`. */
 function countSatisfiedRequiredSlots(spec: PlaySpec, concept: ConceptEntry): number {
   let satisfied = 0;
   const used = new Set<number>();
@@ -182,8 +276,12 @@ function countSatisfiedRequiredSlots(spec: PlaySpec, concept: ConceptEntry): num
 // instead of 4). Route-slot violations relax; structural requirements
 // (carry/ballPath/rpo) stay strict.
 //   - flag_6v6 → 6 eligibles can't field every concept's full slot set
+//   - flag_5v5 → 5 eligibles can't either (added 2026-05-26 — 5v5
+//                Four Verts ships as "3 Verts + C outlet" and Dagger
+//                drops the slot Sit; both are real coach-recognizable
+//                adaptations, not regressions)
 //   - flag_4v4 → 3 eligibles same problem one tier deeper
-const LENIENT_PATTERN_VARIANTS = new Set<string>(["flag_6v6", "flag_4v4"]);
+const LENIENT_PATTERN_VARIANTS = new Set<string>(["flag_6v6", "flag_5v5", "flag_4v4"]);
 
 function matchConcept(spec: PlaySpec, concept: ConceptEntry): ConceptMatchResult {
   // Build all spec assignments that have a route family.
@@ -289,7 +387,7 @@ function matchConcept(spec: PlaySpec, concept: ConceptEntry): ConceptMatchResult
       const matchingCarry = carries.find((a) => {
         if (a.action.kind !== "carry") return false; // narrow for TS
         if (filter.player === "qb" && !isQbId(a.player)) return false;
-        if (filter.player === "back" && !isBackId(a.player)) return false;
+        if (filter.player === "back" && !isBackId(a.player, spec.variant)) return false;
         if (filter.runTypes && filter.runTypes.length > 0) {
           if (!a.action.runType) return false;
           if (!filter.runTypes.includes(a.action.runType)) return false;
@@ -370,8 +468,15 @@ const BACK_PLAYER_IDS = new Set(["B", "F", "RB", "HB", "TB", "FB"]);
 function isQbId(id: string): boolean {
   return QB_PLAYER_IDS.has(id.toUpperCase());
 }
-function isBackId(id: string): boolean {
-  return BACK_PLAYER_IDS.has(id.toUpperCase());
+function isBackId(id: string, variant?: PlaySpec["variant"]): boolean {
+  if (BACK_PLAYER_IDS.has(id.toUpperCase())) return true;
+  // flag_5v5 has no @B in the {Q, C, X, Y, Z} roster — @Y plays the
+  // back-equivalent role in run-game concepts (Sweep/Dive/Counter/
+  // Draw all use carrierId="Y" in 5v5). Without this exception, the
+  // matchConcept structural carry filter `filter.player === "back"`
+  // rejects every 5v5 run play, so detectConcept returns NONE.
+  if (variant === "flag_5v5" && id.toUpperCase() === "Y") return true;
+  return false;
 }
 
 /**

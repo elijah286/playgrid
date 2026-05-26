@@ -1158,9 +1158,14 @@ function buildYCross(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRe
 function buildDagger(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
   const variant = opts.variant;
   if (variant === "flag_5v5") {
+    // X Dig @ 15 (not 12) so the depth falls inside Dagger's
+    // required Dig [14,16] range and detectConcept counts it as
+    // a satisfied slot. Without this, 5v5 Dagger labels itself as
+    // Four Verticals because Four Verts's lenient 2-Go-1-Seam
+    // partial outscored Dagger's 1-of-2 strict partial.
     const assignments = flagFiveRoutes({
       Y: { family: "Seam", depthYds: 14 },
-      X: { family: "Dig", depthYds: 12 },
+      X: { family: "Dig", depthYds: 15 },
       Z: { family: "Go", depthYds: 18 },
       C: { family: "Sit", depthYds: 5 },
     });
@@ -1169,7 +1174,7 @@ function buildDagger(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRe
       concept: "Dagger",
       spec: baseSpec(variant, "Dagger", "Spread Doubles", undefined, assignments),
       notes:
-        `Dagger (5v5): @Y seam @ 14yd (vertical clear) + @X dig @ 12yd (in the void) — same vertical-stretch + dig logic as 7v7/tackle. @Z deep clear; @C sits @ 5yd as the eligible outlet.`,
+        `Dagger (5v5): @Y seam @ 14yd (vertical clear) + @X dig @ 15yd (in the void) — same vertical-stretch + dig logic as 7v7/tackle. @Z deep clear; @C sits @ 5yd as the eligible outlet.`,
     };
   }
   if (variant === "flag_6v6") {

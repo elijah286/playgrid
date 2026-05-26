@@ -1488,3 +1488,43 @@ describe("Concept × variant coverage — no skeleton silently drops assignments
     }
   }
 });
+
+/**
+ * Audit 2026-05-26 (Phase 2): every concept's skeleton output must
+ * also DETECT as that concept via `detectConcept`. Before this test,
+ * 23 (concept × variant) tuples mislabeled themselves — 6v6 Flood
+ * detected as Curl-Flat, 7v7 Drive detected as Stick, etc. The prose
+ * lead in `projectSpecToNotes` reads from `detectConcept`, so a
+ * mislabel showed up as the wrong concept name + description at the
+ * top of every library page.
+ *
+ * The new specificity scoring (total score → unsatisfied count →
+ * complexity → catalog order) gets every (concept × supported-
+ * variant) tuple correct. This test pins that — adding a new
+ * concept whose pattern accidentally subset-matches an existing one
+ * will fail at the exact tuple in CI.
+ */
+import { detectConcept } from "./conceptMatch";
+
+describe("Concept × variant detection — skeleton output detects as the right concept", () => {
+  for (const concept of CONCEPTS) {
+    const variants = (concept.variants ?? []) as readonly SportVariant[];
+    for (const variant of variants) {
+      it(`${concept.name} in ${variant}: detectConcept returns "${concept.name}"`, () => {
+        const skeleton = generateConceptSkeleton(concept.name, {
+          variant,
+          strength: "right",
+        });
+        if (!skeleton.ok) return;
+        const detected = detectConcept(skeleton.spec);
+        const name = detected?.ok ? detected.concept.name : "NONE";
+        expect(
+          name,
+          name === concept.name
+            ? undefined
+            : `Skeleton for "${concept.name}" in ${variant} detected as "${name}" — specificity scoring or skeleton output is drifting`,
+        ).toBe(concept.name);
+      });
+    }
+  }
+});

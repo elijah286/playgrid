@@ -28,6 +28,13 @@ import type { ConceptDef } from "../schemas/ConceptDef";
 
 const ALL_VARIANTS = ["flag_5v5", "flag_6v6", "flag_7v7", "tackle_11"] as const;
 const TACKLE_ONLY = ["tackle_11"] as const;
+// Concepts that require a true back position. 5v5 flag rosters {Q, C,
+// X, Y, Z} — no @B — so the RPO read ("give to back, or throw the
+// pass") can't be modeled. Surfaced 2026-05-26 when the 5v5 Bubble
+// RPO library page failed every detection: the spec couldn't include
+// a carry without a back, and matchConcept's structural carry filter
+// (requiresCarry.player="back") rejected the spec.
+const NEEDS_BACK = ["flag_6v6", "flag_7v7", "tackle_11"] as const;
 
 export const CONCEPTS: ConceptDef[] = [
   // ── Pass concepts ─────────────────────────────────────────────────
@@ -341,7 +348,13 @@ export const CONCEPTS: ConceptDef[] = [
     id: "bubble-rpo",
     name: "Bubble RPO",
     family: "concept",
-    variants: [...ALL_VARIANTS],
+    // Excludes flag_5v5: the RPO mechanic requires a back to hand to,
+    // and 5v5 has no @B in its {Q,C,X,Y,Z} roster — there's no second
+    // option for the QB to read between. Without removing 5v5 here,
+    // the library page for 5v5 Bubble RPO would never satisfy the
+    // concept's structural carry filter and detectConcept would label
+    // it as a different concept (Smash, in practice).
+    variants: [...NEEDS_BACK],
     description: "Inside Zone + Bubble screen tag — QB reads conflict defender for run/throw.",
     body: "Run-pass option built on Inside Zone with a bubble screen tag. The OL run-blocks; the back takes the Inside Zone path; a slot receiver releases on a bubble (lateral release, settling 0–2 yds behind the LOS); the QB reads the conflict defender (typically the playside OLB / overhang). If the conflict defender comes down to fill the run, the QB pulls and throws the bubble — the slot has the perimeter outflanked. If the defender stays out to play the bubble, the QB gives and the back hits a 5-on-5 box. Modern HS / college / NFL staple.",
     aliases: ["Bubble Screen RPO", "RPO Bubble", "Inside Zone Bubble"],
