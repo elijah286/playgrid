@@ -10,7 +10,7 @@ import {
   variantToSlug,
   type LibraryVariant,
 } from "@/lib/learn/variant";
-import { DEFAULT_LIBRARY_VARIANT } from "../VariantPill";
+import { DEFAULT_LIBRARY_VARIANT } from "@/lib/learn/variant";
 import { CategoryIndex } from "../_CategoryIndex";
 
 export const metadata: Metadata = {

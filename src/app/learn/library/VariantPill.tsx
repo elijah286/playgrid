@@ -21,11 +21,17 @@ const VARIANTS = [
 
 type VariantValue = (typeof VARIANTS)[number]["value"];
 
-/** Default variant when no `?v=` param is set. flag_5v5 is the
- *  highest-volume library target — best entry point for an
- *  unauthenticated visitor landing on /learn/library. */
-export const DEFAULT_LIBRARY_VARIANT: VariantValue = "flag_5v5";
-export const DEFAULT_LIBRARY_VARIANT_SLUG = "flag-5v5";
+// Default-variant constants moved to `src/lib/learn/variant.ts` so
+// server components can import them — this file is `"use client"`,
+// and Next.js wraps non-component exports from client modules as
+// "client references" that server components can't call. Importing
+// directly from the server-safe variant module avoids the
+// production-only runtime crash that produced the `routes/[slug]`
+// "Something went wrong" error (2026-05-26).
+import {
+  DEFAULT_LIBRARY_VARIANT,
+  DEFAULT_LIBRARY_VARIANT_SLUG,
+} from "@/lib/learn/variant";
 
 /** Persistent variant filter for the Football Library. Tracked on the
  *  URL as `?v=flag-5v5` so navigation between library pages preserves

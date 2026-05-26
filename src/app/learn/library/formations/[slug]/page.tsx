@@ -19,7 +19,8 @@ import {
   variantToSlug,
   type LibraryVariant,
 } from "@/lib/learn/variant";
-import { DEFAULT_LIBRARY_VARIANT, VariantPill } from "../../VariantPill";
+import { DEFAULT_LIBRARY_VARIANT } from "@/lib/learn/variant";
+import { VariantPill } from "../../VariantPill";
 
 export const dynamicParams = false;
 export const revalidate = 3600;

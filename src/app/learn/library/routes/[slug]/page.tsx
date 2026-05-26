@@ -14,7 +14,7 @@ import { PlayEditorClient } from "@/features/editor/PlayEditorClient";
 import { isFootballLibraryAvailable } from "@/lib/learn/access";
 import { toLearnSlug } from "@/lib/learn/links";
 import { withFullContext } from "@/lib/seo/ld-json";
-import { DEFAULT_LIBRARY_VARIANT } from "../../VariantPill";
+import { DEFAULT_LIBRARY_VARIANT } from "@/lib/learn/variant";
 
 export const dynamicParams = false;
 export const revalidate = 3600;

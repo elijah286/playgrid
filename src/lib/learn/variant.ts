@@ -37,6 +37,15 @@ export const LIBRARY_VARIANTS: ReadonlyArray<LibraryVariant> = [
   "tackle_11",
 ];
 
+/** Default variant when no `?v=` param is set. flag_5v5 is the
+ *  highest-volume library target — best entry point for an
+ *  unauthenticated visitor landing on /learn/library. Lives here
+ *  (not in VariantPill.tsx) because server components need to
+ *  import it; `"use client"` modules can't be safely consumed
+ *  from server components for non-component exports. */
+export const DEFAULT_LIBRARY_VARIANT: LibraryVariant = "flag_5v5";
+export const DEFAULT_LIBRARY_VARIANT_SLUG = "flag-5v5";
+
 export const VARIANT_LABEL: Record<LibraryVariant, string> = {
   flag_5v5: "5v5 Flag",
   flag_6v6: "6v6 Flag",
