@@ -222,6 +222,31 @@ describe("generateConceptSkeleton — Mesh in flag_5v5 crossing pair", () => {
   });
 });
 
+// ── Stick 5v5: strong-side outside WR clears the corner (audit #3) ──
+// The prior 5v5 Stick had both outside WRs running Hitch @ 5, which
+// left the corner camping at 5-8yd over the slot's stick route. The
+// canonical Stick concept REQUIRES the strong-side outside WR (#1)
+// to run a fade/go to pull the corner over the top — only then does
+// the high-low on the flat defender actually work.
+describe("generateConceptSkeleton — Stick in flag_5v5 strong-side clear", () => {
+  it("strong-side outside WR runs a vertical clear (Go), not a Hitch", () => {
+    const result = generateConceptSkeleton("Stick", {
+      variant: "flag_5v5",
+      strength: "right",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // For right-strength Stick the strong-side outside is @Z.
+    const strongSide = result.spec.assignments.find((a) => a.player === "Z");
+    expect(strongSide?.action.kind).toBe("route");
+    if (strongSide?.action.kind !== "route") return;
+    expect(
+      strongSide.action.family,
+      "Strong-side outside WR must clear the corner with Go/Fade — Hitch leaves the corner sitting on the stick",
+    ).toBe("Go");
+  });
+});
+
 describe("generateConceptSkeleton — flag_6v6 end-to-end", () => {
   // Smoke test that the new flag_6v6 variant composes legal plays for the
   // pass-concept skeletons (the ones a 6v6 coach would actually call). The

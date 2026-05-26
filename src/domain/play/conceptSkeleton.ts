@@ -403,12 +403,27 @@ function buildStick(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRes
     };
   }
   if (variant === "flag_5v5") {
-    // Stick 5v5: Y plays the slot stick (Sit @ 6yd). C takes the Flat
-    // as the eligible underneath. X/Z run quick verticals to clear.
+    // Stick 5v5: CORRECTED 2026-05-26 (audit finding #3). Prior
+    // version had both outside WRs running Hitch @ 5 — which is
+    // WRONG because the outside WR (#1) needs to RUN A CLEAR
+    // (fade/go) to pull the corner over the top. Without that
+    // clear, the corner camps at 5-8yd over the stick and erases
+    // the concept's "high-low on the flat defender" stretch. The
+    // backside WR's hitch was acceptable, but the strong-side one
+    // was breaking the play.
+    //
+    // Routes:
+    //   @Y stick @ 6yd      — the slot stick (sit facing QB)
+    //   @C flat @ 4yd       — the eligible underneath (5v5 has C)
+    //   @[outsideWR] go @ 18yd — clears the corner (the strong-
+    //                            side outside WR)
+    //   @[backsideWR] hitch @ 5yd — backside hitch (acceptable
+    //                            since the stick side is what
+    //                            needs the clear)
     const assignments = flagFiveRoutes({
       Y: { family: "Sit", depthYds: 6 },
       C: { family: "Flat", depthYds: 4 },
-      [outsideWR]: { family: "Hitch", depthYds: 5 },
+      [outsideWR]: { family: "Go", depthYds: 18 },
       [backsideWR]: { family: "Hitch", depthYds: 5 },
     });
     return {
@@ -416,7 +431,7 @@ function buildStick(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRes
       concept: "Stick",
       spec: baseSpec(variant, `Stick ${cap(side)}`, "Trips", side, assignments),
       notes:
-        `Stick ${cap(side)}: @Y stick @ 6yd, @C flat @ 4yd — high-low (5v5: C is the eligible underneath). @${outsideWR}/@${backsideWR} hitch @ 5yd.`,
+        `Stick ${cap(side)}: @Y stick @ 6yd, @C flat @ 4yd — high-low (5v5: C is the eligible underneath). @${outsideWR} go @ 18yd clears the corner over the top; @${backsideWR} hitch @ 5yd backside.`,
     };
   }
   const slot = side === "right" ? "S" : "H";
