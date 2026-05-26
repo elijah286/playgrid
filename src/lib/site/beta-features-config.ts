@@ -30,10 +30,9 @@ const DEFAULTS: BetaFeatures = {
   // scope="me" via the admin UI for site-admin-only testing.
   coach_ai_image_upload: "off",
   // Football Library — /learn/library and every concept/route page
-  // under it. Hidden from anonymous + non-admin users until the
-  // editorial pass is fuller; admins see the full library so they
-  // can review content in production.
-  football_library: "me",
+  // under it. Public (un-gated 2026-05-26) so the catalog can be
+  // crawled and indexed; flip back to "me" or "off" to hide.
+  football_library: "all",
 };
 
 /** Safe "everything off" fallback for callers that need a value even when

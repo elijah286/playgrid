@@ -22,7 +22,7 @@ const DEFAULTS: BetaFeatures = {
   version_history: "off",
   team_messaging: "off",
   coach_ai_image_upload: "off",
-  football_library: "me",
+  football_library: "all",
 };
 
 export async function getBetaFeaturesAction() {
