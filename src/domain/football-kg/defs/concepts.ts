@@ -41,6 +41,12 @@ export const CONCEPTS: ConceptDef[] = [
     aliases: ["Curl/Flat", "Hook-Flat"],
     complexity: "basic",
     defaultFormation: { id: "doubles", strength: "right" },
+    whenToUse: "Call on 2nd-and-medium or 3rd-and-short vs zone underneath — the flat defender can't cover both layers. Avoid vs man press if your outside receiver can't separate at the top of the curl.",
+    commonMistakes: [
+      "Curl receiver settles too deep — the LB beneath him stays in the throwing lane. Settle at 5-6 yards, not 8+.",
+      "Flat release tangles with the curl. Spacing should be at least 5 yards apart at the snap.",
+      "QB stares at the curl; if zone rotates, throw the flat fast — it's the cheaper completion.",
+    ],
     pattern: [
       { role: "outside_wr", family: "Curl", depthRangeYds: { min: 4, max: 7 } },
       { role: "any",        family: "Flat", depthRangeYds: { min: 0, max: 4 } },
@@ -56,6 +62,13 @@ export const CONCEPTS: ConceptDef[] = [
     aliases: ["Slant/Flat"],
     complexity: "basic",
     defaultFormation: { id: "doubles", strength: "right" },
+    whenToUse: "Quick-game answer to press man — the slant is one of football's most reliable press-beaters. Also strong vs Cover 2 with the slant fitting between the corner and the safety.",
+    commonMistakes: [
+      "Slant breaks too vertical — should be ~45° inside, not 60-75° (that's a deep dig, not a slant).",
+      "Flat releases under the slant; should be on the OUTSIDE so the QB has a clean look at both options.",
+      "Slant receiver waits to break — at 3 yards he should already be in the cut.",
+      "QB throws late. This is a rhythm throw on the third step from shotgun — if it's not there by then, scramble.",
+    ],
     pattern: [
       { role: "outside_wr", family: "Slant", depthRangeYds: { min: 3, max: 7 } },
       { role: "any",        family: "Flat",  depthRangeYds: { min: 0, max: 4 } },
@@ -71,6 +84,13 @@ export const CONCEPTS: ConceptDef[] = [
     aliases: ["Smash Concept"],
     complexity: "basic",
     defaultFormation: { id: "doubles", strength: "right" },
+    whenToUse: "Cover-2 killer — the corner over the top puts the safety in a no-win choice and the hitch underneath is the safe check-down. Reliable on 1st-and-10 or 2nd-and-medium against a 2-shell team.",
+    commonMistakes: [
+      "Corner depth too shallow — the safety squeezes it. Aim for 12-15 yards before the break.",
+      "Hitch settles at the wrong depth; should be at 5 yards with eyes back to the QB by the third step.",
+      "QB throws the hitch first against zone — wrong read. Check the corner first, dump the hitch if covered.",
+      "Receivers cross the same vertical lane and create traffic. Outside should win to the sideline; corner climbs to the boundary.",
+    ],
     pattern: [
       { role: "outside_wr", family: "Hitch",  depthRangeYds: { min: 4, max: 6 } },
       { role: "any",        family: "Corner", depthRangeYds: { min: 12, max: 18 } },
@@ -86,6 +106,12 @@ export const CONCEPTS: ConceptDef[] = [
     aliases: ["Stick Concept"],
     complexity: "basic",
     defaultFormation: { id: "trips", strength: "right" },
+    whenToUse: "3rd-down staple, especially 3rd-and-3 to 3rd-and-6. The sit gives you a settled target; the flat is the hot if zone rotates underneath.",
+    commonMistakes: [
+      "Slot doesn't sit — keeps running, the route becomes a dig and loses the high-low element.",
+      "Outside receiver doesn't clear hard enough; the deep defender sinks and the stick window closes.",
+      "QB throws the flat before reading the LB — kills the high-low purpose. Read the underneath defender first.",
+    ],
     pattern: [
       { role: "slot", family: "Sit",  depthRangeYds: { min: 5, max: 7 } },
       { role: "any",  family: "Flat", depthRangeYds: { min: 0, max: 4 } },
@@ -101,6 +127,12 @@ export const CONCEPTS: ConceptDef[] = [
     aliases: ["Snag Concept", "Spot Concept"],
     complexity: "intermediate",
     defaultFormation: { id: "trips-bunch", strength: "right" },
+    whenToUse: "Versatile triangle vs Cover 1 or Cover 3 — three options at three depths. Strong on 2nd-and-medium when you need positive yards regardless of look.",
+    commonMistakes: [
+      "Snag receiver doesn't sit in the soft spot; either keeps running or settles too deep.",
+      "Corner route flattens out; should be a true corner break at 45°, not a deep out.",
+      "RB flat doesn't get vertical leverage on the linebacker; flat should be back to the sideline at 0-3 yards.",
+    ],
     pattern: [
       { role: "slot",       family: "Spot",   depthRangeYds: { min: 4, max: 7 } },
       { role: "outside_wr", family: "Corner", depthRangeYds: { min: 12, max: 18 } },
@@ -120,6 +152,12 @@ export const CONCEPTS: ConceptDef[] = [
     altFormations: [
       { id: "empty", note: "5-wide variant — all four receivers can release on verts plus a fifth choice route" },
       { id: "trips", note: "Trips side runs 3 verts; backside isolate runs the 4th" },
+    ],
+    whenToUse: "Best on 1st-and-10 or shot plays vs single-high coverage — seam routes attack the safety's space, and a man corner can't run with a vertical for 50 yards. Avoid vs deep zone (Cover 4) which has too many bodies in the deep half.",
+    commonMistakes: [
+      "Inside receivers don't bend their seam — should track at 2-yard width inside the hash to attack the FS.",
+      "Outside receivers run pure verticals vs deep zone — should adjust to comebacks at 14-16 yards.",
+      "QB throws on rhythm without reading the safety; this is a read-then-throw, not a pre-snap throw.",
     ],
     pattern: [
       { role: "outside_wr", family: "Go",   depthRangeYds: { min: 12, max: 25 } },
@@ -141,6 +179,18 @@ export const CONCEPTS: ConceptDef[] = [
     altFormations: [
       { id: "diamond", note: "Diamond formation tightens the mesh angle — rubs hit faster vs press man" },
     ],
+    whenToUse: "Best vs man coverage — the natural rub at the cross gives both crossers a free release. Also reliable as a check-down vs blitz because the drags break inside out of the rush. Avoid vs Cover 2 with a deep middle safety; the underneath shells smother the crossers.",
+    commonMistakes: [
+      "Crossers at the same depth — they collide and defenders stay glued. Depth differential should be at least 2 yards.",
+      "QB locks onto the first crosser; the second crosser comes open a half-tick later behind the rub.",
+      "Tightening the cross too close to the LOS — defenders can re-route from underneath. Cross at 5-7 yards minimum.",
+      "No check-down outlet. Mesh wants an RB or center as a hot route against blitz.",
+    ],
+    reads: [
+      { progression: 1, player: "Flat / check-down", window: "vs blitz — throw immediately", coverage: "vs pressure" },
+      { progression: 2, player: "Under-drag", window: "first crosser behind the LBs", coverage: "vs man" },
+      { progression: 3, player: "Over-drag", window: "second crosser behind the rub", coverage: "vs man" },
+    ],
     pattern: [
       { role: "any", family: "Drag", depthRangeYds: { min: 2, max: 3.5 } },
       { role: "any", family: "Drag", depthRangeYds: { min: 6, max: 9 } },
@@ -157,6 +207,12 @@ export const CONCEPTS: ConceptDef[] = [
     complexity: "intermediate",
     defaultFormation: { id: "trips", strength: "right" },
     sameSideRequired: true,
+    whenToUse: "Best vs Cover 3 — the three-level stretch puts the deep defender, the curl-flat defender, and the boundary corner each in conflict. Doesn't beat 2-shell coverages with two deep safeties.",
+    commonMistakes: [
+      "Routes stack vertically instead of stretching flat-to-deep — one defender can cover them all.",
+      "Deep route runs at the wrong landmark; should be at the numbers, not the hash.",
+      "Flat releases too late; should be the first route to declare so the underneath defender commits.",
+    ],
     pattern: [
       { role: "any", family: "Corner", depthRangeYds: { min: 12, max: 18 } },
       { role: "any", family: "Out",    depthRangeYds: { min: 8,  max: 12 } },
@@ -173,6 +229,12 @@ export const CONCEPTS: ConceptDef[] = [
     aliases: ["Drive Concept"],
     complexity: "intermediate",
     defaultFormation: { id: "doubles", strength: "right" },
+    whenToUse: "Excellent answer to Cover 1 — the drag eats horizontal space, the dig above stretches the LB level. Reliable 2nd-and-medium call when you need a chunk play but not a shot.",
+    commonMistakes: [
+      "Drag depth wrong — should be at 2-4 yards, not 5+ (that becomes a shallow cross, different concept).",
+      "Dig too shallow; should be at 12 yards minimum to stretch the second-level defenders.",
+      "Both crossers go the same direction; should be opposing for the rub effect at the cross.",
+    ],
     pattern: [
       { role: "any", family: "Drag", depthRangeYds: { min: 2,  max: 4  } },
       { role: "any", family: "Dig",  depthRangeYds: { min: 10, max: 14 } },
@@ -188,6 +250,12 @@ export const CONCEPTS: ConceptDef[] = [
     aliases: ["Levels Concept"],
     complexity: "intermediate",
     defaultFormation: { id: "doubles", strength: "right" },
+    whenToUse: "Manning-era staple vs man and zone-match. High-low at two depths puts the corner in a bind on the deep side.",
+    commonMistakes: [
+      "Routes flatten out instead of staying vertical at their landmark before the in-cut.",
+      "QB throws the high read first; should read low-to-high — high In is the safety-valve.",
+      "Both routes break at the same yardage; the depth differential is the entire point.",
+    ],
     pattern: [
       { role: "any", family: "In",  depthRangeYds: { min: 6,  max: 8  } },
       { role: "any", family: "Dig", depthRangeYds: { min: 10, max: 14 } },
@@ -203,6 +271,12 @@ export const CONCEPTS: ConceptDef[] = [
     aliases: ["Y Cross", "Y-Cross Concept"],
     complexity: "advanced",
     defaultFormation: { id: "doubles", strength: "right" },
+    whenToUse: "Big-play call vs Cover 1 — the crosser becomes a 1-on-1 with a linebacker on a deep angle. Best on 2nd-and-long when you need a chunk.",
+    commonMistakes: [
+      "Crosser stays flat instead of climbing — should be at 18-22 yards by the time he crosses the hash.",
+      "No underneath outlet route; the play falls apart vs pressure and the QB has nowhere to go.",
+      "Post + dig stack at the same depth on the same side; depth and side differentiation is what stretches the safety.",
+    ],
     pattern: [
       { role: "any", family: "Dig",  depthRangeYds: { min: 14, max: 16 } },
       { role: "any", family: "Post", depthRangeYds: { min: 12, max: 18 } },
@@ -219,6 +293,12 @@ export const CONCEPTS: ConceptDef[] = [
     aliases: ["Dagger Concept"],
     complexity: "advanced",
     defaultFormation: { id: "doubles", strength: "right" },
+    whenToUse: "Modern shot play vs single-high coverage — the seam pulls the safety, the dig hits the soft spot the safety vacated. Best on 1st-and-10 or 2nd-and-medium when you've seen Cover 1 or Cover 3.",
+    commonMistakes: [
+      "Seam not aggressive enough; should force the safety to declare or commit.",
+      "Dig too shallow — settle at 14-16 yards in the soft spot, not 10.",
+      "QB throws the dig before the seam clears the safety; sequence matters.",
+    ],
     pattern: [
       { role: "any", family: "Seam", depthRangeYds: { min: 14, max: 25 } },
       { role: "any", family: "Dig",  depthRangeYds: { min: 14, max: 16 } },
@@ -236,6 +316,12 @@ export const CONCEPTS: ConceptDef[] = [
     aliases: ["Quarterback Draw", "QB Lead Draw"],
     complexity: "basic",
     defaultFormation: { id: "empty", strength: "right" },
+    whenToUse: "Best on 3rd-and-medium against a deep-rotation defense — pass-rushers vacate the middle, coverage drops, the QB takes the easy 7-8 yards. Especially deadly when the QB is a running threat.",
+    commonMistakes: [
+      "QB telegraphs by stepping up too early; should sell the dropback for at least two beats.",
+      "OL doesn't sell the pass set; rushers stay home and the lane never opens.",
+      "Receivers don't widen on their hitches; LBs hold the middle and the lane closes.",
+    ],
     pattern: [],
     structural: {
       requiresCarry: {
@@ -255,6 +341,13 @@ export const CONCEPTS: ConceptDef[] = [
     aliases: ["Bubble Screen RPO", "RPO Bubble", "Inside Zone Bubble"],
     complexity: "advanced",
     defaultFormation: { id: "trips", strength: "right" },
+    whenToUse: "Use when the box is loaded (defender count exceeds blockers + 1) — pull and throw the bubble. When the box is light, hand off. The READ is the play; calling the right action based on alignment is more important than the play name.",
+    commonMistakes: [
+      "QB doesn't actually read; just hands off (or always pulls). Defeats the entire purpose of the RPO.",
+      "Bubble receiver attacks the LOS; should be running at the QB pre-snap then bouncing outside on the catch.",
+      "OL runs downfield on the bubble side — illegal man downfield. Half-cuts are the discipline; no OL gets past the LOS until the QB commits.",
+      "QB holds the read too long; should be a 1-second decision off the conflict defender's first step.",
+    ],
     pattern: [
       { role: "slot", family: "Bubble", depthRangeYds: { min: -2, max: 2 } },
     ],
@@ -277,6 +370,12 @@ export const CONCEPTS: ConceptDef[] = [
     aliases: ["Reverse", "Reverse Jet", "End-Around Reverse"],
     complexity: "intermediate",
     defaultFormation: { id: "singleback", strength: "right" },
+    whenToUse: "Catch a defense over-pursuing pre-snap motion. Best in the red zone or on the boundary where the defense has been over-flowing to the jet action. One-shot — use it sparingly; the surprise IS the play.",
+    commonMistakes: [
+      "Motion man too slow; pursuit catches up before the second handoff connects.",
+      "Reverse cross-block too cute; just give a clean lane on the backside — the misdirection does the work.",
+      "Calling it too often; once the defense has seen it twice in a game, the over-pursuit disappears.",
+    ],
     pattern: [],
     structural: {
       requiresBallPathSteps: 2,
@@ -295,6 +394,12 @@ export const CONCEPTS: ConceptDef[] = [
     aliases: ["Outside Sweep", "Toss Sweep", "Stretch"],
     complexity: "basic",
     defaultFormation: { id: "singleback", strength: "right" },
+    whenToUse: "Get to the edge fast vs a defense over-committing to the interior. Best on 1st-and-10 to establish the edge run, or as a change-of-pace after a series of inside hits.",
+    commonMistakes: [
+      "RB cuts up too early; should press the edge first to force the corner to commit, THEN turn vertical.",
+      "Pulling lineman gets caught on the LOS; needs a clean pull around with no hesitation.",
+      "Perimeter blockers don't seal — wide receivers and slot must stalk-block the corner and force defender.",
+    ],
     pattern: [],
     structural: {
       requiresCarry: { player: "back", runTypes: ["sweep", "outside_zone"] },
@@ -312,6 +417,12 @@ export const CONCEPTS: ConceptDef[] = [
     aliases: ["Inside Dive", "Iso", "Lead Dive"],
     complexity: "basic",
     defaultFormation: { id: "singleback", strength: "right" },
+    whenToUse: "Short yardage between the tackles vs a soft front. Quick-hitting and predictable but consistent — chunks of 2-4 yards keep the chains moving and set up play-action.",
+    commonMistakes: [
+      "Back hesitates at the hole; should hit it downhill at full speed — first available crease wins.",
+      "OL high-blocks; need to double-team the playside DT to the LB level.",
+      "Run-action faked too softly; play-action off dive depends on the LBs honoring this look.",
+    ],
     pattern: [],
     structural: {
       requiresCarry: { player: "back", runTypes: ["inside_zone", "trap"] },
@@ -329,6 +440,12 @@ export const CONCEPTS: ConceptDef[] = [
     aliases: ["Power O", "Strong Power", "Down G"],
     complexity: "basic",
     defaultFormation: { id: "pro-i", strength: "right" },
+    whenToUse: "Short yardage between the tackles. Reliable hammer when you need 2-3 yards — gets at least the LOS even vs a stacked box.",
+    commonMistakes: [
+      "RB cuts away from the puller; should follow him through the hole, not freelance.",
+      "Puller stops at the LOS instead of climbing to the LB; the second-level block is what springs the run.",
+      "Down-blocks too soft; need to knock the DTs off the ball, not just engage.",
+    ],
     pattern: [],
     structural: {
       requiresCarry: { player: "back", runTypes: ["power"] },
@@ -346,6 +463,12 @@ export const CONCEPTS: ConceptDef[] = [
     aliases: ["Counter Trey", "Counter GT", "Counter OF"],
     complexity: "intermediate",
     defaultFormation: { id: "singleback", strength: "right" },
+    whenToUse: "Against an aggressive front that over-pursues to the back's initial step. The misdirection at the snap pulls defenders away from the actual play side.",
+    commonMistakes: [
+      "Fake step too lazy; defenders read it. Must be a hard one-step fake to sell the strong-side action.",
+      "Pulling guards trip over each other; need clean pull-around timing — backside guard pulls first, tackle follows.",
+      "Back doesn't widen enough after the jab; the counter path should bend BEHIND the OL's wash.",
+    ],
     pattern: [],
     structural: {
       requiresCarry: { player: "back", runTypes: ["counter"] },
@@ -363,6 +486,12 @@ export const CONCEPTS: ConceptDef[] = [
     aliases: ["RB Draw", "Lead Draw"],
     complexity: "intermediate",
     defaultFormation: { id: "empty", strength: "right" },
+    whenToUse: "Best on 3rd-and-long when the defense is in pass-rush mode — the OL pass-sets and the back hits the hole the rushers vacated. Especially deadly vs nickel/dime fronts with light boxes.",
+    commonMistakes: [
+      "OL sells the pass too softly; rushers don't widen and the lane never opens.",
+      "Back leaves too early; should wait for the rushers to commit upfield past the LOS.",
+      "Receivers run shallow routes; should run hitches at 8-10 yards to pull coverage AWAY from the hole.",
+    ],
     pattern: [],
     structural: {
       requiresCarry: { player: "back", runTypes: ["draw"] },
@@ -382,6 +511,13 @@ export const CONCEPTS: ConceptDef[] = [
     aliases: ["Flicker", "Halfback Flicker", "WR Flicker"],
     complexity: "advanced",
     defaultFormation: { id: "doubles", strength: "right" },
+    whenToUse: "Trick play — best after establishing the run game so safeties are biting on run-action. Usually 1st-and-10 or 2nd-and-short, ideally between the 30s. One-time call: defenses adjust the second time they see it.",
+    commonMistakes: [
+      "QB shows the pass too early; safeties don't bite and the deep routes get smothered.",
+      "Back doesn't sell the run hard enough; should be at full speed before the pitch back.",
+      "Deep receiver releases vertically too quickly; should release lazily then accelerate to sell the run-block.",
+      "Pitch back to QB is sloppy; should be a clean underhand pitch, not a forward toss.",
+    ],
     pattern: [],
     structural: {
       requiresBallPathSteps: 2,
