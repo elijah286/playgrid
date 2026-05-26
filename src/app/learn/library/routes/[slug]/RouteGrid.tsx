@@ -1,8 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { SegmentShape } from "@/domain/play/types";
+
+// Persist the grid's scroll offset across route navigations so clicking
+// a route deep in the list doesn't snap the user back to the top of
+// the sidebar on the next page. The list is identical on every route
+// page, so a single shared key is fine.
+const SCROLL_STORAGE_KEY = "library:routes:grid-scroll";
 
 export type RouteGridItem = {
   name: string;
@@ -79,6 +85,31 @@ export function RouteGrid({
   currentSlug: string;
 }) {
   const [query, setQuery] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // On mount, restore the scroll position from the previous page (if
+  // any). This runs once the scroll container is in the DOM. The
+  // outer page's scroll position is handled by Next.js routing — we
+  // only manage the sidebar's internal scroll.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.sessionStorage.getItem(SCROLL_STORAGE_KEY);
+    if (stored && scrollRef.current) {
+      scrollRef.current.scrollTop = Number(stored) || 0;
+    }
+  }, []);
+
+  // Capture the scroll position right before a Link triggers
+  // navigation. onClick fires synchronously before the navigation
+  // commits, so the write to sessionStorage is durable by the time
+  // the next page mounts.
+  const handleLinkClick = () => {
+    if (typeof window === "undefined" || !scrollRef.current) return;
+    window.sessionStorage.setItem(
+      SCROLL_STORAGE_KEY,
+      String(scrollRef.current.scrollTop),
+    );
+  };
 
   const filtered = query.trim()
     ? routes.filter((r) => r.name.toLowerCase().includes(query.toLowerCase()))
@@ -93,13 +124,17 @@ export function RouteGrid({
         onChange={(e) => setQuery(e.target.value)}
         className="mb-2.5 w-full rounded-lg border border-border bg-surface-inset px-3 py-1.5 text-xs placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-primary/40"
       />
-      <div className="grid grid-cols-2 gap-1.5 max-h-[480px] overflow-y-auto pr-0.5">
+      <div
+        ref={scrollRef}
+        className="grid grid-cols-2 gap-1.5 max-h-[480px] overflow-y-auto pr-0.5"
+      >
         {filtered.map((r) => {
           const isCurrent = r.slug === currentSlug;
           return (
             <Link
               key={r.slug}
               href={`/learn/library/routes/${r.slug}`}
+              onClick={handleLinkClick}
               className={
                 "flex items-center gap-1.5 rounded-lg border px-1.5 py-1 text-left text-xs font-medium transition-colors " +
                 (isCurrent
