@@ -2,6 +2,11 @@ import type { MetadataRoute } from "next";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getExamplesPageEnabled } from "@/lib/site/examples-config";
+import { CONCEPTS } from "@/domain/football-kg/defs/concepts";
+import { FORMATIONS } from "@/domain/football-kg/defs/formations";
+import { ROUTE_TEMPLATES } from "@/domain/play/routeTemplates";
+import { DEFENSIVE_ALIGNMENTS } from "@/domain/play/defensiveAlignments";
+import { toLearnSlug } from "@/lib/learn/links";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com";
 
@@ -59,6 +64,65 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority,
   }));
 
+  // Category index pages.
+  const libraryCategories: Entry[] = [
+    { path: "/learn/library/plays", priority: 0.85 },
+    { path: "/learn/library/formations", priority: 0.8 },
+    { path: "/learn/library/routes", priority: 0.8 },
+    { path: "/learn/library/defense", priority: 0.8 },
+  ].map(({ path, priority }) => ({
+    url: `${SITE_URL}${path}`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority,
+  }));
+
+  // Every concept / formation / route / defense gets a page.
+  const conceptEntries: Entry[] = CONCEPTS.map((c) => ({
+    url: `${SITE_URL}/learn/library/plays/${toLearnSlug(c.name)}`,
+    lastModified: now,
+    changeFrequency: "monthly",
+    priority: 0.75,
+  }));
+  const formationEntries: Entry[] = FORMATIONS.map((f) => ({
+    url: `${SITE_URL}/learn/library/formations/${toLearnSlug(f.name)}`,
+    lastModified: now,
+    changeFrequency: "monthly",
+    priority: 0.7,
+  }));
+  const routeEntries: Entry[] = ROUTE_TEMPLATES.map((r) => ({
+    url: `${SITE_URL}/learn/library/routes/${toLearnSlug(r.name)}`,
+    lastModified: now,
+    changeFrequency: "monthly",
+    priority: 0.7,
+  }));
+  // Defense pages dedupe by (front, coverage) — the slug page groups
+  // variants under one URL, so the sitemap must too.
+  const defenseSlugs = new Set<string>();
+  for (const a of DEFENSIVE_ALIGNMENTS) {
+    const front = (a.front ?? "").trim();
+    const coverage = (a.coverage ?? "").trim();
+    const name =
+      !front || front.toLowerCase() === coverage.toLowerCase()
+        ? coverage
+        : `${front} ${coverage}`.trim();
+    defenseSlugs.add(toLearnSlug(name));
+  }
+  const defenseEntries: Entry[] = Array.from(defenseSlugs).map((slug) => ({
+    url: `${SITE_URL}/learn/library/defense/${slug}`,
+    lastModified: now,
+    changeFrequency: "monthly",
+    priority: 0.7,
+  }));
+
   const dynamicEntries = await loadExamplePlaybookEntries(now);
-  return [...staticEntries, ...dynamicEntries];
+  return [
+    ...staticEntries,
+    ...libraryCategories,
+    ...conceptEntries,
+    ...formationEntries,
+    ...routeEntries,
+    ...defenseEntries,
+    ...dynamicEntries,
+  ];
 }

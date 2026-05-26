@@ -288,42 +288,49 @@ const FEATURED_CONCEPTS: Array<{
   variant: string;
   blurb: string;
   accent: string;
+  href: string;
 }> = [
   {
     name: "Mesh",
-    variant: "5v5 Flag · Pass",
+    variant: "Play · 5v5 Flag",
     blurb: "Crossing in-routes that pick man coverage at 6 yards.",
     accent: BRAND_BLUE,
+    href: "/learn/library/plays/mesh",
   },
   {
     name: "Smash",
-    variant: "7v7 Flag · Pass",
+    variant: "Play · 7v7 Flag",
     blurb: "Classic high-low on the corner — flag football's most reliable concept.",
     accent: BRAND_GREEN,
+    href: "/learn/library/plays/smash",
   },
   {
     name: "Four Verticals",
-    variant: "Tackle 11 · Pass",
+    variant: "Play · Tackle 11",
     blurb: "Stretch the field vertically. Hits the seam when the safety bites.",
     accent: BRAND_ORANGE,
+    href: "/learn/library/plays/four-verticals",
   },
   {
-    name: "Cover 2 (zone)",
-    variant: "Defense · all variants",
-    blurb: "Two deep safeties, five underneath. Read the QB, break on the throw.",
-    accent: BRAND_BLUE,
-  },
-  {
-    name: "Trips Right",
-    variant: "Formation · 5v5 / 7v7",
+    name: "Trips",
+    variant: "Formation · all variants",
     blurb: "Three receivers stacked to one side. Forces the defense to declare.",
     accent: BRAND_GREEN,
+    href: "/learn/library/formations/trips",
   },
   {
-    name: "Mesh release drill",
-    variant: "Drill · all ages",
-    blurb: "Receivers cross at 6 yards, no defense. The foundation of teaching Mesh.",
+    name: "Slant",
+    variant: "Route · all variants",
+    blurb: "Quick inside cut at the LOS. The press-man killer.",
+    accent: BRAND_BLUE,
+    href: "/learn/library/routes/slant",
+  },
+  {
+    name: "Defenses",
+    variant: "Cover 1 / 2 / 3 · Tampa 2 · blitzes",
+    blurb: "Every front + coverage in the library — from man-press to deep zone.",
     accent: BRAND_ORANGE,
+    href: "/learn/library/defense",
   },
 ];
 
@@ -371,7 +378,7 @@ export function FootballLibraryTeaser() {
             {FEATURED_CONCEPTS.map((c) => (
               <li key={c.name}>
                 <Link
-                  href="/learn/library"
+                  href={c.href}
                   className="group block h-full overflow-hidden rounded-2xl border border-border bg-surface-raised transition-all hover:-translate-y-0.5 hover:shadow-md"
                 >
                   <div
@@ -387,12 +394,6 @@ export function FootballLibraryTeaser() {
                     >
                       {c.name.split(" ")[0]}
                     </div>
-                    <span
-                      className="absolute right-3 top-3 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white"
-                      style={{ background: c.accent }}
-                    >
-                      Preview
-                    </span>
                   </div>
                   <div className="p-4">
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">
@@ -413,8 +414,8 @@ export function FootballLibraryTeaser() {
 
         <Reveal delay={200}>
           <p className="mt-8 text-center text-sm text-muted">
-            Concept pages launch in the next release. Until then, tiles take you
-            to the full library where you can browse every category.
+            Each concept page renders in the same play editor that powers the
+            builder — same diagrams, same coaching cues.
           </p>
         </Reveal>
       </div>
