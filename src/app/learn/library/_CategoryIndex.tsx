@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { withFullContext } from "@/lib/seo/ld-json";
+import { CategoryNav } from "./CategoryNav";
 import { VariantPill } from "./VariantPill";
 
 export type CategoryIndexProps = {
@@ -63,6 +64,11 @@ export function CategoryIndex({
         <h1 className="mt-1 text-3xl font-extrabold tracking-tight">{title}</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted">{description}</p>
       </header>
+
+      {/* Category nav — sibling-page jumper so a coach scanning Plays
+          can sidestep to Formations / Defenses / Routes without bouncing
+          back to /learn/library. Preserves variant where applicable. */}
+      <CategoryNav />
 
       {/* Variant filter — same persistent pill the library landing
           uses. Tracked on the URL so navigation between library

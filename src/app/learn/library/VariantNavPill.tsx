@@ -12,12 +12,12 @@
 // chip ("11v11 Tackle only") rather than a single-option pill — the
 // variant is informational, not selectable.
 
-import Link from "next/link";
 import {
   VARIANT_LABEL,
   variantToSlug,
   type LibraryVariant,
 } from "@/lib/learn/variant";
+import { VariantNavLink } from "./VariantNavLink";
 
 export type VariantNavPillProps = {
   /** Category segment of the URL — "plays" / "formations" / "routes" /
@@ -71,13 +71,13 @@ export function VariantNavPill({
           );
         }
         return (
-          <Link
+          <VariantNavLink
             key={v}
             href={`/learn/library/${category}/${conceptSlug}/${slug}`}
+            variant={v}
             className={className}
-          >
-            {VARIANT_LABEL[v]}
-          </Link>
+            label={VARIANT_LABEL[v]}
+          />
         );
       })}
     </nav>

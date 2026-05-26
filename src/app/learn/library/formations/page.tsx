@@ -10,6 +10,7 @@ import {
   type LibraryVariant,
 } from "@/lib/learn/variant";
 import { DEFAULT_LIBRARY_VARIANT } from "@/lib/learn/variant";
+import { getLibraryVariantCookie } from "@/lib/learn/variant-preference";
 import { CategoryIndex } from "../_CategoryIndex";
 
 export const metadata: Metadata = {
@@ -24,8 +25,9 @@ export default async function FormationsIndexPage(
 ) {
   if (!(await isFootballLibraryAvailable())) notFound();
   const { v } = await searchParams;
+  const variantFromCookie = await getLibraryVariantCookie();
   const variant: LibraryVariant =
-    (v ? slugToVariant(v) : null) ?? DEFAULT_LIBRARY_VARIANT;
+    (v ? slugToVariant(v) : null) ?? variantFromCookie ?? DEFAULT_LIBRARY_VARIANT;
   const variantSlug = variantToSlug(variant);
 
   const allFormations = [...FORMATIONS].sort((a, b) => {

@@ -51,3 +51,6 @@ next-env.d.ts
 # `scripts/capture-store-screenshots.mjs`, large (~3 MB), not worth versioning.
 # The icon + feature graphic under play-store/ ARE committed (small, hand-curated).
 /public/marketing/store/
+
+# Android Studio / IntelliJ project files — local, per-machine.
+android/.idea/

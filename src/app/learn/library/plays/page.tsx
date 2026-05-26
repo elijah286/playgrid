@@ -14,6 +14,8 @@ import {
   type LibraryVariant,
 } from "@/lib/learn/variant";
 import { DEFAULT_LIBRARY_VARIANT } from "@/lib/learn/variant";
+import { getLibraryVariantCookie } from "@/lib/learn/variant-preference";
+import { CategoryNav } from "../CategoryNav";
 import { VariantPill } from "../VariantPill";
 
 export const metadata: Metadata = {
@@ -44,12 +46,17 @@ export default async function PlaysIndexPage(
 ) {
   if (!(await isFootballLibraryAvailable())) notFound();
   const { v } = await searchParams;
-  // Variant from URL, defaulting to flag_5v5. Every concept is
-  // variant-specific — the index filters out concepts that don't
-  // support the current variant (e.g. Power is tackle-only and
-  // doesn't show on 5v5/6v6/7v7 lists).
+  // Variant resolution order:
+  //   1. `?v=` URL param (explicit, wins)
+  //   2. `xo_library_variant` cookie (coach's saved preference)
+  //   3. flag_5v5 (highest-volume default)
+  // The cookie is what makes "switch to 7v7 on a play page, then
+  // browse to a different play" land on 7v7 — without it, every page
+  // without `?v=` snapped back to flag_5v5.
+  const variantFromUrl = v ? slugToVariant(v) : null;
+  const variantFromCookie = await getLibraryVariantCookie();
   const variant: LibraryVariant =
-    (v ? slugToVariant(v) : null) ?? DEFAULT_LIBRARY_VARIANT;
+    variantFromUrl ?? variantFromCookie ?? DEFAULT_LIBRARY_VARIANT;
   const variantSlug = variantToSlug(variant);
 
   // Group concepts by complexity so basic plays surface first — coaches
@@ -95,6 +102,8 @@ export default async function PlaysIndexPage(
           of your playbooks.
         </p>
       </header>
+
+      <CategoryNav />
 
       <div className="mb-6">
         <VariantPill />

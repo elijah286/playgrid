@@ -8,16 +8,16 @@ import type { ConceptDef } from "@/domain/football-kg/schemas/ConceptDef";
 import { isFootballLibraryAvailable } from "@/lib/learn/access";
 import { toLearnSlug } from "@/lib/learn/links";
 import {
+  conceptSupportsVariant,
   defaultVariantForConceptDef,
   variantToSlug,
 } from "@/lib/learn/variant";
+import { getLibraryVariantCookie } from "@/lib/learn/variant-preference";
 
-export const dynamicParams = false;
-export const revalidate = 3600;
-
-export function generateStaticParams() {
-  return CONCEPTS.map((c) => ({ slug: toLearnSlug(c.name) }));
-}
+// Reading the variant-preference cookie makes this route per-request;
+// it can no longer be statically pre-built. The redirect is cheap
+// (no DB, no heavy work).
+export const dynamic = "force-dynamic";
 
 function findConceptBySlug(slug: string): ConceptDef | null {
   return CONCEPTS.find((c) => toLearnSlug(c.name) === slug) ?? null;
@@ -30,7 +30,18 @@ export default async function PlayConceptDefaultVariantRedirect(
   const { slug } = await params;
   const concept = findConceptBySlug(slug);
   if (!concept) notFound();
-  const variant = defaultVariantForConceptDef(concept);
+
+  // Coach's saved variant preference wins — when set AND supported by
+  // this concept. Falls back to the catalog default (flag_5v5-first
+  // ranking) when the cookie is absent or the concept doesn't support
+  // the cookie's variant. This is what makes the variant choice
+  // persist across plays.
+  const supportedVariants = concept.variants ?? [];
+  const preferred = await getLibraryVariantCookie();
+  const variant =
+    preferred && conceptSupportsVariant(supportedVariants, preferred)
+      ? preferred
+      : defaultVariantForConceptDef(concept);
   if (!variant) notFound();
   redirect(`/learn/library/plays/${slug}/${variantToSlug(variant)}`);
 }

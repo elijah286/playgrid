@@ -20,6 +20,7 @@ import {
   type LibraryVariant,
 } from "@/lib/learn/variant";
 import { DEFAULT_LIBRARY_VARIANT } from "@/lib/learn/variant";
+import { getLibraryVariantCookie } from "@/lib/learn/variant-preference";
 import { VariantPill } from "../../VariantPill";
 
 export const dynamicParams = false;
@@ -74,8 +75,9 @@ export default async function FormationPage(
   // 5v5 Flag selected), we surface a "not available" panel with
   // links to the variants the formation DOES support — no silent
   // fallback to a different variant.
+  const variantFromCookie = await getLibraryVariantCookie();
   const requestedVariant: LibraryVariant =
-    (v ? slugToVariant(v) : null) ?? DEFAULT_LIBRARY_VARIANT;
+    (v ? slugToVariant(v) : null) ?? variantFromCookie ?? DEFAULT_LIBRARY_VARIANT;
   const supportedLibraryVariants = (formation.variants ?? []).filter(
     (vv): vv is LibraryVariant => LIBRARY_VARIANTS.includes(vv as LibraryVariant),
   );

@@ -12,6 +12,7 @@ import { coachDiagramToPlayDocument } from "@/features/coach-ai/coachDiagramConv
 import { isFootballLibraryAvailable } from "@/lib/learn/access";
 import { featuredConceptOfTheDay } from "@/lib/learn/featured";
 import { toLearnSlug } from "@/lib/learn/links";
+import { getLibraryVariantCookie } from "@/lib/learn/variant-preference";
 import {
   DEFAULT_LIBRARY_VARIANT,
   conceptSupportsVariant,
@@ -91,8 +92,10 @@ export default async function LibraryLandingPage(
   // the VariantPill changed `?v=` but nothing on this page consumed
   // it, so coaches saw the same featured concept + same teaser items
   // regardless of which variant they picked.
+  const variantFromUrl = v ? slugToVariant(v) : null;
+  const variantFromCookie = await getLibraryVariantCookie();
   const variant: LibraryVariant =
-    (v ? slugToVariant(v) : null) ?? DEFAULT_LIBRARY_VARIANT;
+    variantFromUrl ?? variantFromCookie ?? DEFAULT_LIBRARY_VARIANT;
   const variantSlug = variantToSlug(variant);
 
   const featured = featuredConceptOfTheDay(new Date(), variant);

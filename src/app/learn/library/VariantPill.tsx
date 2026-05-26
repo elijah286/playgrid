@@ -32,6 +32,7 @@ import {
   DEFAULT_LIBRARY_VARIANT,
   DEFAULT_LIBRARY_VARIANT_SLUG,
 } from "@/lib/learn/variant";
+import { setLibraryVariantCookieClient } from "@/lib/learn/variant-preference";
 
 /** Persistent variant filter for the Football Library. Tracked on the
  *  URL as `?v=flag-5v5` so navigation between library pages preserves
@@ -77,6 +78,8 @@ export function VariantPill({
 
   const onSelect = useCallback(
     (value: VariantValue) => {
+      // Persist the choice so other library pages default to it.
+      setLibraryVariantCookieClient(value);
       const next = new URLSearchParams(searchParams.toString());
       const v = VARIANTS.find((x) => x.value === value);
       if (v) next.set("v", v.slug);
