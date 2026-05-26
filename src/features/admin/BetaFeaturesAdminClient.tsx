@@ -67,6 +67,13 @@ const FEATURES: FeatureMeta[] = [
     description:
       "Surfaces the paperclip in the Coach Cal chat so coaches can attach a play-sheet photo or a file. The hand-drawn play-sheet vision pipeline is currently unreliable on small pencil arrows and rounded routes; pulled back to \"Only me\" while we work on accuracy. Re-widen once translation quality is consistently good across arbitrary drawings.",
   },
+  {
+    key: "football_library",
+    label: "Football library",
+    description:
+      "Public coaching library at /learn/library — concept pages for every play, formation, route, and defensive scheme in the catalog. Each play page renders in the canonical editor. When hidden, the Resources → Football library link, the home page library teaser, and every library URL all disappear or 404 for non-entitled users. Admins always see it (so the editorial pass can be reviewed in production).",
+    previewHref: "/learn/library",
+  },
 ];
 
 const SCOPE_OPTIONS: { value: BetaFeatureScope; label: string; hint: string }[] = [
