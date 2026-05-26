@@ -586,21 +586,31 @@ function buildFourVerts(_c: ConceptEntry, opts: ConceptSkeletonOptions): Skeleto
 function buildMesh(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
   const variant = opts.variant;
   if (variant === "flag_4v4") {
-    // 4v4 Mesh: only 3 eligibles, so the canonical 2-drag mesh
-    // reduces to 1 drag + over-the-top. @Y runs the under-drag at 2yd
-    // (the "mesh point" / pick element); outside WRs run a curl over
-    // the top + a clear. Lenient validator accepts as a Mesh.
+    // CORRECTED 2026-05-26 (audit finding #10). The prior 4v4 Mesh
+    // was a 1-drag + curl + clear — i.e., NOT a Mesh (Mesh requires
+    // two crossers). With 3 eligibles {X, Y, Z}, a true 4v4 Mesh
+    // uses BOTH outside WRs as the crossing pair (opposite-side
+    // releases give the classic rub), and @Y plays the over-the-top
+    // sit as the eligible underneath outlet.
+    //
+    // Routes:
+    //   @X drag @ 2yd  — under-crosser (from one side)
+    //   @Z drag @ 8yd  — over-crosser (from the opposite side)
+    //   @Y curl @ 10yd — over-the-top outlet (the "Y-option" of mesh)
+    //
+    // 2/8 depth differential preserved (same visual-separation
+    // argument as 5v5/7v7).
     const assignments = flagFourRoutes({
-      Y: { family: "Drag", depthYds: 2 },
-      X: { family: "Curl", depthYds: 8 },
-      Z: { family: "Go", depthYds: 12 },
+      X: { family: "Drag", depthYds: 2 },
+      Z: { family: "Drag", depthYds: 8 },
+      Y: { family: "Curl", depthYds: 10 },
     });
     return {
       ok: true,
       concept: "Mesh",
       spec: baseSpec(variant, "Mesh", "Trips", undefined, assignments),
       notes:
-        `Mesh (4v4 1-drag): @Y under-drag @ 2yd creates the rub; @X curl @ 8yd settles over the top, @Z go @ 12yd to clear. With only 3 eligibles, the canonical 2-drag becomes a single drag + curl + clear.`,
+        `Mesh (4v4): @X under-drag @ 2yd + @Z over-drag @ 8yd — the two outside WRs cross from opposite sides, 6yd visual separation. @Y curl @ 10yd over the top as the eligible underneath outlet.`,
     };
   }
   if (variant === "flag_5v5") {

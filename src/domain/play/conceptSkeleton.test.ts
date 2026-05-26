@@ -222,6 +222,24 @@ describe("generateConceptSkeleton — Mesh in flag_5v5 crossing pair", () => {
   });
 });
 
+// ── Mesh 4v4: true 2-drag crossing pair (audit #10) ──
+// Prior implementation was 1-drag + curl + clear — not actually
+// Mesh. With 3 eligibles {X, Y, Z} a true 4v4 mesh uses BOTH
+// outside WRs as the crossing pair.
+describe("generateConceptSkeleton — Mesh 4v4 is actually a Mesh", () => {
+  it("has TWO drag routes (one from each outside WR)", () => {
+    const result = generateConceptSkeleton("Mesh", { variant: "flag_4v4" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const drags = result.spec.assignments.filter(
+      (a) => a.action.kind === "route" && a.action.family === "Drag",
+    );
+    expect(drags, "4v4 Mesh must have two drag routes for the actual cross").toHaveLength(2);
+    const players = drags.map((d) => d.player).sort();
+    expect(players).toEqual(["X", "Z"]);
+  });
+});
+
 // ── Bubble RPO: outside WR stalk-blocks in tackle (audit #8) ──
 // In tackle, the WR adjacent to the bubble must stalk-block the
 // corner to give the bubble runner space. The prior version had
