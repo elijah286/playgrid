@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { withFullContext } from "@/lib/seo/ld-json";
+import { VariantPill } from "./VariantPill";
 
 export type CategoryIndexProps = {
   category: string;
@@ -57,6 +58,13 @@ export function CategoryIndex({
         <h1 className="mt-1 text-3xl font-extrabold tracking-tight">{title}</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted">{description}</p>
       </header>
+
+      {/* Variant filter — same persistent pill the library landing
+          uses. Tracked on the URL so navigation between library
+          pages preserves the coach's selection. */}
+      <div className="mb-6">
+        <VariantPill />
+      </div>
 
       <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {entities.map((e) => (

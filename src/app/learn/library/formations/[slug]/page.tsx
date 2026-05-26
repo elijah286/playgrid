@@ -1,11 +1,25 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowLeft, ArrowRight, BookOpen } from "lucide-react";
 import { FORMATIONS } from "@/domain/football-kg/defs/formations";
 import { CONCEPTS } from "@/domain/football-kg/defs/concepts";
 import type { FormationDef } from "@/domain/football-kg/schemas/FormationDef";
+import { synthesizeOffense } from "@/domain/play/offensiveSynthesize";
+import { coachDiagramToPlayDocument, type CoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
+import { defaultSettingsForVariant } from "@/domain/playbook/settings";
+import { PlayEditorClient } from "@/features/editor/PlayEditorClient";
 import { isFootballLibraryAvailable } from "@/lib/learn/access";
 import { toLearnSlug } from "@/lib/learn/links";
-import { LibraryEntityPage } from "../../_LibraryEntityPage";
+import { withFullContext } from "@/lib/seo/ld-json";
+import {
+  LIBRARY_VARIANTS,
+  VARIANT_LABEL,
+  slugToVariant,
+  variantToSlug,
+  type LibraryVariant,
+} from "@/lib/learn/variant";
+import { VariantPill } from "../../VariantPill";
 
 export const dynamicParams = false;
 export const revalidate = 3600;
@@ -17,15 +31,6 @@ export function generateStaticParams() {
 function findFormationBySlug(slug: string): FormationDef | null {
   return FORMATIONS.find((f) => toLearnSlug(f.name) === slug) ?? null;
 }
-
-const VARIANT_LABEL: Record<string, string> = {
-  flag_4v4: "4v4 Flag",
-  flag_5v5: "5v5 Flag",
-  flag_6v6: "6v6 Flag",
-  flag_7v7: "7v7 Flag",
-  touch_7v7: "7v7 Touch",
-  tackle_11: "11v11 Tackle",
-};
 
 export async function generateMetadata(
   { params }: { params: Promise<{ slug: string }> },
@@ -46,13 +51,39 @@ export async function generateMetadata(
   };
 }
 
+/** Pick a sensible default variant to RENDER the formation in. Honors
+ *  the URL's `?v=...` filter when the formation supports it, otherwise
+ *  falls back to flag_5v5 (highest-volume library variant) when
+ *  supported, then to whatever the formation actually supports first. */
+function pickRenderVariant(
+  formation: FormationDef,
+  requested: LibraryVariant | null,
+): LibraryVariant | null {
+  const supported = (formation.variants ?? []).filter((v): v is LibraryVariant =>
+    LIBRARY_VARIANTS.includes(v as LibraryVariant),
+  );
+  if (supported.length === 0) return null;
+  if (requested && supported.includes(requested)) return requested;
+  if (supported.includes("flag_5v5")) return "flag_5v5";
+  return supported[0] ?? null;
+}
+
 export default async function FormationPage(
-  { params }: { params: Promise<{ slug: string }> },
+  {
+    params,
+    searchParams,
+  }: {
+    params: Promise<{ slug: string }>;
+    searchParams: Promise<{ v?: string }>;
+  },
 ) {
   if (!(await isFootballLibraryAvailable())) notFound();
   const { slug } = await params;
+  const { v } = await searchParams;
   const formation = findFormationBySlug(slug);
   if (!formation) notFound();
+  const requestedVariant = v ? slugToVariant(v) : null;
+  const renderVariant = pickRenderVariant(formation, requestedVariant);
 
   // Cross-reference: which concepts use this formation as their default?
   const usedBy = CONCEPTS.filter((c) => c.defaultFormation.id === formation.id).map(
@@ -61,7 +92,7 @@ export default async function FormationPage(
   const usedByLine =
     usedBy.length > 0
       ? `${usedBy.slice(0, 6).join(", ")}${usedBy.length > 6 ? `, +${usedBy.length - 6} more` : ""}`
-      : undefined;
+      : null;
 
   // Related formations: same tag overlap.
   const myTags = new Set(formation.tags ?? []);
@@ -71,21 +102,229 @@ export default async function FormationPage(
     .slice(0, 6)
     .map((f) => ({ name: f.name, slug: toLearnSlug(f.name) }));
 
+  // Build a player-only PlayDocument for the formation render. The
+  // synthesizer produces SynthOffensePlayer[] in yards; we wrap as a
+  // CoachDiagram with empty routes and run through the canonical
+  // converter so the player coords end up in the same normalized
+  // [0, 1] space the editor expects.
+  let formationDoc: ReturnType<typeof coachDiagramToPlayDocument> | null = null;
+  if (renderVariant) {
+    const synth = synthesizeOffense(renderVariant, formation.name);
+    if (synth) {
+      const diagram: CoachDiagram = {
+        title: formation.name,
+        variant: renderVariant,
+        focus: "O",
+        players: synth.players.map((p) => ({
+          id: p.id,
+          x: p.x,
+          y: p.y,
+          team: "O",
+        })),
+        routes: [],
+        zones: [],
+      };
+      try {
+        formationDoc = coachDiagramToPlayDocument(diagram);
+      } catch {
+        formationDoc = null;
+      }
+    }
+  }
+  const playbookSettings = renderVariant
+    ? defaultSettingsForVariant(renderVariant)
+    : null;
+
+  const supportedLibraryVariants = (formation.variants ?? []).filter(
+    (vv): vv is LibraryVariant => LIBRARY_VARIANTS.includes(vv as LibraryVariant),
+  );
+
+  const breadcrumbLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: "/" },
+      { "@type": "ListItem", position: 2, name: "Football library", item: "/learn/library" },
+      { "@type": "ListItem", position: 3, name: "Formations", item: "/learn/library/formations" },
+      { "@type": "ListItem", position: 4, name: formation.name, item: `/learn/library/formations/${slug}` },
+    ],
+  };
+  const articleLd = {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: `${formation.name} — football formation`,
+    description: formation.description,
+    articleSection: "Football library",
+    keywords: [formation.name, ...(formation.aliases ?? [])].join(", "),
+  };
+
   return (
-    <LibraryEntityPage
-      category="formations"
-      categoryLabel="Formation"
-      name={formation.name}
-      slug={slug}
-      aliases={formation.aliases ?? []}
-      description={formation.description}
-      body={formation.body}
-      tags={formation.tags ?? []}
-      complexity={formation.complexity ?? null}
-      variants={[...(formation.variants ?? [])]}
-      variantLabels={VARIANT_LABEL}
-      related={related}
-      usedByLine={usedByLine}
-    />
+    <article className="mx-auto max-w-6xl px-6 py-10 text-foreground">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(withFullContext(breadcrumbLd)) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(withFullContext(articleLd)) }}
+      />
+
+      <nav className="mb-6 flex items-center gap-1 text-xs text-muted">
+        <Link href="/learn/library" className="hover:text-foreground transition-colors">
+          Football library
+        </Link>
+        <span>›</span>
+        <Link href="/learn/library/formations" className="hover:text-foreground transition-colors">
+          Formations
+        </Link>
+        <span>›</span>
+        <span className="text-foreground">{formation.name}</span>
+      </nav>
+
+      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+            Football Library · Formations
+          </p>
+          <h1 className="mt-1 text-4xl font-extrabold tracking-tight">{formation.name}</h1>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <span className="rounded-full bg-emerald-500/10 px-3 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+              Formation
+            </span>
+            {formation.complexity ? (
+              <span className="rounded-full bg-surface-inset px-3 py-0.5 text-xs font-medium text-muted capitalize">
+                {formation.complexity}
+              </span>
+            ) : null}
+            {(formation.tags ?? []).slice(0, 4).map((t) => (
+              <span
+                key={t}
+                className="rounded-full bg-surface-inset px-3 py-0.5 text-xs font-medium text-muted"
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+        </div>
+        <Link
+          href="/learn/library/formations"
+          className="inline-flex items-center gap-1 text-xs text-muted hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="size-3.5" />
+          All formations
+        </Link>
+      </header>
+
+      {/* Variant filter — same persistent pill the library landing
+          page uses. When the coach picks a variant here, the formation
+          diagram below re-renders in that variant (different player
+          count for 5v5 vs 7v7 vs tackle). */}
+      <div className="mb-6">
+        <VariantPill />
+      </div>
+
+      <div className="mb-8 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_280px]">
+        <div>
+          <p className="mb-6 text-lg leading-relaxed text-foreground">
+            {formation.body ?? formation.description}
+          </p>
+
+          {formationDoc && renderVariant && playbookSettings ? (
+            <div className="overflow-hidden rounded-2xl border border-border bg-surface-raised">
+              <PlayEditorClient
+                playId={`library:formations:${slug}:${renderVariant}`}
+                playbookId="library-preview"
+                playbookName="Football Library"
+                playbookVariant={renderVariant}
+                initialDocument={formationDoc}
+                initialNav={[]}
+                initialGroups={[]}
+                allFormations={[]}
+                opponentFormations={[]}
+                playbookSettings={playbookSettings}
+                canEdit={false}
+                libraryMode={true}
+              />
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-border bg-surface-raised p-8 text-center text-sm text-muted">
+              No diagram available for this formation
+              {renderVariant ? ` in ${VARIANT_LABEL[renderVariant]}` : ""}.
+            </div>
+          )}
+
+          {usedByLine ? (
+            <p className="mt-6 rounded-xl border border-border bg-surface-raised px-4 py-3 text-sm text-muted">
+              <strong className="font-semibold text-foreground">Concepts that use this formation: </strong>
+              {usedByLine}
+            </p>
+          ) : null}
+        </div>
+
+        <aside className="space-y-4">
+          {renderVariant ? (
+            <div className="rounded-2xl bg-foreground p-5 text-surface-raised">
+              <h3 className="text-sm font-semibold">Add to my playbook</h3>
+              <p className="mt-1.5 text-xs text-surface-raised/70">
+                Sign in and we&apos;ll create a new play with the {formation.name}{" "}
+                formation in one of your {VARIANT_LABEL[renderVariant]} playbooks
+                — same alignment as the diagram above.
+              </p>
+              <Link
+                href={`/login?mode=signup&intent=add-formation&formation=${encodeURIComponent(formation.name)}&variant=${renderVariant}`}
+                className="mt-3 inline-flex w-full items-center justify-center rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white"
+              >
+                Add to my playbook
+              </Link>
+            </div>
+          ) : null}
+
+          {supportedLibraryVariants.length > 0 ? (
+            <div className="rounded-2xl border border-border bg-surface-raised p-4">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">
+                Available variants
+              </h4>
+              <ul className="mt-2 space-y-1.5 text-sm">
+                {supportedLibraryVariants.map((vv) => (
+                  <li key={vv}>
+                    <Link
+                      href={`/learn/library/formations/${slug}?v=${variantToSlug(vv)}`}
+                      className={`flex items-center justify-between hover:text-primary ${
+                        renderVariant === vv ? "font-semibold text-foreground" : "text-muted"
+                      }`}
+                    >
+                      <span>{VARIANT_LABEL[vv]}</span>
+                      <span className="text-xs text-emerald-500">✓</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {related.length > 0 ? (
+            <div className="rounded-2xl border border-border bg-surface-raised p-4">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">
+                <BookOpen className="mr-1 inline size-3.5" />
+                Related formations
+              </h4>
+              <ul className="mt-2 space-y-1.5">
+                {related.map((r) => (
+                  <li key={r.slug}>
+                    <Link
+                      href={`/learn/library/formations/${r.slug}`}
+                      className="flex items-center justify-between text-sm hover:text-primary"
+                    >
+                      <span>{r.name}</span>
+                      <ArrowRight className="size-3.5 text-muted" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </aside>
+      </div>
+    </article>
   );
 }

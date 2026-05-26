@@ -6,6 +6,9 @@ import { CONCEPTS } from "@/domain/football-kg/defs/concepts";
 import { FORMATIONS } from "@/domain/football-kg/defs/formations";
 import { ROUTE_TEMPLATES } from "@/domain/play/routeTemplates";
 import { DEFENSIVE_ALIGNMENTS } from "@/domain/play/defensiveAlignments";
+import { generateConceptSkeleton } from "@/domain/play/conceptSkeleton";
+import { playSpecToCoachDiagram } from "@/domain/play/specRenderer";
+import { coachDiagramToPlayDocument } from "@/features/coach-ai/coachDiagramConverter";
 import { isFootballLibraryAvailable } from "@/lib/learn/access";
 import { featuredConceptOfTheDay } from "@/lib/learn/featured";
 import { toLearnSlug } from "@/lib/learn/links";
@@ -14,6 +17,7 @@ import {
   variantToSlug,
 } from "@/lib/learn/variant";
 import { withFullContext } from "@/lib/seo/ld-json";
+import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
 import { VariantPill } from "./VariantPill";
 
 export const metadata: Metadata = {
@@ -72,6 +76,39 @@ export default async function LibraryLandingPage() {
   const featuredHref = featuredVariant
     ? `/learn/library/plays/${featuredSlug}/${variantToSlug(featuredVariant)}`
     : `/learn/library/plays/${featuredSlug}`;
+
+  // Real thumbnail for the featured concept card (previously a
+  // placeholder "play diagram preview" tile). We pre-render the
+  // concept's PlaySpec → CoachDiagram → PlayDocument chain server-
+  // side and pass the layer data to `<PlayThumbnail>` (static SVG,
+  // no client JS). Falls back to null when the concept has no
+  // skeleton builder yet — the placeholder div still renders.
+  let featuredThumbnail: {
+    players: import("@/domain/play/types").Player[];
+    routes: import("@/domain/play/types").Route[];
+    zones?: import("@/domain/play/types").Zone[];
+    lineOfScrimmageY: number;
+  } | null = null;
+  if (featuredVariant) {
+    try {
+      const skeleton = generateConceptSkeleton(featured.name, {
+        variant: featuredVariant,
+        strength: "right",
+      });
+      if (skeleton.ok) {
+        const { diagram } = playSpecToCoachDiagram(skeleton.spec);
+        const doc = coachDiagramToPlayDocument(diagram);
+        featuredThumbnail = {
+          players: doc.layers.players,
+          routes: doc.layers.routes,
+          zones: doc.layers.zones,
+          lineOfScrimmageY: doc.lineOfScrimmageY ?? 0.5,
+        };
+      }
+    } catch {
+      // Render the placeholder.
+    }
+  }
 
   // Empty categories (drills, practice plans, coaching articles,
   // glossary) are hidden until they have content. Per user feedback —
@@ -157,12 +194,21 @@ export default async function LibraryLandingPage() {
             Rotates daily — check back tomorrow for a different concept.
           </p>
         </div>
-        <div
-          aria-hidden
-          className="hidden h-24 w-44 items-center justify-center rounded-xl bg-gradient-to-b from-[#2D8B4E] to-[#1B5E30] text-xs italic text-white/70 md:flex"
-        >
-          play diagram preview
-        </div>
+        {featuredThumbnail ? (
+          <div
+            aria-hidden
+            className="hidden h-32 w-48 overflow-hidden rounded-xl border border-border bg-surface-raised shadow-sm md:block"
+          >
+            <PlayThumbnail preview={featuredThumbnail} light />
+          </div>
+        ) : (
+          <div
+            aria-hidden
+            className="hidden h-24 w-44 items-center justify-center rounded-xl bg-gradient-to-b from-[#2D8B4E] to-[#1B5E30] text-xs italic text-white/70 md:flex"
+          >
+            play diagram preview
+          </div>
+        )}
       </section>
 
       <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-muted">
