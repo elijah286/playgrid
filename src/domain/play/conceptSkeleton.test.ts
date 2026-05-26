@@ -222,6 +222,50 @@ describe("generateConceptSkeleton — Mesh in flag_5v5 crossing pair", () => {
   });
 });
 
+// ── QB Draw / Draw receivers run vertical clears (audit #4) ──
+// Canonical: both Draw concepts need the receivers to pull LBs and
+// safeties AWAY from the run lane. Hitches at 3-5yd keep defenders
+// AT the LB level — exactly where the back is going. The play's own
+// commonMistakes calls this out ("Receivers don't widen on their
+// hitches; LBs hold the middle and the lane closes"). Fix: vertical
+// clears (Go's + Seams) instead of hitches/drags.
+describe("generateConceptSkeleton — QB Draw + Draw receivers", () => {
+  it("QB Draw outside WRs run vertical clears (Go), not hitches", () => {
+    const result = generateConceptSkeleton("QB Draw", { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const x = result.spec.assignments.find((a) => a.player === "X");
+    const z = result.spec.assignments.find((a) => a.player === "Z");
+    expect(x?.action.kind === "route" && x.action.family).toBe("Go");
+    expect(z?.action.kind === "route" && z.action.family).toBe("Go");
+  });
+
+  it("Draw (tackle) outside WRs run vertical clears, not Hitches/unspecified", () => {
+    const result = generateConceptSkeleton("Draw", { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const x = result.spec.assignments.find((a) => a.player === "X");
+    expect(x?.action.kind).toBe("route");
+    if (x?.action.kind !== "route") return;
+    // Canonical Draw uses vertical clears (Go) to pull LBs away from
+    // the lane. Sweep/Counter/Power use Hitch stalk-blocks.
+    expect(x.action.family).toBe("Go");
+  });
+
+  it("Sweep (run-action) still uses Hitch stalk for receivers — only Draw flips to verticals", () => {
+    const result = generateConceptSkeleton("Sweep", {
+      variant: "flag_5v5",
+      strength: "right",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // @X is not the carrier in 5v5 sweep — the carrier is @Y. So @X
+    // should be a stalk-blocker (Hitch in flag).
+    const x = result.spec.assignments.find((a) => a.player === "X");
+    expect(x?.action.kind === "route" && x.action.family).toBe("Hitch");
+  });
+});
+
 // ── Stick 5v5: strong-side outside WR clears the corner (audit #3) ──
 // The prior 5v5 Stick had both outside WRs running Hitch @ 5, which
 // left the corner camping at 5-8yd over the slot's stick route. The

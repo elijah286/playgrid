@@ -954,13 +954,21 @@ function buildQbDraw(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRe
     // Back stays in to pass-block (the play sells pass; the QB
     // exploits the lifted coverage).
     { player: "B", confidence: "high", action: { kind: "block", target: "blitz" } },
-    // Receivers run quick pass routes to widen coverage. Hitches +
-    // a Drag underneath give Cal a sensible default; the user can
-    // swap any of them via revise_play.
-    routeAt("X", "Hitch", 5),
-    routeAt("Z", "Hitch", 5),
-    routeAt("H", "Drag", 3),
-    routeAt("S", "Drag", 3),
+    // CORRECTED 2026-05-26 (audit finding #4). The prior version
+    // had outside WRs on Hitch @ 5 and slots on Drag @ 3 — but
+    // hitches/drags KEEP DEFENDERS NEAR THE LOS, which is the
+    // opposite of what QB Draw needs. Canonical QB Draw uses
+    // VERTICAL CLEARS (Go's, deep Posts/Seams) to pull LBs and
+    // safeties away from the run lane the QB is about to attack.
+    //
+    // The play's own commonMistakes note (concepts.ts) calls this
+    // out: "Receivers don't widen on their hitches; LBs hold the
+    // middle and the lane closes." Hitches at 5yd don't widen
+    // anything — they sit at the LB level. Vertical clears DO.
+    routeAt("X", "Go", 18),    // strong-side clear pulls outside DB deep
+    routeAt("Z", "Go", 18),    // backside clear mirrors
+    routeAt("H", "Seam", 18),  // slot seam pulls hook LB / safety up
+    routeAt("S", "Seam", 18),  // strong-slot seam (opposite hash)
     ...lineBlocks(variant),
   ];
   // Note we do NOT include qbDropback(): the QB is the runner.
@@ -970,7 +978,7 @@ function buildQbDraw(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRe
     spec: baseSpec(variant, "QB Draw", "Spread Doubles", undefined, assignments),
     notes:
       `QB Draw: QB takes the snap, hesitates as if reading, then runs straight up the middle. ` +
-      `OL pass-sets to sell pass; receivers run hitches / drags to widen coverage. ` +
+      `OL pass-sets to sell pass; receivers run VERTICAL CLEARS (gos + seams) to pull defenders AWAY from the run lane. ` +
       `Best vs rush-heavy defenses on obvious passing downs.`,
   };
 }
@@ -1184,9 +1192,20 @@ function buildSingleHandoffRun(
     variant === "flag_6v6" ||
     variant === "flag_7v7" ||
     variant === "touch_7v7";
-  const stalkAction: AssignmentAction = isFlag
-    ? { kind: "route", family: "Hitch", depthYds: 3 }
-    : { kind: "unspecified" };
+  // AUDIT FINDING #4 (2026-05-26): Draw is a pass-action concept —
+  // the OL sells pass, the receivers must run VERTICAL CLEARS to
+  // pull LBs and safeties AWAY from the soft middle the back will
+  // hit. Hitches/drags at 3-5yd keep defenders at the LB level,
+  // exactly where the back is going. The other run concepts
+  // (Sweep / Counter / Power / Dive) are run-action plays where
+  // stalk-block-as-Hitch is the correct posture for the perimeter
+  // (stalks read as blockers; the play is a run). Draw differs.
+  const isPassAction = conceptName === "Draw";
+  const stalkAction: AssignmentAction = isPassAction
+    ? { kind: "route", family: "Go", depthYds: 18 } // vertical clear for Draw
+    : isFlag
+      ? { kind: "route", family: "Hitch", depthYds: 3 } // stalk-block posture for run plays
+      : { kind: "unspecified" };
 
   const assignments: PlayerAssignment[] = [
     {
