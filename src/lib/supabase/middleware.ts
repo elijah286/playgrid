@@ -39,6 +39,10 @@ const PUBLIC_EXACT = new Set<string>([
 ]);
 
 const PUBLIC_PREFIXES = [
+  // Learning Center — Football Library + product tutorials. Must be
+  // crawlable by Googlebot/Bingbot and reachable by anonymous visitors
+  // landing from search. Pages enforce their own per-feature gates.
+  "/learn/",
   "/invite/", // invite landing page (pre-login preview)
   "/auth/", // OAuth/PKCE callback — runs before a session exists
   "/api/contact",
