@@ -1055,10 +1055,22 @@ function buildBubbleRpo(_c: ConceptEntry, opts: ConceptSkeletonOptions): Skeleto
     // Bubble slot — the pass option. Bubble route family is the
     // catalog's lateral-release screen at ~0–2 yds.
     routeAt(bubbleSlot, "Bubble", 1, side),
-    // Outside receiver to the bubble side runs a hitch as the
-    // bubble's blocker (no actual block in the spec; a Hitch keeps
-    // the cornerback honest until the ball is in the air).
-    routeAt(bubbleOutside, "Hitch", 5),
+    // Outside receiver to the bubble side: CORRECTED 2026-05-26
+    // (audit finding #8). In tackle, this WR must stalk-block the
+    // corner so the bubble runner has space to attack the
+    // perimeter — that's the defining mechanic of any bubble screen.
+    // In flag variants we keep the Hitch @ 5 because the offensive-
+    // coverage validator requires a route or motion for every non-QB
+    // skill player (`unspecified` would fail the gate), and stalk-
+    // blocking isn't a real mechanic in flag anyway. Tackle uses an
+    // explicit `block` action targeting the corner.
+    variant === "tackle_11"
+      ? {
+          player: bubbleOutside,
+          confidence: "high",
+          action: { kind: "block", target: "corner" },
+        }
+      : routeAt(bubbleOutside, "Hitch", 5),
     // Backside players give a counter-image — both run go routes to
     // hold the safety, so the playside read is honest.
     routeAt(backsideOutside, "Go", 18),

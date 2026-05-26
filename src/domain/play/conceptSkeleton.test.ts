@@ -222,6 +222,41 @@ describe("generateConceptSkeleton — Mesh in flag_5v5 crossing pair", () => {
   });
 });
 
+// ── Bubble RPO: outside WR stalk-blocks in tackle (audit #8) ──
+// In tackle, the WR adjacent to the bubble must stalk-block the
+// corner to give the bubble runner space. The prior version had
+// him on a Hitch @ 5 — which keeps the corner honest but doesn't
+// block. Flag variants keep the Hitch (no real stalk-blocking in
+// flag, and the offensive-coverage validator requires a route).
+describe("generateConceptSkeleton — Bubble RPO outside WR blocking", () => {
+  it("tackle_11: bubble-side outside WR uses kind:block (target:corner), not Hitch", () => {
+    const result = generateConceptSkeleton("Bubble RPO", {
+      variant: "tackle_11",
+      strength: "right",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // For right strength, bubble outside is @Z.
+    const outside = result.spec.assignments.find((a) => a.player === "Z");
+    expect(outside?.action.kind).toBe("block");
+    if (outside?.action.kind !== "block") return;
+    expect(outside.action.target).toBe("corner");
+  });
+
+  it("flag_7v7: bubble-side outside WR keeps the Hitch (validator-coverage requirement)", () => {
+    const result = generateConceptSkeleton("Bubble RPO", {
+      variant: "flag_7v7",
+      strength: "right",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const outside = result.spec.assignments.find((a) => a.player === "Z");
+    expect(outside?.action.kind).toBe("route");
+    if (outside?.action.kind !== "route") return;
+    expect(outside.action.family).toBe("Hitch");
+  });
+});
+
 // ── Slant-Flat 5v5: @Y (RB) on flat, not @C (audit #7) ──
 // Center can't release outside the outside WR running the slant.
 // The catalog's own commonMistakes warns against the flat releasing
