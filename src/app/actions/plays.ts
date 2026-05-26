@@ -482,6 +482,141 @@ export async function installConceptToPlaybookAction({
   return { ok: true, playId: play.id };
 }
 
+/**
+ * Install a catalog defensive alignment as a new defense play in the given
+ * playbook. Mirrors the diagram pipeline the library defense page uses.
+ */
+export async function installDefenseToPlaybookAction({
+  alignmentName,
+  variant,
+  playbookId,
+}: {
+  alignmentName: string;
+  variant: LibraryVariant;
+  playbookId: string;
+}): Promise<{ ok: true; playId: string } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const lock = await assertNotLocked({ ownerId: user.id, playbookId });
+  if (!lock.ok) return { ok: false, error: lock.error };
+
+  const gameLock = await assertNoActiveGameSession(supabase, playbookId);
+  if (gameLock.locked) return gameModeLockedResult(gameLock.lock);
+
+  const cap = await assertPlayCap(supabase, playbookId);
+  if (!cap.ok) return { ok: false, error: cap.error };
+
+  const { alignmentWithAssignments, zonesForStrength, DEFENSIVE_ALIGNMENTS } =
+    await import("@/domain/play/defensiveAlignments");
+  const { coachDiagramToPlayDocument } = await import(
+    "@/features/coach-ai/coachDiagramConverter"
+  );
+
+  // Find the alignment entry matching the name + variant.
+  const alignment = DEFENSIVE_ALIGNMENTS.find(
+    (a) =>
+      a.variant === variant &&
+      `${(a.front ?? "").trim()} ${(a.coverage ?? "").trim()}`.trim() === alignmentName.trim(),
+  );
+  if (!alignment) {
+    return { ok: false, error: `Alignment "${alignmentName}" not found for variant ${variant}.` };
+  }
+
+  // Suffix duplicate defender ids (same as library page + compose_defense).
+  function suffixDuplicateIds<T extends { id: string }>(items: T[]): T[] {
+    const seen = new Map<string, number>();
+    return items.map((p) => {
+      const count = (seen.get(p.id) ?? 0) + 1;
+      seen.set(p.id, count);
+      return { ...p, id: count === 1 ? p.id : `${p.id}${count}` };
+    });
+  }
+
+  const defenders = alignmentWithAssignments(alignment, "right");
+  const zones = zonesForStrength(alignment, "right");
+  const uniqueDefenders = suffixDuplicateIds(
+    defenders.map((p) => ({ id: p.id, x: p.x, y: p.y })),
+  );
+
+  const diagram = {
+    title: alignmentName,
+    variant,
+    focus: "D" as const,
+    players: uniqueDefenders.map((p) => ({ id: p.id, x: p.x, y: p.y, team: "D" as const })),
+    routes: [],
+    zones: zones.map((z) => ({ kind: z.kind, center: z.center, size: z.size, label: z.label })),
+  };
+
+  const doc = coachDiagramToPlayDocument(diagram);
+  doc.metadata.coachName = alignmentName;
+  doc.metadata.playType = "defense";
+
+  const { data: sortRow } = await supabase
+    .from("plays")
+    .select("sort_order")
+    .eq("playbook_id", playbookId)
+    .eq("is_archived", false)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const nextSort = (sortRow?.sort_order ?? -1) + 1;
+
+  const { data: codeRows } = await supabase
+    .from("plays")
+    .select("wristband_code")
+    .eq("playbook_id", playbookId);
+  const maxCode = (codeRows ?? [])
+    .map((r) => parseInt((r.wristband_code as string | null) ?? "", 10))
+    .filter((n): n is number => Number.isFinite(n))
+    .reduce((m, n) => Math.max(m, n), 0);
+  doc.metadata.wristbandCode = String(maxCode + 1).padStart(2, "0");
+
+  const { data: play, error: playErr } = await supabase
+    .from("plays")
+    .insert({
+      playbook_id: playbookId,
+      name: doc.metadata.coachName,
+      shorthand: doc.metadata.shorthand,
+      wristband_code: doc.metadata.wristbandCode,
+      formation_name: doc.metadata.formation,
+      concept: alignmentName,
+      tags: doc.metadata.tags,
+      tag: doc.metadata.tags[0] ?? "",
+      display_abbrev: doc.metadata.sheetAbbrev,
+      sort_order: nextSort,
+      formation_id: null,
+      formation_tag: null,
+      play_type: "defense",
+      special_teams_unit: null,
+      is_tutorial: false,
+    })
+    .select("id")
+    .single();
+  if (playErr) return { ok: false, error: playErr.message };
+
+  const { data: ver, error: verErr } = await supabase
+    .from("play_versions")
+    .insert({
+      play_id: play.id,
+      schema_version: 2,
+      document: doc as unknown as Record<string, unknown>,
+      label: "v1",
+      created_by: user.id,
+      kind: "create",
+    })
+    .select("id")
+    .single();
+  if (verErr) return { ok: false, error: verErr.message };
+
+  await supabase.from("plays").update({ current_version_id: ver.id }).eq("id", play.id);
+  await revalidateExampleSurfacesIfPublicPlaybook(playbookId);
+
+  return { ok: true, playId: play.id };
+}
+
 export async function getPlayForEditorAction(playId: string) {
   if (!hasSupabaseEnv()) {
     return { ok: false as const, error: "Supabase is not configured." };

@@ -27,6 +27,7 @@ import {
 } from "@/lib/learn/variant";
 import { DEFAULT_LIBRARY_VARIANT } from "@/lib/learn/variant";
 import { VariantPill } from "../../VariantPill";
+import { InstallDefenseButton } from "./InstallDefenseButton";
 
 export const dynamicParams = false;
 export const revalidate = 3600;
@@ -471,18 +472,16 @@ export default async function DefensePage(
         <aside className="space-y-4">
           {renderVariant ? (
             <div className="rounded-2xl bg-foreground p-5 text-surface-raised">
-              <h3 className="text-sm font-semibold">Add to my playbook</h3>
+              <h3 className="text-sm font-semibold">Add to your playbook</h3>
               <p className="mt-1.5 text-xs text-surface-raised/70">
-                Sign in and we&apos;ll save a defensive play with the {group.name}{" "}
-                alignment in one of your {VARIANT_LABEL[renderVariant]} playbooks —
-                same defenders, same zones as the diagram above.
+                The diagram you&apos;ll see in the editor is the same one
+                rendered above.
               </p>
-              <Link
-                href={`/login?mode=signup&intent=add-defense&defense=${encodeURIComponent(group.name)}&variant=${renderVariant}`}
-                className="mt-3 inline-flex w-full items-center justify-center rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white"
-              >
-                Add to my playbook
-              </Link>
+              <InstallDefenseButton
+                alignmentName={group.name}
+                variant={renderVariant}
+                loginHref={`/login?mode=signup&intent=add-defense&defense=${encodeURIComponent(group.name)}&variant=${renderVariant}`}
+              />
             </div>
           ) : null}
 

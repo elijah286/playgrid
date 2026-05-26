@@ -1,17 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
-import { installConceptToPlaybookAction } from "@/app/actions/plays";
+import { installDefenseToPlaybookAction } from "@/app/actions/plays";
 import { InstallButton } from "@/app/learn/library/_components/InstallButton";
 import type { LibraryVariant } from "@/lib/learn/variant";
 
-export function InstallPlayButton({
-  conceptName,
+export function InstallDefenseButton({
+  alignmentName,
   variant,
   loginHref,
 }: {
-  conceptName: string;
+  alignmentName: string;
   variant: LibraryVariant;
   loginHref: string;
 }) {
@@ -19,10 +17,10 @@ export function InstallPlayButton({
     <InstallButton
       variant={variant}
       loginHref={loginHref}
-      dialogTitle="Install play"
-      installing={conceptName}
+      dialogTitle="Install defense"
+      installing={alignmentName}
       onInstall={(playbookId) =>
-        installConceptToPlaybookAction({ conceptName, variant, playbookId })
+        installDefenseToPlaybookAction({ alignmentName, variant, playbookId })
       }
     />
   );
