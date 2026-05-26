@@ -37,6 +37,7 @@ import {
   PrintoutsAndWristbands,
   RealPlaybooks,
 } from "@/features/marketing/HomeSections";
+import { isFootballLibraryAvailable } from "@/lib/learn/access";
 
 const BRAND_BLUE = "#1769FF";
 const BRAND_GREEN = "#95CC1F";
@@ -57,10 +58,11 @@ export default async function HomePage() {
   // - examples feeds the below-fold strip (every example, no slice).
   // - hero is the single playbook the admin promoted to the hero slot, or
   //   null when no hero is set (page falls back to the X/O illustration).
-  const [examples, heroExample, freeMaxPlays] = await Promise.all([
+  const [examples, heroExample, freeMaxPlays, libraryAvailable] = await Promise.all([
     loadExamplePlaybooks(),
     loadHeroMarketingExample(),
     getFreeMaxPlaysPerPlaybook(),
+    isFootballLibraryAvailable(),
   ]);
 
   return (
@@ -165,7 +167,7 @@ export default async function HomePage() {
           then a final CTA. */}
       <EveryScreen />
       <CoachCalTeaser />
-      <FootballLibraryTeaser />
+      {libraryAvailable ? <FootballLibraryTeaser /> : null}
       <FreeForSolo freeMaxPlays={freeMaxPlays} />
       <PrintoutsAndWristbands />
       <RealPlaybooks examples={examples} />
