@@ -459,17 +459,23 @@ describe("generateConceptSkeleton — QB Draw + Draw receivers", () => {
     expect(x.action.family).toBe("Go");
   });
 
-  it("Sweep (run-action) still uses Hitch stalk for receivers — only Draw flips to verticals", () => {
+  it("Sweep (flag) outside WRs run vertical clears (Go) to pull defense off the perimeter", () => {
+    // CORRECTED 2026-05-26 (user audit). The prior test pinned
+    // Hitch-as-stalk for flag Sweep, but flag football has no real
+    // blocking — receivers running Hitch @ 3 just let defenders sit
+    // in the run lane. The canonical flag-Sweep design has the
+    // outside WRs run vertical clears (Gos) to PULL DEEP DEFENDERS
+    // OFF THE PERIMETER, giving the RB the edge. Tackle Sweep keeps
+    // a different shape (real stalk-block on the corner via
+    // sweepLineBlocks) — the flag flip is variant-specific.
     const result = generateConceptSkeleton("Sweep", {
       variant: "flag_5v5",
       strength: "right",
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    // @X is not the carrier in 5v5 sweep — the carrier is @Y. So @X
-    // should be a stalk-blocker (Hitch in flag).
     const x = result.spec.assignments.find((a) => a.player === "X");
-    expect(x?.action.kind === "route" && x.action.family).toBe("Hitch");
+    expect(x?.action.kind === "route" && x.action.family).toBe("Go");
   });
 });
 

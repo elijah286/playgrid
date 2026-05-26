@@ -130,6 +130,51 @@ function lineBlocks(variant: SportVariant): PlayerAssignment[] {
   }));
 }
 
+/** Play-specific OL assignments for Sweep (Lombardi / Packers Sweep
+ *  design). Both guards pull to the playside — the playside guard
+ *  kicks out the first defender outside the box (the corner / OLB /
+ *  edge defender), the backside guard pulls AROUND the kick-out and
+ *  leads the back through the hole. Tackles reach-block (drive their
+ *  man down the line to seal him inside). Center reaches playside or
+ *  cuts off the backside flow depending on alignment; we model it as
+ *  reach-playside because that's the more common assignment on a
+ *  fast-flowing sweep.
+ *
+ *  Tackle football only — flag variants don't block. */
+function sweepLineBlocks(side: "left" | "right"): PlayerAssignment[] {
+  const playsideT = side === "right" ? "RT" : "LT";
+  const backsideT = side === "right" ? "LT" : "RT";
+  const playsideG = side === "right" ? "RG" : "LG";
+  const backsideG = side === "right" ? "LG" : "RG";
+  return [
+    {
+      player: playsideT,
+      confidence: "high",
+      action: { kind: "block", target: "reach_playside" } as AssignmentAction,
+    },
+    {
+      player: playsideG,
+      confidence: "high",
+      action: { kind: "block", target: "pull_kick" } as AssignmentAction,
+    },
+    {
+      player: "C",
+      confidence: "high",
+      action: { kind: "block", target: "reach_playside" } as AssignmentAction,
+    },
+    {
+      player: backsideG,
+      confidence: "high",
+      action: { kind: "block", target: "pull_lead" } as AssignmentAction,
+    },
+    {
+      player: backsideT,
+      confidence: "high",
+      action: { kind: "block", target: "cut_off" } as AssignmentAction,
+    },
+  ];
+}
+
 /** QB drops back — we model as "unspecified" because the QB's job
  *  is to read and throw, not run a route. */
 function qbDropback(): PlayerAssignment {
@@ -1602,7 +1647,7 @@ function buildSingleHandoffRun(
   const mesh: [number, number] = [sideSign * lateralBias, -4];
   // Back's carry path: from start (~7yd deep in backfield) through the
   // mesh, then up the field on the runType's track.
-  const backWaypoints = runPathFor(conceptName, sideSign, mesh);
+  const backWaypoints = runPathFor(conceptName, sideSign, mesh, variant);
   // QB physical footwork: a short step toward the mesh + back to a
   // post-handoff hold position (no runType — capability gate skipped).
   const qbWaypoints: [number, number][] = [
@@ -1632,16 +1677,23 @@ function buildSingleHandoffRun(
   // the OL sells pass, the receivers must run VERTICAL CLEARS to
   // pull LBs and safeties AWAY from the soft middle the back will
   // hit. Hitches/drags at 3-5yd keep defenders at the LB level,
-  // exactly where the back is going. The other run concepts
-  // (Sweep / Counter / Power / Dive) are run-action plays where
-  // stalk-block-as-Hitch is the correct posture for the perimeter
-  // (stalks read as blockers; the play is a run). Draw differs.
+  // exactly where the back is going.
+  //
+  // SWEEP FOLLOW-UP (2026-05-26): in FLAG variants only, Sweep also
+  // needs the receivers to PULL DEFENSE AWAY from the perimeter the
+  // RB is about to attack — there are no real stalk-blocks in flag,
+  // so the stalk-Hitch @ 3 just lets defenders sit in the run lane.
+  // Vertical clears (Gos) pull deep defenders up and give the RB the
+  // edge. Tackle keeps stalk-Hitch posture only if we're not
+  // emitting play-specific blocks (we do for Sweep — see below).
   const isPassAction = conceptName === "Draw";
-  const stalkAction: AssignmentAction = isPassAction
-    ? { kind: "route", family: "Go", depthYds: 18 } // vertical clear for Draw
-    : isFlag
-      ? { kind: "route", family: "Hitch", depthYds: 3 } // stalk-block posture for run plays
-      : { kind: "unspecified" };
+  const isFlagSweep = isFlag && conceptName === "Sweep";
+  const stalkAction: AssignmentAction =
+    isPassAction || isFlagSweep
+      ? { kind: "route", family: "Go", depthYds: 18 } // vertical clear
+      : isFlag
+        ? { kind: "route", family: "Hitch", depthYds: 3 } // stalk posture
+        : { kind: "unspecified" };
 
   const assignments: PlayerAssignment[] = [
     {
@@ -1673,9 +1725,33 @@ function buildSingleHandoffRun(
         : ["X", "Z", "H", "S"];
   for (const id of stalkReceivers) {
     if (id === carrierId) continue;
+    // Flag Sweep: outside WRs run go routes (vertical clears) to pull
+    // deep defenders off the perimeter. The slot/middle eligible runs
+    // a shorter inside route to pull the LB; otherwise all-go gives
+    // the QB only one read shape.
+    if (isFlagSweep && (id === "H" || id === "S" || id === "C" || id === "Y")) {
+      assignments.push({
+        player: id,
+        confidence: "med",
+        action: { kind: "route", family: "Sit", depthYds: 5 },
+      });
+      continue;
+    }
     assignments.push({ player: id, confidence: "med", action: stalkAction });
   }
-  assignments.push(...lineBlocks(variant));
+  // OL assignments. Generic `lineBlocks` emits `{ kind: "block" }` for
+  // every lineman — the narrator then says "run-block — drive your man
+  // playside" for all five, which is wrong on a Sweep (the canonical
+  // design pulls BOTH guards; tackles reach; center seals). For Sweep
+  // specifically, emit per-OL targets so the notes describe each
+  // lineman's actual job. Other run concepts (Dive / Power / Counter)
+  // still use the generic shape for now — follow-up task to model
+  // their pulling-blocker semantics too.
+  if (conceptName === "Sweep" && variant === "tackle_11") {
+    assignments.push(...sweepLineBlocks(side));
+  } else {
+    assignments.push(...lineBlocks(variant));
+  }
 
   return {
     ok: true,
@@ -1689,39 +1765,45 @@ function buildSingleHandoffRun(
 }
 
 /** Back's carry path for each run-concept type. Each shape ends ~8yd
- *  downfield so the diagram clearly shows where the back is attacking. */
+ *  downfield so the diagram clearly shows where the back is attacking.
+ *  Sweep is variant-aware because the lateral end-point needs to clear
+ *  the outermost receiver (Z's x), which is wider in tackle than in
+ *  5v5 flag. */
 function runPathFor(
   conceptName: "Sweep" | "Dive" | "Counter" | "Draw" | "Power",
   sideSign: 1 | -1,
   mesh: [number, number],
+  variant: SportVariant,
 ): [number, number][] {
   switch (conceptName) {
-    case "Sweep":
-      // CORRECTED 2026-05-26 (audit finding #1). The canonical Sweep
-      // path is LATERAL FIRST — the RB runs parallel to the LOS to
-      // clear the edge of the formation, THEN makes ONE decisive cut
-      // upfield after pulling blockers or the natural edge seals.
+    case "Sweep": {
+      // CORRECTED 2026-05-26 (audit finding #1 + user follow-up). The
+      // canonical Sweep path is LATERAL FIRST and goes ALL THE WAY
+      // AROUND the outside receiver — the RB runs parallel to the LOS
+      // until past the outermost flank, THEN makes ONE decisive cut
+      // upfield. The PRIOR fix (2026-05-26 morning) ended the path at
+      // x=8, which is INSIDE Z (at x=10 in flag, x=18 in tackle), so
+      // the back was cutting up through the formation instead of
+      // turning the corner around the perimeter receiver. Coach
+      // surfaced: "the RB should run parallel to the LOS to the
+      // outside — that means all the way around the outside receiver".
       //
-      // The prior path `[mesh, (6,-2), (10,6)]` was a smooth diagonal
-      // from mesh to the numbers — the back was climbing while still
-      // running laterally, which a coach correctly identified as "the
-      // back ends up running up the middle." A real sweep has the back
-      // pressing the edge first.
-      //
-      // Geometry (right-strength, sideSign=1):
-      //   mesh   = (1.5, -4)  →  initial alignment behind QB, slight playside
-      //   leg 1: (4,   -3)    →  lateral movement, gained 2.5yd lateral and only 1yd shallower (basically parallel to LOS)
-      //   leg 2: (7,   -2.5)  →  continued lateral with slight forward (3yd lateral, 0.5yd up) — pressing the edge
-      //   leg 3: (8,   5)     →  the cut UPFIELD (1yd lateral, 7.5yd vertical) — the "ONE decisive cut" once the lane opens
-      //
-      // The visual signature: a J-shape, not a smooth diagonal. Coach
-      // recognizes it instantly as a sweep.
+      // End-x is variant-aware because Z's position depends on field
+      // width: 5v5/6v6 places Z at ±10 (25yd-wide field), 7v7 at ±12,
+      // tackle at ±18. We end 1–2yd OUTSIDE Z so the perimeter break
+      // is visually unambiguous (Z is on the line, RB clears him).
+      const endX =
+        variant === "tackle_11" ? 20 :
+        variant === "flag_7v7"  ? 14 :
+        /* 5v5 / 6v6 */          11;
       return [
         mesh,
-        [sideSign * 4, -3],
-        [sideSign * 7, -2.5],
-        [sideSign * 8, 5],
+        [sideSign * 4, -3],            // lateral 2.5yd over, parallel
+        [sideSign * 8, -2.5],          // continue lateral, past the OL
+        [sideSign * endX, -1],         // OUTSIDE the outermost receiver
+        [sideSign * endX, 6],          // turn vertical at the perimeter
       ];
+    }
     case "Counter":
       // Jab step away, then back: mesh → cut against the grain → vertical.
       // sideSign here is the play direction; the jab is the opposite,
@@ -1750,8 +1832,9 @@ function runNotesFor(
   switch (conceptName) {
     case "Sweep":
       return (
-        `Sweep ${dir}: @QB hands to @B at the mesh; @B attacks the ${side} edge with the OL reaching playside. ` +
-        `Receivers stalk-block their man. Patient feet to the kick-out, then turn vertical when the corner is sealed.`
+        `Sweep ${dir}: wide perimeter run. @QB hands to the back, who attacks the edge with the OL pulling or ` +
+        `reaching playside. The back's footwork is patient-then-fast: read the kick-out block, then turn vertical ` +
+        `when the corner is sealed. Best vs over-aligned interior fronts where the perimeter is light.`
       );
     case "Dive":
       return (

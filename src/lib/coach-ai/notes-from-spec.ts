@@ -577,6 +577,16 @@ function openerForOffense(spec: PlaySpec): string {
   const defenseLabel = spec.defense
     ? ` vs ${spec.defense.front === spec.defense.coverage ? spec.defense.coverage : `${spec.defense.front} ${spec.defense.coverage}`}`
     : "";
+  // Run plays (carry assignment present) get a run-flavored opener.
+  // The "@Q reads ... work the progression below" framing reads as if
+  // the QB is going to throw — wrong on a Sweep / Counter / Power
+  // where the QB hands off and the receiver routes are decoys. The
+  // run-play opener names the ball-flow shape (handoff) and points
+  // the coach at the OL bullets below where the real teaching lives.
+  const isRunPlay = spec.assignments.some((a) => a.action.kind === "carry");
+  if (isRunPlay) {
+    return `Run from ${formationLabel}${defenseLabel}. The handoff sets up the play; see the OL + receiver bullets below for each player's job.`;
+  }
   // Identify the QB read by walking assignments — the deepest inside
   // route is usually the primary, with a quick-game outlet underneath.
   // For a v1 projection we just name the play context; Phase 4 will
@@ -812,6 +822,14 @@ function depthOf(
  * numbered read items.
  */
 function progressionLines(spec: PlaySpec): string[] | null {
+  // Run plays don't have a QB read order — the receiver routes (when
+  // present) are decoys pulling defense away from the run lane, not
+  // throws the QB is sequencing through. A "Progression: 1. @X 18-yd
+  // go — clear the deep safety" bullet on a Sweep page reads as if
+  // the QB is going to throw the Go, which is misleading. Routes
+  // still surface in the per-assignment bullets below.
+  const isRunPlay = spec.assignments.some((a) => a.action.kind === "carry");
+  if (isRunPlay) return null;
   const routes = spec.assignments.filter(
     (a): a is PlayerAssignment & { action: Extract<AssignmentAction, { kind: "route" }> } =>
       a.action.kind === "route",
@@ -1153,6 +1171,25 @@ function narrateBlock(
   if (action.target === "edge") return `${ref}: protect the edge — pick up the first defender outside.`;
   if (action.target === "interior") return `${ref}: protect interior — pick up A/B-gap pressure.`;
   if (action.target === "blitz") return `${ref}: blitz pickup — find the unblocked rusher.`;
+  // Sweep / Power / Counter — play-specific OL semantics (2026-05-26
+  // audit). Coaches need to read the OL's actual job ("pull and lead",
+  // "reach playside") not a generic "pass protect" bullet, especially
+  // for tackle library pages where the OL detail IS the play.
+  if (action.target === "reach_playside") {
+    return `${ref}: reach block playside — drive your man down the line, seal him inside.`;
+  }
+  if (action.target === "pull_lead") {
+    return `${ref}: pull playside — get depth off the LOS, lead through the hole for the back.`;
+  }
+  if (action.target === "pull_kick") {
+    return `${ref}: pull playside — kick out the first defender outside the tackle box.`;
+  }
+  if (action.target === "cut_off") {
+    return `${ref}: cut off the backside — chase block to prevent pursuit.`;
+  }
+  if (action.target === "corner") {
+    return `${ref}: stalk-block the corner — get hands inside, drive him off coverage so the runner has the edge.`;
+  }
   return `${ref}: block @${action.target}.`;
 }
 
