@@ -23,6 +23,7 @@ import {
   type LibraryVariant,
 } from "@/lib/learn/variant";
 import { VariantNavPill } from "../../../VariantNavPill";
+import { InstallPlayButton } from "./InstallPlayButton";
 
 export const dynamicParams = false;
 export const revalidate = 3600;
@@ -393,15 +394,14 @@ export default async function PlayConceptVariantPage(
           <div className="rounded-2xl bg-foreground p-5 text-surface-raised">
             <h3 className="text-sm font-semibold">Add to your playbook</h3>
             <p className="mt-1.5 text-xs text-surface-raised/70">
-              Sign in to add {concept.name} to your playbook — you&apos;ll see
-              the same diagram in the editor.
+              The diagram you&apos;ll see in the editor is the same one
+              rendered above.
             </p>
-            <Link
-              href={`/login?mode=signup&intent=add-concept&concept=${encodeURIComponent(concept.name)}&variant=${variant}`}
-              className="mt-3 inline-flex w-full items-center justify-center rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white"
-            >
-              Add to my playbook
-            </Link>
+            <InstallPlayButton
+              conceptName={concept.name}
+              variant={variant}
+              loginHref={`/login?mode=signup&intent=add-concept&concept=${encodeURIComponent(concept.name)}&variant=${variant}`}
+            />
           </div>
 
           <div className="rounded-2xl border border-border bg-surface-raised p-4">

@@ -7,6 +7,7 @@ import { ensureDefaultWorkspace, getOrCreateInboxPlaybook } from "@/lib/data/wor
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { createEmptyPlayDocument, defaultDefendersForVariant, defaultPlayersForVariant, generateOtherVariantPlayers, normalizePlayDocument, sportProfileForVariant } from "@/domain/play/factory";
 import type { PlayDocument, Player, PlayType, Route, SpecialTeamsUnit, SportVariant, VsPlaySnapshot, Zone } from "@/domain/play/types";
+import type { LibraryVariant } from "@/lib/learn/variant";
 import { normalizePlaybookSettings, type PlaybookSettings } from "@/domain/playbook/settings";
 import {
   compareNavPlays,
@@ -375,6 +376,110 @@ export async function createPlayAction(
   await revalidateExampleSurfacesIfPublicPlaybook(playbookId);
 
   return { ok: true as const, playId: play.id, versionId: ver.id };
+}
+
+/**
+ * Install a catalog concept as a new play in the given playbook.
+ * Generates the canonical skeleton → renders → saves, identical to the
+ * pipeline the library page uses for display.
+ */
+export async function installConceptToPlaybookAction({
+  conceptName,
+  variant,
+  playbookId,
+}: {
+  conceptName: string;
+  variant: LibraryVariant;
+  playbookId: string;
+}): Promise<{ ok: true; playId: string } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const lock = await assertNotLocked({ ownerId: user.id, playbookId });
+  if (!lock.ok) return { ok: false, error: lock.error };
+
+  const gameLock = await assertNoActiveGameSession(supabase, playbookId);
+  if (gameLock.locked) return gameModeLockedResult(gameLock.lock);
+
+  const cap = await assertPlayCap(supabase, playbookId);
+  if (!cap.ok) return { ok: false, error: cap.error };
+
+  // Lazy-import to avoid pulling heavy domain code into the server-action
+  // bundle unless this action is actually called.
+  const { generateConceptSkeleton } = await import("@/domain/play/conceptSkeleton");
+  const { playSpecToCoachDiagram } = await import("@/domain/play/specRenderer");
+  const { coachDiagramToPlayDocument } = await import("@/features/coach-ai/coachDiagramConverter");
+
+  const skeleton = generateConceptSkeleton(conceptName, { variant, strength: "right" });
+  if (!skeleton.ok) return { ok: false, error: skeleton.error };
+
+  const { diagram } = playSpecToCoachDiagram(skeleton.spec);
+  const doc = coachDiagramToPlayDocument(diagram);
+  doc.metadata.coachName = conceptName;
+
+  const { data: sortRow } = await supabase
+    .from("plays")
+    .select("sort_order")
+    .eq("playbook_id", playbookId)
+    .eq("is_archived", false)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const nextSort = (sortRow?.sort_order ?? -1) + 1;
+
+  const { data: codeRows } = await supabase
+    .from("plays")
+    .select("wristband_code")
+    .eq("playbook_id", playbookId);
+  const maxCode = (codeRows ?? [])
+    .map((r) => parseInt((r.wristband_code as string | null) ?? "", 10))
+    .filter((n): n is number => Number.isFinite(n))
+    .reduce((m, n) => Math.max(m, n), 0);
+  doc.metadata.wristbandCode = String(maxCode + 1).padStart(2, "0");
+
+  const { data: play, error: playErr } = await supabase
+    .from("plays")
+    .insert({
+      playbook_id: playbookId,
+      name: doc.metadata.coachName,
+      shorthand: doc.metadata.shorthand,
+      wristband_code: doc.metadata.wristbandCode,
+      formation_name: doc.metadata.formation,
+      concept: conceptName,
+      tags: doc.metadata.tags,
+      tag: doc.metadata.tags[0] ?? "",
+      display_abbrev: doc.metadata.sheetAbbrev,
+      sort_order: nextSort,
+      formation_id: null,
+      formation_tag: null,
+      play_type: "offense",
+      special_teams_unit: null,
+      is_tutorial: false,
+    })
+    .select("id")
+    .single();
+  if (playErr) return { ok: false, error: playErr.message };
+
+  const { data: ver, error: verErr } = await supabase
+    .from("play_versions")
+    .insert({
+      play_id: play.id,
+      schema_version: 2,
+      document: doc as unknown as Record<string, unknown>,
+      label: "v1",
+      created_by: user.id,
+      kind: "create",
+    })
+    .select("id")
+    .single();
+  if (verErr) return { ok: false, error: verErr.message };
+
+  await supabase.from("plays").update({ current_version_id: ver.id }).eq("id", play.id);
+  await revalidateExampleSurfacesIfPublicPlaybook(playbookId);
+
+  return { ok: true, playId: play.id };
 }
 
 export async function getPlayForEditorAction(playId: string) {
