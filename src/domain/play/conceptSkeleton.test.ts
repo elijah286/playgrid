@@ -677,30 +677,67 @@ describe("generateConceptSkeleton — Bubble RPO", () => {
 });
 
 describe("generateConceptSkeleton — Jet Reverse (multi-handoff)", () => {
-  it("emits a ballPath with exactly 2 handoff steps (QB → B → reverse-carrier)", () => {
+  it("emits a ballPath with exactly 2 handoff steps (QB → jetWR → reverse-carrier)", () => {
+    // Audit fix #5 (2026-05-26): the jet motion WR is the first
+    // carrier, NOT @B. @B fakes / blocks. For default strength=right,
+    // the jet is @Z (strong-side outside WR), reverse is @X (weak
+    // side).
     const result = generateConceptSkeleton("Jet Reverse", { variant: "tackle_11" });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.spec.ballPath).toBeDefined();
     expect(result.spec.ballPath!.length).toBe(2);
     expect(result.spec.ballPath![0].from).toBe("QB");
-    expect(result.spec.ballPath![0].to).toBe("B");
-    expect(result.spec.ballPath![1].from).toBe("B");
-    expect(result.spec.ballPath![1].to).toBe("X"); // default strength=right → reverse comes from weak side (left WR = X)
+    expect(result.spec.ballPath![0].to).toBe("Z"); // jet motion WR (strong-side outside in right-strength)
+    expect(result.spec.ballPath![1].from).toBe("Z");
+    expect(result.spec.ballPath![1].to).toBe("X"); // reverse carrier comes from weak side
   });
 
   it("each ballPath handler has a corresponding carry assignment with waypoints", () => {
     const result = generateConceptSkeleton("Jet Reverse", { variant: "tackle_11" });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    // B (intermediate carrier) and X (reverse carrier) both need carries.
-    for (const id of ["B", "X"]) {
+    // @Z (jet, intermediate carrier) and @X (reverse carrier) both
+    // need carries. @B fakes / blocks (NOT a carrier).
+    for (const id of ["Z", "X"]) {
       const a = result.spec.assignments.find((p) => p.player === id);
       expect(a?.action.kind, `@${id} should be a ballcarrier in the reverse`).toBe("carry");
       if (a?.action.kind !== "carry") continue;
       expect(a.action.waypoints, `@${id} carry should have explicit waypoints`).toBeDefined();
       expect(a.action.waypoints!.length).toBeGreaterThan(0);
     }
+  });
+
+  it("@B fakes / blocks — is NOT a carrier on Jet Reverse anymore (audit fix #5)", () => {
+    const result = generateConceptSkeleton("Jet Reverse", { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const back = result.spec.assignments.find((a) => a.player === "B");
+    expect(
+      back?.action.kind,
+      "@B was the first carrier in the prior (incorrect) implementation. Now @B fakes/blocks to sell the run direction.",
+    ).not.toBe("carry");
+  });
+
+  it("jet WR carry path STARTS far outside the formation (pre-snap motion origin)", () => {
+    // The first waypoint of the jet WR's carry should be at his
+    // pre-snap alignment — well outside the eventual mesh point.
+    // This is how the renderer reads "this is a motion path."
+    const result = generateConceptSkeleton("Jet Reverse", { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const jet = result.spec.assignments.find((a) => a.player === "Z");
+    expect(jet?.action.kind).toBe("carry");
+    if (jet?.action.kind !== "carry") return;
+    const firstWp = jet.action.waypoints?.[0];
+    expect(firstWp, "Jet WR carry must have a first waypoint at motion origin").toBeDefined();
+    if (!firstWp) return;
+    // First waypoint should be well outside (|x| ≥ 8) — at the WR's
+    // natural alignment, not at the QB's snap point.
+    expect(
+      Math.abs(firstWp[0]),
+      `Jet WR's first waypoint at x=${firstWp[0]} — should be far outside (≥ 8yd from center) to represent motion origin`,
+    ).toBeGreaterThanOrEqual(8);
   });
 
   it("ballPath continuity holds: step 2's `from` matches step 1's `to`", () => {
@@ -711,11 +748,14 @@ describe("generateConceptSkeleton — Jet Reverse (multi-handoff)", () => {
     expect(result.spec.ballPath![1].from).toBe(result.spec.ballPath![0].to);
   });
 
-  it("mirrors the reverse direction when strength is 'left' (reverse carrier is Z instead of X)", () => {
+  it("mirrors when strength is 'left' (jet WR is X, reverse carrier is Z)", () => {
+    // Audit fix #5: in left-strength, the jet motion WR is @X (strong-
+    // side outside in left-strength), reverse comes from @Z (weak side).
     const result = generateConceptSkeleton("Jet Reverse", { variant: "tackle_11", strength: "left" });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.spec.ballPath![1].to).toBe("Z");
+    expect(result.spec.ballPath![0].to).toBe("X"); // jet WR mirrors
+    expect(result.spec.ballPath![1].to).toBe("Z"); // reverse mirrors
   });
 });
 

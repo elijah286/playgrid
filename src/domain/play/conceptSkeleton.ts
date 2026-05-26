@@ -1043,67 +1043,103 @@ function buildBubbleRpo(_c: ConceptEntry, opts: ConceptSkeletonOptions): Skeleto
 }
 
 /**
- * Jet Reverse — two-handoff misdirection. QB hands to the back at
- * the mesh; back runs strong-side and hands the ball to the weak-
- * side WR coming around. Three ball-handlers, two exchanges. Use the
- * play-level `ballPath` to ledger the exchanges; each carrier's
- * waypoints describe their leg with the ball. Requires
- * `handoff_chain`.
+ * Jet Reverse — two-handoff misdirection. CORRECTED 2026-05-26
+ * (audit finding #5).
  *
- * Strength: defaults to "right" — initial action goes right, reverse
- * comes back to the left side. Mirrors when strength === "left".
+ * Prior implementation had @B as the first carrier — no jet motion
+ * modeled — which made this a "Counter Reverse" in disguise rather
+ * than a true jet reverse. The defining mechanic of Jet Reverse is
+ * the pre-snap motion: a WR sprinting across the formation full-
+ * speed, taking the handoff IN STRIDE, then handing back to the
+ * weak-side reverse runner.
+ *
+ * Corrected flow:
+ *   1. Strong-side outside WR (the JET) starts in pre-snap motion
+ *      across the formation toward the weak side.
+ *   2. QB hands to the JET as the jet crosses behind the QB.
+ *   3. Jet runs a few yards opposite the original strength (into
+ *      the play's "strong" direction), then hands BACKWARDS to the
+ *      reverse carrier (a WR coming from the OPPOSITE side).
+ *   4. Reverse carrier attacks the perimeter on the OPPOSITE side
+ *      from where the jet motion was going (real opposite-flow
+ *      misdirection).
+ *
+ * Two-step ballPath: QB → jet, jet → reverse carrier.
+ *
+ * @B is now a blocker/fake, not the first carrier — matches what
+ * coaches actually run.
+ *
+ * Strength: defaults to "right" — the jet motions from right→left
+ * (across the formation), takes the handoff, then the reverse
+ * comes back to the right (the original strong side). Mirrors
+ * when strength === "left".
  */
 function buildJetReverse(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
   const variant = opts.variant;
   const side: "left" | "right" = opts.strength ?? "right";
-  // Reverse comes from the WEAK side: when strength=right, the reverse
-  // carrier is X (left WR); when strength=left, the reverse carrier is
-  // Z (right WR).
-  const reverseCarrier = side === "right" ? "X" : "Z";
   const sideSign = side === "right" ? 1 : -1;
-  // Mesh points: QB→B at the snap (behind the LOS), then B→reverse-
-  // carrier a couple yards laterally on the strong side. Both are
-  // behind the LOS so the handoffs look natural in the diagram.
-  const mesh1: [number, number] = [0, -4];
-  const mesh2: [number, number] = [sideSign * 3, -3];
+  // The jet motion WR: the strong-side outside WR. He motions FROM
+  // the strong side ACROSS the formation, taking the handoff as he
+  // crosses the QB.
+  const jetWR = side === "right" ? "Z" : "X";
+  // Reverse carrier: comes from the WEAK side and runs BACK to the
+  // strong side after the handback.
+  const reverseCarrier = side === "right" ? "X" : "Z";
+  // Mesh points:
+  //   mesh1 = QB→jet handoff, right behind QB on the strong side
+  //           (jet has crossed from his alignment to here at speed)
+  //   mesh2 = jet→reverseCarrier handback, a few yards opposite
+  //           strength — the jet has carried the ball briefly
+  //           AGAINST the original motion direction, selling the
+  //           run; reverse carrier catches the handback and runs
+  //           back to the original strong side
+  const mesh1: [number, number] = [sideSign * 1, -3];
+  const mesh2: [number, number] = [-sideSign * 3, -3];
   const assignments: PlayerAssignment[] = [
     // QB hands and gets out of the way — block / no further role.
     { player: "QB", confidence: "high", action: { kind: "block" } },
-    // Back takes the first handoff at mesh1, fakes upfield, then
-    // hands to the reverse carrier at mesh2. Waypoints describe the
-    // ball-carrying leg from mesh1 → mesh2; the renderer prepends
-    // B's start position automatically.
+    // Jet motion WR — pre-snap motion explicit on the action, then
+    // the carry path describes the in-stride handoff + brief carry
+    // before the handback. Waypoints start at the jet's natural
+    // alignment (~ sideSign * 10 yds outside, behind the LOS), go
+    // through mesh1 (handoff in stride), continue briefly to mesh2
+    // (handback to reverse carrier). The renderer reads this as a
+    // motion-then-carry path; the leading waypoint outside the
+    // formation signals the motion origin.
     {
-      player: "B",
+      player: jetWR,
       confidence: "high",
-      action: { kind: "carry", waypoints: [mesh1, mesh2] },
+      action: {
+        kind: "carry",
+        waypoints: [
+          [sideSign * 10, -1], // pre-snap motion origin (outside WR alignment)
+          mesh1,                // QB→jet handoff in stride
+          mesh2,                // jet→reverse handback
+        ],
+      },
     },
-    // Reverse carrier: takes the ball at mesh2 and runs to the weak
-    // side, ending ~10 yds downfield and 5 yds outside the hashes on
-    // the weak side. Waypoints span mesh2 → endpoint; renderer
-    // prepends their start position.
+    // Reverse carrier — takes the handback at mesh2 and runs back
+    // to the original STRONG side perimeter.
     {
       player: reverseCarrier,
       confidence: "high",
       action: {
         kind: "carry",
-        waypoints: [mesh2, [-sideSign * 8, -1], [-sideSign * 14, 8]],
+        waypoints: [mesh2, [sideSign * 6, -1], [sideSign * 14, 8]],
       },
     },
+    // @B fakes a run / blocks — was the first carrier in the prior
+    // (incorrect) implementation. Now @B is a decoy that helps
+    // sell the initial flow direction.
+    { player: "B", confidence: "med", action: { kind: "block" } },
     ...lineBlocks(variant),
   ];
-  // Routes for the remaining receivers so the formation isn't bare.
-  // Add a hitch + a drag on the strong side; backside skill players
-  // get unspecified (they sell run by holding their assignment but
-  // don't have a defined route in the reverse misdirection).
-  const strongOutside = side === "right" ? "Z" : "X";
+  // Remaining receivers. The strong-side slot blocks for the reverse
+  // (since the reverse comes BACK to the strong side); backside
+  // receivers hold their alignment to sell the motion direction.
   const strongSlot = side === "right" ? "S" : "H";
   const backsideSlot = side === "right" ? "H" : "S";
-  // Strong-side receivers block downfield (no route assignment) so
-  // the reverse runner has a perimeter. Mark them as `unspecified`
-  // so the diagram doesn't draw misleading pass routes.
   assignments.push(
-    { player: strongOutside, confidence: "med", action: { kind: "unspecified" } },
     { player: strongSlot, confidence: "med", action: { kind: "unspecified" } },
     { player: backsideSlot, confidence: "med", action: { kind: "unspecified" } },
   );
@@ -1113,14 +1149,12 @@ function buildJetReverse(_c: ConceptEntry, opts: ConceptSkeletonOptions): Skelet
     spec: {
       ...baseSpec(variant, `Jet Reverse ${cap(side)}`, "Trips Right", side, assignments),
       ballPath: [
-        { from: "QB", to: "B", atPoint: mesh1 },
-        { from: "B",  to: reverseCarrier, atPoint: mesh2 },
+        { from: "QB", to: jetWR, atPoint: mesh1 },
+        { from: jetWR, to: reverseCarrier, atPoint: mesh2 },
       ],
     },
     notes:
-      `Jet Reverse ${cap(side)}: QB hands to @B at the mesh; @B runs strong-side and hands the ball back to @${reverseCarrier} coming around. ` +
-      `@${reverseCarrier} attacks the weak side after the defense flows to the initial fake. ` +
-      `Two exchanges, three ball-handlers. Best when the defense is over-pursuing the run.`,
+      `Jet Reverse ${cap(side)}: @${jetWR} comes in PRE-SNAP MOTION across the formation; QB hands to @${jetWR} in stride at the mesh. @${jetWR} carries briefly OPPOSITE the motion direction, then hands BACK to @${reverseCarrier} coming from the other side. @${reverseCarrier} attacks the ${side} perimeter after the defense has flowed against the jet motion. Two exchanges, three ball-handlers. Defense bites hard on the jet motion = the reverse springs.`,
   };
 }
 
