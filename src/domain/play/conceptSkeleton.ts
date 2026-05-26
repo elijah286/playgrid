@@ -175,6 +175,85 @@ function sweepLineBlocks(side: "left" | "right"): PlayerAssignment[] {
   ];
 }
 
+/** Play-specific OL assignments for Counter (Counter Trey / Counter OT
+ *  family). Both backside players pull — the backside guard kicks out
+ *  the first defender outside the playside tackle box, the backside
+ *  tackle pulls AROUND the guard's kick-out and leads through the
+ *  playside hole at the second level. Playside OL DOWN-BLOCKS — they
+ *  drive their man INSIDE toward the playside gap to pin defenders
+ *  away from the puller's path. Center reaches playside to seal the
+ *  A-gap.
+ *
+ *  The RB jab-step away from the play side (selling the wrong
+ *  direction) is modeled in the carry path; the OL scheme matches the
+ *  "Counter Trey" canonical design — most-recognizable gap-scheme
+ *  pull both backside players bring. */
+function counterLineBlocks(side: "left" | "right"): PlayerAssignment[] {
+  const playsideT = side === "right" ? "RT" : "LT";
+  const playsideG = side === "right" ? "RG" : "LG";
+  const backsideT = side === "right" ? "LT" : "RT";
+  const backsideG = side === "right" ? "LG" : "RG";
+  return [
+    { player: playsideT, confidence: "high", action: { kind: "block", target: "down_block" } as AssignmentAction },
+    { player: playsideG, confidence: "high", action: { kind: "block", target: "down_block" } as AssignmentAction },
+    { player: "C",       confidence: "high", action: { kind: "block", target: "reach_playside" } as AssignmentAction },
+    { player: backsideG, confidence: "high", action: { kind: "block", target: "pull_kick" } as AssignmentAction },
+    { player: backsideT, confidence: "high", action: { kind: "block", target: "pull_lead" } as AssignmentAction },
+  ];
+}
+
+/** Play-specific OL assignments for Power. Single pulling guard from
+ *  the backside leads through the playside B-gap; everyone else down-
+ *  blocks (playside) or cuts off (backside tackle). Distinct from
+ *  Sweep (which pulls BOTH guards) and Counter (which pulls G + T
+ *  from backside). Power is gap-scheme but quicker-developing —
+ *  only one puller. */
+function powerLineBlocks(side: "left" | "right"): PlayerAssignment[] {
+  const playsideT = side === "right" ? "RT" : "LT";
+  const playsideG = side === "right" ? "RG" : "LG";
+  const backsideT = side === "right" ? "LT" : "RT";
+  const backsideG = side === "right" ? "LG" : "RG";
+  return [
+    { player: playsideT, confidence: "high", action: { kind: "block", target: "down_block" } as AssignmentAction },
+    { player: playsideG, confidence: "high", action: { kind: "block", target: "down_block" } as AssignmentAction },
+    { player: "C",       confidence: "high", action: { kind: "block", target: "reach_playside" } as AssignmentAction },
+    { player: backsideG, confidence: "high", action: { kind: "block", target: "pull_lead" } as AssignmentAction },
+    { player: backsideT, confidence: "high", action: { kind: "block", target: "cut_off" } as AssignmentAction },
+  ];
+}
+
+/** Play-specific OL assignments for Dive (Inside Zone). Everyone
+ *  zone-blocks playside — combo to the second level when the front
+ *  defender is sealed. Backside tackle cuts off chase. No pullers.
+ *  Distinct from gap-scheme runs (Counter / Power) where specific
+ *  linemen pull. Zone schemes are decision-based rather than
+ *  designed-track. */
+function diveLineBlocks(side: "left" | "right"): PlayerAssignment[] {
+  const backsideT = side === "right" ? "LT" : "RT";
+  return ["LT", "LG", "C", "RG", "RT"].map((id) => ({
+    player: id,
+    confidence: "high" as const,
+    action:
+      id === backsideT
+        ? ({ kind: "block", target: "cut_off" } as AssignmentAction)
+        : ({ kind: "block", target: "zone_playside" } as AssignmentAction),
+  }));
+}
+
+/** Play-specific OL assignments for Draw. All five OL pass-set at the
+ *  snap to sell pass — receivers run pass routes, QB drops back, then
+ *  hands LATE to the back as the rush vacates the middle. The OL then
+ *  run-blocks the soft pocket. The "pass-set first, run-block late"
+ *  sequence is the defining OL shape — a coach reading the page needs
+ *  that, not the generic "drive your man playside" bullet. */
+function drawLineBlocks(): PlayerAssignment[] {
+  return ["LT", "LG", "C", "RG", "RT"].map((id) => ({
+    player: id,
+    confidence: "high" as const,
+    action: { kind: "block", target: "pass_set_late" } as AssignmentAction,
+  }));
+}
+
 /** QB drops back — we model as "unspecified" because the QB's job
  *  is to read and throw, not run a route. */
 function qbDropback(): PlayerAssignment {
@@ -1739,16 +1818,22 @@ function buildSingleHandoffRun(
     }
     assignments.push({ player: id, confidence: "med", action: stalkAction });
   }
-  // OL assignments. Generic `lineBlocks` emits `{ kind: "block" }` for
-  // every lineman — the narrator then says "run-block — drive your man
-  // playside" for all five, which is wrong on a Sweep (the canonical
-  // design pulls BOTH guards; tackles reach; center seals). For Sweep
-  // specifically, emit per-OL targets so the notes describe each
-  // lineman's actual job. Other run concepts (Dive / Power / Counter)
-  // still use the generic shape for now — follow-up task to model
-  // their pulling-blocker semantics too.
-  if (conceptName === "Sweep" && variant === "tackle_11") {
-    assignments.push(...sweepLineBlocks(side));
+  // OL assignments. Each run concept gets its own per-OL block-target
+  // pattern so the notes describe each lineman's actual job rather
+  // than flatten everything to "run-block — drive your man playside":
+  //   - Sweep    : both guards PULL, tackles reach, center seals
+  //   - Counter  : backside G+T pull (Counter Trey), playside down-blocks
+  //   - Power    : backside G pulls only, playside down-blocks
+  //   - Dive     : zone-block playside (inside zone), backside T cuts off
+  //   - Draw     : pass-set late — sells pass, then run-blocks
+  // Flag variants (no OL) fall through to the no-op generic helper.
+  if (variant === "tackle_11") {
+    if (conceptName === "Sweep")        assignments.push(...sweepLineBlocks(side));
+    else if (conceptName === "Counter") assignments.push(...counterLineBlocks(side));
+    else if (conceptName === "Power")   assignments.push(...powerLineBlocks(side));
+    else if (conceptName === "Dive")    assignments.push(...diveLineBlocks(side));
+    else if (conceptName === "Draw")    assignments.push(...drawLineBlocks());
+    else                                 assignments.push(...lineBlocks(variant));
   } else {
     assignments.push(...lineBlocks(variant));
   }

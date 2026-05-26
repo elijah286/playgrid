@@ -1203,6 +1203,23 @@ function narrateBlock(
   if (action.target === "corner") {
     return `${ref}: stalk-block the corner — get hands inside, drive him off coverage so the runner has the edge.`;
   }
+  // Counter / Power — "down block" pins the playside defender INSIDE
+  // so the pullers have a clean track. The down-blocker drives their
+  // man toward the playside gap (the gap the puller fits into).
+  if (action.target === "down_block") {
+    return `${ref}: down block — drive your man INSIDE toward the playside gap, pin him so the pulling guard has a clean track.`;
+  }
+  // Dive / Inside Zone — every OL flows playside, combo-blocking to
+  // the second level when the first-level defender is sealed.
+  if (action.target === "zone_playside") {
+    return `${ref}: zone block playside — combo with your neighbor to the LB; climb to the second level once the front defender is sealed.`;
+  }
+  // Draw — OL pass-sets at the snap to sell pass coverage, then
+  // recovers and run-blocks as the back hits the soft middle the
+  // rush vacated.
+  if (action.target === "pass_set_late") {
+    return `${ref}: pass-set first to sell pass; recover and run-block when the back hits the lane behind you.`;
+  }
   return `${ref}: block @${action.target}.`;
 }
 
