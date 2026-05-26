@@ -271,10 +271,10 @@ export function PracticePlanEditorClient({
 
       {/* Body: split view — timeline blocks (left/top) + lane editor (right/bottom).
           On mobile: stacked vertically; timeline capped at 35vh so the editor is
-          visible below it without scrolling the page. On lg+: side-by-side. */}
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+          visible below it without scrolling the page. On md+: side-by-side. */}
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         {/* Timeline panel */}
-        <aside className="max-h-[35vh] w-full shrink-0 overflow-y-auto border-b border-border bg-surface/50 p-3 lg:max-h-none lg:w-[340px] lg:border-b-0 lg:border-r xl:w-[380px]">
+        <aside className="max-h-[35vh] w-full shrink-0 overflow-y-auto border-b border-border bg-surface/50 p-3 md:max-h-none md:w-[300px] md:border-b-0 md:border-r lg:w-[340px] xl:w-[380px]">
 
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">

@@ -139,7 +139,7 @@ function PlaybookPracticePlansTabInner({ playbookId }: { playbookId: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Practice Plans</h2>
           <p className="text-sm text-muted">
@@ -147,8 +147,11 @@ function PlaybookPracticePlansTabInner({ playbookId }: { playbookId: string }) {
           </p>
         </div>
         {!showCreate ? (
-          <div className="flex items-center gap-2">
-            <CoachCalCTA entryPoint="playbook_generate_practice_plan" />
+          <div className="flex shrink-0 items-center gap-2">
+            <CoachCalCTA
+              entryPoint="playbook_generate_practice_plan"
+              label="Ask Cal"
+            />
             <button
               type="button"
               onClick={() => setShowCreate(true)}
