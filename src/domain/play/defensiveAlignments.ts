@@ -103,6 +103,14 @@ export type DefensiveAlignment = {
    * lines (defender → receiver) instead.
    */
   manCoverage?: boolean;
+  /** Coaching context — when the scheme is the right call. Surfaces
+   *  in the library defense page's "When to call it" section and in
+   *  Cal's recommendation prose. Optional; populated by the KG. */
+  whenToUse?: string;
+  /** Known weaknesses — offensive concepts / coverages that beat
+   *  this defense. Surfaces in the library defense page's "Known
+   *  weaknesses" section. Optional; populated by the KG. */
+  weaknesses?: string[];
 };
 
 // ── Defensive alignments ───────────────────────────────────────────────────

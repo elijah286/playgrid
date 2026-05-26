@@ -149,6 +149,11 @@ export type LegacyDefensiveAlignment = {
     size: [number, number];
     label: string;
   }>;
+  /** Coaching context. Optional — populated when the KG scheme
+   *  declares it. The library defense page surfaces these as the
+   *  "When to call it" + "Known weaknesses" sections. */
+  whenToUse?: string;
+  weaknesses?: string[];
 };
 
 /** Project the KG's SCHEMES array into legacy `DefensiveAlignment[]` shape. */
@@ -172,6 +177,8 @@ export function projectSchemesToLegacy(): LegacyDefensiveAlignment[] {
       zones: s.zones,
     };
     if (s.manCoverage !== undefined) out.manCoverage = s.manCoverage;
+    if (s.whenToUse !== undefined) out.whenToUse = s.whenToUse;
+    if (s.weaknesses !== undefined) out.weaknesses = s.weaknesses;
     return out;
   });
 }

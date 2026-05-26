@@ -339,6 +339,33 @@ export default async function DefensePage(
               {renderVariant ? ` in ${VARIANT_LABEL[renderVariant]}` : ""}.
             </div>
           )}
+
+          {/* Coaching context. Pull from the alignment we just
+              rendered (whenToUse + weaknesses live on the scheme
+              KG def, projected through legacy DefensiveAlignment).
+              Hidden when the scheme has no guidance authored — better
+              an empty space than a placeholder. */}
+          {alignment?.whenToUse ? (
+            <section className="mt-8">
+              <h2 className="text-xl font-bold tracking-tight">When to call it</h2>
+              <p className="mt-2 text-base leading-relaxed text-muted">
+                {alignment.whenToUse}
+              </p>
+            </section>
+          ) : null}
+
+          {alignment?.weaknesses && alignment.weaknesses.length > 0 ? (
+            <section className="mt-8">
+              <h2 className="text-xl font-bold tracking-tight">Known weaknesses</h2>
+              <ul className="mt-2 space-y-1.5 pl-6">
+                {alignment.weaknesses.map((w) => (
+                  <li key={w} className="list-disc text-base leading-relaxed text-muted">
+                    {w}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
         </div>
 
         <aside className="space-y-4">

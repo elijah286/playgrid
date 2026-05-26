@@ -29,6 +29,12 @@ export const SCHEMES: SchemeDef[] = [
     complexity: "intermediate",
     front: "4-3 Over",
     coverage: "Cover 3",
+    whenToUse: "Balanced base call — covers the deep field with a 3-deep shell while keeping 4 underneath defenders + a sound 4-3 run front. Best vs spread teams that mix run and pass; reliable on first/second down when you don't know what's coming.",
+    weaknesses: [
+      "4 verticals — three deep defenders covering four receivers is math the offense wins. The seam runner splits the safety and the corner.",
+      "Smash concept — high-low on the corner stresses the deep third; the corner can't help on the flat and cover the corner route.",
+      "Curl-flat on the boundary — the flat defender can't cover both layers; smart QBs pick whichever is uncovered.",
+    ],
     defenders: [
       { id: "DE", x: -8,  y: 1, assignment: { kind: "blitz", gap: "edge" } },
       { id: "DT", x: -2,  y: 1, assignment: { kind: "blitz", gap: "A" } },
@@ -62,6 +68,12 @@ export const SCHEMES: SchemeDef[] = [
     complexity: "intermediate",
     front: "4-3 Over",
     coverage: "Cover 2",
+    whenToUse: "Sideline-coverage shell — corners squat on the flats so quick outs / hitches die. Best vs perimeter-passing teams that live in the underneath, or anytime you want a hard ceiling on chunk plays outside.",
+    weaknesses: [
+      "Deep middle — no safety on the hash, so 4 verts with a seam runner busts the coverage (the safeties can't cover the middle and the boundary).",
+      "Smash concept — the corner/flat conflict on a Cover 2 corner is exactly what Cover 2 invites; the corner over-the-top can't be covered by the safety.",
+      "Drives between the hashes — the MLB hook is a long way from a late dig route by the slot.",
+    ],
     defenders: [
       { id: "DE", x: -8,  y: 1, assignment: { kind: "blitz", gap: "edge" } },
       { id: "DT", x: -2,  y: 1, assignment: { kind: "blitz", gap: "A" } },
@@ -96,6 +108,13 @@ export const SCHEMES: SchemeDef[] = [
     front: "3-4",
     coverage: "Cover 1",
     manCoverage: true,
+    whenToUse: "Pressure call with man coverage and one safety insurance over the top. The 3-4 front gives you OLB flexibility — they can rush off the edge or drop into coverage. Best vs balanced personnel when you trust your DBs in man.",
+    weaknesses: [
+      "Bunch / picks — switches under stress lead to wide-open receivers behind the rub.",
+      "RB / TE on a LB — the smaller, quicker pass-catcher consistently wins those matchups.",
+      "Deep verticals to your weakest DB — single-high coverage means no double on the matchup the offense is exploiting.",
+      "Interior runs — the 3-4 is light up front (3 DL); A-gap dives and power-A can find creases vs over-aligned DEs.",
+    ],
     defenders: [
       { id: "DE", x: -5,  y: 1,   assignment: { kind: "blitz", gap: "B" } },
       { id: "NT", x:  0,  y: 1,   assignment: { kind: "blitz", gap: "A" } },
@@ -123,6 +142,13 @@ export const SCHEMES: SchemeDef[] = [
     complexity: "advanced",
     front: "Nickel (4-2-5)",
     coverage: "Cover 4 (Quarters)",
+    whenToUse: "Two-high quarters look that morphs into man-match on vertical releases — best vs deep-shot passing teams in must-have-yards situations, or anytime you want a hard ceiling on chunk plays.",
+    weaknesses: [
+      "Underneath — only 3 zones (or LBs) underneath means the middle is open vs quick game and bubble screens.",
+      "Mesh concept — natural pick action at the crossers while the safeties stay deep on their quarters.",
+      "Crossers / shallow drag — the LBs are spread thin vs west-coast horizontal stretching.",
+      "Light run box — 5 DBs means the front-six can be outnumbered vs spread runs.",
+    ],
     defenders: [
       { id: "DE", x: -8,  y: 1,   assignment: { kind: "blitz", gap: "edge" } },
       { id: "DT", x: -2,  y: 1,   assignment: { kind: "blitz", gap: "A" } },
@@ -156,6 +182,13 @@ export const SCHEMES: SchemeDef[] = [
     complexity: "advanced",
     front: "46 Bear",
     coverage: "Cover 1",
+    whenToUse: "Extreme pressure scheme — 8-man box with man coverage over receivers. The Bear front (NT + two 3-techs heads-up on every interior OL) is designed to overwhelm the run game and force one-on-one matchups outside.",
+    weaknesses: [
+      "Spread / 4-WR sets — too many defenders in the box, not enough in coverage. Empty alignment turns the 46 into a free-rusher penalty.",
+      "Quick game / RPOs — any 3-step throw beats the Bear front's rush, and the man coverage outside has no help.",
+      "Picks and rubs — bunch / mesh concepts exploit the man matchups.",
+      "Mismatches — a slot WR on a LB in man is a free completion.",
+    ],
     manCoverage: true,
     defenders: [
       { id: "DE", x: -10, y: 1,   assignment: { kind: "blitz", gap: "edge" } },
@@ -184,6 +217,13 @@ export const SCHEMES: SchemeDef[] = [
     complexity: "intermediate",
     front: "4-4 Stack",
     coverage: "Cover 3",
+    whenToUse: "Heavy-box run defense with a 3-deep coverage shell. The 4-4 stack puts eight in the box vs run while keeping Cover 3's three-deep distribution. Best vs run-heavy teams that pose a passing-game threat.",
+    weaknesses: [
+      "4 verts — three deep defenders vs four vertical threats is the same math problem every Cover 3 faces.",
+      "Smash / corner-flat conflict — the boundary corner-flat split exposes the same Cover 3 weakness.",
+      "Empty / spread looks — the stacked LBs are slow to widen vs 3x1 / 4x1 formations.",
+      "Long-developing pass concepts — the 4-4 expects to win on run downs, less suited to obvious passing situations.",
+    ],
     defenders: [
       { id: "DE", x: -8,  y: 1, assignment: { kind: "blitz", gap: "edge" } },
       { id: "DT", x: -3,  y: 1, assignment: { kind: "blitz", gap: "A" } },
@@ -217,6 +257,13 @@ export const SCHEMES: SchemeDef[] = [
     complexity: "intermediate",
     front: "4-4 Stack",
     coverage: "Cover 1",
+    whenToUse: "Stack-and-blitz: bring an extra man up to either pressure the run or rush the passer, with single-high man coverage on the perimeter. Best when you NEED a stop on a key down vs a balanced run/pass team.",
+    weaknesses: [
+      "Bunch / picks — single-high man invites rub concepts.",
+      "RB / TE on a LB — same Cover 1 weakness — the smaller pass-catcher wins on a route.",
+      "Deep verticals to your weakest DB — no help means the targeted matchup is a 50/50 at best.",
+      "Spread sets — the heavy box gets in conflict when receivers are split out.",
+    ],
     manCoverage: true,
     defenders: [
       { id: "DE", x: -8,  y: 1, assignment: { kind: "blitz", gap: "edge" } },
@@ -247,6 +294,13 @@ export const SCHEMES: SchemeDef[] = [
     complexity: "basic",
     front: "7v7 Zone",
     coverage: "Cover 3",
+    whenToUse: "7v7 zone shell — 3 deep distribution covers the field's vertical thirds; 4 underneath defenders handle quick game. Best as a baseline call vs balanced 7v7 passing teams.",
+    weaknesses: [
+      "4 verts — three deep defenders against four vertical threats forces a coverage bust.",
+      "Smash on the boundary — Cover 3's corner-flat conflict shows up the same way as in tackle.",
+      "Curl-flat — the underneath flat defender can't cover both the curl and the flat receiver.",
+      "Mesh and other in-breaking rubs at the hook level — the underneath zones are stretched horizontally.",
+    ],
     defenders: [
       { id: "FL", x: -10, y: 4,  assignment: { kind: "zone", zoneId: "flat_l" } },
       { id: "HL", x: -4,  y: 5,  assignment: { kind: "zone", zoneId: "hook_l" } },
@@ -276,6 +330,13 @@ export const SCHEMES: SchemeDef[] = [
     complexity: "basic",
     front: "7v7 Zone",
     coverage: "Cover 2",
+    whenToUse: "Cover 2 shell with safeties splitting the deep halves and corners squatting in the flats — kills quick outs and hitches. Best in 7v7 when the offense lives in the sideline passing game.",
+    weaknesses: [
+      "Deep middle (no MLB to carry the seam) — 4 verts with a seam runner busts the coverage cleanly.",
+      "Smash concept — corner over-the-top is the classic Cover 2 beater; the safety can't help in time.",
+      "Drives between the hashes — the hook defender has too much real estate to cover.",
+      "Quick crossers — Cover 2's underneath defenders trail picked-on routes.",
+    ],
     defenders: [
       { id: "CB", x: -12, y: 5,  assignment: { kind: "zone", zoneId: "flat_l" } },
       { id: "HL", x: -5,  y: 5,  assignment: { kind: "zone", zoneId: "hook_l" } },
@@ -305,6 +366,13 @@ export const SCHEMES: SchemeDef[] = [
     complexity: "advanced",
     front: "7v7 Zone",
     coverage: "Tampa 2",
+    whenToUse: "Cover 2 shell with the middle hook defender sprinting to the deep middle to plug the seam. Best when your MLB has the speed to legitimately carry a vertical route — closes the Cover 2 deep-middle hole.",
+    weaknesses: [
+      "The 8-12yd middle hole the MLB just vacated — dig + crosser concepts attack exactly that void.",
+      "Smash high-low — the corner-flat split still exists; the Cover 2 corner can't help on the corner route.",
+      "Quick game while the MLB is mid-drop — the underneath middle is open for 1-2 seconds.",
+      "Boundary-side vertical — the safety has to choose between the corner and the post.",
+    ],
     defenders: [
       { id: "CB", x: -12, y: 5,  assignment: { kind: "zone", zoneId: "flat_l" } },
       { id: "HL", x: -5,  y: 5,  assignment: { kind: "zone", zoneId: "hook_l" } },
@@ -334,6 +402,13 @@ export const SCHEMES: SchemeDef[] = [
     complexity: "intermediate",
     front: "7v7 Zone",
     coverage: "Cover 4",
+    whenToUse: "Two-high quarters in 7v7 — four deep defenders match vertical releases, three underneath handle quick game. Best vs deep-shot 7v7 offenses or in must-have-yards situations where you need a hard ceiling.",
+    weaknesses: [
+      "Underneath quick game — only 3 underneath zones means the middle is open vs hitches and drag concepts.",
+      "Mesh concept — picks at the crossers exploit the underneath man-match while safeties stay deep.",
+      "Crossers / shallow drag — the underneath defenders are stretched thin horizontally.",
+      "Heavy run — only 3 box defenders is a numbers disadvantage vs run-first offenses.",
+    ],
     defenders: [
       { id: "FL", x: -10, y: 5,  assignment: { kind: "zone", zoneId: "curl_flat_l" } },
       { id: "M",  x:   0, y: 5,  assignment: { kind: "zone", zoneId: "hook_m" } },
@@ -363,6 +438,13 @@ export const SCHEMES: SchemeDef[] = [
     complexity: "basic",
     front: "7v7 Man",
     coverage: "Cover 1",
+    whenToUse: "7v7 man coverage with one safety helping over the top — best vs balanced offenses when you trust your DBs in pure matchup football. The free safety bails out a deep shot on the worst matchup.",
+    weaknesses: [
+      "Picks / bunch concepts — natural rubs from mesh / smash / snag confuse the man switches.",
+      "RB / TE on a LB or smaller DB — the matchup is consistently the offense's win.",
+      "Verticals to your weakest DB — single-high safety can only help on one side.",
+      "Hot routes vs blitz — when the rush gets there fast, the man underneath gives up easy completions.",
+    ],
     manCoverage: true,
     defenders: [
       { id: "CB", x: -12, y: 5,  assignment: { kind: "man", target: "X" } },
@@ -387,6 +469,13 @@ export const SCHEMES: SchemeDef[] = [
     complexity: "advanced",
     front: "7v7 Man",
     coverage: "Cover 0",
+    whenToUse: "All-out pressure call — every defender is in man with NO safety help. Best on third-and-long when the offense is one-dimensional pass and you need a stop. Also useful in goal-line short-yardage when you need a body on every gap.",
+    weaknesses: [
+      "Hot routes / quick game — any 3-step throw beats the rush; the QB releases the ball before the pressure arrives.",
+      "Picks and rubs from bunch / mesh — no safety help means a missed switch is a wide-open receiver.",
+      "Mismatches anywhere — a slot WR on a LB or RB on a DB is a guaranteed completion.",
+      "Deep shots — without ANY safety help, any 1-on-1 vertical win is a touchdown.",
+    ],
     manCoverage: true,
     defenders: [
       { id: "CB", x: -12, y: 5, assignment: { kind: "man", target: "X" } },
@@ -411,6 +500,12 @@ export const SCHEMES: SchemeDef[] = [
     complexity: "basic",
     front: "6v6 Zone",
     coverage: "Cover 3",
+    whenToUse: "6v6 zone shell — three deep, three underneath. The default call vs balanced 6v6 offenses; covers the deep field without committing to man.",
+    weaknesses: [
+      "4 verts is impossible to defend perfectly with only 3 deep — the offense always has a numbers advantage downfield.",
+      "Smash + curl-flat on the boundary — Cover 3's flat-defender conflict surfaces the same way as in 7v7.",
+      "Quick crossers in the middle — the lone hook defender has too much horizontal space to cover.",
+    ],
     defenders: [
       { id: "E",  x:  4,  y: 2,  assignment: { kind: "blitz", gap: "edge" } },
       { id: "FL", x: -8,  y: 4,  assignment: { kind: "zone", zoneId: "flat_l" } },
@@ -437,6 +532,12 @@ export const SCHEMES: SchemeDef[] = [
     complexity: "basic",
     front: "6v6 Zone",
     coverage: "Cover 2",
+    whenToUse: "6v6 with two safeties splitting the deep halves and corners squatting in flats — kills perimeter quick game. Best when the offense lives on quick outs and stop routes.",
+    weaknesses: [
+      "Deep middle — no MLB to carry the seam; 4-vert / seam concepts find the void between the safeties.",
+      "Smash high-low on the corner — Cover 2 corner can't cover both the corner route and the flat.",
+      "Drives between the hashes — only one underneath defender to cover the entire middle.",
+    ],
     defenders: [
       { id: "E",  x:  4,  y: 2,  assignment: { kind: "blitz", gap: "edge" } },
       { id: "CB", x: -10, y: 5,  assignment: { kind: "zone", zoneId: "flat_l" } },
@@ -463,6 +564,12 @@ export const SCHEMES: SchemeDef[] = [
     complexity: "basic",
     front: "6v6 Man",
     coverage: "Cover 1",
+    whenToUse: "6v6 man with a free safety over the top — best vs balanced offenses when you trust your DBs in matchup football and need an extra body in the run-pass conflict.",
+    weaknesses: [
+      "Bunch / picks — natural rubs from mesh / snag confuse the man switches.",
+      "RB / TE matchups on a LB — the smaller pass-catcher wins on a route.",
+      "Deep verticals to your weakest DB — single-high means no double on the threat.",
+    ],
     manCoverage: true,
     defenders: [
       { id: "E",  x:  4,  y: 2,  assignment: { kind: "blitz", gap: "edge" } },
@@ -486,6 +593,12 @@ export const SCHEMES: SchemeDef[] = [
     complexity: "advanced",
     front: "6v6 Man",
     coverage: "Cover 0",
+    whenToUse: "All-out pressure with NO safety help — every defender is in man. Best on third-and-long when you need a sack or a stop. Risky on neutral downs.",
+    weaknesses: [
+      "Hot routes / quick game — any 3-step throw beats the rush.",
+      "Picks and rubs — no safety means a missed switch is a touchdown.",
+      "Any 1-on-1 deep win — without a safety, vertical mismatches are uncontested.",
+    ],
     manCoverage: true,
     defenders: [
       { id: "E",  x:  4,  y: 2,  assignment: { kind: "blitz", gap: "edge" } },
@@ -509,6 +622,12 @@ export const SCHEMES: SchemeDef[] = [
     complexity: "basic",
     front: "5v5 Zone",
     coverage: "Cover 3",
+    whenToUse: "5v5 zone shell — 3 deep (corners + free safety on the hashes) and 2 underneath flats. The baseline call vs balanced 5v5 offenses. Best when you want to cap chunk plays without committing to man.",
+    weaknesses: [
+      "4 receivers running deep stretches your 3 deep defenders — there's no helping the seam between the corner and the safety.",
+      "Smash on the boundary — Cover 3's corner-flat conflict surfaces the same way as in 7v7 and tackle.",
+      "Mesh / shallow crossers — two underneath flats are stretched thin horizontally; crossers hit the void at 5-6yd depth.",
+    ],
     defenders: [
       { id: "FL", x: -7,  y: 4,  assignment: { kind: "zone", zoneId: "flat_l" } },
       { id: "FR", x:  7,  y: 4,  assignment: { kind: "zone", zoneId: "flat_r" } },
@@ -534,6 +653,13 @@ export const SCHEMES: SchemeDef[] = [
     complexity: "basic",
     front: "5v5 Man",
     coverage: "Cover 1",
+    whenToUse: "5v5 man coverage with a free safety helping over the top — best vs balanced offenses when you trust your matchups. The free safety is your insurance against the deep shot.",
+    weaknesses: [
+      "Picks / bunch concepts — natural rubs from mesh / smash / snag confuse the man switches.",
+      "RB matchup on a defender who isn't your best cover guy — the smaller, quicker target wins.",
+      "Vertical to the weakest matchup — single-high safety can only help on one side.",
+      "Hot routes vs rush — when pressure gets there fast, the man defender gives up an easy completion.",
+    ],
     manCoverage: true,
     defenders: [
       { id: "CB", x: -8,  y: 5,  assignment: { kind: "man", target: "X" } },

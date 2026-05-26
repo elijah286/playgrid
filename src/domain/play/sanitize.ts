@@ -277,7 +277,50 @@ export function sanitizeCoachDiagram(
         message: `zone "${z.label ?? "(unlabeled)"}" center clamped from [${c[0]}, ${c[1]}] to [${center[0]}, ${center[1]}].`,
       });
     }
-    cleanZones.push({ ...z, center });
+
+    // EXTENT clamp (2026-05-26). The center-clamp above keeps the zone
+    // CENTER on the field but doesn't account for the zone's SIZE. A
+    // deep_third in 5v5 with center=(0,17) and size=(9,16) has a
+    // center on the field but extends from y=9 to y=25 — past the
+    // visible y=15 boundary (display window is 10yd backfield + 15yd
+    // downfield, per the sport profile). Coaches saw the zone clip
+    // off the top of the field.
+    //
+    // Fix: shrink the zone size so its extents stay within the field
+    // viewport. We use the display window (yMax = fieldLength) rather
+    // than the more-forgiving PLAYER_BOUNDS because zones get
+    // rendered as filled ellipses; a partially-clipped fill reads as
+    // a bug, not a coaching choice. Width clamped to fieldWidth so
+    // the zone doesn't paint past the sidelines either.
+    let size: [number, number] = [s[0], s[1]];
+    let sizeClamped = false;
+    const fieldYMin = -10;
+    const fieldYMax = profile.fieldLengthYds; // display window: LOS + fieldLength downfield
+    // x: distance from center.x to the nearer sideline. Half-size can
+    // be at most that distance on either side.
+    const maxHalfW = Math.min(halfWidthYds - center[0], halfWidthYds + center[0]);
+    if (maxHalfW > 0 && size[0] / 2 > maxHalfW) {
+      size = [maxHalfW * 2, size[1]];
+      sizeClamped = true;
+    }
+    // y: similar, but using the asymmetric field y bounds.
+    const maxHalfHUp = fieldYMax - center[1];
+    const maxHalfHDown = center[1] - fieldYMin;
+    const maxHalfH = Math.min(maxHalfHUp, maxHalfHDown);
+    if (maxHalfH > 0 && size[1] / 2 > maxHalfH) {
+      size = [size[0], maxHalfH * 2];
+      sizeClamped = true;
+    }
+    if (sizeClamped) {
+      warnings.push({
+        code: "zone_center_clamped", // re-use code; tightly scoped warning
+        subject: z.label ?? "(unlabeled)",
+        message:
+          `zone "${z.label ?? "(unlabeled)"}" size shrunk from [${s[0]}, ${s[1]}] to [${size[0].toFixed(1)}, ${size[1].toFixed(1)}] ` +
+          `so the extent fits inside the ${variantStr} field viewport.`,
+      });
+    }
+    cleanZones.push({ ...z, center, size });
   }
 
   // ── Routes ───────────────────────────────────────────────────────────

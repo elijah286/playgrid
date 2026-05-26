@@ -2486,13 +2486,22 @@ function PlayEditorClientInner({
                   z-30 keeps it above the AnimationOverlay. */}
               {libraryMode && (
                 <>
-                  <button
-                    type="button"
-                    onClick={anim.step}
-                    aria-label="Advance play"
-                    className="pointer-events-auto absolute inset-0 z-10 cursor-pointer bg-transparent"
-                  />
-                  <LibraryPlaybackBar anim={anim} />
+                  {/* Library-mode static plays (formations, defenses)
+                      have nothing to animate — no routes, no motion.
+                      The play button + overlay would be dead UI.
+                      Render them only when there's actually an
+                      animation worth playing back. */}
+                  {(doc.layers.routes.length > 0 || anim.hasMotion) && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={anim.step}
+                        aria-label="Advance play"
+                        className="pointer-events-auto absolute inset-0 z-10 cursor-pointer bg-transparent"
+                      />
+                      <LibraryPlaybackBar anim={anim} />
+                    </>
+                  )}
                 </>
               )}
             </div>
