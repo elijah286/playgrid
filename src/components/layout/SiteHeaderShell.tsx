@@ -7,6 +7,7 @@ import { CoachAiLauncher } from "@/features/coach-ai/CoachAiLauncher";
 import { ShareButton } from "@/components/share/ShareButton";
 import { InboxBell } from "@/components/layout/InboxBell";
 import { ResourcesDropdown } from "@/components/layout/ResourcesDropdown";
+import { MobileNavMenu } from "@/components/layout/MobileNavMenu";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
 
 type Props = {
@@ -64,43 +65,68 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
         hideOnMobile ? "hidden sm:block" : ""
       }`}
     >
+      {/* Two-cluster layout:
+            LEFT  = brand wordmark + site nav (Resources, Pricing) — where to go
+            RIGHT = utilities + auth (Cal/Inbox/Share/Avatar, or Sign in/Get started) — what to do / who you are
+          Keeping text-nav and icon-utilities in separate visual zones lets
+          the eye parse the header without re-classifying mid-row, and matches
+          the established pattern on every major SaaS header (Linear, Notion,
+          Stripe, Vercel, GitHub). On <sm the nav row collapses behind the
+          MobileNavMenu hamburger on the right; the bottom toolbar still
+          owns primary app navigation for authed users. */}
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3">
-        <Link
-          href={user ? "/home" : "/"}
-          aria-label="XO Gridmaker home"
-          className="flex cursor-pointer items-center text-[#06255E] dark:text-foreground"
-        >
-          {/* Single <text> with colored <tspan>s so crawlers read the
-              wordmark as one token ("xogridmaker") rather than three. The
-              X (#1769FF) and O (#95CC1F) stay fixed in both themes;
-              "gridmaker" inherits currentColor for dark mode.
-
-              No `dominantBaseline` — Safari ignores both `hanging` and
-              `text-before-edge` and falls back to alphabetic, so we
-              pre-bake that assumption: y=210 puts the alphabetic
-              baseline at ~2/3 down the 320-unit viewBox, leaving ~75
-              units above for ascenders (`d`, `k`) and ~30 below for
-              descenders (`g`). */}
-          <svg
-            viewBox="0 0 1600 320"
-            role="img"
-            aria-label="XO Gridmaker"
-            className="h-8 w-auto sm:h-9"
+        <div className="flex items-center gap-4 sm:gap-6">
+          <Link
+            href={user ? "/home" : "/"}
+            aria-label="XO Gridmaker home"
+            className="flex cursor-pointer items-center text-[#06255E] dark:text-foreground"
           >
-            <text
-              y="210"
-              fontFamily='"DejaVu Sans", Arial, sans-serif'
-              fontSize="150"
-              fontStyle="oblique"
-              fontWeight="700"
+            {/* Single <text> with colored <tspan>s so crawlers read the
+                wordmark as one token ("xogridmaker") rather than three. The
+                X (#1769FF) and O (#95CC1F) stay fixed in both themes;
+                "gridmaker" inherits currentColor for dark mode.
+
+                No `dominantBaseline` — Safari ignores both `hanging` and
+                `text-before-edge` and falls back to alphabetic, so we
+                pre-bake that assumption: y=210 puts the alphabetic
+                baseline at ~2/3 down the 320-unit viewBox, leaving ~75
+                units above for ascenders (`d`, `k`) and ~30 below for
+                descenders (`g`). */}
+            <svg
+              viewBox="0 0 1600 320"
+              role="img"
+              aria-label="XO Gridmaker"
+              className="h-8 w-auto sm:h-9"
             >
-              <tspan x="278.24" fill="#1769FF">x</tspan><tspan x="378.68" fill="#95CC1F">o</tspan><tspan x="473.44" fill="currentColor">gridmaker</tspan>
-            </text>
-          </svg>
-        </Link>
+              <text
+                y="210"
+                fontFamily='"DejaVu Sans", Arial, sans-serif'
+                fontSize="150"
+                fontStyle="oblique"
+                fontWeight="700"
+              >
+                <tspan x="278.24" fill="#1769FF">x</tspan><tspan x="378.68" fill="#95CC1F">o</tspan><tspan x="473.44" fill="currentColor">gridmaker</tspan>
+              </text>
+            </svg>
+          </Link>
+          <nav
+            aria-label="Primary"
+            className="hidden items-center gap-5 sm:flex"
+          >
+            <ResourcesDropdown footballLibraryAvailable={footballLibraryAvailable ?? false} />
+            {!user && showPricingLink && (
+              <Link
+                href="/pricing"
+                data-web-only
+                className="whitespace-nowrap text-sm text-muted hover:text-foreground transition-colors"
+              >
+                Pricing
+              </Link>
+            )}
+          </nav>
+        </div>
         {user ? (
           <div className="flex items-center gap-2 sm:gap-4">
-            <ResourcesDropdown footballLibraryAvailable={footballLibraryAvailable ?? false} />
             {/* Cal launcher: trigger button visible only on desktop.
                 The bottom toolbar's CalNavButton takes over on mobile.
                 The launcher stays mounted on every viewport (the
@@ -140,46 +166,30 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
                 isAdmin={isAdmin}
               />
             </div>
+            <MobileNavMenu authed footballLibraryAvailable={footballLibraryAvailable} />
           </div>
         ) : (
-          // Right side splits into two clusters with a vertical divider:
-          //   [ Resources ▾   Pricing ]  |  [ Sign in   Get started ]
-          //   ─── nav ───                  ─── auth ───
-          // The bare ShareButton icon is intentionally NOT rendered on
-          // anonymous public pages — first-time visitors have no content
-          // to share and the icon's purpose isn't self-evident. The
-          // authed header still has it where it belongs.
-          <div className="flex items-center gap-3 sm:gap-6">
-            <div className="flex items-center gap-3 sm:gap-5">
-              <ResourcesDropdown footballLibraryAvailable={footballLibraryAvailable ?? false} />
-              {showPricingLink && (
-                <Link
-                  href="/pricing"
-                  data-web-only
-                  className="whitespace-nowrap text-sm text-muted hover:text-foreground transition-colors"
-                >
-                  Pricing
-                </Link>
-              )}
-            </div>
-            <span
-              aria-hidden
-              className="hidden h-5 w-px bg-border sm:block"
-            />
-            <div className="flex items-center gap-3">
-              <Link
-                href="/login"
-                className="whitespace-nowrap text-sm font-semibold text-foreground hover:text-primary transition-colors"
-              >
-                Sign in
-              </Link>
-              <Link
-                href="/login?mode=signup"
-                className="hidden rounded-lg bg-primary px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-hover sm:inline-flex"
-              >
-                Get started
-              </Link>
-            </div>
+          // Anonymous right cluster: just auth affordances on desktop. The
+          // bare ShareButton icon is intentionally NOT rendered on anonymous
+          // public pages — first-time visitors have no content to share and
+          // the icon's purpose isn't self-evident. On mobile the hamburger
+          // (MobileNavMenu) absorbs Resources + Pricing + a Get-started CTA;
+          // Sign in stays visible as the quickest re-entry for returning
+          // coaches.
+          <div className="flex items-center gap-3">
+            <Link
+              href="/login"
+              className="whitespace-nowrap text-sm font-semibold text-foreground hover:text-primary transition-colors"
+            >
+              Sign in
+            </Link>
+            <Link
+              href="/login?mode=signup"
+              className="hidden rounded-lg bg-primary px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-hover sm:inline-flex"
+            >
+              Get started
+            </Link>
+            <MobileNavMenu authed={false} footballLibraryAvailable={footballLibraryAvailable} />
           </div>
         )}
       </div>

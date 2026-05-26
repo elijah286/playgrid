@@ -23,6 +23,11 @@ const LIBRARY_ITEM: Item = {
   description: "Plays, drills, and coaching concepts",
 };
 
+/** Returns the items list for a given gate state; shared with [[MobileNavMenu]]. */
+export function getResourceItems(footballLibraryAvailable: boolean): Item[] {
+  return footballLibraryAvailable ? [LIBRARY_ITEM, ...APP_ITEMS] : APP_ITEMS;
+}
+
 /** Header nav dropdown grouping the free educational/reference content.
  *  The Football Library entry is beta-gated — included only when
  *  footballLibraryAvailable=true. Hidden on mobile (footer covers it). */
