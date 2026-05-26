@@ -15,7 +15,15 @@ import {
   DEFENSIVE_ALIGNMENTS,
   type DefensiveAlignment,
 } from "@/domain/play/defensiveAlignments";
+import { CONCEPTS as KG_CONCEPTS } from "@/domain/football-kg/defs/concepts";
 import { FORMATIONS } from "@/domain/football-kg/defs/formations";
+import {
+  defaultVariantForConcept,
+  slugToVariant,
+  variantToSlug,
+  LIBRARY_VARIANTS,
+  type LibraryVariant,
+} from "@/lib/learn/variant";
 
 /** Defenses are keyed (front, coverage, variant); for library purposes
  *  the human-facing identifier is `${front} ${coverage}` (or just
@@ -66,14 +74,44 @@ export type LearnLinkInput = {
  *  and FORMATIONS resolves to a real page once Phase 1c's dynamic routes
  *  ship; the build-time validator (`scripts/validate-learn-links.ts`)
  *  asserts that fact. */
+/** Resolve a variant input string to a LibraryVariant. Accepts both the
+ *  internal id ("flag_5v5") and the URL slug ("flag-5v5"). Returns null
+ *  on unrecognized values. */
+function resolveVariant(input?: string): LibraryVariant | null {
+  if (!input) return null;
+  if (LIBRARY_VARIANTS.includes(input as LibraryVariant)) {
+    return input as LibraryVariant;
+  }
+  return slugToVariant(input);
+}
+
 export function learnLink(input: LearnLinkInput): string | null {
   const want = input.category;
-  const variantQuery = input.variant ? `?v=${encodeURIComponent(input.variant)}` : "";
+  const requestedVariant = resolveVariant(input.variant);
+  // Legacy query-param suffix used only for categories that don't yet
+  // have variant-specific URL paths (formations / routes / defense).
+  // Plays use variant-in-path and ignore this entirely.
+  const variantQuery = input.variant
+    ? `?v=${encodeURIComponent(input.variant)}`
+    : "";
 
   const tryPlay = () => {
     const concept = findConcept(input.concept);
     if (!concept) return null;
-    return `/learn/library/plays/${toLearnSlug(concept.name)}${variantQuery}`;
+    // Plays use variant-in-path. Pick the requested variant if the
+    // concept supports it, otherwise the concept's default.
+    const kgConcept = KG_CONCEPTS.find(
+      (c) => c.name.toLowerCase() === concept.name.toLowerCase(),
+    );
+    const supported = kgConcept?.variants ?? [];
+    let variant: LibraryVariant | null = null;
+    if (requestedVariant && supported.includes(requestedVariant)) {
+      variant = requestedVariant;
+    } else {
+      variant = defaultVariantForConcept(supported);
+    }
+    if (!variant) return null;
+    return `/learn/library/plays/${toLearnSlug(concept.name)}/${variantToSlug(variant)}`;
   };
 
   const tryDefense = () => {
@@ -118,8 +156,19 @@ export function allLibraryUrls(): string[] {
     "/learn/library/routes",
     "/learn/library/defense",
   ];
+  // Plays: each concept has both the redirect URL AND a variant-
+  // specific URL for every supported variant.
   for (const c of CONCEPT_CATALOG) {
-    urls.push(`/learn/library/plays/${toLearnSlug(c.name)}`);
+    const slug = toLearnSlug(c.name);
+    urls.push(`/learn/library/plays/${slug}`);
+    // Map legacy ConceptEntry → KG ConceptDef to read .variants
+    const kg = KG_CONCEPTS.find((k) => k.name.toLowerCase() === c.name.toLowerCase());
+    const supported = (kg?.variants ?? []).filter((v): v is LibraryVariant =>
+      LIBRARY_VARIANTS.includes(v as LibraryVariant),
+    );
+    for (const v of supported) {
+      urls.push(`/learn/library/plays/${slug}/${variantToSlug(v)}`);
+    }
   }
   for (const f of FORMATIONS) {
     urls.push(`/learn/library/formations/${toLearnSlug(f.name)}`);

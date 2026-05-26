@@ -9,6 +9,10 @@ import { DEFENSIVE_ALIGNMENTS } from "@/domain/play/defensiveAlignments";
 import { isFootballLibraryAvailable } from "@/lib/learn/access";
 import { featuredConceptOfTheDay } from "@/lib/learn/featured";
 import { toLearnSlug } from "@/lib/learn/links";
+import {
+  defaultVariantForConceptDef,
+  variantToSlug,
+} from "@/lib/learn/variant";
 import { withFullContext } from "@/lib/seo/ld-json";
 import { VariantPill } from "./VariantPill";
 
@@ -64,6 +68,10 @@ export default async function LibraryLandingPage() {
 
   const featured = featuredConceptOfTheDay();
   const featuredSlug = toLearnSlug(featured.name);
+  const featuredVariant = defaultVariantForConceptDef(featured);
+  const featuredHref = featuredVariant
+    ? `/learn/library/plays/${featuredSlug}/${variantToSlug(featuredVariant)}`
+    : `/learn/library/plays/${featuredSlug}`;
 
   // Empty categories (drills, practice plans, coaching articles,
   // glossary) are hidden until they have content. Per user feedback —
@@ -139,7 +147,7 @@ export default async function LibraryLandingPage() {
             avoid.
           </p>
           <Link
-            href={`/learn/library/plays/${featuredSlug}`}
+            href={featuredHref}
             className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover"
           >
             Open {featured.name}

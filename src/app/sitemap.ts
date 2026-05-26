@@ -2,11 +2,13 @@ import type { MetadataRoute } from "next";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getExamplesPageEnabled } from "@/lib/site/examples-config";
+import { getBetaFeatures } from "@/lib/site/beta-features-config";
 import { CONCEPTS } from "@/domain/football-kg/defs/concepts";
 import { FORMATIONS } from "@/domain/football-kg/defs/formations";
 import { ROUTE_TEMPLATES } from "@/domain/play/routeTemplates";
 import { DEFENSIVE_ALIGNMENTS } from "@/domain/play/defensiveAlignments";
 import { toLearnSlug } from "@/lib/learn/links";
+import { LIBRARY_VARIANTS, variantToSlug } from "@/lib/learn/variant";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com";
 
@@ -77,13 +79,30 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority,
   }));
 
-  // Every concept / formation / route / defense gets a page.
-  const conceptEntries: Entry[] = CONCEPTS.map((c) => ({
-    url: `${SITE_URL}/learn/library/plays/${toLearnSlug(c.name)}`,
-    lastModified: now,
-    changeFrequency: "monthly",
-    priority: 0.75,
-  }));
+  // Every concept gets a redirect page AND one variant-specific page
+  // per supported variant. The redirect is the canonical "broad" target
+  // ("mesh concept"); variant pages target long-tail ("5v5 flag mesh").
+  const conceptEntries: Entry[] = [];
+  for (const c of CONCEPTS) {
+    const slug = toLearnSlug(c.name);
+    conceptEntries.push({
+      url: `${SITE_URL}/learn/library/plays/${slug}`,
+      lastModified: now,
+      changeFrequency: "monthly",
+      priority: 0.75,
+    });
+    const supported = (c.variants ?? []).filter(
+      (v) => LIBRARY_VARIANTS.includes(v as (typeof LIBRARY_VARIANTS)[number]),
+    );
+    for (const v of supported) {
+      conceptEntries.push({
+        url: `${SITE_URL}/learn/library/plays/${slug}/${variantToSlug(v as (typeof LIBRARY_VARIANTS)[number])}`,
+        lastModified: now,
+        changeFrequency: "monthly",
+        priority: 0.78,
+      });
+    }
+  }
   const formationEntries: Entry[] = FORMATIONS.map((f) => ({
     url: `${SITE_URL}/learn/library/formations/${toLearnSlug(f.name)}`,
     lastModified: now,
