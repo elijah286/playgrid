@@ -377,6 +377,16 @@ export type PlayDocument = {
    */
   showYardNumbers?: boolean;
   /**
+   * Whether to render the horizontal yard-line stripes every 5 yards.
+   * Defaults to `true`. Set false for "bare field" demos (Football
+   * Library route pages, for example) where the grid distracts from
+   * the route shape — combined with `showYardNumbers: false`,
+   * `showHashMarks: false`, `lineOfScrimmage: "none"`, and
+   * `fieldBackground: "white"` you get an unmarked white field with
+   * just the player + route on it.
+   */
+  showYardLines?: boolean;
+  /**
    * Line-of-scrimmage marker style. Drawn at `lineOfScrimmageY`.
    * Defaults to "line".
    */

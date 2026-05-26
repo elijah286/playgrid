@@ -114,13 +114,48 @@ export default async function RoutePage(
     // doing. Filtering happens on the rendered diagram (not the
     // spec) so the renderer still gets a real formation to compute
     // X's starting position from.
+    //
+    // We also slide X toward the middle so the demo doesn't crowd
+    // against the sideline. In a real Spread Doubles look X starts
+    // wide (≈ −10 yd from center), but for a one-receiver teaching
+    // diagram a slot-style alignment reads better — there's more
+    // canvas to draw the break into without clipping the route at
+    // the field edge. The route's path is shifted by the same delta
+    // so the geometry still connects to the receiver.
+    const RECEIVER_SHIFT_X = 5; // pull X 5 yards inward (toward the hash)
     const KEEP = new Set(["QB", "X"]);
     const slimDiagram = {
       ...diagram,
-      players: diagram.players.filter((p) => KEEP.has(p.id)),
-      routes: (diagram.routes ?? []).filter((r) => KEEP.has(r.from)),
+      players: diagram.players
+        .filter((p) => KEEP.has(p.id))
+        .map((p) => (p.id === "X" ? { ...p, x: p.x + RECEIVER_SHIFT_X } : p)),
+      routes: (diagram.routes ?? [])
+        .filter((r) => KEEP.has(r.from))
+        .map((r) =>
+          r.from === "X"
+            ? {
+                ...r,
+                path: r.path.map(
+                  ([x, y]) => [x + RECEIVER_SHIFT_X, y] as [number, number],
+                ),
+              }
+            : r,
+        ),
     };
-    routeDoc = coachDiagramToPlayDocument(slimDiagram);
+    const baseDoc = coachDiagramToPlayDocument(slimDiagram);
+    // Bare-field demo: no grid noise, no LOS, white background.
+    // The route page is teaching ONE route — the field markings are
+    // a distraction. New `showYardLines` flag (added in this commit)
+    // gates the horizontal 5-yard stripes; the others were already
+    // toggleable.
+    routeDoc = {
+      ...baseDoc,
+      fieldBackground: "white",
+      showHashMarks: false,
+      showYardNumbers: false,
+      showYardLines: false,
+      lineOfScrimmage: "none",
+    };
   } catch (err) {
     console.warn(
       `[library/routes] render failed for ${slug} in ${variant}`,

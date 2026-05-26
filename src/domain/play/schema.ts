@@ -333,6 +333,7 @@ export const playDocumentSchema = z.object({
   showHashMarks: z.boolean().optional(),
   hashStyle: hashStyleSchema.optional(),
   showYardNumbers: z.boolean().optional(),
+  showYardLines: z.boolean().optional(),
   lineOfScrimmage: losStyleSchema.optional(),
   lineOfScrimmageY: z.number().optional(),
   fieldZone: fieldZoneSchema.optional(),

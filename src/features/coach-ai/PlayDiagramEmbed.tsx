@@ -8,6 +8,7 @@ import {
   resolveEndDecoration,
   resolveRouteStroke,
   resolveShowHashMarks,
+  resolveShowYardLines,
   resolveShowYardNumbers,
   resolveHashStyle,
   resolveFieldZone,
@@ -181,6 +182,7 @@ const DiagramCanvas = memo(function DiagramCanvas({ doc, animatingIds, fieldAspe
     return String(v);
   };
   const showYardNumbers = resolveShowYardNumbers(doc);
+  const showYardLines = resolveShowYardLines(doc);
   const showHash = resolveShowHashMarks(doc);
   const [hashLeftFrac, hashRightFrac] = hashColumnsForStyle(resolveHashStyle(doc));
   const yardLines: React.ReactNode[] = [];
@@ -191,7 +193,7 @@ const DiagramCanvas = memo(function DiagramCanvas({ doc, animatingIds, fieldAspe
     if (yd <= 0) continue;
     const y = yd / fieldLengthYds;
     const svgY = 1 - y;
-    if (yd !== losYd) {
+    if (showYardLines && yd !== losYd) {
       yardLines.push(
         <line key={`h${yd}`} x1={0} y1={svgY} x2={fieldAspect} y2={svgY}
           stroke={theme.lineColor} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />,

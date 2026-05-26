@@ -31,6 +31,7 @@ import {
   resolveHashStyle,
   hashColumnsForStyle,
   resolveShowYardNumbers,
+  resolveShowYardLines,
   uid,
 } from "@/domain/play/factory";
 import type { FieldStructure } from "@/domain/play/leaguePresets";
@@ -1715,6 +1716,7 @@ function EditorCanvasImpl({
     return String(v);
   };
   const showYardNumbers = resolveShowYardNumbers(doc);
+  const showYardLines = resolveShowYardLines(doc);
   const rotatedNumbers = resolveRotatedYardNumbers(doc);
   // Choose where the 5-yard marks sit:
   //   - With a league field structure, anchor to the LEAGUE grid so the
@@ -1747,7 +1749,10 @@ function EditorCanvasImpl({
     const y = yd / fieldLengthYds;
     const svgY = fy(y);
     // Skip the solid stripe exactly at LOS — the dashed LOS line draws there.
-    if (yd !== losYd) {
+    // `showYardLines` is the document-level toggle; defaults to true.
+    // Bare-field demos (Football Library route pages) set it false so
+    // the field is just background + player + route — no grid noise.
+    if (showYardLines && yd !== losYd) {
       yardLines.push(
         <line
           key={`h${yd}`}

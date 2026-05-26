@@ -58,6 +58,13 @@ export function resolveShowYardNumbers(doc: PlayDocument): boolean {
   return doc.showYardNumbers ?? true;
 }
 
+/** Effective yard-line setting (the horizontal 5-yard stripes).
+ *  Defaults to true. Library route demos opt out so the diagram
+ *  shows nothing but the player + the route shape. */
+export function resolveShowYardLines(doc: PlayDocument): boolean {
+  return doc.showYardLines ?? true;
+}
+
 /** LOS marker style, defaulting to a horizontal line. */
 export function resolveLineOfScrimmage(
   doc: PlayDocument,
