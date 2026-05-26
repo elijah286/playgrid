@@ -913,15 +913,31 @@ function clamp(n: number, lo: number, hi: number): number {
  * fieldLengthYds = 25 across all variants; fieldWidthYds comes from the
  * variant's sport profile.
  *
- * depthYds (optional): when set, scales every waypoint's y proportionally
- * so the deepest template waypoint lands at exactly `depthYds` yards from
- * the LOS. This is the per-assignment override that makes concept-level
- * route adaptations actually render — e.g. a Mesh's two drags can now
- * render at 2yd (under) and 4yd (over) when Cal sets depthYds on each.
+ * depthYds (optional): when set, scales every waypoint's y so the
+ * deepest template waypoint lands at exactly `depthYds` yards PAST
+ * THE LOS — regardless of where the carrier starts. This is the
+ * per-assignment override that makes concept-level route adaptations
+ * actually render — e.g. a Mesh's two drags can now render at 5yd
+ * (under) and 6yd (over) when Cal sets depthYds on each.
+ *
+ * CORRECTED 2026-05-26 (user audit). The prior implementation scaled
+ * by `depthYds / templateMaxYds` and added carrier.y at the END, so
+ * the deepest waypoint landed at `carrier.y + depthYds`. For a back
+ * at y=-5 running a Drag @ 5, the deepest waypoint landed at y=0 (AT
+ * the LOS) instead of y=5 (5yd past LOS). Coaches read depthYds as
+ * "where the route CATCHES" — a real-field reference, not a player-
+ * relative one. The fix: scale by `(depthYds - carrier.y) / templateMaxYds`
+ * so the deepest waypoint lands at depthYds past LOS regardless of
+ * carrier start.
+ *
+ * Side effect: intermediate waypoints (release stem, anchor points)
+ * stretch proportionally with the scale. A back's drag has a longer
+ * vertical stem than a WR's drag, which is what actually happens on
+ * the field — the back has to clear the backfield before the lateral
+ * cross. Acceptable shape distortion for the correct depth landing.
  *
  * The scale is applied to ALL y-values (including the release stem and
- * intermediate anchors), so a drag's pinned-flat cross stays pinned at
- * whatever depth it's scaled to. Routes whose template has zero positive
+ * intermediate anchors). Routes whose template has zero positive
  * depth (rare — only Bubble has all negatives) skip scaling to avoid
  * divide-by-zero; routes whose template has both positive and negative
  * y values (none currently) would need a sign-aware scale, but the
@@ -967,14 +983,20 @@ function pathFromTemplate(
     return carrier.x >= 0 ? 1 : -1;
   })();
 
-  // Per-assignment depth override: scale every y proportionally so the
-  // template's deepest waypoint lands at depthYds. Only positive depths
-  // scale (negative-only templates like Bubble use their natural depth).
+  // Per-assignment depth override: scale every y so the template's
+  // deepest waypoint lands at `depthYds` PAST THE LOS (not relative
+  // to the carrier's start). Only positive depths scale; Bubble and
+  // other negative-only templates use their natural depth.
+  //
+  // Without subtracting carrier.y, a back at y=-5 running Drag @ 5
+  // would end at y=0 (the LOS) because the renderer added carrier.y
+  // to the scaled max. Coaches read depthYds as "5yd past the LOS";
+  // the renderer now matches that convention.
   const templateMaxYNorm = Math.max(...template.points.map((p) => p.y));
   const templateMaxYds = templateMaxYNorm * FIELD_LENGTH_YDS;
   const yScale =
     depthYds !== undefined && templateMaxYds > 0.5
-      ? depthYds / templateMaxYds
+      ? (depthYds - carrier.y) / templateMaxYds
       : 1;
 
   // Skip the first template point — it's the carrier-relative origin

@@ -103,9 +103,10 @@ describe("modify_play_route — preserves offense, changes only the targeted rou
     const oldH = prior.routes.find((r: any) => r.from === "H");
     const newH = newFence.routes.find((r: any) => r.from === "H");
     expect(newH.path).not.toEqual(oldH.path);
-    // The deepest waypoint of H's new path should be ~6yd from H's carrier y.
-    const carrier = prior.players.find((p: any) => p.id === "H");
-    const deepestY = Math.max(...newH.path.map(([, y]: [number, number]) => y - carrier.y));
+    // The deepest waypoint should land ~6yd PAST THE LOS. 2026-05-26
+    // audit: depth is interpreted as absolute past-LOS yardage, not
+    // travel-from-carrier. Was `y - carrier.y` before.
+    const deepestY = Math.max(...newH.path.map(([, y]: [number, number]) => y));
     expect(deepestY).toBeGreaterThan(5.5);
     expect(deepestY).toBeLessThan(6.5);
   });

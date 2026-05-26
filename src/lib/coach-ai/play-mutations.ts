@@ -188,7 +188,15 @@ export function applyRouteMod(fence: Fence, mod: RouteMod): ApplyRouteModResult 
     })();
     const templateMaxYNorm = Math.max(...template.points.map((p) => p.y));
     const templateMaxYds = templateMaxYNorm * FIELD_LENGTH_YDS;
-    const yScale = setDepth !== null && templateMaxYds > 0.5 ? setDepth / templateMaxYds : 1;
+    // Depth is interpreted as YARDS PAST THE LOS (not relative to the
+    // carrier's start). Mirrors specRenderer.pathFromTemplate's
+    // corrected scaling (2026-05-26 user audit). Without subtracting
+    // carrierY, a back at y=-5 running Drag @ 5 would land at the LOS
+    // (y=0) instead of 5yd downfield. The catalog's depth ranges are
+    // in the past-LOS convention; this scaling matches.
+    const yScale = setDepth !== null && templateMaxYds > 0.5
+      ? (setDepth - carrierY) / templateMaxYds
+      : 1;
     const waypoints = template.points[0]?.x === 0 && template.points[0]?.y === 0
       ? template.points.slice(1)
       : template.points;

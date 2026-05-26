@@ -40,7 +40,11 @@ describe("applyRouteMod — single mod", () => {
     if (!r.ok) return;
     const newPath = (r.fence.routes as Array<{ path: [number, number][] }>)[0].path;
     const maxY = Math.max(...newPath.map((p) => p[1]));
-    expect(Math.abs(maxY - 5)).toBeLessThanOrEqual(0.6); // carrier.y=-1, depth 6 → max y ≈ 5
+    // 2026-05-26 audit: depth is yards PAST THE LOS regardless of
+    // carrier start (was carrier-relative travel before). Drag @ 6 →
+    // deepest y ≈ 6 (catalog's depth ranges are in this same
+    // past-LOS convention).
+    expect(Math.abs(maxY - 6)).toBeLessThanOrEqual(0.6);
   });
 
   it("swaps route family from Curl to Post", () => {
@@ -119,7 +123,9 @@ describe("applyRouteMods — batched + identity-preservation", () => {
     if (!r.ok) return;
     const sRoute = (r.fence.routes as Array<{ from: string; path: [number, number][] }>).find((rt) => rt.from === "S")!;
     const sMaxY = Math.max(...sRoute.path.map((p) => p[1]));
-    expect(Math.abs(sMaxY - 5)).toBeLessThanOrEqual(0.6);
+    // Depth 6 = yards past LOS (post-2026-05-26 audit). Was 5 under
+    // the carrier-relative interpretation.
+    expect(Math.abs(sMaxY - 6)).toBeLessThanOrEqual(0.6);
     expect(r.appliedSummaries[0]).toMatch(/@S/);
   });
 

@@ -329,12 +329,21 @@ function checkRouteAgainstTemplate(
   const path = Array.isArray(route.path) ? route.path : [];
   if (path.length === 0) return null; // nothing to measure
 
-  // Depth = max |y - carrier.y| across waypoints. Use signed max for
-  // bubble-style negative-depth routes so we don't double-count negatives.
+  // Depth = max |y| across waypoints (LOS is y=0 in field coords).
+  // CORRECTED 2026-05-26 (user audit). Prior version measured
+  // `wp[1] - carrier.y` — the receiver's travel distance from start.
+  // For a back at y=-5 running a Sit @ 6, travel = 11yd which fell
+  // outside Sit's catalog range [3,7] and falsely failed validation.
+  // Coaches read depth as "yards past LOS where the route catches"
+  // — an absolute reference point. The catalog ranges are in that
+  // same convention, so the validator now measures the same way.
+  //
+  // Signed max preserves the bubble-style negative-depth case
+  // (routes that catch behind the LOS).
   let deepestSigned = 0;
   for (const wp of path) {
     if (!Array.isArray(wp) || wp.length < 2) continue;
-    const dy = wp[1] - carrier.y;
+    const dy = wp[1];
     if (Math.abs(dy) > Math.abs(deepestSigned)) deepestSigned = dy;
   }
 
