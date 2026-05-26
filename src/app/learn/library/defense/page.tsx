@@ -4,6 +4,13 @@ import { DEFENSIVE_ALIGNMENTS } from "@/domain/play/defensiveAlignments";
 import type { DefensiveAlignment } from "@/domain/play/defensiveAlignments";
 import { isFootballLibraryAvailable } from "@/lib/learn/access";
 import { toLearnSlug } from "@/lib/learn/links";
+import {
+  VARIANT_LABEL,
+  slugToVariant,
+  variantToSlug,
+  type LibraryVariant,
+} from "@/lib/learn/variant";
+import { DEFAULT_LIBRARY_VARIANT } from "../VariantPill";
 import { CategoryIndex } from "../_CategoryIndex";
 
 export const metadata: Metadata = {
@@ -20,18 +27,18 @@ function defenseDisplayName(a: DefensiveAlignment): string {
   return `${front} ${coverage}`.trim();
 }
 
-const VARIANT_LABEL: Record<string, string> = {
-  flag_5v5: "5v5 Flag",
-  flag_6v6: "6v6 Flag",
-  flag_7v7: "7v7 Flag",
-  tackle_11: "11v11 Tackle",
-};
-
-export default async function DefenseIndexPage() {
+export default async function DefenseIndexPage(
+  { searchParams }: { searchParams: Promise<{ v?: string }> },
+) {
   if (!(await isFootballLibraryAvailable())) notFound();
+  const { v } = await searchParams;
+  const variant: LibraryVariant =
+    (v ? slugToVariant(v) : null) ?? DEFAULT_LIBRARY_VARIANT;
+  const variantSlug = variantToSlug(variant);
 
   // Same grouping logic as the slug page — one entry per unique
-  // (front, coverage) pair, with variants rolled up as chips.
+  // (front, coverage) pair. Filter to only show schemes supported
+  // in the current variant (e.g. 3-4 fronts don't show on 5v5).
   const groups = new Map<
     string,
     { name: string; slug: string; description: string; variants: string[]; manCoverage: boolean }
@@ -52,23 +59,28 @@ export default async function DefenseIndexPage() {
       });
     }
   }
-  const sorted = Array.from(groups.values()).sort((a, b) => a.name.localeCompare(b.name));
+  const allGroups = Array.from(groups.values()).sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  const sorted = allGroups.filter((g) => g.variants.includes(variant));
+  const hiddenCount = allGroups.length - sorted.length;
 
   return (
     <CategoryIndex
       category="defense"
       title="Defenses"
-      description="Defensive schemes coaches call by name — the front + coverage pairs that show up on Friday night and Saturday morning. Each links to the scheme's breakdown plus the variants it's defined for."
+      description={`Defensive schemes coaches call by name in ${VARIANT_LABEL[variant]} — the front + coverage pairs that show up on Friday night and Saturday morning. Each links to the scheme's breakdown plus the variants it's defined for.`}
       entities={sorted.map((g) => ({
         name: g.name,
-        slug: g.slug,
+        slug: `${g.slug}?v=${variantSlug}`,
         description: g.description,
-        chips: [
-          g.manCoverage ? "man coverage" : "zone coverage",
-          ...g.variants.map((v) => VARIANT_LABEL[v] ?? v),
-        ],
+        chips: [g.manCoverage ? "man coverage" : "zone coverage"],
       }))}
-      note={`${sorted.length} unique defensive schemes across all variants. Defender + zone diagrams render in an upcoming release.`}
+      note={
+        hiddenCount > 0
+          ? `${sorted.length} unique defensive schemes in ${VARIANT_LABEL[variant]} (${hiddenCount} more available in other variants — switch the variant filter above).`
+          : `${sorted.length} unique defensive schemes in ${VARIANT_LABEL[variant]}.`
+      }
     />
   );
 }

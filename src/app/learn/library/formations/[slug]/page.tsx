@@ -19,7 +19,7 @@ import {
   variantToSlug,
   type LibraryVariant,
 } from "@/lib/learn/variant";
-import { VariantPill } from "../../VariantPill";
+import { DEFAULT_LIBRARY_VARIANT, VariantPill } from "../../VariantPill";
 
 export const dynamicParams = false;
 export const revalidate = 3600;
@@ -51,22 +51,6 @@ export async function generateMetadata(
   };
 }
 
-/** Pick a sensible default variant to RENDER the formation in. Honors
- *  the URL's `?v=...` filter when the formation supports it, otherwise
- *  falls back to flag_5v5 (highest-volume library variant) when
- *  supported, then to whatever the formation actually supports first. */
-function pickRenderVariant(
-  formation: FormationDef,
-  requested: LibraryVariant | null,
-): LibraryVariant | null {
-  const supported = (formation.variants ?? []).filter((v): v is LibraryVariant =>
-    LIBRARY_VARIANTS.includes(v as LibraryVariant),
-  );
-  if (supported.length === 0) return null;
-  if (requested && supported.includes(requested)) return requested;
-  if (supported.includes("flag_5v5")) return "flag_5v5";
-  return supported[0] ?? null;
-}
 
 export default async function FormationPage(
   {
@@ -82,8 +66,22 @@ export default async function FormationPage(
   const { v } = await searchParams;
   const formation = findFormationBySlug(slug);
   if (!formation) notFound();
-  const requestedVariant = v ? slugToVariant(v) : null;
-  const renderVariant = pickRenderVariant(formation, requestedVariant);
+  // Variant from URL, defaulting to flag_5v5. Always specific (no
+  // "all variants" path — every formation has a variant-specific
+  // player layout). When the requested variant isn't supported by
+  // this formation (e.g. Pro I is tackle-only and the coach has
+  // 5v5 Flag selected), we surface a "not available" panel with
+  // links to the variants the formation DOES support — no silent
+  // fallback to a different variant.
+  const requestedVariant: LibraryVariant =
+    (v ? slugToVariant(v) : null) ?? DEFAULT_LIBRARY_VARIANT;
+  const supportedLibraryVariants = (formation.variants ?? []).filter(
+    (vv): vv is LibraryVariant => LIBRARY_VARIANTS.includes(vv as LibraryVariant),
+  );
+  const isSupportedHere = supportedLibraryVariants.includes(requestedVariant);
+  const renderVariant: LibraryVariant | null = isSupportedHere
+    ? requestedVariant
+    : null;
 
   // Cross-reference: which concepts use this formation as their default?
   const usedBy = CONCEPTS.filter((c) => c.defaultFormation.id === formation.id).map(
@@ -134,10 +132,6 @@ export default async function FormationPage(
   const playbookSettings = renderVariant
     ? defaultSettingsForVariant(renderVariant)
     : null;
-
-  const supportedLibraryVariants = (formation.variants ?? []).filter(
-    (vv): vv is LibraryVariant => LIBRARY_VARIANTS.includes(vv as LibraryVariant),
-  );
 
   const breadcrumbLd = {
     "@context": "https://schema.org",
@@ -245,6 +239,34 @@ export default async function FormationPage(
                 canEdit={false}
                 libraryMode={true}
               />
+            </div>
+          ) : !isSupportedHere ? (
+            // Formation doesn't apply to the variant the coach has
+            // selected (e.g. Pro I is tackle-only and the coach has
+            // 5v5 Flag selected). Show alternatives instead of
+            // silently rendering a different variant.
+            <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-6 text-sm">
+              <p className="font-semibold text-foreground">
+                {formation.name} isn&apos;t run in {VARIANT_LABEL[requestedVariant]}.
+              </p>
+              <p className="mt-1 text-muted">
+                This formation is defined for{" "}
+                {supportedLibraryVariants.map((vv) => VARIANT_LABEL[vv]).join(", ")}.
+                Switch your variant filter, or jump to a supported one:
+              </p>
+              <ul className="mt-3 flex flex-wrap gap-2">
+                {supportedLibraryVariants.map((vv) => (
+                  <li key={vv}>
+                    <Link
+                      href={`/learn/library/formations/${slug}?v=${variantToSlug(vv)}`}
+                      className="inline-flex items-center gap-1 rounded-full border border-border bg-surface-raised px-3 py-1 text-xs font-medium text-foreground hover:border-primary hover:text-primary"
+                    >
+                      View in {VARIANT_LABEL[vv]}
+                      <ArrowRight className="size-3" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             </div>
           ) : (
             <div className="rounded-2xl border border-border bg-surface-raised p-8 text-center text-sm text-muted">

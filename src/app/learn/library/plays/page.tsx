@@ -6,6 +6,14 @@ import { CONCEPTS } from "@/domain/football-kg/defs/concepts";
 import { isFootballLibraryAvailable } from "@/lib/learn/access";
 import { toLearnSlug } from "@/lib/learn/links";
 import { withFullContext } from "@/lib/seo/ld-json";
+import {
+  LIBRARY_VARIANTS,
+  VARIANT_LABEL,
+  slugToVariant,
+  variantToSlug,
+  type LibraryVariant,
+} from "@/lib/learn/variant";
+import { DEFAULT_LIBRARY_VARIANT, VariantPill } from "../VariantPill";
 
 export const metadata: Metadata = {
   title: "Plays · Football library · XO Gridmaker",
@@ -30,19 +38,34 @@ const COMPLEXITY_TONE: Record<string, string> = {
   advanced: "bg-rose-500/10 text-rose-700 dark:text-rose-400",
 };
 
-export default async function PlaysIndexPage() {
+export default async function PlaysIndexPage(
+  { searchParams }: { searchParams: Promise<{ v?: string }> },
+) {
   if (!(await isFootballLibraryAvailable())) notFound();
+  const { v } = await searchParams;
+  // Variant from URL, defaulting to flag_5v5. Every concept is
+  // variant-specific — the index filters out concepts that don't
+  // support the current variant (e.g. Power is tackle-only and
+  // doesn't show on 5v5/6v6/7v7 lists).
+  const variant: LibraryVariant =
+    (v ? slugToVariant(v) : null) ?? DEFAULT_LIBRARY_VARIANT;
+  const variantSlug = variantToSlug(variant);
 
   // Group concepts by complexity so basic plays surface first — coaches
   // browsing the catalog usually want install-friendly stuff before deep
   // cuts.
-  const concepts = [...CONCEPTS].sort((a, b) => {
+  const allConcepts = [...CONCEPTS].sort((a, b) => {
     const order = { basic: 0, intermediate: 1, advanced: 2 } as const;
     const ai = order[a.complexity as keyof typeof order] ?? 1;
     const bi = order[b.complexity as keyof typeof order] ?? 1;
     if (ai !== bi) return ai - bi;
     return a.name.localeCompare(b.name);
   });
+  // Filter to concepts supported in the current variant.
+  const concepts = allConcepts.filter((c) =>
+    (c.variants ?? []).includes(variant),
+  );
+  const hiddenCount = allConcepts.length - concepts.length;
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10 text-foreground">
@@ -65,17 +88,22 @@ export default async function PlaysIndexPage() {
         </p>
         <h1 className="mt-1 text-3xl font-extrabold tracking-tight">Plays</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted">
-          Every play concept in the catalog. Each page renders the play in the
-          canonical XO editor — same diagram a coach would see in the
-          builder. Sign in to drop a concept into one of your playbooks.
+          Every play concept in the catalog for {VARIANT_LABEL[variant]}. Each
+          page renders the play in the canonical XO editor — same diagram a
+          coach would see in the builder. Sign in to drop a concept into one
+          of your playbooks.
         </p>
       </header>
+
+      <div className="mb-6">
+        <VariantPill />
+      </div>
 
       <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {concepts.map((c) => (
           <li key={c.id}>
             <Link
-              href={`/learn/library/plays/${toLearnSlug(c.name)}`}
+              href={`/learn/library/plays/${toLearnSlug(c.name)}/${variantSlug}`}
               className="group block h-full rounded-2xl border border-border bg-surface-raised p-5 transition-all hover:-translate-y-0.5 hover:border-primary-light hover:shadow-md"
             >
               <div className="mb-2 flex items-start justify-between gap-3">
@@ -97,9 +125,6 @@ export default async function PlaysIndexPage() {
                     {c.complexity}
                   </span>
                 ) : null}
-                <span className="rounded-full bg-surface-inset px-2 py-0.5 text-[10px] font-medium text-muted">
-                  {c.variants.length} variant{c.variants.length === 1 ? "" : "s"}
-                </span>
               </div>
             </Link>
           </li>
@@ -107,10 +132,32 @@ export default async function PlaysIndexPage() {
       </ul>
 
       <p className="mt-10 text-xs text-muted">
-        {concepts.length} plays in the catalog. Library content is in active
-        development — concept pages will gain &ldquo;when to call it&rdquo; and
-        &ldquo;common mistakes&rdquo; prose in upcoming releases.
+        {concepts.length} concepts in {VARIANT_LABEL[variant]}
+        {hiddenCount > 0
+          ? ` (${hiddenCount} more available in other variants — switch the variant filter above)`
+          : ""}
+        . Library content is in active development — concept pages will gain
+        &ldquo;when to call it&rdquo; and &ldquo;common mistakes&rdquo; prose
+        in upcoming releases.
       </p>
+
+      {LIBRARY_VARIANTS.filter((vv) => vv !== variant).length > 0 ? (
+        <p className="mt-3 text-xs text-muted">
+          Looking for a different variant? Try{" "}
+          {LIBRARY_VARIANTS.filter((vv) => vv !== variant).map((vv, i, arr) => (
+            <span key={vv}>
+              <Link
+                href={`/learn/library/plays?v=${variantToSlug(vv)}`}
+                className="text-primary hover:underline"
+              >
+                {VARIANT_LABEL[vv]}
+              </Link>
+              {i < arr.length - 1 ? ", " : ""}
+            </span>
+          ))}
+          .
+        </p>
+      ) : null}
     </div>
   );
 }

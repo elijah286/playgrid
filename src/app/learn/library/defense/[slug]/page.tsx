@@ -21,7 +21,7 @@ import {
   variantToSlug,
   type LibraryVariant,
 } from "@/lib/learn/variant";
-import { VariantPill } from "../../VariantPill";
+import { DEFAULT_LIBRARY_VARIANT, VariantPill } from "../../VariantPill";
 
 export const dynamicParams = false;
 export const revalidate = 3600;
@@ -94,20 +94,21 @@ export async function generateMetadata(
   };
 }
 
-/** Pick which variant to RENDER the defensive alignment in. Honors
- *  the URL `?v=` filter when the defense supports it, falls back to
- *  flag_5v5 then to whatever the catalog has first. */
-function pickRenderVariant(
-  group: DefenseGroup,
-  requested: LibraryVariant | null,
-): LibraryVariant | null {
-  const supported = Object.keys(group.byVariant).filter((v): v is LibraryVariant =>
-    LIBRARY_VARIANTS.includes(v as LibraryVariant),
-  );
-  if (supported.length === 0) return null;
-  if (requested && supported.includes(requested)) return requested;
-  if (supported.includes("flag_5v5")) return "flag_5v5";
-  return supported[0] ?? null;
+/** Suffix duplicate defender ids so every player in the diagram has
+ *  a unique key. The DefensiveAlignment catalog has roster-style ids
+ *  (DE, DT, CB, OLB) and a single scheme can repeat them (3-4 has
+ *  two DEs and two OLBs; 4-3 has two CBs). The coachDiagramConverter
+ *  rejects duplicate ids — without this suffix step the conversion
+ *  throws and the diagram silently fails to render. Same pattern
+ *  compose_defense uses (tools.ts:1999). */
+function suffixDuplicateIds<T extends { id: string }>(players: T[]): T[] {
+  const seen = new Map<string, number>();
+  return players.map((p) => {
+    const count = (seen.get(p.id) ?? 0) + 1;
+    seen.set(p.id, count);
+    const id = count === 1 ? p.id : `${p.id}${count}`;
+    return { ...p, id };
+  });
 }
 
 export default async function DefensePage(
@@ -124,8 +125,27 @@ export default async function DefensePage(
   const { v } = await searchParams;
   const group = findGroupBySlug(slug);
   if (!group) notFound();
-  const requestedVariant = v ? slugToVariant(v) : null;
-  const renderVariant = pickRenderVariant(group, requestedVariant);
+
+  // Variant from URL, defaulting to flag_5v5. Always specific now
+  // (no "all variants" path — every defense renders in ONE variant
+  // at a time).
+  const requestedVariant: LibraryVariant =
+    (v ? slugToVariant(v) : null) ?? DEFAULT_LIBRARY_VARIANT;
+
+  const supportedVariants = Object.keys(group.byVariant).filter(
+    (vv): vv is LibraryVariant => LIBRARY_VARIANTS.includes(vv as LibraryVariant),
+  );
+  const isSupportedHere = supportedVariants.includes(requestedVariant);
+
+  // When the requested variant doesn't apply to this defense
+  // (e.g. 3-4 Cover 1 is tackle-only and the coach has flag_5v5
+  // selected), we do NOT silently fall back to a different
+  // variant — that's the bug the user surfaced. Instead we show
+  // the "not available in this variant" panel below and offer
+  // jumps to variants that DO support the scheme.
+  const renderVariant: LibraryVariant | null = isSupportedHere
+    ? requestedVariant
+    : null;
   const alignment = renderVariant ? group.byVariant[renderVariant] : null;
 
   // Build a defender-only PlayDocument for the alignment render.
@@ -137,11 +157,17 @@ export default async function DefensePage(
   if (alignment) {
     const defenders = alignmentWithAssignments(alignment, "right");
     const zones = zonesForStrength(alignment, "right");
+    // Suffix duplicate defender ids (DE / DE2, OLB / OLB2, etc.)
+    // before handing to the converter — otherwise the dup-id guard
+    // throws and the diagram silently fails to render.
+    const uniqueDefenders = suffixDuplicateIds(
+      defenders.map((p) => ({ id: p.id, x: p.x, y: p.y })),
+    );
     const diagram: CoachDiagram = {
       title: group.name,
       variant: renderVariant ?? undefined,
       focus: "D",
-      players: defenders.map((p) => ({
+      players: uniqueDefenders.map((p) => ({
         id: p.id,
         x: p.x,
         y: p.y,
@@ -157,7 +183,14 @@ export default async function DefensePage(
     };
     try {
       defenseDoc = coachDiagramToPlayDocument(diagram);
-    } catch {
+    } catch (err) {
+      // Server-side log so admins notice when a catalog alignment
+      // can't render; the user-facing fallback panel below still
+      // surfaces a clean message.
+      console.warn(
+        `[library/defense] conversion failed for ${slug} in ${renderVariant}`,
+        err,
+      );
       defenseDoc = null;
     }
   }
@@ -168,10 +201,6 @@ export default async function DefensePage(
   const related = groupDefenses()
     .filter((g) => g.slug !== group.slug)
     .slice(0, 6);
-
-  const supportedVariants = Object.keys(group.byVariant).filter(
-    (vv): vv is LibraryVariant => LIBRARY_VARIANTS.includes(vv as LibraryVariant),
-  );
 
   const tags: string[] = [];
   if (group.manCoverage) tags.push("man coverage");
@@ -274,6 +303,35 @@ export default async function DefensePage(
                 canEdit={false}
                 libraryMode={true}
               />
+            </div>
+          ) : !isSupportedHere ? (
+            // The defense exists in the catalog but doesn't apply
+            // to the variant the coach has selected (e.g. 3-4 Cover 1
+            // in 5v5 Flag — there's no equivalent because 3-4 needs
+            // a real OL to run against). Show alternatives instead
+            // of silently rendering a different variant.
+            <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-6 text-sm">
+              <p className="font-semibold text-foreground">
+                {group.name} isn&apos;t run in {VARIANT_LABEL[requestedVariant]}.
+              </p>
+              <p className="mt-1 text-muted">
+                This scheme is defined for{" "}
+                {supportedVariants.map((vv) => VARIANT_LABEL[vv]).join(", ")}.
+                Switch your variant filter, or jump to a supported one:
+              </p>
+              <ul className="mt-3 flex flex-wrap gap-2">
+                {supportedVariants.map((vv) => (
+                  <li key={vv}>
+                    <Link
+                      href={`/learn/library/defense/${slug}?v=${variantToSlug(vv)}`}
+                      className="inline-flex items-center gap-1 rounded-full border border-border bg-surface-raised px-3 py-1 text-xs font-medium text-foreground hover:border-primary hover:text-primary"
+                    >
+                      View in {VARIANT_LABEL[vv]}
+                      <ArrowRight className="size-3" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             </div>
           ) : (
             <div className="rounded-2xl border border-border bg-surface-raised p-8 text-center text-sm text-muted">
