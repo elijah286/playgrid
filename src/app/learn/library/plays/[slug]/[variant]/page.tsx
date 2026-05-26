@@ -391,11 +391,10 @@ export default async function PlayConceptVariantPage(
 
         <aside className="space-y-4">
           <div className="rounded-2xl bg-foreground p-5 text-surface-raised">
-            <h3 className="text-sm font-semibold">Use this play</h3>
+            <h3 className="text-sm font-semibold">Add to your playbook</h3>
             <p className="mt-1.5 text-xs text-surface-raised/70">
-              Sign in and we&apos;ll drop {concept.name} into one of your{" "}
-              {VARIANT_LABEL[variant]} playbooks. The diagram you&apos;ll see
-              in the editor is the same one rendered above.
+              Sign in to add {concept.name} to your playbook — you&apos;ll see
+              the same diagram in the editor.
             </p>
             <Link
               href={`/login?mode=signup&intent=add-concept&concept=${encodeURIComponent(concept.name)}&variant=${variant}`}
