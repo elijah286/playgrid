@@ -176,11 +176,13 @@ function baseSpec(
  *  - @X and @Z keep their outside-receiver roles.
  *
  *  Caller controls collision resolution by passing roles directly:
- *  `flagFiveRoutes({ Y: {family: "Drag", depthYds: 2}, C: {family: "Drag", depthYds: 8} })`. */
-function flagFiveRoutes(routes: Record<string, { family: string; depthYds: number }>): PlayerAssignment[] {
+ *  `flagFiveRoutes({ Y: {family: "Drag", depthYds: 2}, C: {family: "Drag", depthYds: 8} })`.
+ *  Optional `direction` on a route forces the lateral side (used for
+ *  RB/back flats that need to release wide regardless of natural x). */
+function flagFiveRoutes(routes: Record<string, { family: string; depthYds: number; direction?: "left" | "right" }>): PlayerAssignment[] {
   const assignments: PlayerAssignment[] = [];
   for (const [id, r] of Object.entries(routes)) {
-    assignments.push(routeAt(id, r.family, r.depthYds));
+    assignments.push(routeAt(id, r.family, r.depthYds, r.direction));
   }
   assignments.push(qbDropback());
   return assignments;
@@ -295,14 +297,26 @@ function buildSlantFlat(_c: ConceptEntry, opts: ConceptSkeletonOptions): Skeleto
     notes =
       `Slant-Flat ${cap(side)}: @${outsideWR} slant @ 5yd (high), @Y flat @ 3yd (low) — high-low on the flat defender (4v4: middle eligible underneath). @${backsideWR} go @ 12yd to clear.`;
   } else if (variant === "flag_5v5") {
+    // CORRECTED 2026-05-26 (audit finding #7). Prior version put @C
+    // (center) on the Flat — but the center can't release outside
+    // the outside WR running the slant, so the flat ends up INSIDE
+    // the slant route (the catalog's own `commonMistakes` warns
+    // against this exact pattern: "Flat releases under the slant;
+    // should be on the OUTSIDE so the QB has a clean look at both
+    // options"). The center on the LOS has no clean release angle
+    // to get outside the slant's release.
+    //
+    // Fix: @Y (RB) runs the flat with explicit `direction: side`
+    // so he releases wide to the flood-side numbers. @C plays the
+    // short underneath sit (his natural role from the snap point).
     assignments = flagFiveRoutes({
       [outsideWR]: { family: "Slant", depthYds: 5 },
-      C: { family: "Flat", depthYds: 3 },
-      Y: { family: "Sit", depthYds: 6 },
+      Y: { family: "Flat", depthYds: 3, direction: side },
+      C: { family: "Sit", depthYds: 5 },
       [backsideWR]: { family: "Go", depthYds: 18 },
     });
     notes =
-      `Slant-Flat ${cap(side)}: @${outsideWR} slant @ 5yd (high), @C flat @ 3yd (low) — high-low on the flat defender (5v5: C is the eligible underneath). Quick-game variant of Curl-Flat. @Y sit @ 6yd; @${backsideWR} go @ 18yd.`;
+      `Slant-Flat ${cap(side)}: @${outsideWR} slant @ 5yd (high), @Y flat @ 3yd (low, releases wide to the ${side} numbers) — high-low on the flat defender. @C sits @ 5yd as the eligible underneath; @${backsideWR} go @ 18yd to clear.`;
   } else {
     const slot = side === "right" ? "S" : "H";
     const backsideSlot = side === "right" ? "H" : "S";

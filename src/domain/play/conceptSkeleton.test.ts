@@ -222,6 +222,39 @@ describe("generateConceptSkeleton — Mesh in flag_5v5 crossing pair", () => {
   });
 });
 
+// ── Slant-Flat 5v5: @Y (RB) on flat, not @C (audit #7) ──
+// Center can't release outside the outside WR running the slant.
+// The catalog's own commonMistakes warns against the flat releasing
+// INSIDE the slant. Fix: @Y (RB) runs the flat with direction: side.
+describe("generateConceptSkeleton — Slant-Flat 5v5 flat runner", () => {
+  it("@Y (RB) runs the flat with direction override, not @C", () => {
+    const result = generateConceptSkeleton("Slant-Flat", {
+      variant: "flag_5v5",
+      strength: "right",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const flat = result.spec.assignments.find(
+      (a) => a.action.kind === "route" && a.action.family === "Flat",
+    );
+    expect(flat?.player, "5v5 Slant-Flat: flat must be on @Y, not @C").toBe("Y");
+    if (flat?.action.kind !== "route") return;
+    expect(
+      flat.action.direction,
+      "@Y flat must have explicit direction so the RB releases wide (not inside the slant)",
+    ).toBeDefined();
+  });
+
+  it("@C plays a short sit, not the flat", () => {
+    const result = generateConceptSkeleton("Slant-Flat", { variant: "flag_5v5" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const center = result.spec.assignments.find((a) => a.player === "C");
+    if (center?.action.kind !== "route") return;
+    expect(center.action.family).not.toBe("Flat");
+  });
+});
+
 // ── Levels: both in-breakers on the SAME side (audit #6) ──
 // Canonical Levels stacks an In and a Dig on the SAME side of the
 // formation to high-low the hook/curl defender. The prior build put
