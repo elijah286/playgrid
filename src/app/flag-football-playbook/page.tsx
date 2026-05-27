@@ -16,7 +16,7 @@ const SITE_URL =
 const PAGE_URL = `${SITE_URL}/flag-football-playbook`;
 
 const PAGE_TITLE =
-  "Flag football playbook builder (5v5, 6v6, 7v7) · XO Gridmaker";
+  "Flag football playbook builder (5v5, 6v6, 7v7)";
 const PAGE_DESCRIPTION =
   "Build a flag football playbook in minutes. Design plays, organize them by situation, share with your team, and print game-ready wristbands. Free for solo coaches — 5v5, 6v6, and 7v7.";
 
