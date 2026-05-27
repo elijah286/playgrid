@@ -18,12 +18,28 @@ import { getLibraryVariantCookie } from "@/lib/learn/variant-preference";
 import { CategoryNav } from "../CategoryNav";
 import { VariantPill } from "../VariantPill";
 
-export const metadata: Metadata = {
-  title: "Plays · Football library · XO Gridmaker",
-  description:
-    "Every football play concept in the XO Gridmaker library — pass, run, RPO, and trick plays. Each opens to a real diagram rendered by the canonical play editor.",
-  alternates: { canonical: "/learn/library/plays" },
-};
+// Canonical for this page points at the corresponding variant rollup
+// (/learn/library/plays/variant/{slug}). The rollup has the indexable
+// per-variant H1 + metadata Google ranks for "5v5 flag football plays"
+// queries; this page is the coach-facing browsing UX (cookie-persisted
+// variant + variant pill) but should never compete with the rollup for
+// search ranking. Two URLs, one ranking signal.
+export async function generateMetadata(
+  { searchParams }: { searchParams: Promise<{ v?: string }> },
+): Promise<Metadata> {
+  const { v } = await searchParams;
+  const variantFromUrl = v ? slugToVariant(v) : null;
+  const variantFromCookie = await getLibraryVariantCookie();
+  const variant: LibraryVariant =
+    variantFromUrl ?? variantFromCookie ?? DEFAULT_LIBRARY_VARIANT;
+  const canonical = `/learn/library/plays/variant/${variantToSlug(variant)}`;
+  return {
+    title: "Plays · Football library · XO Gridmaker",
+    description:
+      "Every football play concept in the XO Gridmaker library — pass, run, RPO, and trick plays. Each opens to a real diagram rendered by the canonical play editor.",
+    alternates: { canonical },
+  };
+}
 
 const breadcrumbLd = {
   "@context": "https://schema.org",
