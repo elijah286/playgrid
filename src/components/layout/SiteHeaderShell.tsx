@@ -8,6 +8,7 @@ import { ShareButton } from "@/components/share/ShareButton";
 import { InboxBell } from "@/components/layout/InboxBell";
 import { ResourcesDropdown } from "@/components/layout/ResourcesDropdown";
 import { MobileNavMenu } from "@/components/layout/MobileNavMenu";
+import { FeedbackTrigger } from "@/components/feedback/FeedbackTrigger";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
 
 type Props = {
@@ -43,6 +44,9 @@ type Props = {
   /** Beta gate for the public Football Library. When false, the
    *  Resources dropdown's "Football library" entry is hidden. */
   footballLibraryAvailable?: boolean;
+  /** When false, the "Give feedback" top-nav link and mobile menu item
+   *  are hidden (admin disabled the widget). */
+  feedbackEnabled?: boolean;
 };
 
 // Routes where the playbook banner takes over the top of the screen on
@@ -50,7 +54,7 @@ type Props = {
 // stacked headers. Desktop always shows both.
 const PLAYBOOK_DETAIL_RE = /^\/playbooks\/[^/]+(?:\/.*)?$/;
 
-export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAiAvailable, showCoachCalPromo, coachAiEvalDays, coachAiImageUploadAvailable, userTier, coachProTrialUsed, footballLibraryAvailable }: Props) {
+export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAiAvailable, showCoachCalPromo, coachAiEvalDays, coachAiImageUploadAvailable, userTier, coachProTrialUsed, footballLibraryAvailable, feedbackEnabled }: Props) {
   const pathname = usePathname();
   const hideOnMobile = PLAYBOOK_DETAIL_RE.test(pathname);
   // Pricing is a top-level nav affordance on every public page — the
@@ -123,6 +127,7 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
                 Pricing
               </Link>
             )}
+            {feedbackEnabled && <FeedbackTrigger />}
           </nav>
         </div>
         {user ? (
@@ -166,7 +171,7 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
                 isAdmin={isAdmin}
               />
             </div>
-            <MobileNavMenu authed footballLibraryAvailable={footballLibraryAvailable} />
+            <MobileNavMenu authed footballLibraryAvailable={footballLibraryAvailable} feedbackEnabled={feedbackEnabled} />
           </div>
         ) : (
           // Anonymous right cluster: just auth affordances on desktop. The
@@ -189,7 +194,7 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
             >
               Get started
             </Link>
-            <MobileNavMenu authed={false} footballLibraryAvailable={footballLibraryAvailable} />
+            <MobileNavMenu authed={false} footballLibraryAvailable={footballLibraryAvailable} feedbackEnabled={feedbackEnabled} />
           </div>
         )}
       </div>

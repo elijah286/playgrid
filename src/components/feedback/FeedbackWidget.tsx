@@ -15,6 +15,8 @@ import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "playgrid:feedback-widget-pos";
+const DISMISS_KEY = "playgrid:feedback-pill-dismissed";
+export const OPEN_FEEDBACK_EVENT = "app:open-feedback";
 const MARGIN = 16;
 const FOOTER_CLEARANCE = 96;
 
@@ -46,6 +48,7 @@ export function FeedbackWidget({
   touchEnabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
   const [message, setMessage] = useState("");
   const [pending, startTransition] = useTransition();
   const { toast } = useToast();
@@ -103,6 +106,40 @@ export function FeedbackWidget({
   useEffect(() => {
     if (open) textareaRef.current?.focus();
   }, [open]);
+
+  // Hydrate dismissed-pill state from localStorage.
+  useEffect(() => {
+    try {
+      setDismissed(localStorage.getItem(DISMISS_KEY) === "1");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  // Global trigger from the top nav / mobile menu. Opens the dialog and
+  // un-dismisses the pill so it stays available for next time.
+  useEffect(() => {
+    function onOpen() {
+      try {
+        localStorage.removeItem(DISMISS_KEY);
+      } catch {
+        /* ignore */
+      }
+      setDismissed(false);
+      setOpen(true);
+    }
+    window.addEventListener(OPEN_FEEDBACK_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_FEEDBACK_EVENT, onOpen);
+  }, []);
+
+  function dismissPill() {
+    try {
+      localStorage.setItem(DISMISS_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    setDismissed(true);
+  }
 
   useEffect(() => {
     if (!dragging) return;
@@ -202,11 +239,11 @@ export function FeedbackWidget({
             <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" />
             <div className="flex-1">
               <p className="text-sm font-semibold text-foreground">
-                Help shape XO Gridmaker
+                Tell us how we&apos;re doing
               </p>
               <p className="mt-0.5 text-xs text-muted">
-                This site is brand new — we&apos;d love your ideas, bug reports,
-                or anything confusing. Feel free to tell us what you like, too.
+                What&apos;s working? What&apos;s not? We&apos;re building this
+                with coaches — your input shapes what ships next.
               </p>
             </div>
             <button
@@ -227,7 +264,7 @@ export function FeedbackWidget({
               onKeyDown={(e) => {
                 if ((e.metaKey || e.ctrlKey) && e.key === "Enter") submit();
               }}
-              placeholder="What could be better? What do you like? Any bugs?"
+              placeholder="Type away…"
               rows={4}
               maxLength={4000}
               className="block w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -246,34 +283,39 @@ export function FeedbackWidget({
             </div>
           </div>
         </div>
-      ) : (
-        <button
-          type="button"
-          onPointerDown={startDrag}
-          onClick={() => {
-            if (didDragRef.current) return;
-            setOpen(true);
-          }}
-          aria-label="Send feedback"
-          style={{ touchAction: "none" }}
-          className={cn(
-            "group flex items-center gap-2 rounded-full bg-primary text-sm font-semibold text-white shadow-lg",
-            "hover:bg-primary-hover active:bg-primary-dark",
-            "ring-4 ring-primary/20",
-            compact ? "p-3" : "px-4 py-3",
-            dragging ? "cursor-grabbing" : "cursor-grab",
-          )}
-        >
-          <MessageCirclePlus className={compact ? "size-5" : "size-4"} />
-          {!compact && (
-            <>
-              <span>Send feedback</span>
-              <span className="hidden rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide sm:inline">
-                New site
-              </span>
-            </>
-          )}
-        </button>
+      ) : dismissed ? null : (
+        <div className="relative inline-flex">
+          <button
+            type="button"
+            onPointerDown={startDrag}
+            onClick={() => {
+              if (didDragRef.current) return;
+              setOpen(true);
+            }}
+            aria-label="Send feedback"
+            style={{ touchAction: "none" }}
+            className={cn(
+              "group flex items-center gap-2 rounded-full bg-primary text-sm font-semibold text-white shadow-lg",
+              "hover:bg-primary-hover active:bg-primary-dark",
+              "ring-4 ring-primary/20",
+              compact ? "p-3" : "px-4 py-3 pr-5",
+              dragging ? "cursor-grabbing" : "cursor-grab",
+            )}
+          >
+            <MessageCirclePlus className={compact ? "size-5" : "size-4"} />
+            {!compact && <span>Send feedback</span>}
+          </button>
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={dismissPill}
+            aria-label="Dismiss feedback pill"
+            title="Hide this"
+            className="absolute -right-1.5 -top-1.5 inline-flex size-5 items-center justify-center rounded-full border border-border bg-surface-raised text-muted shadow-sm transition-colors hover:bg-surface-inset hover:text-foreground"
+          >
+            <X className="size-3" />
+          </button>
+        </div>
       )}
     </div>
   );

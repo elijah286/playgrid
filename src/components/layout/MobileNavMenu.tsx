@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Menu, X } from "lucide-react";
 import { getResourceItems } from "./ResourcesDropdown";
+import { FeedbackTrigger } from "@/components/feedback/FeedbackTrigger";
 
 type Props = {
   /** Anonymous mobile users get Pricing + a Get-started CTA inside the
@@ -15,6 +16,7 @@ type Props = {
    *  hamburger is purely a Resources side-door for them. */
   authed: boolean;
   footballLibraryAvailable?: boolean;
+  feedbackEnabled?: boolean;
 };
 
 /**
@@ -29,7 +31,7 @@ type Props = {
  * creates a containing block for `position:fixed` descendants, so an
  * in-tree sheet would clip to the header height instead of the viewport.
  */
-export function MobileNavMenu({ authed, footballLibraryAvailable = false }: Props) {
+export function MobileNavMenu({ authed, footballLibraryAvailable = false, feedbackEnabled = false }: Props) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -148,6 +150,16 @@ export function MobileNavMenu({ authed, footballLibraryAvailable = false }: Prop
                   >
                     Pricing
                   </Link>
+                </>
+              )}
+
+              {feedbackEnabled && (
+                <>
+                  <div className="my-1 h-px bg-border" />
+                  <FeedbackTrigger
+                    variant="sheet"
+                    onClick={() => setOpen(false)}
+                  />
                 </>
               )}
             </nav>

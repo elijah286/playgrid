@@ -11,6 +11,7 @@ import {
   isBetaFeatureAvailable,
 } from "@/lib/site/beta-features-config";
 import { isFootballLibraryAvailable } from "@/lib/learn/access";
+import { getFeedbackWidgetSettings } from "@/lib/site/feedback-config";
 
 export async function SiteHeader() {
   let user: { id: string; email: string | null } | null = null;
@@ -24,6 +25,7 @@ export async function SiteHeader() {
   let coachProTrialUsed = false;
   const coachAiEvalDays = await getCoachAiEvalDays();
   const footballLibraryAvailable = await isFootballLibraryAvailable();
+  const feedbackEnabled = (await getFeedbackWidgetSettings()).enabled;
 
   if (hasSupabaseEnv()) {
     try {
@@ -96,6 +98,7 @@ export async function SiteHeader() {
       userTier={userTier}
       coachProTrialUsed={coachProTrialUsed}
       footballLibraryAvailable={footballLibraryAvailable}
+      feedbackEnabled={feedbackEnabled}
     />
   );
 }
