@@ -56,12 +56,14 @@ type DowngradeModalState = {
 
 type Interval = "month" | "year";
 
+type Feature = string | { text: string; bold?: boolean };
 type TierDef = {
   id: SubscriptionTier;
   name: string;
   tagline: string;
   price: { month: number; year: number };
-  features: string[];
+  features: Feature[];
+  limitNote?: string;
   addOns?: string;
   cta: string;
 };
@@ -77,33 +79,29 @@ function buildTiers(
     name: "Solo Coach",
     tagline: "Run your team's playbook, schedule, and roster — free, forever.",
     price: { month: 0, year: 0 },
+    limitNote: `1 playbook · ${freeMaxPlays} plays max`,
     features: [
-      `1 playbook with up to ${freeMaxPlays} plays`,
-      "Full play editor",
-      "Playsheets (print + PDF)",
-      "Formations library",
+      "Full play editor with playsheets (print + PDF) and formations library",
       "Team calendar — practices, games, scrimmages with player RSVPs",
       "Invite unlimited players to view the playbook and get schedule updates",
       "Manage your roster (names, jersey numbers, positions)",
-      "View shared playbooks",
-      "View on mobile",
     ],
     cta: "Get started",
   },
   {
     id: "coach",
     name: "Team Coach",
-    tagline: "Run a real program — with Coach Cal AI in your corner.",
+    tagline: "Everything you need to coach a season — plus Coach Cal AI.",
     price: { month: 9, year: 99 },
     features: [
-      "Everything in Solo Coach",
+      { text: "Unlimited plays", bold: true },
+      { text: "Unlimited playbooks", bold: true },
       "Coach Cal AI — generate plays, plan practices, get strategy feedback (50 messages/month)",
-      "Unlimited plays",
+      "Game Mode — sideline view with play-by-play results tracking",
       "Wristbands (print + PDF)",
       `Invite ${seatDefaults.coach} assistant coach${seatDefaults.coach === 1 ? "" : "es"} to collaborate on the playbook`,
       "Send a copy of your playbook to another coach",
       "Practice plans — build reusable templates, collaborate with co-coaches, share with players",
-      "Game Mode — sideline view with play-by-play results tracking",
       "Play & playbook history — every change tracked, restore any version",
     ],
     addOns: `Need more? +$${SEAT_PRICE_USD_PER_MONTH}/seat/mo · +$${MESSAGE_PACK_PRICE_USD_PER_MONTH}/mo per ${MESSAGE_PACK_SIZE} extra Cal messages`,
@@ -444,13 +442,21 @@ export function PricingClient({
                 ) : null}
               </div>
 
+              {t.limitNote ? (
+                <p className="-mt-3 mb-5 text-xs text-muted">{t.limitNote}</p>
+              ) : null}
+
               <ul className="mb-3 space-y-2 text-sm">
-                {t.features.map((f) => (
-                  <li key={f} className="flex items-start gap-2">
-                    <Check className="mt-0.5 size-4 shrink-0 text-primary" />
-                    <span className="text-foreground">{f}</span>
-                  </li>
-                ))}
+                {t.features.map((f) => {
+                  const text = typeof f === "string" ? f : f.text;
+                  const bold = typeof f === "string" ? false : !!f.bold;
+                  return (
+                    <li key={text} className="flex items-start gap-2">
+                      <Check className="mt-0.5 size-4 shrink-0 text-primary" />
+                      <span className={cn("text-foreground", bold && "font-semibold")}>{text}</span>
+                    </li>
+                  );
+                })}
               </ul>
               {t.addOns ? (
                 <p className="mb-6 pl-6 text-[11px] text-muted">{t.addOns}</p>
