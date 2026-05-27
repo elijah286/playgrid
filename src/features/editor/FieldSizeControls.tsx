@@ -927,7 +927,10 @@ function MarkingsControl({
   const hashStyle = resolveHashStyle(doc);
   const showYardNumbers = resolveShowYardNumbers(doc);
   const losStyle = resolveLineOfScrimmage(doc);
-  const showRushLine = doc.showRushLine ?? true;
+  // Default mirrors EditorCanvas + FieldLegend: on for defense, off for
+  // offense. Otherwise the checkbox shows "on" while the canvas draws
+  // nothing on offense plays the coach never explicitly toggled.
+  const showRushLine = doc.showRushLine ?? isDefense;
   const rushLineYards = doc.rushLineYards ?? 7;
   const noRunZones = fieldStructure?.noRunZones ?? [];
   const downMarkers = fieldStructure?.firstDownLineYds ?? [];
