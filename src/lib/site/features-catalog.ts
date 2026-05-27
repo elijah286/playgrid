@@ -1357,6 +1357,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-01",
   },
   {
+    id: "seo-how-to-flag-playbook-guide",
+    name: "How-to-build-a-flag-football-playbook guide",
+    description:
+      "Long-form coaching guide at /learn/how-to-build-a-flag-football-playbook targeting the informational half of the \"make flag football playbook\" Google query (~1,800 words). Walks coaches through install size, formation choice, the four pass concepts to install first, run-game additions, trick play selection, situational organization, defensive call sheets, and printing. Liberal internal links into the Football Library and the /flag-football-playbook product page; Article + FAQPage + BreadcrumbList JSON-LD for rich-result eligibility.",
+    category: "Marketing site",
+    status: "ga",
+    addedDate: "2026-05-26",
+  },
+  {
     id: "seo-flag-football-landing",
     name: "Flag football playbook landing page",
     description:

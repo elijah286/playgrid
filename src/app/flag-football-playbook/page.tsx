@@ -179,6 +179,16 @@ export default function FlagFootballPlaybookPage() {
           them by situation, share with your team, and print wristbands —
           all in one tool.
         </p>
+        <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">
+          New to playbook design? Start with the{" "}
+          <Link
+            href="/learn/how-to-build-a-flag-football-playbook"
+            className="text-primary hover:underline"
+          >
+            step-by-step guide to building a flag football playbook
+          </Link>
+          .
+        </p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Link
             href="/login"

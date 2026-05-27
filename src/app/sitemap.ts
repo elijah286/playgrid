@@ -49,6 +49,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { path: "/coach-cal", priority: 0.95 },
     { path: "/flag-football-playbook", priority: 0.95 },
     { path: "/learn/library", priority: 0.95 },
+    {
+      path: "/learn/how-to-build-a-flag-football-playbook",
+      priority: 0.9,
+    },
     { path: "/learn/using-xo", priority: 0.85 },
     { path: "/examples", priority: 0.9 },
     { path: "/pricing", priority: 0.8 },
