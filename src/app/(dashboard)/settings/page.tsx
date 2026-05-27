@@ -41,6 +41,7 @@ import { getBetaFeatures } from "@/lib/site/beta-features-config";
 import { getTrafficSummaryAction } from "@/app/actions/admin-traffic";
 import { getGeoSummaryAction } from "@/app/actions/admin-geography";
 import { getActivationSummaryAction } from "@/app/actions/admin-activation";
+import { getReengagementMetricsAction } from "@/app/actions/admin-reengagement";
 import { getShareLifetimeSummaryAction } from "@/app/actions/admin-traffic-insights";
 import { getAnalyticsExcludedEmails } from "@/lib/site/analytics-exclusions-config";
 import { listSeedFormationsAction } from "@/app/actions/formations";
@@ -114,6 +115,7 @@ export default async function SettingsPage({
     trafficRes,
     geoRes,
     activationRes,
+    reengagementRes,
     seedsRes,
     mobileEditingEnabled,
     betaFeatures,
@@ -156,6 +158,7 @@ export default async function SettingsPage({
     getTrafficSummaryAction(overviewWindowDays),
     getGeoSummaryAction(overviewWindowDays),
     getActivationSummaryAction(),
+    getReengagementMetricsAction(),
     listSeedFormationsAction(),
     getMobileEditingEnabled(),
     getBetaFeatures(),
@@ -340,6 +343,8 @@ export default async function SettingsPage({
             : null
         }
         activationError={activationRes.ok ? null : activationRes.error}
+        initialReengagementMetrics={reengagementRes.ok ? reengagementRes.metrics : null}
+        reengagementError={reengagementRes.ok ? null : reengagementRes.error}
         initialExcludedEmails={analyticsExcludedEmails}
         initialSeeds={seedsRes.ok ? seedsRes.formations : []}
         initialBetaFeatures={betaFeatures}

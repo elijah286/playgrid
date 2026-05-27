@@ -12,6 +12,28 @@ function absolutize(path: string): string {
   return `${SITE_URL.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
+/** Append UTM params for re-engagement-email attribution. We use the
+ *  app-wide page_views table's existing utm_* columns (no schema change),
+ *  so a click from any reengagement email shows up as a page view tagged
+ *  utm_source=reengagement and we can attribute returns + conversions to
+ *  the specific send via utm_campaign (3d/10d) and utm_content. */
+export function withReengagementUtm(
+  url: string,
+  campaign: "3d" | "10d",
+  content: string,
+): string {
+  const u = new URL(url);
+  u.searchParams.set("utm_source", "reengagement");
+  u.searchParams.set("utm_medium", "email");
+  u.searchParams.set("utm_campaign", campaign);
+  u.searchParams.set("utm_content", content);
+  return u.toString();
+}
+
+function slugify(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
 /** Per-variant "what coach X added next" trio.
  *
  *  Hand-curated starter plays for each library variant — the same plays
