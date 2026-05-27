@@ -50,6 +50,8 @@ const PUBLIC_PREFIXES = [
   "/api/stripe/webhook", // Stripe → server. Must accept POSTs without a session.
   "/api/calendar/", // Cron + ICS feed: auth via bearer secret / signed token.
   "/api/digest/", // Cron: auth via bearer CRON_SECRET.
+  "/api/reengagement/", // Cron: auth via bearer CRON_SECRET.
+  "/api/email/unsubscribe", // RFC 8058 one-click: mail clients POST without a session. Verifies HMAC token.
   "/api/trash/purge", // Cron: auth via bearer CRON_SECRET.
   "/api/auth/purge-unconfirmed", // Cron: auth via bearer CRON_SECRET.
   "/monitoring", // Sentry tunnel
