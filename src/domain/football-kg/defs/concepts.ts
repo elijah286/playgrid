@@ -179,7 +179,7 @@ export const CONCEPTS: ConceptDef[] = [
     family: "concept",
     variants: [...ALL_VARIANTS],
     description: "Two crossing drags meshing at 5-6 yards with 1 yard of vertical separation.",
-    body: "Two shallow crossing drags from opposite sides of the formation that 'mesh' past each other at 5-6 yards — one runner is the UNDER (at 5yd), the other is the OVER (at 6yd), giving 1 yard of visible separation at the mesh point. The depth differential is small but real: same depth = collision; ~1yd differential at canonical 5-6 yd depth = natural rub for the under-drag and a free release for the over-drag. Cal MUST set depthYds explicitly on each drag (e.g. 5 and 6) so the over-drag passes CLEARLY ABOVE the under-drag. Natural pick / rub action vs man, finds soft spots in zone.",
+    body: "Two shallow crossing drags from opposite sides of the formation that 'mesh' past each other at 5-6 yards — one runner is the UNDER (at 5yd), the other is the OVER (at 6yd), giving 1 yard of visible separation at the mesh point. The depth differential is small but real: same depth = collision; ~1yd differential at canonical 5-6 yd depth = natural rub for the under-drag and a free release for the over-drag. Each drag has an explicit depth (e.g. 5 and 6) so the over-drag passes clearly above the under-drag. Natural pick / rub action vs man, finds soft spots in zone.",
     aliases: ["Mesh Concept"],
     complexity: "basic",
     defaultFormation: { id: "doubles", strength: "right" },
