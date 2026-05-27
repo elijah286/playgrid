@@ -33,6 +33,8 @@ import { GoogleNativeSigninSettingsClient } from "@/features/admin/GoogleNativeS
 import { RevenueAdminClient } from "@/features/admin/RevenueAdminClient";
 import { FeedbackAdminClient } from "@/features/admin/FeedbackAdminClient";
 import { CoachAiFeedbackTabs } from "@/features/admin/CoachAiFeedbackTabs";
+import { CoachAiTokenUsageClient } from "@/features/admin/CoachAiTokenUsageClient";
+import type { CoachAiTokenUsageSummary } from "@/app/actions/coach-ai-token-usage";
 import type { KbMissRow } from "@/app/actions/coach-ai-feedback";
 import { CoachInvitationsAdminClient } from "@/features/admin/CoachInvitationsAdminClient";
 import { BillingAdminClient } from "@/features/admin/BillingAdminClient";
@@ -130,6 +132,7 @@ type Tab =
   | "payments"
   | "feedback"
   | "ai_feedback"
+  | "ai_usage"
   | "seeds"
   | "site"
   | "integrations"
@@ -149,6 +152,7 @@ function isTab(value: string | null | undefined): value is Tab {
     value === "payments" ||
     value === "feedback" ||
     value === "ai_feedback" ||
+    value === "ai_usage" ||
     value === "seeds" ||
     value === "site" ||
     value === "integrations" ||
@@ -196,6 +200,7 @@ export function SettingsClient({
   initialGoogleOAuthWebClientId,
   initialCoachAiKbMisses,
   coachAiKbMissesError,
+  initialCoachAiTokenUsage,
   initialOpexServices,
   initialOpexEntries,
   initialOpexPeriod,
@@ -259,6 +264,7 @@ export function SettingsClient({
   initialGoogleOAuthWebClientId: string | null;
   initialCoachAiKbMisses: KbMissRow[];
   coachAiKbMissesError: string | null;
+  initialCoachAiTokenUsage: CoachAiTokenUsageSummary;
   initialOpexServices: OpexService[];
   initialOpexEntries: OpexEntry[];
   initialOpexPeriod: string;
@@ -381,6 +387,7 @@ export function SettingsClient({
           icon: Brain,
           badge: overviewProps.unreviewedKbMisses,
         },
+        { value: "ai_usage", label: "Cal usage", icon: DollarSign },
         { value: "seeds", label: "Playbook seeds", icon: Sparkles },
       ],
     },
@@ -654,6 +661,10 @@ export function SettingsClient({
             initialKbMisses={initialCoachAiKbMisses}
             initialError={coachAiKbMissesError}
           />
+        )}
+
+        {tab === "ai_usage" && (
+          <CoachAiTokenUsageClient initial={initialCoachAiTokenUsage} />
         )}
 
         {tab === "seeds" && (

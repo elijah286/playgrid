@@ -1504,6 +1504,9 @@ export async function detectPlaySheetLayout(
       system: LAYOUT_DETECTION_PROMPT + contextBlock(ctx),
       messages: [userWithImage],
       maxTokens: 1500,
+      usageContext: ctx.userId
+        ? { userId: ctx.userId, context: "layout_detection" }
+        : undefined,
       // Layout detection is a structurally simple task (find boxes,
       // emit bbox JSON), but a small thinking budget still helps the
       // model carefully partition the sheet rather than guess at
@@ -1570,6 +1573,9 @@ async function performFullImageVisionPass(
       system: VISION_PASS_PROMPT + contextBlock(ctx),
       messages: [userWithImage],
       maxTokens: 2500,
+      usageContext: ctx.userId
+        ? { userId: ctx.userId, context: "vision_pass" }
+        : undefined,
       // Full-image fallback path. Multiple plays in one image is
       // the hardest vision task in this pipeline. Give the model
       // ample thinking budget to examine each play region carefully.
@@ -1629,6 +1635,9 @@ async function performPerCropVisionPass(
       system: PER_CROP_VISION_PROMPT + contextBlock(ctx),
       messages: [userMessage],
       maxTokens: 2000,
+      usageContext: ctx.userId
+        ? { userId: ctx.userId, context: "diagram_crop" }
+        : undefined,
       // Per-crop vision is THE accuracy-critical step. Without
       // thinking, Opus has to commit pixels → JSON in one forward
       // pass and template-locks to common-play priors when uncertain.
@@ -2520,6 +2529,9 @@ export async function runAgent(
       tools,
       maxTokens: 4096,
       onTextDelta: undefined,
+      usageContext: ctx.userId
+        ? { userId: ctx.userId, context: "chat" }
+        : undefined,
     });
     modelId = result.modelId;
     provider = result.provider;

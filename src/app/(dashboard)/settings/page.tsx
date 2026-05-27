@@ -46,6 +46,7 @@ import { getShareLifetimeSummaryAction } from "@/app/actions/admin-traffic-insig
 import { getAnalyticsExcludedEmails } from "@/lib/site/analytics-exclusions-config";
 import { listSeedFormationsAction } from "@/app/actions/formations";
 import { listCoachAiKbMissesAction } from "@/app/actions/coach-ai-feedback";
+import { listCoachAiTokenUsageAction } from "@/app/actions/coach-ai-token-usage";
 import {
   listOpexServicesAction,
   listOpexEntriesAction,
@@ -121,6 +122,7 @@ export default async function SettingsPage({
     betaFeatures,
     hideOwnerInfoAbout,
     coachAiKbMissesRes,
+    coachAiTokenUsageRes,
     opexServicesRes,
     opexEntriesRes,
     anthropicAdminKeyRes,
@@ -164,6 +166,7 @@ export default async function SettingsPage({
     getBetaFeatures(),
     getHideOwnerInfoAbout(),
     listCoachAiKbMissesAction("unreviewed"),
+    listCoachAiTokenUsageAction(),
     listOpexServicesAction(),
     listOpexEntriesAction(opexPeriod),
     getAnthropicAdminKeyStatusAction(),
@@ -358,6 +361,7 @@ export default async function SettingsPage({
         initialCoachAiEvalDays={coachAiEvalDays}
         initialCoachAiKbMisses={coachAiKbMissesRes.ok ? coachAiKbMissesRes.items : []}
         coachAiKbMissesError={coachAiKbMissesRes.ok ? null : coachAiKbMissesRes.error}
+        initialCoachAiTokenUsage={coachAiTokenUsageRes}
         initialOpexServices={opexServicesRes.ok ? opexServicesRes.services : []}
         initialOpexEntries={opexEntriesRes.ok ? opexEntriesRes.entries : []}
         initialOpexPeriod={opexPeriod}

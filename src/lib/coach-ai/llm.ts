@@ -1,6 +1,8 @@
 import { getStoredClaudeApiKey } from "@/lib/site/claude-key";
 import { getStoredOpenAIApiKey } from "@/lib/site/openai-key";
 import { getLlmProvider, type LlmProvider } from "@/lib/site/llm-provider";
+import { recordTokenUsage, type UsageContext } from "./token-usage-log";
+import type { TokenUsage } from "./token-cost";
 
 // Default text model — Haiku 4.5 is the right tradeoff for the vast majority
 // of Coach Cal turns (rules Q&A, play composition from named concepts, KB
@@ -90,6 +92,14 @@ export type ChatResult = {
   stopReason: "end_turn" | "tool_use" | "max_tokens" | "other";
   provider: LlmProvider;
   modelId: string;
+  /**
+   * Token counts as reported by the provider, if available. Used by the
+   * cost-tracking pipeline; not all paths populate it (OpenAI path
+   * currently does not). Callers that need cost attribution should
+   * provide ChatOptions.usageContext — llm.ts persists internally when
+   * both are present.
+   */
+  usage?: TokenUsage;
 };
 
 export type ChatOptions = {
@@ -122,6 +132,13 @@ export type ChatOptions = {
   thinkingBudget?: number;
   /** Called for each streamed text token (Claude only; ignored by OpenAI path). */
   onTextDelta?: (text: string) => void;
+  /**
+   * When set, llm.ts writes a row to `coach_ai_token_usage` after the
+   * response is assembled. Best-effort; logging failures never block
+   * the turn. Omit for code paths that shouldn't be billed (tests,
+   * health checks).
+   */
+  usageContext?: { userId: string; context: UsageContext };
 };
 
 export async function chat(opts: ChatOptions): Promise<ChatResult> {
@@ -257,6 +274,7 @@ async function chatClaude(opts: ChatOptions): Promise<ChatResult> {
       content: Array<ContentBlock | { type: "thinking" | "redacted_thinking" }>;
       stop_reason: string;
       model: string;
+      usage?: Partial<TokenUsage>;
     };
     const cleaned = ensureNonEmptyAssistantContent(
       json.content.filter((b): b is ContentBlock => {
@@ -265,11 +283,14 @@ async function chatClaude(opts: ChatOptions): Promise<ChatResult> {
         return true;
       }),
     );
+    const usage = normalizeUsage(json.usage);
+    await maybeRecordUsage(json.model, usage, opts.usageContext);
     return {
       message: { role: "assistant", content: cleaned },
       stopReason: normalizeStopReason(json.stop_reason),
       provider: "claude",
       modelId: json.model,
+      usage,
     };
   }
 
@@ -282,6 +303,14 @@ async function chatClaude(opts: ChatOptions): Promise<ChatResult> {
   let cur: PartialBlock | null = null;
   let stopReason = "other";
   let modelId = selectedModel;
+  // Anthropic SSE reports input_tokens (+ cache counts) on message_start and
+  // output_tokens on message_delta. Accumulate as they arrive.
+  const streamUsage: TokenUsage = {
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_read_input_tokens: 0,
+    cache_creation_input_tokens: 0,
+  };
 
   while (true) {
     const { done, value } = await reader.read();
@@ -299,8 +328,15 @@ async function chatClaude(opts: ChatOptions): Promise<ChatResult> {
 
       const type = ev.type as string;
       if (type === "message_start") {
-        const msg = ev.message as { model?: string } | undefined;
+        const msg = ev.message as { model?: string; usage?: Partial<TokenUsage> } | undefined;
         if (msg?.model) modelId = msg.model;
+        if (msg?.usage) {
+          const u = normalizeUsage(msg.usage);
+          streamUsage.input_tokens += u.input_tokens;
+          streamUsage.cache_read_input_tokens += u.cache_read_input_tokens;
+          streamUsage.cache_creation_input_tokens += u.cache_creation_input_tokens;
+          streamUsage.output_tokens += u.output_tokens;
+        }
       }
       if (type === "content_block_start") {
         const cb = ev.content_block as { type: string; id?: string; name?: string; text?: string } | undefined;
@@ -332,16 +368,47 @@ async function chatClaude(opts: ChatOptions): Promise<ChatResult> {
       if (type === "message_delta") {
         const delta = ev.delta as { stop_reason?: string } | undefined;
         if (delta?.stop_reason) stopReason = delta.stop_reason;
+        // Final output_tokens count rides on message_delta.usage.
+        const evUsage = (ev as { usage?: Partial<TokenUsage> }).usage;
+        if (evUsage) {
+          const u = normalizeUsage(evUsage);
+          if (u.output_tokens > 0) streamUsage.output_tokens = u.output_tokens;
+        }
       }
     }
   }
 
+  await maybeRecordUsage(modelId, streamUsage, opts.usageContext);
   return {
     message: { role: "assistant", content: ensureNonEmptyAssistantContent(blocks) },
     stopReason: normalizeStopReason(stopReason),
     provider: "claude",
     modelId,
+    usage: streamUsage,
   };
+}
+
+function normalizeUsage(raw: Partial<TokenUsage> | undefined): TokenUsage {
+  return {
+    input_tokens: raw?.input_tokens ?? 0,
+    output_tokens: raw?.output_tokens ?? 0,
+    cache_read_input_tokens: raw?.cache_read_input_tokens ?? 0,
+    cache_creation_input_tokens: raw?.cache_creation_input_tokens ?? 0,
+  };
+}
+
+async function maybeRecordUsage(
+  modelId: string,
+  usage: TokenUsage,
+  ctx: { userId: string; context: UsageContext } | undefined,
+): Promise<void> {
+  if (!ctx) return;
+  await recordTokenUsage({
+    userId: ctx.userId,
+    modelId,
+    usage,
+    context: ctx.context,
+  });
 }
 
 /**
