@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 import { getStoredResendConfig } from "@/lib/site/resend-config";
 import { buildUnsubscribeUrl } from "@/lib/email/unsubscribe-token";
-import type { PlayRecommendation } from "./reengagement-recs";
+import { withReengagementUtm, type PlayRecommendation } from "./reengagement-recs";
 
 /** Category string written to `email_opt_outs.category`. */
 export const REENGAGEMENT_OPT_OUT_CATEGORY = "reengagement";
@@ -72,19 +72,30 @@ function buildPlainText(input: SendReengagementInput, unsubscribeUrl: string): s
       ? `Hey ${first} — just checking back. You started a playbook ${input.startedOnLabel} with ${playRef}. Most coaches add 4-5 plays before they have something they'd actually run on Saturday. Here are three I'd add next:`
       : `Hey ${first} — saw you got ${playRef} into your playbook ${input.startedOnLabel}. Most coaches add a few more in the same sitting and then have a real call sheet. Three I'd pick next:`;
   const recs = input.recommendations
-    .map((r, i) => `  ${i + 1}. ${r.name} — learn more: ${r.url}`)
+    .map((r, i) => {
+      const tagged = withReengagementUtm(r.url, input.kind, recSlug(r.name));
+      return `  ${i + 1}. ${r.name} — learn more: ${tagged}`;
+    })
     .join("\n");
+  const ctaUrl = withReengagementUtm(input.playbookUrl, input.kind, "cta");
   return [
     leadIn,
     "",
     recs,
     "",
-    `Pick up where you left off: ${input.playbookUrl}`,
+    `Pick up where you left off: ${ctaUrl}`,
     "",
     "— XO Gridmaker",
     "",
     `Unsubscribe from these nudges: ${unsubscribeUrl}`,
   ].join("\n");
+}
+
+/** Slugify a play name into a stable utm_content value so analytics can
+ *  attribute a click to the specific recommendation. Keep lowercase,
+ *  hyphens, alphanumeric only — Google Analytics-style. */
+function recSlug(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
 function escapeHtml(s: string): string {
@@ -107,22 +118,24 @@ function buildHtml(input: SendReengagementInput, unsubscribeUrl: string): string
       ? `Hey ${first} — just checking back. You started a playbook <strong>${startedOn}</strong> with ${playRef}. Most coaches add 4–5 plays before they have something they'd run on Saturday.`
       : `Hey ${first} — saw you got ${playRef} into your playbook <strong>${startedOn}</strong>. Most coaches add a few more in the same sitting and then have a real call sheet.`;
   const recCards = input.recommendations
-    .map(
-      (r) => `
+    .map((r) => {
+      const tagged = withReengagementUtm(r.url, input.kind, recSlug(r.name));
+      return `
     <tr>
       <td style="padding:10px 0; border-bottom:1px solid #e5e7eb;">
-        <a href="${escapeHtml(r.url)}" style="color:#1769FF; text-decoration:none; font-weight:600; font-size:16px;">
+        <a href="${escapeHtml(tagged)}" style="color:#1769FF; text-decoration:none; font-weight:600; font-size:16px;">
           ${escapeHtml(r.name)}
         </a>
         <div style="margin-top:2px;">
-          <a href="${escapeHtml(r.url)}" style="color:#6b7280; font-size:13px; text-decoration:underline;">
+          <a href="${escapeHtml(tagged)}" style="color:#6b7280; font-size:13px; text-decoration:underline;">
             Learn more about this play concept →
           </a>
         </div>
       </td>
-    </tr>`,
-    )
+    </tr>`;
+    })
     .join("");
+  const ctaUrl = withReengagementUtm(input.playbookUrl, input.kind, "cta");
   return `<!doctype html>
 <html>
   <body style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width:560px; margin:0 auto; padding:24px; color:#111827; line-height:1.55;">
@@ -132,7 +145,7 @@ function buildHtml(input: SendReengagementInput, unsubscribeUrl: string): string
       ${recCards}
     </table>
     <div style="margin-top:28px;">
-      <a href="${escapeHtml(input.playbookUrl)}"
+      <a href="${escapeHtml(ctaUrl)}"
          style="display:inline-block; background:#1769FF; color:#ffffff; text-decoration:none; font-weight:700; padding:12px 22px; border-radius:10px; font-size:15px;">
         Pick up where you left off
       </a>

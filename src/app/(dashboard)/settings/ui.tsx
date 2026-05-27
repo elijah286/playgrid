@@ -39,6 +39,8 @@ import { BillingAdminClient } from "@/features/admin/BillingAdminClient";
 import { TrafficAdminClient } from "@/features/admin/TrafficAdminClient";
 import { GeographyAdminClient } from "@/features/admin/GeographyAdminClient";
 import { ActivationAdminClient } from "@/features/admin/ActivationAdminClient";
+import { ReengagementAdminClient } from "@/features/admin/ReengagementAdminClient";
+import type { ReengagementMetrics } from "@/app/actions/admin-reengagement";
 import { AnalyticsExclusionsAdminClient } from "@/features/admin/AnalyticsExclusionsAdminClient";
 import { SiteSettingsAdminClient } from "@/features/admin/SiteSettingsAdminClient";
 import { CoachSeatsAdminClient } from "@/features/admin/CoachSeatsAdminClient";
@@ -184,6 +186,8 @@ export function SettingsClient({
   geoError,
   initialActivationSummary,
   activationError,
+  initialReengagementMetrics,
+  reengagementError,
   initialSeeds,
   initialBetaFeatures,
   initialHideOwnerInfoAbout,
@@ -245,6 +249,8 @@ export function SettingsClient({
   geoError: string | null;
   initialActivationSummary: MonetizationSummary | null;
   activationError: string | null;
+  initialReengagementMetrics: ReengagementMetrics | null;
+  reengagementError: string | null;
   initialSeeds: SavedFormation[];
   initialBetaFeatures: BetaFeatures;
   initialHideOwnerInfoAbout: boolean;
@@ -282,7 +288,7 @@ export function SettingsClient({
   const urlQuery = searchParams?.get("q") ?? null;
   const [tab, setTab] = useState<Tab>(isTab(urlTab) ? urlTab : "overview");
   const [analyticsSubTab, setAnalyticsSubTab] = useState<
-    "traffic" | "monetization"
+    "traffic" | "monetization" | "reengagement"
   >("traffic");
   const [usersSubTab, setUsersSubTab] = useState<"list" | "settings">("list");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -469,6 +475,7 @@ export function SettingsClient({
               items={[
                 { value: "traffic", label: "Traffic" },
                 { value: "monetization", label: "Monetization Health" },
+                { value: "reengagement", label: "Re-engagement Email" },
               ]}
             />
             {analyticsSubTab === "traffic" && (
@@ -484,6 +491,14 @@ export function SettingsClient({
                 initialError={activationError}
               />
             )}
+            {analyticsSubTab === "reengagement" &&
+              (initialReengagementMetrics ? (
+                <ReengagementAdminClient initial={initialReengagementMetrics} />
+              ) : (
+                <p className="rounded-2xl border border-border bg-surface-raised p-4 text-sm text-muted">
+                  {reengagementError ?? "No re-engagement data available yet."}
+                </p>
+              ))}
           </div>
         )}
 
