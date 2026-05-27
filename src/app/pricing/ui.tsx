@@ -11,11 +11,7 @@ import {
   scheduleSubscriptionDowngradeAction,
 } from "@/app/actions/billing";
 import { track } from "@/lib/analytics/track";
-import {
-  MESSAGE_PACK_PRICE_USD_PER_MONTH,
-  MESSAGE_PACK_SIZE,
-  SEAT_PRICE_USD_PER_MONTH,
-} from "@/lib/billing/seats-config";
+import { SEAT_PRICE_USD_PER_MONTH } from "@/lib/billing/seats-config";
 import type { SeatDefaults } from "@/lib/site/seat-defaults-config";
 import type { Entitlement, SubscriptionTier } from "@/lib/billing/entitlement";
 import { Modal, SegmentedControl } from "@/components/ui";
@@ -104,7 +100,7 @@ function buildTiers(
       "Practice plans — build reusable templates, collaborate with co-coaches, share with players",
       "Play & playbook history — every change tracked, restore any version",
     ],
-    addOns: `Need more? +$${SEAT_PRICE_USD_PER_MONTH}/seat/mo · +$${MESSAGE_PACK_PRICE_USD_PER_MONTH}/mo per ${MESSAGE_PACK_SIZE} extra Cal messages`,
+    addOns: `Need more? +$${SEAT_PRICE_USD_PER_MONTH}/seat/mo`,
     cta: "Upgrade to Team Coach",
   },
   {
@@ -124,7 +120,7 @@ function buildTiers(
       "Practice and game scheduling help",
       "200 Coach Cal messages per month",
     ],
-    addOns: `Scale up: +$${SEAT_PRICE_USD_PER_MONTH}/seat/mo · +$${MESSAGE_PACK_PRICE_USD_PER_MONTH}/mo per ${MESSAGE_PACK_SIZE} extra messages`,
+    addOns: `Scale up: +$${SEAT_PRICE_USD_PER_MONTH}/seat/mo`,
     cta: `Start ${evalDays}-day free trial`,
   },
   ];
@@ -787,7 +783,9 @@ function UpgradePreviewModal({
   );
 }
 
-function AddOnsDisclosure({ showCoachAi }: { showCoachAi: boolean }) {
+// `showCoachAi` prop kept on the call site for future re-introduction
+// of the Coach Cal message-pack block; not consumed today (2026-05-27).
+function AddOnsDisclosure(_props: { showCoachAi: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="mx-auto max-w-md text-center">
@@ -809,17 +807,8 @@ function AddOnsDisclosure({ showCoachAi }: { showCoachAi: boolean }) {
                 already pay for their own plan don&rsquo;t count.
               </dd>
             </div>
-            {showCoachAi ? (
-              <div>
-                <dt className="font-semibold">Extra Coach Cal messages</dt>
-                <dd className="text-muted">
-                  ${MESSAGE_PACK_PRICE_USD_PER_MONTH}/month per pack of{" "}
-                  {MESSAGE_PACK_SIZE} additional messages on Coach Pro. Stack
-                  as many packs as you need; unused messages don&rsquo;t roll
-                  over.
-                </dd>
-              </div>
-            ) : null}
+            {/* Coach Cal message packs hidden 2026-05-27 — bring back
+                when the add-on UX is ready to be re-promoted. */}
           </dl>
         </div>
       ) : null}
