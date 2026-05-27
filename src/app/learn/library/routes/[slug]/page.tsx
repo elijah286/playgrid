@@ -138,16 +138,28 @@ export default async function RoutePage(
   }
   const playbookSettings = defaultSettingsForVariant(variant);
 
-  // Apply admin override on top of the catalog default. Routes are
+  // Apply admin override on top of the route demo. Routes are
   // variant-agnostic, so the override row is keyed by `(slug, variant)`
-  // using the canonical demo variant (flag_5v5). When a site admin has
-  // edited the route via the admin editor, this PlayDocument replaces
-  // the catalog-rendered demo. Reading the override calls Supabase
-  // (which reads cookies), so the page becomes per-request rendered —
-  // route changes show up immediately after an admin save.
+  // using the demo variant (flag_5v5). When a site admin has edited
+  // the route via the admin editor, this PlayDocument replaces the
+  // demo geometry — but we FORCE the library's clean display settings
+  // (white background, no hash marks / numbers / no-run zones) on top
+  // so the route always reads the same in the library regardless of
+  // what field-display options the admin happened to have toggled on
+  // when they saved. Reading the override calls Supabase (cookie auth),
+  // so the page renders per-request and updates the second an admin
+  // saves.
   const override = await loadLibraryOverride(slug, variant);
   if (override) {
-    routeDoc = override.document;
+    routeDoc = {
+      ...override.document,
+      fieldBackground: "white",
+      showHashMarks: false,
+      showYardNumbers: false,
+      showYardLines: true,
+      showNoRunZones: false,
+      lineOfScrimmage: "line",
+    };
   }
   const isAdmin = await isCurrentUserSiteAdmin();
 

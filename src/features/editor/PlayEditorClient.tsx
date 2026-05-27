@@ -2209,7 +2209,18 @@ function PlayEditorClientInner({
           libraryMode ? "" : "lg:grid-cols-[minmax(0,1fr)_320px]"
         }`}
       >
-          <div className="flex min-h-[260px] min-w-0 flex-col gap-3 sm:min-h-[420px]">
+          <div
+            className={`flex min-w-0 flex-col gap-3 ${
+              // The min-heights below exist to keep the editor's toolbar /
+              // notes / inspector row from collapsing on phones — they
+              // reserve vertical room for the chrome that hangs below the
+              // field. Library mode hides ALL of that chrome, so the
+              // reserved space becomes dead air below the field. Skip the
+              // min-height entirely in library mode so the white container
+              // hugs the field SVG.
+              libraryMode ? "" : "min-h-[260px] sm:min-h-[420px]"
+            }`}
+          >
             {/* No max-width on this inner column — the parent
                 `.play-editor-content` wrapper already caps the entire
                 editor stack to match the field's natural width, so the
