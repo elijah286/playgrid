@@ -82,24 +82,16 @@ export default async function PlaysIndexPage(
         dangerouslySetInnerHTML={{ __html: JSON.stringify(withFullContext(breadcrumbLd)) }}
       />
 
-      <nav className="mb-6 flex items-center gap-1 text-xs text-muted">
-        <Link href="/learn/library" className="hover:text-foreground transition-colors">
-          Football library
-        </Link>
-        <span>›</span>
-        <span className="text-foreground">Plays</span>
-      </nav>
-
       <header className="mb-8">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted">
           Football library
         </p>
         <h1 className="mt-1 text-3xl font-extrabold tracking-tight">Plays</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted">
-          Every play concept in the catalog for {VARIANT_LABEL[variant]}. Each
-          page renders the play in the canonical XO editor — same diagram a
-          coach would see in the builder. Sign in to drop a concept into one
-          of your playbooks.
+          Every play concept available for {VARIANT_LABEL[variant]}. Each
+          page opens the play in the XO editor — the same diagram a coach
+          would see in the builder. Sign in to drop a concept into one of
+          your playbooks.
         </p>
       </header>
 

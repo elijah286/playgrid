@@ -262,9 +262,16 @@ export default async function DefensePage(
     }
   }
 
-  const related = groupDefenses()
-    .filter((g) => g.slug !== group.slug)
-    .slice(0, 6);
+  // Related defenses — only show schemes that exist in the SAME variant
+  // the coach is viewing. A 5v5 page shouldn't link out to tackle 3-4 or
+  // 7v7 quarters — those 404 / mislead in the current variant context.
+  const related = renderVariant
+    ? groupDefenses()
+        .filter(
+          (g) => g.slug !== group.slug && g.byVariant[renderVariant] !== undefined,
+        )
+        .slice(0, 6)
+    : [];
 
   const tags: string[] = [];
   if (group.manCoverage) tags.push("man coverage");
@@ -300,17 +307,6 @@ export default async function DefensePage(
         dangerouslySetInnerHTML={{ __html: JSON.stringify(withFullContext(articleLd)) }}
       />
 
-      <nav className="mb-6 flex items-center gap-1 text-xs text-muted">
-        <Link href="/learn/library" className="hover:text-foreground transition-colors">
-          Football library
-        </Link>
-        <span>›</span>
-        <Link href="/learn/library/defense" className="hover:text-foreground transition-colors">
-          Defenses
-        </Link>
-        <span>›</span>
-        <span className="text-foreground">{group.name}</span>
-      </nav>
 
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
@@ -368,7 +364,7 @@ export default async function DefensePage(
 
       <div className="mb-8 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_280px]">
         <div>
-          <p className="mb-6 text-lg leading-relaxed text-foreground">
+          <p className="mb-6 max-w-2xl text-lg leading-relaxed text-foreground">
             {displayedDescription}
           </p>
 
@@ -485,29 +481,6 @@ export default async function DefensePage(
             </div>
           ) : null}
 
-          {supportedVariants.length > 0 ? (
-            <div className="rounded-2xl border border-border bg-surface-raised p-4">
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">
-                Available variants
-              </h4>
-              <ul className="mt-2 space-y-1.5 text-sm">
-                {supportedVariants.map((vv) => (
-                  <li key={vv}>
-                    <Link
-                      href={`/learn/library/defense/${slug}?v=${variantToSlug(vv)}`}
-                      className={`flex items-center justify-between hover:text-primary ${
-                        renderVariant === vv ? "font-semibold text-foreground" : "text-muted"
-                      }`}
-                    >
-                      <span>{VARIANT_LABEL[vv]}</span>
-                      <span className="text-xs text-emerald-500">✓</span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-
           {related.length > 0 ? (
             <div className="rounded-2xl border border-border bg-surface-raised p-4">
               <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">
@@ -518,7 +491,7 @@ export default async function DefensePage(
                 {related.map((r) => (
                   <li key={r.slug}>
                     <Link
-                      href={`/learn/library/defense/${r.slug}`}
+                      href={`/learn/library/defense/${r.slug}?v=${variantToSlug(renderVariant!)}`}
                       className="flex items-center justify-between text-sm hover:text-primary"
                     >
                       <span>{r.name}</span>
@@ -529,6 +502,34 @@ export default async function DefensePage(
               </ul>
             </div>
           ) : null}
+
+          <div className="rounded-2xl border border-border bg-surface-raised p-4">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">
+              <BookOpen className="mr-1 inline size-3.5" />
+              Browse more
+            </h4>
+            <Link
+              href={`/learn/library/plays${renderVariant ? `?v=${variantToSlug(renderVariant)}` : ""}`}
+              className="mt-2 flex items-center justify-between text-sm hover:text-primary"
+            >
+              <span>All plays</span>
+              <ArrowRight className="size-3.5 text-muted" />
+            </Link>
+            <Link
+              href={`/learn/library/formations${renderVariant ? `?v=${variantToSlug(renderVariant)}` : ""}`}
+              className="mt-2 flex items-center justify-between text-sm hover:text-primary"
+            >
+              <span>Formations</span>
+              <ArrowRight className="size-3.5 text-muted" />
+            </Link>
+            <Link
+              href="/learn/library/routes"
+              className="mt-2 flex items-center justify-between text-sm hover:text-primary"
+            >
+              <span>Routes</span>
+              <ArrowRight className="size-3.5 text-muted" />
+            </Link>
+          </div>
         </aside>
       </div>
     </article>

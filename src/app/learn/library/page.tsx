@@ -6,6 +6,7 @@ import { CONCEPTS } from "@/domain/football-kg/defs/concepts";
 import { FORMATIONS } from "@/domain/football-kg/defs/formations";
 import { ROUTE_TEMPLATES } from "@/domain/play/routeTemplates";
 import { DEFENSIVE_ALIGNMENTS } from "@/domain/play/defensiveAlignments";
+import type { DefensiveAlignment } from "@/domain/play/defensiveAlignments";
 import { generateConceptSkeleton } from "@/domain/play/conceptSkeleton";
 import { playSpecToCoachDiagram } from "@/domain/play/specRenderer";
 import { coachDiagramToPlayDocument } from "@/features/coach-ai/coachDiagramConverter";
@@ -25,11 +26,17 @@ import {
 import { withFullContext } from "@/lib/seo/ld-json";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
 import { VariantPill } from "./VariantPill";
+import { CategoryPill } from "./CategoryPill";
+import {
+  DEFAULT_LIBRARY_CATEGORY,
+  isLibraryCategory,
+  type LibraryCategory,
+} from "./categoryConstants";
 
 export const metadata: Metadata = {
   title: "Football library · Learning Center · XO Gridmaker",
   description:
-    "A free, browsable library of football concepts — plays, formations, routes, and defensive schemes. Each concept renders in the canonical play editor with coaching breakdowns.",
+    "A free, browsable library of football concepts — plays, formations, routes, and defensive schemes. Each concept opens in the XO play editor with coaching breakdowns.",
   alternates: { canonical: "/learn/library" },
   openGraph: {
     title: "Football library · XO Gridmaker",
@@ -49,43 +56,72 @@ const breadcrumbLd = {
   ],
 };
 
-// Unique (front, coverage) defensive schemes — same grouping as the
-// /defense category page, but inline so we don't pay an import cost.
-// Optionally filters to a specific variant (matching the
-// defense/page.tsx grouping logic).
-function uniqueDefenseNames(variant?: LibraryVariant): string[] {
-  const slugs = new Map<string, Set<string>>();
-  for (const a of DEFENSIVE_ALIGNMENTS) {
-    const front = (a.front ?? "").trim();
-    const coverage = (a.coverage ?? "").trim();
-    const name =
-      !front || front.toLowerCase() === coverage.toLowerCase()
-        ? coverage
-        : `${front} ${coverage}`.trim();
-    if (!slugs.has(name)) slugs.set(name, new Set<string>());
-    slugs.get(name)!.add(a.variant);
-  }
-  const out: string[] = [];
-  for (const [name, variants] of slugs) {
-    if (!variant || variants.has(variant)) out.push(name);
-  }
-  return out.sort((a, b) => a.localeCompare(b));
+/** Group raw defensive alignments by (front, coverage) into unique
+ *  schemes — the same grouping the /defense category index uses. */
+function defenseDisplayName(a: DefensiveAlignment): string {
+  const front = (a.front ?? "").trim();
+  const coverage = (a.coverage ?? "").trim();
+  if (!front || front.toLowerCase() === coverage.toLowerCase()) return coverage;
+  return `${front} ${coverage}`.trim();
 }
 
-type Category = {
+type GroupedDefense = {
+  name: string;
   slug: string;
-  icon: string;
-  title: string;
-  items: string[];
-  count: number;
-  countNoun: string;
+  description: string;
+  variants: string[];
+  manCoverage: boolean;
+};
+
+function groupDefenses(): GroupedDefense[] {
+  const groups = new Map<string, GroupedDefense>();
+  for (const a of DEFENSIVE_ALIGNMENTS) {
+    const name = defenseDisplayName(a);
+    const slug = toLearnSlug(name);
+    const existing = groups.get(slug);
+    if (existing) {
+      if (!existing.variants.includes(a.variant)) existing.variants.push(a.variant);
+    } else {
+      groups.set(slug, {
+        name,
+        slug,
+        description: a.description,
+        variants: [a.variant],
+        manCoverage: a.manCoverage ?? false,
+      });
+    }
+  }
+  return Array.from(groups.values()).sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+}
+
+const COMPLEXITY_TONE: Record<string, string> = {
+  basic: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+  intermediate: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+  advanced: "bg-rose-500/10 text-rose-700 dark:text-rose-400",
+};
+
+const COMPLEXITY_ORDER = { basic: 0, intermediate: 1, advanced: 2 } as const;
+
+/** One card row in the unified grid — the four categories all map
+ *  their entities into this shape. */
+type LibraryCard = {
+  key: string;
+  name: string;
+  description: string;
+  href: string;
+  chips: Array<{ label: string; tone?: string }>;
 };
 
 export default async function LibraryLandingPage(
-  { searchParams }: { searchParams: Promise<{ v?: string }> },
+  { searchParams }: { searchParams: Promise<{ v?: string; cat?: string }> },
 ) {
   if (!(await isFootballLibraryAvailable())) notFound();
-  const { v } = await searchParams;
+  const { v, cat } = await searchParams;
+  const activeCategory: LibraryCategory = isLibraryCategory(cat)
+    ? cat
+    : DEFAULT_LIBRARY_CATEGORY;
   // Active variant from URL — drives the featured concept, the
   // thumbnail render, and the items shown in each category card.
   // Without this, the landing page sat outside the variant filter:
@@ -149,56 +185,85 @@ export default async function LibraryLandingPage(
     }
   }
 
-  // Empty categories (drills, practice plans, coaching articles,
-  // glossary) are hidden until they have content. Per user feedback —
-  // "Coming soon" cards felt cluttered when the categories truly had no
-  // data yet. They'll come back when their catalogs are seeded.
-  //
-  // Items + count are variant-scoped (matching what the category index
-  // pages show) so the landing card is consistent with what the coach
-  // sees after clicking through. Routes are variant-agnostic — a Slant
-  // is a Slant regardless of game type — so they don't filter.
-  const conceptsInVariant = CONCEPTS.filter((c) =>
-    (c.variants ?? []).includes(variant),
-  );
-  const formationsInVariant = FORMATIONS.filter((f) =>
-    (f.variants ?? []).includes(variant),
-  );
-  const defenseNamesInVariant = uniqueDefenseNames(variant);
-  const CATEGORIES: Category[] = [
-    {
-      slug: "plays",
-      icon: "▶",
-      title: "Plays",
-      items: conceptsInVariant.slice(0, 4).map((c) => c.name),
-      count: conceptsInVariant.length,
-      countNoun: "concepts",
-    },
-    {
-      slug: "formations",
-      icon: "▢",
-      title: "Formations",
-      items: formationsInVariant.slice(0, 4).map((f) => f.name),
-      count: formationsInVariant.length,
-      countNoun: "sets",
-    },
-    {
-      slug: "routes",
-      icon: "↗",
-      title: "Routes",
-      items: ROUTE_TEMPLATES.slice(0, 4).map((r) => r.name),
-      count: ROUTE_TEMPLATES.length,
-      countNoun: "templates",
-    },
-    {
-      slug: "defense",
-      icon: "🛡",
-      title: "Defense",
-      items: defenseNamesInVariant.slice(0, 4),
-      count: defenseNamesInVariant.length,
-      countNoun: "schemes",
-    },
-  ];
+  // Build cards for the active category. The four categories all
+  // collapse into a uniform `LibraryCard[]` so the grid below stays
+  // a single chunk of markup. Routes are variant-agnostic; everything
+  // else is variant-filtered.
+  let cards: LibraryCard[] = [];
+  let activeNote = "";
+  if (activeCategory === "plays") {
+    const sorted = [...CONCEPTS]
+      .sort((a, b) => {
+        const ai = COMPLEXITY_ORDER[a.complexity as keyof typeof COMPLEXITY_ORDER] ?? 1;
+        const bi = COMPLEXITY_ORDER[b.complexity as keyof typeof COMPLEXITY_ORDER] ?? 1;
+        return ai !== bi ? ai - bi : a.name.localeCompare(b.name);
+      })
+      .filter((c) => (c.variants ?? []).includes(variant));
+    cards = sorted.map((c) => ({
+      key: c.id,
+      name: c.name,
+      description: c.description,
+      href: `/learn/library/plays/${toLearnSlug(c.name)}/${variantSlug}`,
+      chips: c.complexity
+        ? [
+            {
+              label: c.complexity,
+              tone:
+                COMPLEXITY_TONE[c.complexity] ??
+                "bg-surface-inset text-muted",
+            },
+          ]
+        : [],
+    }));
+    activeNote = `${cards.length} ${cards.length === 1 ? "concept" : "concepts"} in ${VARIANT_LABEL[variant]}`;
+  } else if (activeCategory === "formations") {
+    const sorted = [...FORMATIONS]
+      .sort((a, b) => {
+        const ai = COMPLEXITY_ORDER[a.complexity as keyof typeof COMPLEXITY_ORDER] ?? 1;
+        const bi = COMPLEXITY_ORDER[b.complexity as keyof typeof COMPLEXITY_ORDER] ?? 1;
+        return ai !== bi ? ai - bi : a.name.localeCompare(b.name);
+      })
+      .filter((f) => (f.variants ?? []).includes(variant));
+    cards = sorted.map((f) => ({
+      key: f.id,
+      name: f.name,
+      description: f.description,
+      href: `/learn/library/formations/${toLearnSlug(f.name)}?v=${variantSlug}`,
+      chips: [
+        ...(f.complexity
+          ? [
+              {
+                label: f.complexity,
+                tone:
+                  COMPLEXITY_TONE[f.complexity] ??
+                  "bg-surface-inset text-muted",
+              },
+            ]
+          : []),
+        ...((f.tags ?? []).slice(0, 2).map((t) => ({ label: t }))),
+      ],
+    }));
+    activeNote = `${cards.length} ${cards.length === 1 ? "formation" : "formations"} in ${VARIANT_LABEL[variant]}`;
+  } else if (activeCategory === "defenses") {
+    const grouped = groupDefenses().filter((g) => g.variants.includes(variant));
+    cards = grouped.map((g) => ({
+      key: g.slug,
+      name: g.name,
+      description: g.description,
+      href: `/learn/library/defense/${g.slug}?v=${variantSlug}`,
+      chips: [{ label: g.manCoverage ? "man coverage" : "zone coverage" }],
+    }));
+    activeNote = `${cards.length} ${cards.length === 1 ? "scheme" : "schemes"} in ${VARIANT_LABEL[variant]}`;
+  } else if (activeCategory === "routes") {
+    cards = ROUTE_TEMPLATES.map((r) => ({
+      key: r.name,
+      name: r.name,
+      description: r.description ?? "",
+      href: `/learn/library/routes/${toLearnSlug(r.name)}`,
+      chips: [],
+    }));
+    activeNote = `${cards.length} route ${cards.length === 1 ? "template" : "templates"} (variant-agnostic — same routes across game types)`;
+  }
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10 text-foreground">
@@ -215,9 +280,9 @@ export default async function LibraryLandingPage(
           Football library
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-muted">
-          A free, browsable library of football concepts. Each play renders in
-          the same canonical editor that powers the in-app play designer —
-          same diagrams, same coaching cues, same depth.
+          A free, browsable library of football concepts. Each play opens in
+          the same editor coaches use to build their playbooks — same
+          diagrams, same coaching cues, same depth.
         </p>
       </header>
 
@@ -234,9 +299,8 @@ export default async function LibraryLandingPage(
             {featured.name}
           </h2>
           <p className="mt-1.5 max-w-xl text-sm text-muted">
-            {featured.description} Renders live in the canonical play editor
-            with coaching cues, when-to-call guidance, and common mistakes to
-            avoid.
+            {featured.description} Opens in the XO play editor with coaching
+            cues, when-to-call guidance, and common mistakes to avoid.
           </p>
           <Link
             href={featuredHref}
@@ -263,53 +327,62 @@ export default async function LibraryLandingPage(
         )}
       </section>
 
-      <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-muted">
-        Browse the library
-      </p>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {CATEGORIES.map((cat) => {
-          // Routes are variant-agnostic; everything else is filtered
-          // to the active variant. The category landing page reads
-          // the same `?v=` so navigation lands on a consistent view.
-          const href =
-            cat.slug === "routes"
-              ? `/learn/library/${cat.slug}`
-              : `/learn/library/${cat.slug}?v=${variantSlug}`;
-          return (
-            <Link key={cat.slug} href={href} className="group">
-              <div className="flex h-full flex-col rounded-2xl border border-border bg-surface-raised p-5 transition-shadow group-hover:border-primary-light group-hover:shadow-md">
-                <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-primary-light text-base text-primary">
-                  {cat.icon}
-                </div>
-                <h3 className="mb-3 text-base font-semibold text-foreground">
-                  {cat.title}
-                </h3>
-                <ul className="space-y-1.5 text-xs text-muted">
-                  {cat.items.map((item) => (
-                    <li
-                      key={item}
-                      className="before:mr-1.5 before:text-primary before:content-['→']"
-                    >
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-                {/* Count sits in the card footer — coaches read this
-                  * as "there are more beyond what you see." The arrow
-                  * mirrors the per-item arrow so it reads as a
-                  * sibling "view all" affordance. */}
-                <p className="mt-auto pt-3 text-xs font-semibold text-muted transition-colors group-hover:text-primary">
-                  <span className="inline-flex items-center gap-1">
-                    {cat.count} {cat.countNoun}
-                    <ArrowRight className="size-3" />
-                  </span>
-                </p>
-              </div>
-            </Link>
-          );
-        })}
+      {/* Category selector — left-aligned and prominent so coaches don't
+          miss it. Stacks with the variant pill above (same alignment,
+          same pill family) so the two filters read as a pair. The old
+          "Browse the library" label is dropped — the pill itself names
+          what's being browsed. */}
+      <div className="mb-5">
+        <CategoryPill />
       </div>
+
+      {cards.length === 0 ? (
+        <p className="rounded-2xl border border-dashed border-border bg-surface-inset p-8 text-center text-sm text-muted">
+          No {activeCategory} in {VARIANT_LABEL[variant]} yet. Try a different
+          variant above.
+        </p>
+      ) : (
+        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {cards.map((card) => (
+            <li key={card.key}>
+              <Link
+                href={card.href}
+                className="group block h-full rounded-2xl border border-border bg-surface-raised p-5 transition-all hover:-translate-y-0.5 hover:border-primary-light hover:shadow-md"
+              >
+                <div className="mb-2 flex items-start justify-between gap-3">
+                  <h3 className="text-lg font-semibold text-foreground transition-colors group-hover:text-primary">
+                    {card.name}
+                  </h3>
+                  <ArrowRight className="mt-1 size-4 shrink-0 text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+                </div>
+                <p className="line-clamp-3 text-sm leading-relaxed text-muted">
+                  {card.description}
+                </p>
+                {card.chips.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {card.chips.map((c) => (
+                      <span
+                        key={c.label}
+                        className={
+                          c.tone
+                            ? `rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${c.tone}`
+                            : "rounded-full bg-surface-inset px-2 py-0.5 text-[10px] font-medium text-muted"
+                        }
+                      >
+                        {c.label}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {activeNote ? (
+        <p className="mt-8 text-xs text-muted">{activeNote}</p>
+      ) : null}
     </div>
   );
 }

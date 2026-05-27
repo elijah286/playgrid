@@ -223,21 +223,6 @@ export default async function PlayConceptVariantPage(
         dangerouslySetInnerHTML={{ __html: JSON.stringify(withFullContext(articleLd)) }}
       />
 
-      <nav className="mb-6 flex items-center gap-1 text-xs text-muted">
-        <Link href="/learn/library" className="hover:text-foreground transition-colors">
-          Football library
-        </Link>
-        <span>›</span>
-        <Link href="/learn/library/plays" className="hover:text-foreground transition-colors">
-          Plays
-        </Link>
-        <span>›</span>
-        <Link href={`/learn/library/plays/${slug}`} className="hover:text-foreground transition-colors">
-          {concept.name}
-        </Link>
-        <span>›</span>
-        <span className="text-foreground">{VARIANT_LABEL[variant]}</span>
-      </nav>
 
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
@@ -304,7 +289,7 @@ export default async function PlayConceptVariantPage(
 
       <div className="mb-8 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_280px]">
         <div>
-          <p className="mb-6 text-lg leading-relaxed text-foreground">
+          <p className="mb-6 max-w-2xl text-lg leading-relaxed text-foreground">
             {conceptBody}
           </p>
 

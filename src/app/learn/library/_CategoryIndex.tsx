@@ -49,14 +49,6 @@ export function CategoryIndex({
         dangerouslySetInnerHTML={{ __html: JSON.stringify(withFullContext(breadcrumbLd)) }}
       />
 
-      <nav className="mb-6 flex items-center gap-1 text-xs text-muted">
-        <Link href="/learn/library" className="hover:text-foreground transition-colors">
-          Football library
-        </Link>
-        <span>›</span>
-        <span className="text-foreground">{title}</span>
-      </nav>
-
       <header className="mb-8">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted">
           Football library

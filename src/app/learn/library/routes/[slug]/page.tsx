@@ -207,17 +207,6 @@ export default async function RoutePage(
         dangerouslySetInnerHTML={{ __html: JSON.stringify(withFullContext(articleLd)) }}
       />
 
-      <nav className="mb-6 flex items-center gap-1 text-xs text-muted">
-        <Link href="/learn/library" className="hover:text-foreground transition-colors">
-          Football library
-        </Link>
-        <span>›</span>
-        <Link href="/learn/library/routes" className="hover:text-foreground transition-colors">
-          Routes
-        </Link>
-        <span>›</span>
-        <span className="text-foreground">{route.name}</span>
-      </nav>
 
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
@@ -270,12 +259,17 @@ export default async function RoutePage(
 
       <div className="mb-8 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_280px]">
         <div>
-          <p className="mb-6 text-lg leading-relaxed text-foreground">
+          <p className="mb-6 max-w-2xl text-lg leading-relaxed text-foreground">
             {route.description ?? `${route.name} — route template.`}
           </p>
 
           {routeDoc ? (
-            <div className="overflow-hidden rounded-2xl border border-border bg-surface-raised">
+            // Route demos use only one receiver + QB on a field designed
+            // for 10. Constrain the visual to a centered 480px column so
+            // the route doesn't drown in a sea of empty field width.
+            // Plays/defenses/formations DON'T get this constraint —
+            // they use the full field width legitimately.
+            <div className="mx-auto max-w-[480px] overflow-hidden rounded-2xl border border-border bg-surface-raised">
               <PlayEditorClient
                 playId={`library:routes:${slug}:${variant}`}
                 playbookId="library-preview"
@@ -297,12 +291,11 @@ export default async function RoutePage(
             </div>
           )}
 
-          <p className="mt-4 text-xs text-muted">
-            Demo rendered on @X (outside WR) at {depth}yd depth — the catalog
-            default. Only the route runner and the QB are shown so the break
-            stays the focus; the same route family scales to any depth a play
-            calls for, and concepts that use this route may set a different
-            depth.
+          <p className="mt-4 max-w-2xl text-xs text-muted">
+            Demo rendered on @X (outside WR) at {depth}yd depth. Only the
+            route runner and the QB are shown so the break stays the focus;
+            the same route family scales to any depth a play calls for, and
+            concepts that use this route may set a different depth.
           </p>
 
           {usedBy.length > 0 ? (

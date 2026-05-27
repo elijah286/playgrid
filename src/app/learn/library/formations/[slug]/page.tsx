@@ -167,17 +167,6 @@ export default async function FormationPage(
         dangerouslySetInnerHTML={{ __html: JSON.stringify(withFullContext(articleLd)) }}
       />
 
-      <nav className="mb-6 flex items-center gap-1 text-xs text-muted">
-        <Link href="/learn/library" className="hover:text-foreground transition-colors">
-          Football library
-        </Link>
-        <span>›</span>
-        <Link href="/learn/library/formations" className="hover:text-foreground transition-colors">
-          Formations
-        </Link>
-        <span>›</span>
-        <span className="text-foreground">{formation.name}</span>
-      </nav>
 
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
@@ -224,7 +213,7 @@ export default async function FormationPage(
 
       <div className="mb-8 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_280px]">
         <div>
-          <p className="mb-6 text-lg leading-relaxed text-foreground">
+          <p className="mb-6 max-w-2xl text-lg leading-relaxed text-foreground">
             {formation.body ?? formation.description}
           </p>
 
