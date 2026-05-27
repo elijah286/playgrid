@@ -11,11 +11,13 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 const getPlaybookOwnerEntitlementMock = vi.fn<() => Promise<unknown>>();
+const getPlaybookOwnerIdMock = vi.fn<() => Promise<string | null>>();
 const tierAtLeastMock = vi.fn<(ent: unknown, tier: string) => boolean>();
-const getFreeMaxPlaysPerPlaybookMock = vi.fn<() => Promise<number>>();
+const getFreePlayCapForOwnerMock = vi.fn<(ownerId: string | null) => Promise<number>>();
 
 vi.mock("@/lib/billing/owner-entitlement", () => ({
   getPlaybookOwnerEntitlement: (id: string) => getPlaybookOwnerEntitlementMock(),
+  getPlaybookOwnerId: (id: string) => getPlaybookOwnerIdMock(),
 }));
 
 vi.mock("@/lib/billing/features", () => ({
@@ -23,7 +25,7 @@ vi.mock("@/lib/billing/features", () => ({
 }));
 
 vi.mock("@/lib/site/free-plays-config", () => ({
-  getFreeMaxPlaysPerPlaybook: () => getFreeMaxPlaysPerPlaybookMock(),
+  getFreePlayCapForOwner: (ownerId: string | null) => getFreePlayCapForOwnerMock(ownerId),
 }));
 
 import { assertPlayCap } from "./play-cap";
@@ -63,15 +65,17 @@ function makeSupabase(opts: { count: number }) {
 
 beforeEach(() => {
   getPlaybookOwnerEntitlementMock.mockReset();
+  getPlaybookOwnerIdMock.mockReset();
+  getPlaybookOwnerIdMock.mockResolvedValue("owner-1");
   tierAtLeastMock.mockReset();
-  getFreeMaxPlaysPerPlaybookMock.mockReset();
+  getFreePlayCapForOwnerMock.mockReset();
 });
 
 describe("assertPlayCap — query shape", () => {
   it("filters out soft-deleted plays (deleted_at IS NULL)", async () => {
     getPlaybookOwnerEntitlementMock.mockResolvedValue({ tier: "free" });
     tierAtLeastMock.mockReturnValue(false);
-    getFreeMaxPlaysPerPlaybookMock.mockResolvedValue(16);
+    getFreePlayCapForOwnerMock.mockResolvedValue(16);
     const sb = makeSupabase({ count: 0 });
 
     await assertPlayCap(sb.client, "pb-1");
@@ -86,7 +90,7 @@ describe("assertPlayCap — query shape", () => {
   it("scopes count to the requested playbook and excludes archived plays", async () => {
     getPlaybookOwnerEntitlementMock.mockResolvedValue({ tier: "free" });
     tierAtLeastMock.mockReturnValue(false);
-    getFreeMaxPlaysPerPlaybookMock.mockResolvedValue(16);
+    getFreePlayCapForOwnerMock.mockResolvedValue(16);
     const sb = makeSupabase({ count: 0 });
 
     await assertPlayCap(sb.client, "pb-42");
@@ -100,7 +104,7 @@ describe("assertPlayCap — gating", () => {
   it("rejects when the visible count meets the limit", async () => {
     getPlaybookOwnerEntitlementMock.mockResolvedValue({ tier: "free" });
     tierAtLeastMock.mockReturnValue(false);
-    getFreeMaxPlaysPerPlaybookMock.mockResolvedValue(16);
+    getFreePlayCapForOwnerMock.mockResolvedValue(16);
     const sb = makeSupabase({ count: 16 });
 
     const result = await assertPlayCap(sb.client, "pb-1");
@@ -114,7 +118,7 @@ describe("assertPlayCap — gating", () => {
   it("allows the create when the visible count is below the limit", async () => {
     getPlaybookOwnerEntitlementMock.mockResolvedValue({ tier: "free" });
     tierAtLeastMock.mockReturnValue(false);
-    getFreeMaxPlaysPerPlaybookMock.mockResolvedValue(16);
+    getFreePlayCapForOwnerMock.mockResolvedValue(16);
     const sb = makeSupabase({ count: 11 });
 
     const result = await assertPlayCap(sb.client, "pb-1");
@@ -131,6 +135,6 @@ describe("assertPlayCap — gating", () => {
 
     expect(result.ok).toBe(true);
     expect(sb.from).not.toHaveBeenCalled();
-    expect(getFreeMaxPlaysPerPlaybookMock).not.toHaveBeenCalled();
+    expect(getFreePlayCapForOwnerMock).not.toHaveBeenCalled();
   });
 });

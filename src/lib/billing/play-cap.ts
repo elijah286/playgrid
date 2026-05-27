@@ -1,7 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getPlaybookOwnerEntitlement } from "@/lib/billing/owner-entitlement";
+import {
+  getPlaybookOwnerEntitlement,
+  getPlaybookOwnerId,
+} from "@/lib/billing/owner-entitlement";
 import { tierAtLeast } from "@/lib/billing/features";
-import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
+import { getFreePlayCapForOwner } from "@/lib/site/free-plays-config";
 
 export async function assertPlayCap(
   supabase: SupabaseClient,
@@ -9,7 +12,8 @@ export async function assertPlayCap(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ownerEnt = await getPlaybookOwnerEntitlement(playbookId);
   if (tierAtLeast(ownerEnt, "coach")) return { ok: true };
-  const limit = await getFreeMaxPlaysPerPlaybook();
+  const ownerId = await getPlaybookOwnerId(playbookId);
+  const limit = await getFreePlayCapForOwner(ownerId);
   const { count } = await supabase
     .from("plays")
     .select("id", { count: "exact", head: true })

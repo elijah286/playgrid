@@ -23,7 +23,8 @@ import type { SportVariant } from "@/domain/play/types";
 import { normalizePlaybookSettings } from "@/domain/playbook/settings";
 import { getCurrentEntitlement, hasUsedCoachProTrial } from "@/lib/billing/entitlement";
 import { canUseGameMode, tierAtLeast } from "@/lib/billing/features";
-import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
+import { getFreePlayCapForOwner } from "@/lib/site/free-plays-config";
+import { getPlaybookOwnerId } from "@/lib/billing/owner-entitlement";
 import {
   getBetaFeatures,
   isBetaFeatureAvailable,
@@ -286,7 +287,10 @@ export default async function PlaybookDetailPage({ params }: Props) {
 
   const freeMaxPlays = await timed(
     `playbook-page:freeMaxPlays pb=${playbookId}`,
-    () => getFreeMaxPlaysPerPlaybook(),
+    async () => {
+      const ownerId = await getPlaybookOwnerId(playbookId);
+      return getFreePlayCapForOwner(ownerId);
+    },
   );
 
   const betaFeatures = await timed(

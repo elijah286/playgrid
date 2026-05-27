@@ -17,7 +17,7 @@ import {
   getPlaybookOwnerId,
 } from "@/lib/billing/owner-entitlement";
 import { tierAtLeast } from "@/lib/billing/features";
-import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
+import { getFreePlayCapForOwner } from "@/lib/site/free-plays-config";
 
 export async function getTutorialProgressAction(tutorialId: TutorialId) {
   const row = await getTutorialProgress(tutorialId);
@@ -132,7 +132,7 @@ export async function keepTutorialPlayAction(playId: string) {
     ? await getPlaybookOwnerEntitlement(playbookId)
     : null;
   if (!ownerEnt || !tierAtLeast(ownerEnt, "coach")) {
-    const limit = await getFreeMaxPlaysPerPlaybook();
+    const limit = await getFreePlayCapForOwner(ownerId);
     const { count } = await supabase
       .from("plays")
       .select("id", { count: "exact", head: true })

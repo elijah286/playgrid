@@ -4,7 +4,7 @@ import {
   FREE_MAX_PLAYBOOKS_OWNED,
   tierAtLeast,
 } from "@/lib/billing/features";
-import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
+import { getFreePlayCapForOwner } from "@/lib/site/free-plays-config";
 
 /**
  * When a Coach+ user downgrades to Free, they may own more than
@@ -36,7 +36,7 @@ export async function computeDowngradeLocks(userId: string): Promise<DowngradeLo
   const entitlement = await getUserEntitlement(userId);
   if (tierAtLeast(entitlement, "coach")) return EMPTY_LOCKS;
 
-  const freeMaxPlays = await getFreeMaxPlaysPerPlaybook();
+  const freeMaxPlays = await getFreePlayCapForOwner(userId);
   const admin = createServiceRoleClient();
 
   const { data: ownedMembers } = await admin

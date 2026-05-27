@@ -35,6 +35,37 @@ export async function getFreeMaxPlaysPerPlaybook(): Promise<number> {
   return fetchFreeMaxPlays();
 }
 
+/**
+ * Effective free-play cap for a given owner.
+ *
+ * Existing users are grandfathered: profiles.free_play_cap stores the cap that
+ * was in effect when their account was created (set by handle_new_user, or
+ * backfilled by the 20260526160000 migration). Lowering the global only
+ * affects future signups. Raising the global still benefits everyone, so we
+ * return max(profile_cap, global).
+ */
+export async function getFreePlayCapForOwner(
+  ownerId: string | null,
+): Promise<number> {
+  const global = await getFreeMaxPlaysPerPlaybook();
+  if (!ownerId) return global;
+  try {
+    const admin = createServiceRoleClient();
+    const { data } = await admin
+      .from("profiles")
+      .select("free_play_cap")
+      .eq("id", ownerId)
+      .maybeSingle();
+    const cap = data?.free_play_cap as number | null | undefined;
+    if (typeof cap === "number" && Number.isFinite(cap) && cap >= 1) {
+      return Math.max(Math.floor(cap), global);
+    }
+    return global;
+  } catch {
+    return global;
+  }
+}
+
 export async function setFreeMaxPlaysPerPlaybook(next: number): Promise<void> {
   if (!Number.isFinite(next) || next < 1 || next > 1000) {
     throw new Error("Play cap must be between 1 and 1000.");
