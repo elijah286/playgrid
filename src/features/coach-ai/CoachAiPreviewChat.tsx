@@ -48,51 +48,27 @@ export function CoachAiPreviewChat({
   // + trial available → start trial). The middle state suppresses the
   // entry-point-specific trial label since the entry-point templates all
   // bake "Start X-day free trial" into the copy.
-  const upgradeOnly = userTier === "coach";
-  const trialUsed = !upgradeOnly && coachProTrialUsed;
-  const ctaLabel = upgradeOnly
-    ? "Upgrade to Coach Pro"
-    : trialUsed
-      ? "Subscribe to Coach Pro"
-      : previewCtaLabel(config, evalDays);
-  const ctaSubtitle = upgradeOnly
-    ? "Prorated for this billing period · cancel anytime"
-    : trialUsed
-      ? "$25/month · cancel anytime"
-      : "No charge today · cancel anytime";
-  const inputPlaceholder = upgradeOnly
-    ? "Upgrade to Coach Pro to chat with Coach Cal"
-    : trialUsed
-      ? "Subscribe to Coach Pro to chat with Coach Cal"
-      : "Start your free trial to chat with Coach Cal";
-  const lockBadge = upgradeOnly || trialUsed ? "Coach Pro required" : "Trial required";
-  const footnote = upgradeOnly
-    ? "Coach Cal is included with Coach Pro — upgrade from your current Team Coach plan to unlock it."
-    : trialUsed
-      ? "Coach Cal is included with Coach Pro — $25/month gets you 200 messages plus everything in Team Coach."
-      : `Get the full Coach Cal experience with a ${evalDays}-day free trial — no charge today.`;
+  // Cal folded into the $9 Team Coach tier (2026-05-27) — every paid
+  // tier gets Cal access. Lock screen only shows for `free` users.
+  void userTier;
+  void coachProTrialUsed;
+  void evalDays;
+  void previewCtaLabel;
+  const ctaLabel = "Upgrade to Team Coach";
+  const ctaSubtitle = "$9/month · cancel anytime";
+  const inputPlaceholder = "Upgrade to Team Coach to chat with Coach Cal";
+  const lockBadge = "Team Coach required";
+  const footnote = "Coach Cal is included with Team Coach at $9/month — 50 messages/month, plus unlimited plays, Game Mode, and team features.";
   function handleCtaClick() {
-    const action = upgradeOnly ? "upgrade" : trialUsed ? "subscribe" : "start_trial";
     track({
       event: "coach_cal_cta_click",
       target: "preview_chat_trial",
-      metadata: { surface: "preview_chat", entry_point: entryPoint, action },
+      metadata: { surface: "preview_chat", entry_point: entryPoint, action: "subscribe" },
     });
-    if (upgradeOnly) {
-      // Paid Team Coach: must go through /pricing for the
-      // proration upgrade modal — direct checkout refuses.
-      onCtaClick?.();
-      router.push("/pricing");
-      return;
-    }
-    // Free user with clear Coach Pro intent: skip /pricing
-    // and jump straight to embedded checkout. /checkout handles
-    // the active-sub guard and surfaces any error with a link
-    // back to pricing.
     setErr(null);
     onCtaClick?.();
     startTransition(() => {
-      router.push("/checkout?tier=coach_ai&interval=month");
+      router.push("/checkout?tier=coach&interval=month");
     });
   }
 

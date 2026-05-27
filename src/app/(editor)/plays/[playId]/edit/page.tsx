@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getMobileEditingEnabled } from "@/lib/site/mobile-editing-config";
 import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
 import { getCurrentEntitlement, hasUsedCoachProTrial } from "@/lib/billing/entitlement";
-import { canUseGameMode } from "@/lib/billing/features";
+import { canUseAiFeatures, canUseGameMode } from "@/lib/billing/features";
 import {
   getBetaFeatures,
   isBetaFeatureAvailable,
@@ -198,12 +198,8 @@ export default async function PlayEditPage({ params }: Props) {
   );
   const practicePlansAvailable = isCoachInPlaybook;
   const viewerCanUseGameMode = isAdmin || canUseGameMode(editorEntitlement);
-  const coachAiAvailable =
-    isAdmin || (editorEntitlement?.tier ?? "free") === "coach_ai";
-  const showCoachCalCta =
-    (editorEntitlement?.tier ?? "free") !== "coach_ai" &&
-    user !== null &&
-    !isAdmin;
+  const coachAiAvailable = isAdmin || canUseAiFeatures(editorEntitlement);
+  const showCoachCalCta = !canUseAiFeatures(editorEntitlement) && user !== null && !isAdmin;
   // Cal launcher promo: only logged-in users without entitlement see the
   // upgrade preview. Anonymous example viewers don't see Cal at all.
   const showCoachCalPromo = user !== null && !coachAiAvailable;

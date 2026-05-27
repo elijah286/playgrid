@@ -113,9 +113,13 @@ export function canUseGameMode(entitlement: Entitlement | null): boolean {
   return tierAtLeast(entitlement, "coach");
 }
 
-/** AI features (placeholder — not yet implemented). Coach AI only. */
+/** Coach Cal AI access. Folded into the Coach ($9) tier 2026-05-27 — the
+ *  previous Coach Pro split-tier model (separate $25 SKU for Cal) failed
+ *  to retain trials. Cal is now the wedge that makes Coach worth paying
+ *  for. Monthly message cap (COACH_CAL_MONTHLY_LIMIT in coach-cal-cap.ts)
+ *  is the cost guard, not the tier check. */
 export function canUseAiFeatures(entitlement: Entitlement | null): boolean {
-  return tierAtLeast(entitlement, "coach_ai");
+  return tierAtLeast(entitlement, "coach");
 }
 
 export const TIER_LABEL: Record<SubscriptionTier, string> = {

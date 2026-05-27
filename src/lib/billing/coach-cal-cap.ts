@@ -2,8 +2,10 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { getCoachCalPackConfig } from "@/lib/site/coach-cal-pack-config";
 
 /** Tier-default monthly Coach Cal cap. Single source of truth shared
- *  by the user-facing usage action and the server-side stream gate. */
-export const COACH_AI_MONTHLY_LIMIT = 200;
+ *  by the user-facing usage action and the server-side stream gate.
+ *  Lowered from 200 → 50 on 2026-05-27 when Cal folded into the $9
+ *  Coach tier. Heavy users buy message packs (see pack config). */
+export const COACH_AI_MONTHLY_LIMIT = 50;
 
 export type CoachCalCapState = {
   count: number;

@@ -10,6 +10,7 @@ import { getExpirationNotice } from "@/lib/billing/expiration-notice";
 import { ExpirationBanner } from "@/components/billing/ExpirationBanner";
 import { NameCapturePrompt } from "@/components/account/NameCapturePrompt";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
+import { canUseAiFeatures } from "@/lib/billing/features";
 import { getBetaFeatures, isBetaFeatureAvailable } from "@/lib/site/beta-features-config";
 import { OfflineAutoRefreshMount } from "@/components/offline/OfflineAutoRefreshMount";
 import { HomeBottomNav } from "./home/HomeBottomNav";
@@ -67,9 +68,8 @@ export default async function DashboardLayout({
   ]);
 
   const isAdmin = (selfRoleRow?.data?.role as string | null) === "admin";
-  const coachAiAvailable =
-    isAdmin || (entitlement?.tier ?? "free") === "coach_ai";
-  // Logged-in user without Coach Pro still gets the Cal slot in the
+  const coachAiAvailable = isAdmin || canUseAiFeatures(entitlement);
+  // Logged-in user without Team Coach still gets the Cal slot in the
   // toolbar — tapping opens the upgrade prompt instead of the chat.
   // Matches the gate PlaybookBottomNav + EditorBottomNav use, so Cal
   // appears in the same nav position on every mobile surface.

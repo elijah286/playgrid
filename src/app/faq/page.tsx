@@ -38,8 +38,9 @@ function buildSections(
   coachSeats: number,
   evalDays: number,
 ): Section[] {
-  const evalLabel = `${evalDays}-day`;
-  const evalLabelPlural = `${evalDays} day${evalDays === 1 ? "" : "s"}`;
+  // Trial copy was tied to the legacy Coach Pro SKU. Kept the evalDays
+  // lookup wiring intact in case we relaunch a trialed tier post-app-store.
+  void evalDays;
   return [
     {
       id: "general",
@@ -65,15 +66,15 @@ function buildSections(
       faqs: [
         {
           q: "Is XO Gridmaker free?",
-          a: `Yes, there's a free tier that gives you one playbook with up to ${freeMaxPlays} plays — enough to design a small playbook without paying. Paid plans scale with how much you use it: unlimited plays, more playbooks, team invites, wristbands, and Coach Cal AI on Coach Pro. See the pricing page for current plan details.`,
+          a: `Yes, there's a free tier that gives you one playbook with up to ${freeMaxPlays} plays — enough to evaluate the editor. The Team Coach plan unlocks the full product: unlimited plays, team invites, wristbands, Game Mode, and Coach Cal — the AI coaching partner — included with a monthly message allowance. See the pricing page for current plan details.`,
         },
         {
           q: "Can my whole staff use one Team Coach plan?",
-          a: `Team Coach includes ${coachSeats} collaborator seat${coachSeats === 1 ? "" : "s"} — enough for a small staff. Beyond that, extra seats are $${SEAT_PRICE_USD_PER_MONTH}/seat/month, billed to the head coach. If an assistant already has their own Team Coach or Coach Pro plan, they don't count against your seats — they ride on their own subscription.`,
+          a: `Team Coach includes ${coachSeats} collaborator seat${coachSeats === 1 ? "" : "s"} — enough for a small staff. Beyond that, extra seats are $${SEAT_PRICE_USD_PER_MONTH}/seat/month, billed to the head coach. If an assistant already has their own Team Coach plan, they don't count against your seats — they ride on their own subscription.`,
         },
         {
-          q: "What's the difference between Team Coach and Coach Pro?",
-          a: `Team Coach is the full collaboration suite — unlimited playbooks, Game Mode, team invites, printing. Coach Pro is everything in Team Coach plus Coach Cal, the AI coaching partner: 200 messages/month, AI play and playbook generation, strategy feedback vs. specific defenses, and bulk formation edits. Coach Pro starts with a ${evalLabel} free trial.`,
+          q: "What's included with Team Coach?",
+          a: `Everything in Solo Coach, plus unlimited plays, Game Mode, wristbands, team invites, practice plans, and Coach Cal — the AI coaching partner — with 50 messages per month. Heavy Cal users can add message packs.`,
         },
       ],
     },
@@ -121,11 +122,11 @@ function buildSections(
       id: "coach-cal",
       title: "Coach Cal — your AI coaching partner",
       intro:
-        "Coach Cal is the AI assistant included with Coach Pro. It knows football, knows your playbook, and can do real work — generate plays, review your playbook, plan practice, and answer the questions you'd otherwise text another coach about.",
+        "Coach Cal is the AI assistant included with the Team Coach plan. It knows football, knows your playbook, and can do real work — generate plays, review your playbook, plan practice, and answer the questions you'd otherwise text another coach about.",
       faqs: [
         {
           q: "What is Coach Cal?",
-          a: "Coach Cal is the AI coaching partner included with Coach Pro. You chat with Coach Cal in the app — about a specific play, about your whole playbook, or about coaching in general — and it answers using a curated football knowledge base plus the actual contents of your playbook (when you give it permission).",
+          a: "Coach Cal is the AI coaching partner included with the Team Coach plan. You chat with Coach Cal in the app — about a specific play, about your whole playbook, or about coaching in general — and it answers using a curated football knowledge base plus the actual contents of your playbook (when you give it permission).",
         },
         {
           q: "What can Coach Cal actually do?",
@@ -145,10 +146,10 @@ function buildSections(
         },
         {
           q: "How much does Coach Cal cost?",
-          a: `Coach Cal is included with Coach Pro at $25/month (or $250/year). New Coach Pro users get a ${evalLabel} free trial — no credit card required to try the chat. After the trial, the plan includes 200 messages per month.`,
+          a: `Coach Cal is included with the Team Coach plan at $9/month (or $99/year) — no separate AI subscription. The plan includes 50 Coach Cal messages per month.`,
         },
         {
-          q: "What happens if I use up my 200 messages?",
+          q: "What happens if I use up my 50 messages?",
           a: `Two options: wait for the next monthly cycle (the cap resets automatically), or add a message pack — ${MESSAGE_PACK_SIZE} additional messages for $${MESSAGE_PACK_PRICE_USD_PER_MONTH}/month. Packs stack on top of your monthly allowance, so heavy users can add multiple. You'll see a meter inside the chat showing where you are.`,
         },
         {
@@ -175,7 +176,7 @@ function buildSections(
       faqs: [
         {
           q: "How do I get started?",
-          a: `Browse the example playbooks to see what's possible, then create a free account and start a playbook. Most coaches have their first play drawn within a couple of minutes. Coach Cal includes ${evalLabelPlural} free for new users to try.`,
+          a: `Browse the example playbooks to see what's possible, then create a free account and start a playbook. Most coaches have their first play drawn within a couple of minutes. When you're ready for unlimited plays, team features, and Coach Cal, upgrade to Team Coach for $9/month.`,
         },
       ],
     },

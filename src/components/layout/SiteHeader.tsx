@@ -4,6 +4,7 @@ import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getCachedUserRole } from "@/lib/auth/profile-cache";
 import { SiteHeaderShell } from "@/components/layout/SiteHeaderShell";
 import { getCurrentEntitlement, hasUsedCoachProTrial, type SubscriptionTier } from "@/lib/billing/entitlement";
+import { canUseAiFeatures } from "@/lib/billing/features";
 import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
 import {
   getBetaFeatures,
@@ -49,17 +50,14 @@ export async function SiteHeader() {
         try {
           const entitlement = await getCurrentEntitlement();
           userTier = entitlement?.tier ?? "free";
-          const isEntitled = isAdmin || userTier === "coach_ai";
+          const isEntitled = isAdmin || canUseAiFeatures(entitlement);
           coachAiAvailable = isEntitled;
-          // Logged-in users without a Coach Pro subscription see the promo
+          // Logged-in users without a Team Coach subscription see the promo
           // launcher (upgrade CTA) instead of the chat.
           showCoachCalPromo = !coachAiAvailable;
-          // For non-entitled users, also check if they've already burned
-          // the Coach Pro trial. If so, the preview surface suppresses
-          // trial copy ("Start X-day free trial / no charge today") and
-          // shows subscribe copy instead — Stripe would refuse the trial
-          // at checkout anyway, so promising it is misleading. Skip the
-          // query for entitled / paid users where it can't apply.
+          // Trial gate retained for legacy preview surfaces — the Cal-folded
+          // Team Coach tier has no trial today, so this only matters if we
+          // relaunch a trialed SKU later. Skip for entitled users.
           if (!isEntitled && userTier !== "coach") {
             coachProTrialUsed = await hasUsedCoachProTrial(authUser.id);
           }

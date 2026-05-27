@@ -5190,7 +5190,7 @@ function FirstPlayHero({
               label="Generate play"
               className="h-12 w-full min-w-[260px] justify-center whitespace-nowrap rounded-full px-6 text-sm font-bold sm:w-auto"
             />
-            <p className="mt-2 text-xs text-muted">Coach Pro — done in seconds.</p>
+            <p className="mt-2 text-xs text-muted">Team Coach — done in seconds.</p>
           </div>
         </div>
       </div>

@@ -9,7 +9,7 @@ import {
   DEFAULT_BETA_FEATURES,
 } from "@/lib/site/beta-features-config";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
-import { tierAtLeast } from "@/lib/billing/features";
+import { canUseAiFeatures, tierAtLeast } from "@/lib/billing/features";
 import { withTimeout } from "@/lib/perf/with-timeout";
 import { DashboardClient } from "./ui";
 
@@ -62,9 +62,8 @@ export default async function HomePage({ searchParams }: Props) {
     { isAdmin, isEntitled: true },
   );
   const canUseTeamFeatures = isAdmin || tierAtLeast(entitlement, "coach");
-  const coachAiAvailable =
-    isAdmin || (entitlement?.tier ?? "free") === "coach_ai";
-  // Logged-in users without Coach Pro see the promo CTA — same logic as
+  const coachAiAvailable = isAdmin || canUseAiFeatures(entitlement);
+  // Logged-in users without Team Coach see the promo CTA — same logic as
   // SiteHeader uses to decide whether to render the Cal launcher button.
   const showCoachCalPromo = !coachAiAvailable;
   // Welcome dialogs: only fire when the upgrade-success / checkout-success

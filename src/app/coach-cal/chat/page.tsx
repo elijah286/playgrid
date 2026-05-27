@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
+import { canUseAiFeatures } from "@/lib/billing/features";
 import { getCachedUserRole } from "@/lib/auth/profile-cache";
 import { ChatWindow } from "./ChatWindow";
 
@@ -25,7 +26,7 @@ export default async function CoachCalChatPage({
     getCachedUserRole(user.id),
   ]);
   const isAdmin = role === "admin";
-  const entitled = isAdmin || (entitlement?.tier ?? "free") === "coach_ai";
+  const entitled = isAdmin || canUseAiFeatures(entitlement);
   if (!entitled) redirect("/pricing");
 
   const { playbook: playbookId } = await searchParams;

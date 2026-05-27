@@ -42,7 +42,7 @@ const STARTER_PROMPTS: Array<{ label: string; prompt: string }> = [
 
 const FEATURES: string[] = [
   "Coach Cal — your AI coaching partner",
-  "200 messages per month, included",
+  "50 messages per month, included",
   "Generate plays, playbooks, and practice plans",
   "Strategy feedback vs. specific defenses",
 ];
