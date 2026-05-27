@@ -5,6 +5,7 @@ import { recapCoachDiagram } from "@/lib/coach-ai/diagram-recap";
 import type { PlayDocument } from "@/domain/play/types";
 import type { ChatMessage, ContentBlock } from "@/lib/coach-ai/llm";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
+import { canUseAiFeatures } from "@/lib/billing/features";
 import { getCoachCalCapState } from "@/lib/billing/coach-cal-cap";
 import { getCoachCalImageCapState } from "@/lib/billing/coach-cal-image-cap";
 import type { CoachAiMode, ToolContext } from "@/lib/coach-ai/tools";
@@ -83,8 +84,8 @@ async function loadCallerInfo(): Promise<
     .single();
   const isAdmin = profile?.role === "admin";
   const entitlement = await getCurrentEntitlement();
-  const isEntitled = isAdmin || (entitlement?.tier ?? "free") === "coach_ai";
-  if (!isEntitled) return { ok: false, error: "Coach Cal requires a Coach Pro subscription." };
+  const isEntitled = isAdmin || canUseAiFeatures(entitlement);
+  if (!isEntitled) return { ok: false, error: "Coach Cal requires a Team Coach subscription." };
   return { ok: true, userId: user.id, isAdmin };
 }
 

@@ -561,20 +561,10 @@ function PlanCard({
           </div>
           {isPaid ? (
             <div className="flex flex-wrap items-center gap-2" data-web-only>
-              {/* Paid Team Coach users get a primary in-app upgrade
-                  path to Coach Pro right alongside Manage billing —
-                  previously the only upgrade route was via Coach Cal's
-                  upsell or by remembering /pricing exists. Navigates
-                  to /pricing?upgrade=coach_ai so the proration modal
-                  auto-opens on arrival (one click, not two). */}
-              {tier === "coach" && !isCanceling ? (
-                <Link
-                  href="/pricing?upgrade=coach_ai"
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-hover"
-                >
-                  Upgrade to Coach Pro
-                </Link>
-              ) : null}
+              {/* Cal was folded into Team Coach 2026-05-27, so the
+                  "Upgrade to Coach Pro" button is no longer surfaced
+                  here — paid users already have Cal. Kept the wrapper
+                  layout intact for Manage billing / Cancel buttons. */}
               <button
                 type="button"
                 onClick={goToPortal}

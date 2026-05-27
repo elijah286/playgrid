@@ -39,8 +39,8 @@ const PAGE_URL = `${SITE_URL}/coach-cal`;
 const OG_IMAGE = `${SITE_URL}/marketing/screens/hero-poster.png`;
 
 const PAGE_TITLE = "Coach Cal — AI Football Coach for Plays & Playbooks";
-function buildPageDescription(evalDays: number): string {
-  return `Coach Cal is an AI football coaching partner that generates plays and full playbooks, game-plans offense and defense, reviews last week's game, schedules your season, builds situational call sheets, and writes QB reads — built for youth, flag, 7v7, and tackle. Free for ${evalDays} days.`;
+function buildPageDescription(_evalDays: number): string {
+  return `Coach Cal is an AI football coaching partner that generates plays and full playbooks, game-plans offense and defense, reviews last week's game, schedules your season, builds situational call sheets, and writes QB reads — built for youth, flag, 7v7, and tackle. Included with the $9/mo Team Coach plan.`;
 }
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -230,7 +230,7 @@ function Hero({ evalDays }: { evalDays: number }) {
             <em>and</em> defense, generates plays and full playbooks, reviews
             last week&rsquo;s game, schedules your season, and writes the QB
             reads you don&rsquo;t have time to. Built for youth, flag, 7v7,
-            and tackle — free to try for {evalDays} days.
+            and tackle — included with the $9/mo Team Coach plan.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <Link
@@ -238,7 +238,7 @@ function Hero({ evalDays }: { evalDays: number }) {
               className="inline-flex items-center gap-2 rounded-lg px-5 py-3 text-base font-bold text-white shadow-lg transition-transform hover:-translate-y-0.5"
               style={{ background: BRAND_BLUE }}
             >
-              Start {evalDays}-day free trial
+              Start with Team Coach — $9/mo
               <ArrowRight className="size-4" />
             </Link>
             <Link
@@ -592,17 +592,17 @@ function Pricing({ evalDays }: { evalDays: number }) {
         <div className="mt-8 rounded-2xl border-2 border-primary/40 bg-surface-raised p-7 text-left shadow-lg">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold text-muted">Coach Pro</p>
+              <p className="text-sm font-semibold text-muted">Team Coach</p>
               <p className="mt-1 text-3xl font-extrabold tracking-tight">
-                $25<span className="text-base font-medium text-muted">/month</span>
+                $9<span className="text-base font-medium text-muted">/month</span>
               </p>
-              <p className="mt-1 text-xs text-muted">or $250/year</p>
+              <p className="mt-1 text-xs text-muted">or $99/year</p>
             </div>
             <span
               className="rounded-full px-3 py-1 text-xs font-semibold"
               style={{ background: `${BRAND_GREEN}22`, color: "#5d8d12" }}
             >
-              {evalDays}-day free trial
+              Coach Cal included
             </span>
           </div>
           <ul className="mt-6 space-y-2 text-sm text-foreground">
@@ -618,7 +618,7 @@ function Pricing({ evalDays }: { evalDays: number }) {
                 className="mt-0.5 size-4 shrink-0"
                 style={{ color: BRAND_BLUE }}
               />
-              200 Coach Cal messages per month included
+              50 Coach Cal messages per month included
             </li>
             <li className="flex gap-2">
               <Wand2
@@ -674,7 +674,7 @@ function Pricing({ evalDays }: { evalDays: number }) {
               className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg px-5 py-3 text-base font-bold text-white shadow-md transition-transform hover:-translate-y-0.5"
               style={{ background: BRAND_BLUE }}
             >
-              Start {evalDays}-day free trial
+              Start with Team Coach — $9/mo
               <ArrowRight className="size-4" />
             </Link>
             <Link
@@ -724,17 +724,17 @@ function FaqShortcut() {
 
 /* ---------- Final CTA ---------- */
 
-function FinalCta({ evalDays }: { evalDays: number }) {
+function FinalCta({ evalDays: _evalDays }: { evalDays: number }) {
   return (
     <section className="py-20">
       <div className="mx-auto max-w-4xl px-6 text-center">
         <h2 className="text-3xl font-extrabold tracking-tight md:text-4xl">
-          Try Coach Cal free for {evalDays} days.
+          Coach Cal is included with Team Coach.
         </h2>
         <p className="mx-auto mt-3 max-w-xl text-base text-muted">
-          No credit card to start. Build your first playbook on the free
-          plan, then turn Coach Cal on when you're ready for AI plays,
-          playbook reviews, and practice plans.
+          Start on the free plan, design a few plays, then upgrade to Team
+          Coach for $9/month to unlock Coach Cal, unlimited plays, Game
+          Mode, and the rest of the team toolkit.
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <Link
@@ -742,7 +742,7 @@ function FinalCta({ evalDays }: { evalDays: number }) {
             className="inline-flex items-center gap-2 rounded-lg px-6 py-3.5 text-base font-bold text-white shadow-lg transition-transform hover:-translate-y-0.5"
             style={{ background: BRAND_BLUE }}
           >
-            Start free trial <ArrowRight className="size-5" />
+            Get started — free <ArrowRight className="size-5" />
           </Link>
           <Link
             href="/tour"

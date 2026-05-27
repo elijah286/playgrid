@@ -93,10 +93,11 @@ function buildTiers(
   {
     id: "coach",
     name: "Team Coach",
-    tagline: "For head coaches running a real program.",
+    tagline: "Run a real program — with Coach Cal AI in your corner.",
     price: { month: 9, year: 99 },
     features: [
       "Everything in Solo Coach",
+      "Coach Cal AI — generate plays, plan practices, get strategy feedback (50 messages/month)",
       "Unlimited plays",
       "Wristbands (print + PDF)",
       `Invite ${seatDefaults.coach} assistant coach${seatDefaults.coach === 1 ? "" : "es"} to collaborate on the playbook`,
@@ -105,7 +106,7 @@ function buildTiers(
       "Game Mode — sideline view with play-by-play results tracking",
       "Play & playbook history — every change tracked, restore any version",
     ],
-    addOns: `Need more? +$${SEAT_PRICE_USD_PER_MONTH}/seat/mo`,
+    addOns: `Need more? +$${SEAT_PRICE_USD_PER_MONTH}/seat/mo · +$${MESSAGE_PACK_PRICE_USD_PER_MONTH}/mo per ${MESSAGE_PACK_SIZE} extra Cal messages`,
     cta: "Upgrade to Team Coach",
   },
   {

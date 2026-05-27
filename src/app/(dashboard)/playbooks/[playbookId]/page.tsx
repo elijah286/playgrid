@@ -22,7 +22,7 @@ import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { SportVariant } from "@/domain/play/types";
 import { normalizePlaybookSettings } from "@/domain/playbook/settings";
 import { getCurrentEntitlement, hasUsedCoachProTrial } from "@/lib/billing/entitlement";
-import { canUseGameMode, tierAtLeast } from "@/lib/billing/features";
+import { canUseAiFeatures, canUseGameMode, tierAtLeast } from "@/lib/billing/features";
 import { getFreePlayCapForOwner } from "@/lib/site/free-plays-config";
 import { getPlaybookOwnerId } from "@/lib/billing/owner-entitlement";
 import {
@@ -300,7 +300,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
   // Mirror SiteHeader's logic so the in-playbook (mobile) launcher uses the
   // same entitlement gate as the global one — non-entitled users get the
   // marketing popover, entitled users get the chat.
-  const coachAiEntitled = isAdmin || (viewerEntitlement?.tier ?? "free") === "coach_ai";
+  const coachAiEntitled = isAdmin || canUseAiFeatures(viewerEntitlement);
   const coachAiAvailable = coachAiEntitled;
   const showCoachCalCta =
     !coachAiEntitled && user !== null && !isAdmin;

@@ -75,59 +75,31 @@ export function CoachAiHeaderPreview({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
-  // Three states for the CTA copy:
-  //   - Paid Team Coach (`coach`)        → Upgrade (proration applies, no trial)
-  //   - Free + trial already used        → Subscribe (Stripe refuses a 2nd trial)
-  //   - Free + trial available           → Start trial (no charge today)
-  // The middle state mirrors the billing.ts gate so we don't promise "no
-  // charge today" to someone who'd be billed $25 at checkout.
-  const upgradeOnly = userTier === "coach";
-  const trialUsed = !upgradeOnly && coachProTrialUsed;
-  const ctaLabel = upgradeOnly
-    ? "Upgrade to Coach Pro"
-    : trialUsed
-      ? "Subscribe to Coach Pro"
-      : `Start ${evalDays}-day free trial`;
-  const ctaSubtitle = upgradeOnly
-    ? "Prorated for this billing period · cancel anytime"
-    : trialUsed
-      ? "$25/month · cancel anytime"
-      : "No charge today · cancel anytime";
-  const inputPlaceholder = upgradeOnly
-    ? "Upgrade to Coach Pro to chat with Coach Cal"
-    : trialUsed
-      ? "Subscribe to Coach Pro to chat with Coach Cal"
-      : "Start your free trial to chat with Coach Cal";
-  const lockBadge = upgradeOnly || trialUsed ? "Coach Pro required" : "Trial required";
-  const footnote = upgradeOnly
-    ? "Coach Cal is included with Coach Pro — upgrade from your current Team Coach plan to unlock it."
-    : trialUsed
-      ? "Coach Cal is included with Coach Pro — $25/month gets you 200 messages plus everything in Team Coach."
-      : `Get the full Coach Cal experience with a ${evalDays}-day free trial — no charge today.`;
+  // Cal folded into the $9 Team Coach tier (2026-05-27) — every paid
+  // tier gets Cal access, so the only locked state is `free`. The
+  // userTier / trial props are kept for prop-shape compatibility but
+  // no longer branch the copy.
+  void userTier;
+  void coachProTrialUsed;
+  void evalDays;
+  const ctaLabel = "Upgrade to Team Coach";
+  const ctaSubtitle = "$9/month · cancel anytime";
+  const inputPlaceholder = "Upgrade to Team Coach to chat with Coach Cal";
+  const lockBadge = "Team Coach required";
+  const footnote = "Coach Cal is included with Team Coach at $9/month — 50 messages/month, plus unlimited plays, Game Mode, and team features.";
   function handleCtaClick() {
-    const action = upgradeOnly ? "upgrade" : trialUsed ? "subscribe" : "start_trial";
     track({
       event: "coach_cal_cta_click",
       target: "header_chat_trial",
-      metadata: { surface: "header_chat", action, path: pathname ?? null },
+      metadata: { surface: "header_chat", action: "subscribe", path: pathname ?? null },
     });
-    // Paid Team Coach users must go through /pricing — the upgrade
-    // path needs the proration modal, and the direct checkout action
-    // refuses for users with an active sub.
-    if (upgradeOnly) {
-      onCtaClick?.();
-      router.push("/pricing");
-      return;
-    }
-    // Free + Coach Pro intent is unambiguous (the coach just clicked
-    // "Start trial" / "Subscribe"). Skip the /pricing comparison shop
-    // and jump straight to embedded checkout — one less click, no
-    // second-guessing the decision. /checkout handles the active-sub
-    // guard and surfaces any error with a link back to pricing.
+    // Free + Team Coach intent is unambiguous — jump straight to embedded
+    // checkout. /checkout handles the active-sub guard and surfaces any
+    // error with a link back to pricing.
     setErr(null);
     onCtaClick?.();
     startTransition(() => {
-      router.push("/checkout?tier=coach_ai&interval=month");
+      router.push("/checkout?tier=coach&interval=month");
     });
   }
 

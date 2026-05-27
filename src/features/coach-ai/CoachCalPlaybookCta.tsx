@@ -112,18 +112,13 @@ export function CoachCalPlaybookCta({
     return <CheckoutLoadingOverlay open={pending} />;
   }
 
-  const upgradeOnly = userTier === "coach";
-  const trialUsed = !upgradeOnly && coachProTrialUsed;
-  const ctaLabel = upgradeOnly
-    ? "Upgrade to Coach Pro"
-    : trialUsed
-      ? "Subscribe to Coach Pro"
-      : `Start ${evalDays}-day free trial`;
-  const ctaSubtitle = upgradeOnly
-    ? "Prorated for this billing period · cancel anytime"
-    : trialUsed
-      ? "$25/month · cancel anytime"
-      : "No charge today · cancel anytime";
+  // Cal folded into Team Coach 2026-05-27 — every paid tier has Cal.
+  // The only audience for this CTA is `free` users.
+  void userTier;
+  void coachProTrialUsed;
+  void evalDays;
+  const ctaLabel = "Upgrade to Team Coach";
+  const ctaSubtitle = "$9/month · cancel anytime";
 
   return (
     <>
@@ -172,29 +167,23 @@ export function CoachCalPlaybookCta({
           type="button"
           disabled={pending}
           onClick={() => {
-            const action = upgradeOnly ? "upgrade" : trialUsed ? "subscribe" : "start_trial";
             track({
               event: "coach_cal_cta_click",
               target: "playbook_floating_card",
-              metadata: { surface: "playbook_floating_card", action },
+              metadata: { surface: "playbook_floating_card", action: "subscribe" },
             });
             // Persist the dismissal so they don't see it again, but
             // skip the dismiss event — clicking through is its own
             // outcome and shouldn't double-count as a rejection.
             setVisible(false);
             try { window.localStorage.setItem(STORAGE_KEY, "1"); } catch { /* ignore */ }
-            if (upgradeOnly) {
-              // Paid Team Coach: proration upgrade modal lives on /pricing.
-              router.push("/pricing");
-              return;
-            }
-            // Free user: skip /pricing comparison and jump straight to
-            // embedded checkout — they already declared Coach Pro intent.
-            // /checkout handles the active-sub guard and surfaces any
-            // error with a link back to pricing.
+            // Free user: jump straight to embedded checkout — they
+            // already declared Team Coach intent. /checkout handles
+            // the active-sub guard and surfaces any error with a link
+            // back to pricing.
             setErr(null);
             startTransition(() => {
-              router.push("/checkout?tier=coach_ai&interval=month");
+              router.push("/checkout?tier=coach&interval=month");
             });
           }}
           className="mt-3 flex w-full items-center justify-center rounded-xl py-2 text-sm font-semibold text-white shadow transition hover:opacity-90 disabled:opacity-60"

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { runAgent } from "@/lib/coach-ai/agent";
 import type { ChatMessage, ContentBlock } from "@/lib/coach-ai/llm";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
+import { canUseAiFeatures } from "@/lib/billing/features";
 import type { CoachAiMode, ToolContext } from "@/lib/coach-ai/tools";
 import type { NoteProposal } from "@/lib/coach-ai/playbook-tools";
 import { normalizePlaybookSettings } from "@/domain/playbook/settings";
@@ -76,8 +77,8 @@ async function loadCallerInfo(): Promise<
     .single();
   const isAdmin = profile?.role === "admin";
   const entitlement = await getCurrentEntitlement();
-  const isEntitled = isAdmin || (entitlement?.tier ?? "free") === "coach_ai";
-  if (!isEntitled) return { ok: false, error: "Coach Cal requires a Coach Pro subscription." };
+  const isEntitled = isAdmin || canUseAiFeatures(entitlement);
+  if (!isEntitled) return { ok: false, error: "Coach Cal requires a Team Coach subscription." };
   return { ok: true, isAdmin };
 }
 
