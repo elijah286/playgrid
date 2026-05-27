@@ -5,14 +5,15 @@ import { redirect } from "next/navigation";
 import { ArrowRight, ChevronDown } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "XO Gridmaker — Football play designer & playbook builder for coaches",
+  title:
+    "XO Gridmaker — Flag football playbook builder (5v5, 6v6, 7v7) & tackle play designer",
   description:
-    "Design football plays, organize them into playbooks, share with your team, and print game-ready wristbands. Free for solo coaches — built for flag, 7v7, and tackle football.",
+    "Build a flag football playbook in minutes. Design plays, organize 5v5 / 6v6 / 7v7 and tackle playbooks, share with your team, and print game-ready wristbands. Free for solo coaches.",
   alternates: { canonical: "/" },
   openGraph: {
-    title: "XO Gridmaker — Football play designer & playbook builder",
+    title: "XO Gridmaker — Flag football playbook builder & play designer",
     description:
-      "Design plays. Win games. Free for solo coaches — built for flag, 7v7, and tackle football.",
+      "Build a flag football playbook in minutes. 5v5, 6v6, 7v7, and tackle — free for solo coaches.",
     url: "/",
     type: "website",
   },

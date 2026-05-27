@@ -29,6 +29,7 @@ const PUBLIC_EXACT = new Set<string>([
   // crawlers. These are pre-auth landing pages; gating them on a session
   // would silently bounce every Google referral to /login.
   "/coach-cal",
+  "/flag-football-playbook",
   "/faq",
   // SEO + PWA metadata routes: must be fetchable by crawlers (Googlebot,
   // Bingbot) and the browser's PWA install flow without a session.

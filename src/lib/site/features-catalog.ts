@@ -1357,6 +1357,24 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-01",
   },
   {
+    id: "seo-flag-football-landing",
+    name: "Flag football playbook landing page",
+    description:
+      "Dedicated /flag-football-playbook landing page targeting high-intent search queries (\"make flag football playbook\", \"flag football playbook builder\"). Includes hero CTA, feature grid, 8 featured 5v5 plays linked into the Football Library, deep links into each variant rollup (5v5/6v6/7v7), FAQ with FAQPage schema, and WebApplication JSON-LD. Pairs with the un-gated Football Library to turn search referrals into trials.",
+    category: "Marketing site",
+    status: "ga",
+    addedDate: "2026-05-26",
+  },
+  {
+    id: "seo-library-variant-rollups",
+    name: "Library variant rollup pages",
+    description:
+      "Indexable collection pages at /learn/library/plays/variant/{flag-5v5,flag-6v6,flag-7v7,tackle-11} — one per variant, each listing every play concept available for that game. Replaces the previous client-side ?v= filter, which produced no distinct URL for Google to index, so head-term queries like \"5v5 flag football plays\" now have a dedicated landing target.",
+    category: "Marketing site",
+    status: "ga",
+    addedDate: "2026-05-26",
+  },
+  {
     id: "example-sticky-cta-desktop",
     name: "Sticky desktop CTA on examples",
     description:

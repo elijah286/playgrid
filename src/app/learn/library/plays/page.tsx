@@ -143,23 +143,21 @@ export default async function PlaysIndexPage(
         in upcoming releases.
       </p>
 
-      {LIBRARY_VARIANTS.filter((vv) => vv !== variant).length > 0 ? (
-        <p className="mt-3 text-xs text-muted">
-          Looking for a different variant? Try{" "}
-          {LIBRARY_VARIANTS.filter((vv) => vv !== variant).map((vv, i, arr) => (
-            <span key={vv}>
-              <Link
-                href={`/learn/library/plays?v=${variantToSlug(vv)}`}
-                className="text-primary hover:underline"
-              >
-                {VARIANT_LABEL[vv]}
-              </Link>
-              {i < arr.length - 1 ? ", " : ""}
-            </span>
-          ))}
-          .
-        </p>
-      ) : null}
+      <p className="mt-3 text-xs text-muted">
+        Browse by variant:{" "}
+        {LIBRARY_VARIANTS.map((vv, i, arr) => (
+          <span key={vv}>
+            <Link
+              href={`/learn/library/plays/variant/${variantToSlug(vv)}`}
+              className="text-primary hover:underline"
+            >
+              {VARIANT_LABEL[vv]} plays
+            </Link>
+            {i < arr.length - 1 ? ", " : ""}
+          </span>
+        ))}
+        .
+      </p>
     </div>
   );
 }

@@ -47,6 +47,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticRoutes: Array<{ path: string; priority: number }> = [
     { path: "/", priority: 1 },
     { path: "/coach-cal", priority: 0.95 },
+    { path: "/flag-football-playbook", priority: 0.95 },
     { path: "/learn/library", priority: 0.95 },
     { path: "/learn/using-xo", priority: 0.85 },
     { path: "/examples", priority: 0.9 },
@@ -77,6 +78,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     lastModified: now,
     changeFrequency: "weekly",
     priority,
+  }));
+
+  // Variant rollup pages — one collection URL per variant ("5v5 flag
+  // football plays" etc.). Higher priority than individual concept pages
+  // because they target head-term queries.
+  const variantRollups: Entry[] = LIBRARY_VARIANTS.map((v) => ({
+    url: `${SITE_URL}/learn/library/plays/variant/${variantToSlug(v)}`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.85,
   }));
 
   // Every concept gets a redirect page AND one variant-specific page
@@ -138,6 +149,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   return [
     ...staticEntries,
     ...libraryCategories,
+    ...variantRollups,
     ...conceptEntries,
     ...formationEntries,
     ...routeEntries,
