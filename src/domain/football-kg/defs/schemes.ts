@@ -604,8 +604,11 @@ export const SCHEMES: SchemeDef[] = [
     defenders: [
       { id: "R",  x:  4,  y: 7,  assignment: { kind: "blitz", gap: "edge" } },
       { id: "CB", x: -10, y: 5,  assignment: { kind: "man", target: "X" } },
-      { id: "NB", x: -4,  y: 5,  assignment: { kind: "man", target: "Y" } },
-      { id: "NB", x:  4,  y: 5,  assignment: { kind: "man", target: "S" } },
+      // CORRECTED 2026-05-28 — was Y/S, which don't exist in flag_6v6
+      // (roster is X, Z, H, B, C; no @Y/@S). The two NBs man the slot @H
+      // and the back @B; @C is the free receiver under the FS.
+      { id: "NB", x: -4,  y: 5,  assignment: { kind: "man", target: "H" } },
+      { id: "NB", x:  4,  y: 5,  assignment: { kind: "man", target: "B" } },
       { id: "CB", x:  10, y: 5,  assignment: { kind: "man", target: "Z" } },
       { id: "FS", x:  0,  y: 12, assignment: { kind: "zone", zoneId: "deep_middle" } },
     ],
@@ -633,8 +636,12 @@ export const SCHEMES: SchemeDef[] = [
     defenders: [
       { id: "R",  x:  4,  y: 7,  assignment: { kind: "blitz", gap: "edge" } },
       { id: "CB", x: -10, y: 5,  assignment: { kind: "man", target: "X" } },
-      { id: "NB", x: -4,  y: 5,  assignment: { kind: "man", target: "Y" } },
-      { id: "NB", x:  4,  y: 5,  assignment: { kind: "man", target: "S" } },
+      // CORRECTED 2026-05-28 — was Y/S, which don't exist in flag_6v6
+      // (roster is X, Z, H, B, C; no @Y/@S). Pure man, no help: every
+      // eligible receiver is covered once. The SS already mans the back
+      // @B, so the freed NB takes the center @C — not a second @B.
+      { id: "NB", x: -4,  y: 5,  assignment: { kind: "man", target: "H" } },
+      { id: "NB", x:  4,  y: 5,  assignment: { kind: "man", target: "C" } },
       { id: "CB", x:  10, y: 5,  assignment: { kind: "man", target: "Z" } },
       { id: "SS", x:  0,  y: 6,  assignment: { kind: "man", target: "B" } },
     ],
