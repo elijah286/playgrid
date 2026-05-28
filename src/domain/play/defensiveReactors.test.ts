@@ -203,6 +203,48 @@ describe("defensiveReactors — coverage breadth", () => {
   });
 });
 
+describe("defensiveReactors — flag_6v6 coverage parity (catalog completeness)", () => {
+  // flag_6v6 shipped with ZERO reactor patterns (2026-05-28 audit). With no
+  // pattern, compose_defense overlays static dots on every 6v6 play and the
+  // defense never visibly reacts to the concept — the gap the coach surfaced
+  // ("show how skill players move in response to a developing play").
+  //
+  // This ratchet brings 6v6 to parity with the flag_5v5 catalog: the two
+  // stock 6v6 coverages — Cover 3 (zone) and Cover 1 (man-free) — must each
+  // react to the six core pass concepts.
+  //
+  // The 6v6 offensive roster is {QB, C, X, H, Z, B}: one slot @H and a back
+  // @B. There is NO @Y or @S in 6v6 (see conceptMatch.test.ts), so reactor
+  // triggers reference @X/@Z/@H/@B/@C — the real receivers the renderer can
+  // resolve at overlay time.
+  const REQUIRED_6V6_COVERAGES = ["Cover 3", "Cover 1"] as const;
+  const REQUIRED_6V6_CONCEPTS = [
+    "Smash",
+    "Slant-Flat",
+    "Mesh",
+    "Flood",
+    "Snag",
+    "Four Verticals",
+  ] as const;
+
+  for (const coverage of REQUIRED_6V6_COVERAGES) {
+    for (const concept of REQUIRED_6V6_CONCEPTS) {
+      it(`has a flag_6v6 ${coverage} reactor pattern for ${concept}`, () => {
+        const r = findReactorPattern("flag_6v6", coverage, concept);
+        expect(r, `no flag_6v6 ${coverage} pattern for ${concept}`).not.toBeNull();
+        if (!r) return;
+        expect(r.variant).toBe("flag_6v6");
+        expect(r.coverage).toBe(coverage);
+        expect(r.concept).toBe(concept);
+        expect(
+          r.reactors.length,
+          `flag_6v6 ${coverage}/${concept} has no reactors`,
+        ).toBeGreaterThan(0);
+      });
+    }
+  }
+});
+
 describe("defensiveReactors — alignment cross-check via findDefensiveAlignment", () => {
   // Sanity: spot-check one pattern's defenders against the actual
   // alignment players[]. If listDefensiveAlignments and the alignment
