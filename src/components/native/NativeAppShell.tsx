@@ -3,6 +3,8 @@
 import { useEffect } from "react";
 import { isNativeApp, nativePlatform } from "@/lib/native/isNativeApp";
 import { registerOfflineServiceWorker } from "@/lib/native/registerServiceWorker";
+import { registerPush, unregisterPush } from "@/lib/native/registerPush";
+import { createClient } from "@/lib/supabase/client";
 
 export function NativeAppShell() {
   useEffect(() => {
@@ -53,10 +55,38 @@ export function NativeAppShell() {
       hideTimer = setTimeout(markReady, 8000);
     }
 
+    // Register for push once authenticated. Re-runs on sign-in (e.g. a shared
+    // device switching coaches) and drops the token on sign-out. Registration
+    // itself is idempotent and best-effort.
+    let teardownPush: (() => void) | void;
+    const supabase = createClient();
+    void supabase.auth.getSession().then(({ data }) => {
+      if (cancelled || !data.session) return;
+      void registerPush().then((fn) => {
+        if (cancelled) fn?.();
+        else teardownPush = fn;
+      });
+    });
+    const { data: authSub } = supabase.auth.onAuthStateChange((event) => {
+      if (cancelled) return;
+      if (event === "SIGNED_IN") {
+        void registerPush().then((fn) => {
+          teardownPush?.();
+          teardownPush = fn;
+        });
+      } else if (event === "SIGNED_OUT") {
+        teardownPush?.();
+        teardownPush = undefined;
+        void unregisterPush();
+      }
+    });
+
     return () => {
       cancelled = true;
       if (hideTimer) clearTimeout(hideTimer);
       window.removeEventListener("load", markReady);
+      teardownPush?.();
+      authSub.subscription.unsubscribe();
       document.body.classList.remove("native-app");
       document.body.classList.remove(`native-${nativePlatform()}`);
     };

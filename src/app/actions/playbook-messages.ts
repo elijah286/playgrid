@@ -1,7 +1,9 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { sendPushToUsers } from "@/lib/notifications/push";
 import {
   MAX_MESSAGE_LENGTH,
   MESSAGE_PAGE_SIZE,
@@ -159,7 +161,66 @@ export async function postPlaybookMessageAction(
     };
   }
   const authors = await hydrateAuthors(sb, [(data as RawRow).author_id]);
-  return { ok: true, message: rowToMessage(data as RawRow, authors) };
+  const row = data as RawRow;
+
+  // Native push fan-out to the rest of the team — best-effort. Messages
+  // otherwise rely on realtime + unread badges, which native users miss
+  // when the app is backgrounded.
+  void notifyTeamMessagePush({
+    playbookId,
+    authorId: userId,
+    authorName: authors.get(userId)?.displayName ?? null,
+    body: trimmed,
+  });
+
+  return { ok: true, message: rowToMessage(row, authors) };
+}
+
+/**
+ * Push the new message to every active member except the author. Uses the
+ * service-role client (push needs to read device_tokens across users).
+ */
+async function notifyTeamMessagePush(input: {
+  playbookId: string;
+  authorId: string;
+  authorName: string | null;
+  body: string;
+}): Promise<void> {
+  try {
+    const admin = createServiceRoleClient();
+    const { data: members } = await admin
+      .from("playbook_members")
+      .select("user_id")
+      .eq("playbook_id", input.playbookId)
+      .eq("status", "active");
+    const recipientIds = (members ?? [])
+      .map((m) => m.user_id as string | null)
+      .filter((id): id is string => Boolean(id) && id !== input.authorId);
+    if (recipientIds.length === 0) return;
+
+    const { data: book } = await admin
+      .from("playbooks")
+      .select("name")
+      .eq("id", input.playbookId)
+      .maybeSingle();
+    const playbookName = (book?.name as string | undefined) ?? "your team";
+    const sender = input.authorName?.trim() || "A teammate";
+    const preview =
+      input.body.length > 140 ? `${input.body.slice(0, 139)}…` : input.body;
+
+    await sendPushToUsers({
+      admin,
+      userIds: recipientIds,
+      category: "team",
+      message: {
+        title: `${sender} · ${playbookName}`,
+        body: preview,
+        link: `/playbooks/${input.playbookId}?tab=messages`,
+      },
+    });
+  } catch {
+    // best-effort
+  }
 }
 
 export async function editPlaybookMessageAction(

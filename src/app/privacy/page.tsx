@@ -172,7 +172,12 @@ export default function PrivacyPage() {
           <p className="mt-3">
             <strong>Inside the iOS / Android app:</strong> product-usage and
             error reporting are turned off entirely. The native app collects
-            only the account info, content, and standard server logs above.
+            only the account info, content, and standard server logs above,
+            plus — if you allow notifications — a per-device push token. We use
+            that token only to deliver the notifications you&apos;d expect:
+            practice and game reminders, play updates, and team messages. You
+            can turn notifications off at any time in your device settings, and
+            the token is removed when you sign out.
           </p>
         </section>
 
@@ -212,6 +217,12 @@ export default function PrivacyPage() {
               notifications, daily digest of playbook activity)
             </li>
             <li>Stripe — payment processing for paid plans</li>
+            <li>
+              Firebase Cloud Messaging (Google) — delivers push
+              notifications to the iOS / Android app. We send Google a
+              per-device messaging token and the notification text; Google
+              does not retain the message beyond delivering it
+            </li>
             <li>Sentry — browser and server error reporting (web only)</li>
             <li>
               Reddit — when we run ads on Reddit, the Reddit Ads pixel

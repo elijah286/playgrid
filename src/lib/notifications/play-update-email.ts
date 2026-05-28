@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { getStoredResendConfig } from "@/lib/site/resend-config";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
+import { sendPushToUsers } from "@/lib/notifications/push";
 
 const DEFAULT_FROM_EMAIL = "XO Gridmaker <onboarding@resend.dev>";
 const SITE_URL =
@@ -21,15 +22,6 @@ export async function sendPlayUpdateNotification(input: {
   senderName: string | null;
   comment: string | null;
 }): Promise<void> {
-  let cfg: Awaited<ReturnType<typeof getStoredResendConfig>>;
-  try {
-    cfg = await getStoredResendConfig();
-  } catch {
-    return;
-  }
-  if (!cfg.apiKey) return;
-  const fromEmail = cfg.fromEmail ?? DEFAULT_FROM_EMAIL;
-
   const admin = createServiceRoleClient();
 
   const { data: members } = await admin
@@ -41,6 +33,32 @@ export async function sendPlayUpdateNotification(input: {
     .map((m) => m.user_id as string | null)
     .filter((id): id is string => Boolean(id) && id !== input.senderUserId);
   if (recipientIds.length === 0) return;
+
+  const senderForPush = input.senderName?.trim() || "Your coach";
+  // Native push fan-out — independent of email, best-effort.
+  try {
+    await sendPushToUsers({
+      admin,
+      userIds: recipientIds,
+      category: "team",
+      message: {
+        title: `${senderForPush} updated ${input.playName}`,
+        body: input.comment?.trim() || `on ${input.playbookName}`,
+        link: `/playbooks/${input.playbookId}/plays/${input.playId}`,
+      },
+    });
+  } catch {
+    // best-effort
+  }
+
+  let cfg: Awaited<ReturnType<typeof getStoredResendConfig>>;
+  try {
+    cfg = await getStoredResendConfig();
+  } catch {
+    return;
+  }
+  if (!cfg.apiKey) return;
+  const fromEmail = cfg.fromEmail ?? DEFAULT_FROM_EMAIL;
 
   const recipients: string[] = [];
   for (const uid of recipientIds) {

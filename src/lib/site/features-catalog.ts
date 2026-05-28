@@ -319,6 +319,15 @@ export const FEATURES: FeatureEntry[] = [
 
   // ── Calendar & scheduling ──────────────────────────────────────
   {
+    id: "push-notifications",
+    name: "Mobile push notifications",
+    description:
+      "Coaches and players with the iOS / Android app installed get push notifications for the things that matter on the day: practice and game reminders (and when an event is added, changed, or cancelled), play updates a coach broadcasts to the team, and new team messages. Tapping a notification deep-links straight to the relevant calendar, play, or chat. Notifications respect the device's OS permission and can be muted per category; the device token is dropped on sign-out.",
+    category: "Calendar & scheduling",
+    status: "beta",
+    addedDate: "2026-05-28",
+  },
+  {
     id: "calendar-bulk-rsvp",
     name: "Bulk RSVP and series rollup",
     description:

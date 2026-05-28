@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { getStoredResendConfig } from "@/lib/site/resend-config";
 import type { createServiceRoleClient } from "@/lib/supabase/admin";
+import { sendPushToUsers } from "@/lib/notifications/push";
 
 type Admin = ReturnType<typeof createServiceRoleClient>;
 
@@ -74,6 +75,37 @@ function headlineFor(kind: CalendarEmailKind): string {
       return "An event on your calendar was cancelled.";
     case "reminder":
       return "Heads up — this event is coming up soon.";
+  }
+}
+
+function whatLabel(ev: EventForEmail): string {
+  return ev.type === "game"
+    ? `Game vs ${ev.opponent ?? "TBD"}`
+    : ev.type === "scrimmage"
+      ? `Scrimmage${ev.opponent ? ` vs ${ev.opponent}` : ""}`
+      : ev.title || "Practice";
+}
+
+function buildPushMessage(
+  kind: CalendarEmailKind,
+  ev: EventForEmail,
+  playbookName: string,
+): { title: string; body: string } {
+  const what = whatLabel(ev);
+  const when = fmtDateTime(ev.starts_at, ev.timezone);
+  const where = ev.location_name ?? null;
+  switch (kind) {
+    case "reminder":
+      return {
+        title: `Reminder: ${what}`,
+        body: where ? `${when} · ${where}` : when,
+      };
+    case "created":
+      return { title: `${playbookName}: ${what} added`, body: when };
+    case "edited":
+      return { title: `${playbookName}: ${what} updated`, body: when };
+    case "cancelled":
+      return { title: `${playbookName}: ${what} cancelled`, body: when };
   }
 }
 
@@ -162,7 +194,8 @@ export async function sendCalendarEventEmails(opts: {
   const apiKey = cfg.apiKey ?? process.env.RESEND_API_KEY ?? null;
   const fromEmail =
     cfg.fromEmail ?? process.env.RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
-  if (!apiKey) return;
+  // Note: we do NOT early-return on a missing Resend key — push still fires
+  // below independently of email.
 
   const { data: ev } = await admin
     .from("playbook_events")
@@ -189,6 +222,25 @@ export async function sendCalendarEventEmails(opts: {
     .map((m) => m.user_id as string)
     .filter((id) => id !== excludeUserId);
   if (memberIds.length === 0) return;
+
+  // Native push fan-out — independent of email, best-effort.
+  try {
+    const { title, body } = buildPushMessage(kind, event, playbookName);
+    await sendPushToUsers({
+      admin,
+      userIds: memberIds,
+      category: "calendar",
+      message: {
+        title,
+        body,
+        link: `/playbooks/${event.playbook_id}?tab=calendar`,
+      },
+    });
+  } catch {
+    // best-effort
+  }
+
+  if (!apiKey) return;
 
   const { data: profiles } = await admin
     .from("profiles")
