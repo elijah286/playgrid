@@ -55,26 +55,36 @@ export function NativeAppShell() {
       hideTimer = setTimeout(markReady, 8000);
     }
 
-    // Register for push once authenticated. Re-runs on sign-in (e.g. a shared
-    // device switching coaches) and drops the token on sign-out. Registration
-    // itself is idempotent and best-effort.
+    // Register for push once authenticated. We drive this off
+    // onAuthStateChange rather than a mount-time getSession() call: in the
+    // native WebView, getSession() races session hydration and often returns
+    // null at mount, and SIGNED_IN only fires on the client instance that
+    // performed the login (cookie storage doesn't broadcast across instances).
+    // onAuthStateChange reliably emits INITIAL_SESSION with the recovered
+    // session once storage hydrates — covering "opened while already logged
+    // in" — plus SIGNED_IN for fresh logins. A guard makes it idempotent.
     let teardownPush: (() => void) | void;
+    let registered = false;
     const supabase = createClient();
-    void supabase.auth.getSession().then(({ data }) => {
-      if (cancelled || !data.session) return;
+    const doRegister = () => {
+      if (cancelled || registered) return;
+      registered = true;
       void registerPush().then((fn) => {
         if (cancelled) fn?.();
         else teardownPush = fn;
       });
-    });
-    const { data: authSub } = supabase.auth.onAuthStateChange((event) => {
+    };
+    const { data: authSub } = supabase.auth.onAuthStateChange((event, session) => {
       if (cancelled) return;
-      if (event === "SIGNED_IN") {
-        void registerPush().then((fn) => {
-          teardownPush?.();
-          teardownPush = fn;
-        });
+      if (
+        session &&
+        (event === "INITIAL_SESSION" ||
+          event === "SIGNED_IN" ||
+          event === "TOKEN_REFRESHED")
+      ) {
+        doRegister();
       } else if (event === "SIGNED_OUT") {
+        registered = false;
         teardownPush?.();
         teardownPush = undefined;
         void unregisterPush();
