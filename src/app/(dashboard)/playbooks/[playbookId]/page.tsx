@@ -124,6 +124,15 @@ export default async function PlaybookDetailPage({ params }: Props) {
 
   if (error || !book) notFound();
 
+  // Auth doesn't depend on the playbook fan-out below, so kick it off
+  // concurrently instead of awaiting the fan-out first. Time-bound it
+  // (see getUserWithTimeout) so a stalled token refresh on a flaky/offline
+  // connection can't trap the page — on timeout we render anonymous and
+  // the next navigation retries auth.
+  const authPromise = timed(`playbook-page:auth-getUser pb=${playbookId}`, () =>
+    getUserWithTimeout(supabase),
+  );
+
   const [listed, rosterRes, invitesRes, formationsRes, prefsRes, claimsRes] =
     await timed(`playbook-page:promise-all pb=${playbookId}`, () =>
       Promise.all([
@@ -148,15 +157,44 @@ export default async function PlaybookDetailPage({ params }: Props) {
       ]),
     );
 
-  // Time-bound the auth check so a stalled refresh on a flaky/offline
-  // connection doesn't trap the page on a spinner. Same pattern as the
-  // root layout + middleware. On timeout we render as anonymous; the
-  // page still loads (read-only state for example playbooks) and the
-  // next navigation retries auth.
-  const authResult = await timed(`playbook-page:auth-getUser pb=${playbookId}`, () =>
-    getUserWithTimeout(supabase),
-  );
+  const authResult = await authPromise;
   const user = authResult.kind === "ok" ? authResult.user : null;
+
+  // Fetch the viewer's profile (display_name + role + avatar_url) and their
+  // membership row ONCE, in parallel. role drives the admin check;
+  // display_name/avatar feed the header + messaging. Previously this same
+  // profile row was read three separate times (viewer-block, isAdmin,
+  // messaging) — three extra cross-region round-trips on the critical path.
+  type ViewerProfileRow = {
+    display_name: string | null;
+    role: string | null;
+    avatar_url: string | null;
+  };
+  let viewerProfile: ViewerProfileRow | null = null;
+  let viewerMembershipRole: "owner" | "editor" | "viewer" | null = null;
+  if (user) {
+    const [profileRes, membershipRes] = await timed(
+      `playbook-page:viewer-profile+membership pb=${playbookId}`,
+      () =>
+        Promise.all([
+          supabase
+            .from("profiles")
+            .select("display_name, role, avatar_url")
+            .eq("id", user.id)
+            .maybeSingle(),
+          supabase
+            .from("playbook_members")
+            .select("role")
+            .eq("playbook_id", playbookId)
+            .eq("user_id", user.id)
+            .maybeSingle(),
+        ]),
+    );
+    viewerProfile = (profileRes.data as ViewerProfileRow | null) ?? null;
+    viewerMembershipRole =
+      (membershipRes.data?.role as "owner" | "editor" | "viewer" | null) ??
+      null;
+  }
 
   const sportVariant = (book.sport_variant as SportVariant) ?? "flag_7v7";
   const variantLabel = SPORT_VARIANT_LABELS[sportVariant] ?? (book.sport_variant as string) ?? "";
@@ -175,43 +213,37 @@ export default async function PlaybookDetailPage({ params }: Props) {
   let isMember = false;
   let ownerDisplayName: string | null = null;
   if (user) {
-    await timed(`playbook-page:viewer-block pb=${playbookId}`, async () => {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("display_name")
-        .eq("id", user.id)
-        .maybeSingle();
-      viewerDisplayName = (profile?.display_name as string | null) ?? null;
-      senderName = viewerDisplayName || user.email || null;
+    viewerDisplayName = viewerProfile?.display_name ?? null;
+    senderName = viewerDisplayName || user.email || null;
+    viewerRole = viewerMembershipRole;
+    isMember = viewerRole != null;
 
-      const { data: membership } = await supabase
-        .from("playbook_members")
-        .select("role")
-        .eq("playbook_id", playbookId)
-        .eq("user_id", user.id)
-        .maybeSingle();
-      viewerRole = (membership?.role as typeof viewerRole) ?? null;
-      isMember = viewerRole != null;
-
-      if (viewerRole && viewerRole !== "owner") {
-        const { data: ownerRow } = await supabase
-          .from("playbook_members")
-          .select("user_id")
-          .eq("playbook_id", playbookId)
-          .eq("role", "owner")
-          .limit(1)
+    // Only a non-owner member needs the owner's display name for the
+    // header, and it genuinely depends on the membership result, so this
+    // lookup stays sequential — but it no longer runs for owners (the
+    // common case) or anonymous viewers.
+    if (viewerRole && viewerRole !== "owner") {
+      const { data: ownerRow } = await timed(
+        `playbook-page:owner-lookup pb=${playbookId}`,
+        () =>
+          supabase
+            .from("playbook_members")
+            .select("user_id")
+            .eq("playbook_id", playbookId)
+            .eq("role", "owner")
+            .limit(1)
+            .maybeSingle(),
+      );
+      const ownerId = (ownerRow?.user_id as string | null) ?? null;
+      if (ownerId) {
+        const { data: ownerProfile } = await supabase
+          .from("profiles")
+          .select("display_name")
+          .eq("id", ownerId)
           .maybeSingle();
-        const ownerId = (ownerRow?.user_id as string | null) ?? null;
-        if (ownerId) {
-          const { data: ownerProfile } = await supabase
-            .from("profiles")
-            .select("display_name")
-            .eq("id", ownerId)
-            .maybeSingle();
-          ownerDisplayName = (ownerProfile?.display_name as string | null) || null;
-        }
+        ownerDisplayName = (ownerProfile?.display_name as string | null) || null;
       }
-    });
+    }
   }
 
   // Non-members viewing a published example get a synthesized viewer
@@ -272,17 +304,8 @@ export default async function PlaybookDetailPage({ params }: Props) {
     ((book as unknown as { example_author_label?: string | null })
       .example_author_label as string | null) ?? null;
 
-  let isAdmin = false;
-  if (user) {
-    await timed(`playbook-page:isAdmin-select pb=${playbookId}`, async () => {
-      const { data: selfRoleRow } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .maybeSingle();
-      isAdmin = (selfRoleRow?.role as string | null) === "admin";
-    });
-  }
+  // Derived from the single profile read above — no extra round-trip.
+  const isAdmin = (viewerProfile?.role as string | null) === "admin";
   const canManageExample = isAdmin && (effectiveRole === "owner" || effectiveRole === "editor");
 
   const freeMaxPlays = await timed(
@@ -366,15 +389,10 @@ export default async function PlaybookDetailPage({ params }: Props) {
   } | null = null;
   let initialMessagesUnread = 0;
   if (teamMessagingAvailable && user && !isExamplePreview) {
-    const { data: viewerProfile } = await supabase
-      .from("profiles")
-      .select("id, display_name, avatar_url")
-      .eq("id", user.id)
-      .maybeSingle();
     messagingViewer = {
       id: user.id,
-      displayName: (viewerProfile?.display_name as string | null) ?? null,
-      avatarUrl: (viewerProfile?.avatar_url as string | null) ?? null,
+      displayName: viewerProfile?.display_name ?? null,
+      avatarUrl: viewerProfile?.avatar_url ?? null,
     };
     const [messagesRes, unreadRes] = await Promise.all([
       listPlaybookMessagesAction(playbookId),
