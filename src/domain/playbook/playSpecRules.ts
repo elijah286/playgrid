@@ -53,8 +53,13 @@ const QB_PLAYER_IDS = new Set(["QB", "Q"]);
 /** runTypes on the QB that count as designed QB runs (require the
  *  `designed_qb_run` capability). `scramble` is intentionally absent —
  *  scrambling is reactive, not designed, and is gated by the broader
- *  `rushingAllowed` toggle instead. */
-const DESIGNED_QB_RUN_TYPES = new Set([
+ *  `rushingAllowed` toggle instead.
+ *
+ *  Exported so the catalog-legality derivation (concept-legality.ts) can
+ *  mirror this exact gate when deciding which variants a QB-run concept
+ *  is playable in — keeping a single source of truth for "what counts as
+ *  a designed QB run" instead of duplicating the list. */
+export const DESIGNED_QB_RUN_TYPES = new Set<string>([
   "qb_keep",
   "draw",
   "power",
