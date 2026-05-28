@@ -68,12 +68,27 @@ function GeographyMap({ cities }: { cities: GeoCityPoint[] }) {
       const map = L.map(containerRef.current, {
         center: [25, 0],
         zoom: 2,
-        worldCopyJump: true,
+        // Keep the viewport to a single copy of Earth: don't allow zooming
+        // out past the whole-world view, and clamp panning to one world so
+        // the map never shows repeated/duplicate globes.
+        minZoom: 2,
+        worldCopyJump: false,
+        maxBounds: [
+          [-85, -180],
+          [85, 180],
+        ],
+        maxBoundsViscosity: 1,
         scrollWheelZoom: true,
         attributionControl: true,
       });
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 12,
+        // noWrap stops the tile layer from repeating the world east/west.
+        noWrap: true,
+        bounds: [
+          [-90, -180],
+          [90, 180],
+        ],
         attribution: "&copy; OpenStreetMap contributors",
       }).addTo(map);
 

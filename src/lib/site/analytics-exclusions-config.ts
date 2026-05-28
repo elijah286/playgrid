@@ -2,6 +2,11 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 
 const SITE_ROW_ID = "default";
 
+// Any account on the company's own email domain is internal (staff, admin@,
+// reviewer@, support@, test accounts) and never a real customer — always
+// excluded from analytics so internal usage can't skew the numbers.
+const COMPANY_EMAIL_DOMAIN = "@xogridmaker.com";
+
 function normalizeEmails(input: readonly string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -47,19 +52,21 @@ export async function setAnalyticsExcludedEmails(emails: string[]): Promise<stri
 }
 
 /**
- * Resolve excluded emails to auth user IDs. Used by analytics queries to
+ * Resolve excluded accounts to auth user IDs. Used by analytics queries to
  * filter out activity from the owner's own/family/test accounts.
  *
- * Excluded emails that don't match any auth user (typos, not-yet-signed-up)
- * are silently skipped — they only affect downstream filtering once a real
- * account exists.
+ * Two sources of exclusion:
+ *   1. The explicit email list (owner / family / test accounts).
+ *   2. Any account on the company email domain — staff/admin/reviewer/support
+ *      accounts are internal by definition and never real customers.
+ *
+ * Listed emails that don't match any auth user (typos, not-yet-signed-up) are
+ * silently skipped — they only affect filtering once a real account exists.
  */
 export async function getAnalyticsExcludedUserIds(): Promise<Set<string>> {
-  const emails = await getAnalyticsExcludedEmails();
-  if (emails.length === 0) return new Set();
+  const wanted = new Set(await getAnalyticsExcludedEmails());
   try {
     const admin = createServiceRoleClient();
-    const wanted = new Set(emails);
     const ids = new Set<string>();
     // listUsers paginates at 1000/page in Supabase; we walk pages until empty.
     // Admin tool with low cardinality, so a few hundred users at most in practice.
@@ -69,7 +76,9 @@ export async function getAnalyticsExcludedUserIds(): Promise<Set<string>> {
       const users = data?.users ?? [];
       for (const u of users) {
         const e = (u.email ?? "").toLowerCase();
-        if (e && wanted.has(e)) ids.add(u.id);
+        if (!e) continue;
+        // Explicit list (owner / family / test) OR any company-domain account.
+        if (wanted.has(e) || e.endsWith(COMPANY_EMAIL_DOMAIN)) ids.add(u.id);
       }
       if (users.length < 1000) break;
     }
