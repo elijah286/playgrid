@@ -28,13 +28,16 @@ import type { ConceptDef } from "../schemas/ConceptDef";
 
 const ALL_VARIANTS = ["flag_5v5", "flag_6v6", "flag_7v7", "tackle_11"] as const;
 const TACKLE_ONLY = ["tackle_11"] as const;
-// Concepts that require a true back position. 5v5 flag rosters {Q, C,
-// X, Y, Z} — no @B — so the RPO read ("give to back, or throw the
-// pass") can't be modeled. Surfaced 2026-05-26 when the 5v5 Bubble
-// RPO library page failed every detection: the spec couldn't include
-// a carry without a back, and matchConcept's structural carry filter
-// (requiresCarry.player="back") rejected the spec.
-const NEEDS_BACK = ["flag_6v6", "flag_7v7", "tackle_11"] as const;
+// Variants whose DEFAULT rule-set enables the `handoff_chain` capability
+// — i.e. where a ball-path run or trick concept (sweep, dive, counter,
+// draw, jet-reverse, flea-flicker) is offered as a stock Library page.
+// Flag 7v7 is pass-only by default, so it's absent here even though its
+// roster could physically run these. A coach whose league allows it can
+// still opt into `handoff_chain` in their own playbook rules and compose
+// one via Cal — that path is capability-gated, not variant-gated. Must
+// stay in sync with `defaultSettingsForVariant` (settings.ts); the
+// concept-legality test (concept-legality.test.ts) fails if they drift.
+const HANDOFF_CHAIN_VARIANTS = ["flag_5v5", "flag_6v6", "tackle_11"] as const;
 
 export const CONCEPTS: ConceptDef[] = [
   // ── Pass concepts ─────────────────────────────────────────────────
@@ -323,7 +326,13 @@ export const CONCEPTS: ConceptDef[] = [
     id: "qb-draw",
     name: "QB Draw",
     family: "concept",
-    variants: [...ALL_VARIANTS],
+    // Designed QB runs need the `designed_qb_run` capability, which only
+    // tackle_11 enables by default. Flag rule-sets forbid the QB carrying
+    // the ball as a designed runner, so QB Draw is NOT offered as a flag
+    // Library page — this is the 2026-05-28 "QB Draw shown as a flag play"
+    // data fix. (A coach whose league permits it can still opt in via
+    // playbook rules; compose is capability-gated, not variant-gated.)
+    variants: [...TACKLE_ONLY],
     description: "Designed QB run from shotgun — blockers sell pass, QB attacks the soft middle.",
     body: "Designed QB run from shotgun. The blockers pass-set to sell pass (tackle); receivers run vertical clears to pull defenders away from the middle (every variant); the QB hesitates as if reading, then runs straight through the soft middle the rush vacated. Best against rush-heavy fronts on obvious passing downs — coverage drops, the box is light, the QB takes the easy yards. In flag the OL doesn't exist, but the same mechanic works because rushers must start behind the rush line — the QB times the run to attack as the rusher commits upfield.",
     aliases: ["Quarterback Draw", "QB Lead Draw"],
@@ -348,13 +357,16 @@ export const CONCEPTS: ConceptDef[] = [
     id: "bubble-rpo",
     name: "Bubble RPO",
     family: "concept",
-    // Excludes flag_5v5: the RPO mechanic requires a back to hand to,
-    // and 5v5 has no @B in its {Q,C,X,Y,Z} roster — there's no second
-    // option for the QB to read between. Without removing 5v5 here,
-    // the library page for 5v5 Bubble RPO would never satisfy the
-    // concept's structural carry filter and detectConcept would label
-    // it as a different concept (Smash, in practice).
-    variants: [...NEEDS_BACK],
+    // Bubble RPO needs the `rpo_read` capability, which only tackle_11
+    // enables by default — so it's offered solely as a tackle Library
+    // page. Two independent facts converge on tackle-only: (1) no flag
+    // variant enables rpo_read by default (the 2026-05-28 legality fix);
+    // (2) the RPO read needs a back to give to, and 5v5's {Q,C,X,Y,Z}
+    // roster has no @B (surfaced 2026-05-26: matchConcept's carry filter
+    // requiresCarry.player="back" rejected the backless 5v5 spec). A coach
+    // in an RPO-legal flag league can still opt in via playbook rules —
+    // compose is capability-gated, not variant-gated.
+    variants: [...TACKLE_ONLY],
     description: "Inside Zone + Bubble screen tag — QB reads conflict defender for run/throw.",
     body: "Run-pass option built on Inside Zone with a bubble screen tag. The blockers run-block the inside zone (tackle OL; in 6v6/7v7 flag the front simulates the read); the back takes the Inside Zone path; a slot receiver releases on a bubble (lateral release, settling 0–2 yds behind the LOS); the QB reads the conflict defender (typically the playside OLB / overhang). If the conflict defender comes down to fill the run, the QB pulls and throws the bubble — the slot has the perimeter outflanked. If the defender stays out to play the bubble, the QB gives and the back hits a light box. Modern HS / college / NFL staple.",
     aliases: ["Bubble Screen RPO", "RPO Bubble", "Inside Zone Bubble"],
@@ -383,7 +395,7 @@ export const CONCEPTS: ConceptDef[] = [
     id: "jet-reverse",
     name: "Jet Reverse",
     family: "concept",
-    variants: [...ALL_VARIANTS],
+    variants: [...HANDOFF_CHAIN_VARIANTS],
     description: "Multi-handoff misdirection — initial fake one way, reverse runner attacks the vacated side.",
     body: "Multi-handoff misdirection. QB takes the snap and hands to the back (or jet-motion receiver) running toward one side; the back/jet then hands the ball back to the weak-side receiver coming around from the opposite direction. Two exchanges, three ball-handlers. The whole defense flows to the initial fake; the reverse runner attacks the vacated weak side. Best when the defense is over-pursuing the run game and your perimeter blockers (slot, weak-side WR) can seal the cornerback.",
     aliases: ["Reverse", "Reverse Jet", "End-Around Reverse"],
@@ -407,7 +419,7 @@ export const CONCEPTS: ConceptDef[] = [
     id: "sweep",
     name: "Sweep",
     family: "concept",
-    variants: [...ALL_VARIANTS],
+    variants: [...HANDOFF_CHAIN_VARIANTS],
     description: "Wide perimeter run — blockers pull or reach playside, back attacks the edge.",
     body: "Wide perimeter run. QB hands to the back, who attacks the edge with the blockers pulling or reaching playside (tackle: classic two-guard pull on Packers Sweep; flag: receivers run vertical clears to pull defenders OFF the perimeter since blocking isn't legal). The back's footwork is patient-then-fast: read the kick-out (or in flag, the leverage of the contain defender), then turn vertical when the corner is sealed. Best vs over-aligned interior fronts where the perimeter is light.",
     aliases: ["Outside Sweep", "Toss Sweep", "Stretch"],
@@ -430,7 +442,7 @@ export const CONCEPTS: ConceptDef[] = [
     id: "dive",
     name: "Dive",
     family: "concept",
-    variants: [...ALL_VARIANTS],
+    variants: [...HANDOFF_CHAIN_VARIANTS],
     description: "North-south interior run — back attacks A/B gap downhill, blockers inside-zone-block.",
     body: "North-south interior run. QB hands to the back attacking the A/B gap downhill — first available crease wins. In tackle the OL inside-zone-blocks (combo to the LBs). In flag, the back attacks the middle gap that opens as defenders flow to the apparent perimeter threat — receivers run quick inside routes (drag/sit) to occupy the second level. Stays on schedule, eats clock, and softens up a stout interior for the play-action that follows.",
     aliases: ["Inside Dive", "Iso", "Lead Dive"],
@@ -476,7 +488,7 @@ export const CONCEPTS: ConceptDef[] = [
     id: "counter",
     name: "Counter",
     family: "concept",
-    variants: [...ALL_VARIANTS],
+    variants: [...HANDOFF_CHAIN_VARIANTS],
     description: "Misdirection run — back jab-steps strong, takes handoff going back weak behind pulling blockers.",
     body: "Misdirection run. The back jab-steps strong-side to hold the LBs, then takes the handoff going BACK weak-side behind pulling blockers (typically the backside guard + tackle). The 'counter' is the defense's pursuit moving the wrong way. Best vs defenses that flow hard to initial back action.",
     aliases: ["Counter Trey", "Counter GT", "Counter OF"],
@@ -499,7 +511,7 @@ export const CONCEPTS: ConceptDef[] = [
     id: "draw",
     name: "Draw",
     family: "concept",
-    variants: [...ALL_VARIANTS],
+    variants: [...HANDOFF_CHAIN_VARIANTS],
     description: "Late-developing interior run that sells pass first — blockers sell pass, back hits the soft middle late.",
     body: "Late-developing interior run that sells pass first. In tackle, the OL pass-sets to draw the rush upfield; receivers run vertical clears to widen coverage. In flag, the rushers must already start behind the 7-yd rush line — the back times the run to attack as they commit upfield past the LOS, with receivers running clears to pull the underneath defenders deep. QB drops back, then hands LATE to the back hitting the soft middle vacated by the rush. Best on obvious passing downs against rush-heavy fronts.",
     aliases: ["RB Draw", "Lead Draw"],
@@ -524,7 +536,7 @@ export const CONCEPTS: ConceptDef[] = [
     id: "flea-flicker",
     name: "Flea Flicker",
     family: "concept",
-    variants: [...ALL_VARIANTS],
+    variants: [...HANDOFF_CHAIN_VARIANTS],
     description: "Trick play — back/WR pitches ball back to QB after fake rush, deep throw off run-action.",
     body: "Trick play that sells run, then attacks deep. QB hands to a back / WR going forward to the LOS; that player runs hard as if rushing, then PITCHES the ball BACK to the QB still behind the LOS. The defense has already triggered on the run fake; deep receivers clear out and find the void behind the now-collapsing safeties. Two backwards passes / handoffs, one deep throw. Best after the run game has been established — the defense has to believe the fake.",
     aliases: ["Flicker", "Halfback Flicker", "WR Flicker"],
