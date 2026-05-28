@@ -5,6 +5,7 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { fetchAllRows } from "@/lib/supabase/paginate";
 import { getAnalyticsExcludedUserIds } from "@/lib/site/analytics-exclusions-config";
+import { centralDayKey } from "@/lib/site/analytics-timezone";
 
 export type TrafficSummary = {
   windowDays: number;
@@ -51,11 +52,6 @@ function emptySummary(windowDays: number): TrafficSummary {
     deviceMix: { mobile: 0, tablet: 0, desktop: 0, unknown: 0 },
     utmSources: [],
   };
-}
-
-function dayKey(d: Date): string {
-  // UTC YYYY-MM-DD
-  return d.toISOString().slice(0, 10);
 }
 
 async function requireAdmin(): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -159,13 +155,13 @@ export async function getTrafficSummaryAction(
       admin
         .from("user_activity_days")
         .select("user_id")
-        .gte("day", sevenStart.toISOString().slice(0, 10)),
+        .gte("day", centralDayKey(sevenStart)),
     );
     const active30 = await fetchAllRows<{ user_id: string }>(() =>
       admin
         .from("user_activity_days")
         .select("user_id")
-        .gte("day", thirtyStart.toISOString().slice(0, 10)),
+        .gte("day", centralDayKey(thirtyStart)),
     );
 
     const activeLast7 = new Set(
@@ -188,7 +184,7 @@ export async function getTrafficSummaryAction(
     // Seed byDay with zeros for each day in window.
     for (let i = 0; i < days; i++) {
       const d = new Date(now - i * 24 * 60 * 60 * 1000);
-      byDayMap.set(dayKey(d), { views: 0, signups: 0 });
+      byDayMap.set(centralDayKey(d), { views: 0, signups: 0 });
     }
 
     for (const v of views) {
@@ -197,7 +193,7 @@ export async function getTrafficSummaryAction(
         sessionsWithSignupUser.add(v.session_id);
       }
 
-      const dk = dayKey(new Date(v.created_at));
+      const dk = centralDayKey(new Date(v.created_at));
       const bucket = byDayMap.get(dk) ?? { views: 0, signups: 0 };
       bucket.views += 1;
       byDayMap.set(dk, bucket);
@@ -232,7 +228,7 @@ export async function getTrafficSummaryAction(
 
     // Signups by day.
     for (const p of newProfiles) {
-      const dk = dayKey(new Date((p.created_at as string) ?? new Date().toISOString()));
+      const dk = centralDayKey(new Date((p.created_at as string) ?? new Date().toISOString()));
       const bucket = byDayMap.get(dk);
       if (bucket) bucket.signups += 1;
     }

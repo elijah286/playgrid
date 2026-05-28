@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "./admin-guard";
+import { centralDayKey } from "@/lib/site/analytics-timezone";
 
 export type DailyTrendBucket = {
   day: string; // ISO date YYYY-MM-DD
@@ -78,14 +79,15 @@ export async function getCoachAiFeedbackTrendsAction(
 
   // Build day buckets covering the window so empty days render as zero rows.
   const buckets = new Map<string, DailyTrendBucket>();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const nowMs = Date.now();
   for (let i = 0; i <= windowDays; i++) {
-    const d = new Date();
-    d.setUTCDate(d.getUTCDate() - (windowDays - i));
-    const k = d.toISOString().slice(0, 10);
+    const d = new Date(nowMs - (windowDays - i) * dayMs);
+    const k = centralDayKey(d);
     buckets.set(k, { day: k, kb_miss: 0, refusal: 0, thumbs_down: 0, thumbs_up: 0 });
   }
   function bump(iso: string, key: keyof Omit<DailyTrendBucket, "day">) {
-    const k = iso.slice(0, 10);
+    const k = centralDayKey(new Date(iso));
     const b = buckets.get(k);
     if (b) b[key] += 1;
   }
