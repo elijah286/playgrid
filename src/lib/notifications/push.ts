@@ -6,16 +6,25 @@ type Admin = ReturnType<typeof createServiceRoleClient>;
 /**
  * Native push fan-out via FCM HTTP v1.
  *
- * Credentials come from the FCM_SERVICE_ACCOUNT_JSON env var (the full service
- * account JSON, mounted from Secret Manager on Cloud Run). When it's absent —
- * local dev, or before Firebase is wired — every send is a silent no-op, the
- * same graceful-degradation contract the Resend email path uses. Push is
- * always best-effort: the in-app row / email is the source of truth.
+ * Auth has two paths, tried in order:
+ *   1. FCM_SERVICE_ACCOUNT_JSON — full service-account JSON. We mint the OAuth2
+ *      token ourselves with Node crypto (RS256 JWT), no extra dependency.
+ *   2. Cloud Run's attached service account via the GCP metadata server — no
+ *      key file (the project's org policy disables service-account keys). Used
+ *      whenever we're on Cloud Run (K_SERVICE set) or FCM_PROJECT_ID is set;
+ *      the runtime SA must hold roles/firebasecloudmessaging.admin.
  *
- * We mint the OAuth2 access token ourselves with Node's crypto (RS256 JWT) so
- * there's no firebase-admin / google-auth-library dependency. The token is
- * cached process-wide until ~1 min before expiry.
+ * When neither path is available — local dev, tests, or before Firebase is
+ * wired — every send is a silent no-op, the same graceful-degradation contract
+ * the Resend email path uses. Push is always best-effort: the in-app row /
+ * email is the source of truth. Tokens are cached process-wide until ~1 min
+ * before expiry.
  */
+
+const METADATA_TOKEN_URL =
+  "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token";
+const METADATA_PROJECT_URL =
+  "http://metadata.google.internal/computeMetadata/v1/project/project-id";
 
 export type PushCategory = "calendar" | "team";
 
@@ -63,12 +72,8 @@ function base64url(input: string | Buffer): string {
 
 let cachedToken: { value: string; expiresAt: number } | null = null;
 
-async function getAccessToken(sa: ServiceAccount): Promise<string | null> {
+async function tokenFromServiceAccount(sa: ServiceAccount): Promise<{ value: string; expiresIn: number } | null> {
   const now = Math.floor(Date.now() / 1000);
-  if (cachedToken && cachedToken.expiresAt - 60 > now) {
-    return cachedToken.value;
-  }
-
   const header = base64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
   const claims = base64url(
     JSON.stringify({
@@ -102,11 +107,63 @@ async function getAccessToken(sa: ServiceAccount): Promise<string | null> {
   if (!res.ok) return null;
   const json = (await res.json()) as { access_token?: string; expires_in?: number };
   if (!json.access_token) return null;
-  cachedToken = {
-    value: json.access_token,
-    expiresAt: now + (json.expires_in ?? 3600),
-  };
-  return cachedToken.value;
+  return { value: json.access_token, expiresIn: json.expires_in ?? 3600 };
+}
+
+async function metadataGet(url: string): Promise<string | null> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 1500);
+    const res = await fetch(url, {
+      headers: { "Metadata-Flavor": "Google" },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    return await res.text();
+  } catch {
+    return null;
+  }
+}
+
+async function tokenFromMetadataServer(): Promise<{ value: string; expiresIn: number } | null> {
+  const body = await metadataGet(METADATA_TOKEN_URL);
+  if (!body) return null;
+  try {
+    const json = JSON.parse(body) as { access_token?: string; expires_in?: number };
+    if (!json.access_token) return null;
+    return { value: json.access_token, expiresIn: json.expires_in ?? 3600 };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve an access token + the FCM project id, or null when push isn't
+ * configured for this environment. Caches the token until ~1 min before expiry.
+ */
+async function getAuth(): Promise<{ accessToken: string; projectId: string } | null> {
+  const sa = loadServiceAccount();
+  const onGcp = Boolean(process.env.K_SERVICE) || Boolean(process.env.FCM_PROJECT_ID);
+  if (!sa && !onGcp) return null;
+
+  const projectId =
+    sa?.projectId ??
+    process.env.FCM_PROJECT_ID ??
+    (await metadataGet(METADATA_PROJECT_URL));
+  if (!projectId) return null;
+
+  const now = Math.floor(Date.now() / 1000);
+  if (cachedToken && cachedToken.expiresAt - 60 > now) {
+    return { accessToken: cachedToken.value, projectId };
+  }
+
+  const minted = sa
+    ? await tokenFromServiceAccount(sa)
+    : await tokenFromMetadataServer();
+  if (!minted) return null;
+  cachedToken = { value: minted.value, expiresAt: now + minted.expiresIn };
+  return { accessToken: minted.value, projectId };
 }
 
 type TokenRow = { id: string; token: string };
@@ -209,24 +266,27 @@ export async function sendPushToUsers(opts: {
   category: PushCategory;
   message: PushMessage;
 }): Promise<{ delivered: number; configured: boolean }> {
-  const sa = loadServiceAccount();
-  if (!sa) return { delivered: 0, configured: false };
+  // Cheap check first: bail before any DB work when push can't be configured
+  // in this environment (no service account, not on Cloud Run).
+  if (!loadServiceAccount() && !process.env.K_SERVICE && !process.env.FCM_PROJECT_ID) {
+    return { delivered: 0, configured: false };
+  }
 
   const uniqueUserIds = Array.from(new Set(opts.userIds)).filter(Boolean);
   const eligible = await filterOptedOut(opts.admin, uniqueUserIds, opts.category);
   const tokens = await activeTokensForUsers(opts.admin, eligible);
   if (tokens.length === 0) return { delivered: 0, configured: true };
 
-  const accessToken = await getAccessToken(sa);
-  if (!accessToken) return { delivered: 0, configured: true };
+  const auth = await getAuth();
+  if (!auth) return { delivered: 0, configured: true };
 
   const deadTokenIds: string[] = [];
   let delivered = 0;
   await Promise.all(
     tokens.map(async (t) => {
       const r = await sendOne({
-        projectId: sa.projectId,
-        accessToken,
+        projectId: auth.projectId,
+        accessToken: auth.accessToken,
         token: t.token,
         message: opts.message,
       });

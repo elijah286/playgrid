@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "624839566857",
+    "project_id": "project-ba380fa9-bf4e-4f61-81d",
+    "storage_bucket": "project-ba380fa9-bf4e-4f61-81d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:624839566857:android:212dbadb861ca922e03ad8",
+        "android_client_info": {
+          "package_name": "com.xogridmaker.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "624839566857-i6ub6s55tni0fkfp11ibv4qqlgag0kcn.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCJ5LKyjzW1sog8a_uoIf4vOztpxakFGJQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "624839566857-i6ub6s55tni0fkfp11ibv4qqlgag0kcn.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
