@@ -33,8 +33,8 @@ describe("Phase 1b migrated KG — validation", () => {
 });
 
 describe("Phase 1b migrated reactor patterns — coverage", () => {
-  it("has 30 reactor patterns (legacy had 31; T11 Cover 0 excluded — empty pattern + no T11 Cover 0 scheme)", () => {
-    expect(FOOTBALL_KG.reactorPatterns.length).toBe(30);
+  it("has 42 reactor patterns (30 migrated + 12 flag_6v6 added 2026-05-28; legacy had 31, T11 Cover 0 excluded)", () => {
+    expect(FOOTBALL_KG.reactorPatterns.length).toBe(42);
   });
 
   it("every reactor pattern has a unique id", () => {
@@ -63,7 +63,7 @@ describe("Phase 1b migrated reactor patterns — coverage", () => {
     }
   });
 
-  it("variant coverage matches the legacy catalog (f7:14, t11:4, f5:12)", () => {
+  it("variant coverage matches the catalog (f7:14, t11:4, f5:12, f6:12 added 2026-05-28)", () => {
     const byVariant: Record<string, number> = {};
     for (const r of FOOTBALL_KG.reactorPatterns) {
       byVariant[r.variant] = (byVariant[r.variant] ?? 0) + 1;
@@ -71,6 +71,7 @@ describe("Phase 1b migrated reactor patterns — coverage", () => {
     expect(byVariant.flag_7v7).toBe(14);
     expect(byVariant.tackle_11).toBe(4);
     expect(byVariant.flag_5v5).toBe(12);
+    expect(byVariant.flag_6v6).toBe(12);
   });
 
   it("Cover 0 wildcard pattern exists for flag_7v7", () => {
