@@ -13,6 +13,7 @@ import WebVitalsReporter from "@/components/WebVitalsReporter";
 import ConsentGate from "@/components/ConsentGate";
 import RedditPixel from "@/components/RedditPixel";
 import { NativeAppShell } from "@/components/native/NativeAppShell";
+import { AppInstallBanner } from "@/components/native/AppInstallBanner";
 import { OfflineStatusBanner } from "@/components/offline/OfflineStatusBanner";
 import { ConnectionRecovery } from "@/components/system/ConnectionRecovery";
 import { withFullContext } from "@/lib/seo/ld-json";
@@ -244,6 +245,7 @@ export default async function RootLayout({
                 initialUrgent={inboxUrgent}
               >
                 <ConfigBanner />
+                <AppInstallBanner />
                 <SiteHeader />
                 <div className="flex flex-1 flex-col">{children}</div>
                 <SiteFooter />

@@ -1439,6 +1439,15 @@ export const FEATURES: FeatureEntry[] = [
   },
   // ── Marketing site ──────────────────────────────────────────────
   {
+    id: "marketing-android-app-banner",
+    name: "Android app install banner",
+    description:
+      "Android mobile-web visitors see a dismissible Smart App Banner at the top of the page promoting the XO Gridmaker app on Google Play, with an 'Open' button that deep-links to the Play Store listing. Shown only on Android browsers (never on desktop, iOS, or inside the native app); dismissal sticks across sessions. Impressions, clicks, and dismissals are tracked for conversion measurement.",
+    category: "Marketing site",
+    status: "ga",
+    addedDate: "2026-05-28",
+  },
+  {
     id: "marketing-hero-playbook",
     name: "Hero playbook (admin-pickable, with A/B tracking)",
     description:
