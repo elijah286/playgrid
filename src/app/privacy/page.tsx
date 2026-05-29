@@ -9,7 +9,7 @@ export default function PrivacyPage() {
   return (
     <article className="mx-auto max-w-2xl px-6 py-16 text-foreground">
       <h1 className="text-3xl font-extrabold tracking-tight">Privacy Policy</h1>
-      <p className="mt-2 text-sm text-muted">Last updated: May 20, 2026</p>
+      <p className="mt-2 text-sm text-muted">Last updated: May 29, 2026</p>
 
       {/* The "Your rights" section below already covers deletion — keep that
           and the new dedicated section consistent if either is edited. */}
@@ -170,14 +170,17 @@ export default function PrivacyPage() {
             </li>
           </ul>
           <p className="mt-3">
-            <strong>Inside the iOS / Android app:</strong> product-usage and
-            error reporting are turned off entirely. The native app collects
-            only the account info, content, and standard server logs above,
-            plus — if you allow notifications — a per-device push token. We use
-            that token only to deliver the notifications you&apos;d expect:
-            practice and game reminders, play updates, and team messages. You
-            can turn notifications off at any time in your device settings, and
-            the token is removed when you sign out.
+            <strong>Inside the iOS / Android app:</strong> detailed in-app
+            product-usage event tracking and error reporting are turned off. The
+            native app collects the account info, content, and standard server
+            logs above, plus: a per-install identifier together with your device
+            platform, app version, and the dates the app was installed and last
+            opened — linked to your account — so we can measure how many people
+            install and actively use the apps; and, if you allow notifications, a
+            per-device push token used only to deliver the notifications
+            you&apos;d expect (practice and game reminders, play updates, and team
+            messages). You can turn notifications off at any time in your device
+            settings, and the token is removed when you sign out.
           </p>
         </section>
 

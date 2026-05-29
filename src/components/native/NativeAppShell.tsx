@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { isNativeApp, nativePlatform } from "@/lib/native/isNativeApp";
 import { registerOfflineServiceWorker } from "@/lib/native/registerServiceWorker";
 import { registerPush, unregisterPush } from "@/lib/native/registerPush";
+import { registerAppOpen } from "@/lib/native/registerAppOpen";
 import { createClient } from "@/lib/supabase/client";
 
 export function NativeAppShell() {
@@ -12,6 +13,10 @@ export function NativeAppShell() {
 
     document.body.classList.add("native-app");
     document.body.classList.add(`native-${nativePlatform()}`);
+
+    // Record this launch for install analytics (open / first-open). Fires on
+    // every native start; the authenticated user is attached on sign-in below.
+    void registerAppOpen();
 
     // Register the offline shell SW. It precaches the routes coaches need
     // when there's no signal so the app boots into a usable state instead
@@ -69,6 +74,10 @@ export function NativeAppShell() {
     const doRegister = () => {
       if (cancelled || registered) return;
       registered = true;
+      // Re-record the open now that we have a session, so the authenticated
+      // user is attached to this install (the mount call may have run while
+      // still logged out).
+      void registerAppOpen();
       void registerPush().then((fn) => {
         if (cancelled) fn?.();
         else teardownPush = fn;
