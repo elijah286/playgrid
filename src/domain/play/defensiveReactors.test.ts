@@ -178,9 +178,12 @@ describe("detectConceptFromTitle — concept extraction", () => {
 
 describe("defensiveReactors — coverage breadth", () => {
   // The user asked for "all four coverages" seeded: Tampa 2, Cover 3,
-  // Cover 1, Cover 0. Pin that each has at least one reactor pattern for
-  // 7v7 (the primary variant in production).
-  const PRIMARY_COVERAGES = ["Tampa 2", "Cover 3", "Cover 1", "Cover 0"];
+  // Cover 1, Cover 0. "Cover 2" was added 2026-05-29 — a coach overlaid
+  // Cover 2 on a Flood Right play and the defenders moved generically
+  // (static zone-drops) because no flag_7v7 Cover 2 reactor existed, so
+  // findReactorPattern returned null and the universal zone-drop fallback
+  // fired. Pin that each coverage has at least one 7v7 reactor pattern.
+  const PRIMARY_COVERAGES = ["Tampa 2", "Cover 2", "Cover 3", "Cover 1", "Cover 0"];
   for (const cov of PRIMARY_COVERAGES) {
     it(`has at least one 7v7 reactor pattern for ${cov}`, () => {
       const patterns = REACTOR_PATTERNS.filter(
@@ -200,6 +203,81 @@ describe("defensiveReactors — coverage breadth", () => {
     const hlReactor = r.reactors.find((rt) => rt.defender === "HL" && rt.trigger === "X");
     expect(hlReactor, "Tampa 2 vs Slant-Flat must include HL jumping @X's slant").toBeDefined();
     expect(hlReactor?.behavior).toBe("jump_route");
+  });
+});
+
+describe("defensiveReactors — flag_7v7 Cover 2 (reactor bug 2026-05-29)", () => {
+  // A coach asked Cal to "install a cover 2 defense and show me how the
+  // defenders should move as this play develops" over a Flood Right play.
+  // The defenders moved generically (uniform static zone-drops) instead of
+  // reacting to the routes, because flag_7v7 had Tampa 2 / Cover 3 / Cover 1
+  // / Cover 0 reactors but NO Cover 2 — so findReactorPattern("flag_7v7",
+  // "Cover 2", "Flood") returned null and the universal zone-drop fallback
+  // fired. This block brings Cover 2 to parity with Tampa 2 (the other 7v7
+  // zone shell) across the same five core pass concepts.
+  //
+  // Trigger ids match the canonical flag_7v7 skeleton (and the coach's
+  // play): {X, Z outside · S, H slots · B back} — there is NO @Y in 7v7
+  // (Y belongs to the 5v5/4v4 roster), so reactors reference the receivers
+  // the renderer can actually resolve at overlay time.
+  const REQUIRED_CONCEPTS = [
+    "Flood",
+    "Smash",
+    "Four Verticals",
+    "Mesh",
+    "Slant-Flat",
+  ] as const;
+
+  for (const concept of REQUIRED_CONCEPTS) {
+    it(`has a flag_7v7 Cover 2 reactor pattern for ${concept}`, () => {
+      const r = findReactorPattern("flag_7v7", "Cover 2", concept);
+      expect(r, `no flag_7v7 Cover 2 pattern for ${concept}`).not.toBeNull();
+      if (!r) return;
+      expect(r.variant).toBe("flag_7v7");
+      expect(r.coverage).toBe("Cover 2");
+      expect(r.concept).toBe(concept);
+      expect(r.reactors.length, `Cover 2/${concept} has no reactors`).toBeGreaterThan(0);
+    });
+  }
+
+  it("Cover 2 vs Flood reacts to the three-level stretch (the coach's exact case)", () => {
+    // The reported play: @Z go (deep), @S out/sail (intermediate), @B flat
+    // (low) — a textbook flood to the strong side. Cover 2's answer is a
+    // three-defender triangle: corner caps the flat, hook undercuts the
+    // sail, deep-half safety tops the vertical (no middle help in Cover 2).
+    const r = findReactorPattern("flag_7v7", "Cover 2", "Flood");
+    expect(r).not.toBeNull();
+    if (!r) return;
+
+    const deepHelp = r.reactors.find((rt) => rt.trigger === "Z" && rt.behavior === "carry_vertical");
+    expect(deepHelp, "Cover 2 vs Flood must carry @Z's go (deep-half safety tops it)").toBeDefined();
+
+    const sail = r.reactors.find((rt) => rt.trigger === "S");
+    expect(sail, "Cover 2 vs Flood must react to @S's sail/out (the high-low route)").toBeDefined();
+
+    const flat = r.reactors.find((rt) => rt.trigger === "B" && rt.behavior === "follow_to_flat");
+    expect(flat, "Cover 2 vs Flood must cap @B's flat (the corner is the flat defender)").toBeDefined();
+
+    // None of the reactors may reference @Y — it doesn't exist in the 7v7
+    // roster, so it would silently fail to resolve at overlay time.
+    expect(r.reactors.some((rt) => rt.trigger === "Y")).toBe(false);
+  });
+
+  it("every Cover 2 reactor trigger resolves against the canonical 7v7 roster", () => {
+    // {X, Z, S, H, B, C} — the receivers a flag_7v7 play actually carries.
+    const SEVEN_V_SEVEN_RECEIVERS = new Set(["X", "Z", "S", "H", "B", "C"]);
+    const cover2 = REACTOR_PATTERNS.filter(
+      (p) => p.variant === "flag_7v7" && p.coverage === "Cover 2",
+    );
+    expect(cover2.length).toBeGreaterThan(0);
+    for (const p of cover2) {
+      for (const rt of p.reactors) {
+        expect(
+          SEVEN_V_SEVEN_RECEIVERS.has(rt.trigger),
+          `Cover 2/${p.concept}: trigger "${rt.trigger}" is not in the 7v7 roster`,
+        ).toBe(true);
+      }
+    }
   });
 });
 

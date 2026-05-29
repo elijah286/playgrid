@@ -238,6 +238,90 @@ export const REACTOR_PATTERNS: ReactorPatternDef[] = [
     conceptId: "*",
     reactors: [],
   },
+  // ── flag_7v7 Cover 2 (added 2026-05-29) ─────────────────────────────
+  // Classic 2-deep / 5-under shell (NOT Tampa 2 — there is no Mike
+  // dropping to the deep middle, so the safeties own the deep halves with
+  // no middle-field help). Corners are the flat/cloud defenders; hooks
+  // wall and carry; safeties split the field deep. Trigger ids follow the
+  // canonical flag_7v7 roster {X, Z outside · S, H slots · B back}.
+  {
+    id: "f7-cover-2-vs-flood",
+    name: "F7 Cover 2 vs Flood",
+    family: "reactor-pattern",
+    variants: ["flag_7v7"],
+    description: "Cover 2 vs Flood — the three-level stretch that high-lows the flat defender.",
+    body: "Cover 2 vs Flood — the textbook Cover 2 stressor. The flood high-lows the strong corner with the flat (@B) under the sail/out (@S) while the go (@Z) holds the deep-half safety. The answer is a three-defender triangle: the corner caps the flat, the hook undercuts the sail, and the deep-half safety tops the vertical with no middle help behind him.",
+    variant: "flag_7v7",
+    schemeId: "f7-cover-2",
+    conceptId: "flood",
+    reactors: [
+      { defender: "CB2", trigger: "B", behavior: "follow_to_flat", cue: "Sits the flat by @B — the corner is the flat defender in Cover 2; squeeze it, don't chase the sail." },
+      { defender: "HR", trigger: "S", behavior: "jump_route", cue: "Sinks under @S's sail/out — undercut the intermediate; it's the route that high-lows the corner." },
+      { defender: "SS", trigger: "Z", behavior: "carry_vertical", cue: "Caps @Z's go in the deep half — no middle-field help in Cover 2, so never get beat over the top." },
+    ],
+  },
+  {
+    id: "f7-cover-2-vs-smash",
+    name: "F7 Cover 2 vs Smash",
+    family: "reactor-pattern",
+    variants: ["flag_7v7"],
+    description: "Cover 2 vs Smash — the corner route attacks the hole between the corner and the deep half.",
+    body: "Cover 2 vs Smash — the hitch-corner combo is THE Cover 2 beater. The corner route (@S) hits the void between the sinking corner and the deep-half safety. The corner sits low on the hitch (@Z) and the deep-half safety must drive on the corner; if he stays flat-footed, the corner is open.",
+    variant: "flag_7v7",
+    schemeId: "f7-cover-2",
+    conceptId: "smash",
+    reactors: [
+      { defender: "CB2", trigger: "Z", behavior: "jump_route", cue: "Sits low on @Z's hitch — drive on it; the hitch is the give, make them throw it underneath." },
+      { defender: "SS", trigger: "S", behavior: "carry_vertical", cue: "Drives on @S's corner into the deep half — the corner attacks the Cover 2 hole; stay over the top of it." },
+    ],
+  },
+  {
+    id: "f7-cover-2-vs-four-verticals",
+    name: "F7 Cover 2 vs Four Verticals",
+    family: "reactor-pattern",
+    variants: ["flag_7v7"],
+    description: "Cover 2 vs Four Verts — two deep safeties can't cover four verticals; the seams are the killer.",
+    body: "Cover 2 vs Four Verts — two deep safeties vs four vertical stems means the inside SEAMS (@S, @H) split the safeties. The hooks have to carry the seams: re-route at the line, then run with them as long as possible. The safeties top the outside verticals and squeeze the seam help.",
+    variant: "flag_7v7",
+    schemeId: "f7-cover-2",
+    conceptId: "four-verticals",
+    reactors: [
+      { defender: "HR", trigger: "S", behavior: "carry_vertical", cue: "Carries @S's seam — re-route then run with it; the inside seam is the Cover 2 killer." },
+      { defender: "HL", trigger: "H", behavior: "carry_vertical", cue: "Carries @H's backside seam — wall and run, don't let it split you from the safety." },
+      { defender: "SS", trigger: "Z", behavior: "carry_vertical", cue: "Tops @Z's vertical in the deep half — squeeze it toward the seam help, you own the half." },
+    ],
+  },
+  {
+    id: "f7-cover-2-vs-mesh",
+    name: "F7 Cover 2 vs Mesh",
+    family: "reactor-pattern",
+    variants: ["flag_7v7"],
+    description: "Cover 2 vs Mesh — wall off the crossing drags from the hook zones.",
+    body: "Cover 2 vs Mesh — two crossing drags at 2-6 yds. The hook defenders wall off the crossers inside-out so they can't run clean across the middle; the middle hook sits in the dead spot and robs any dig settling behind the mesh.",
+    variant: "flag_7v7",
+    schemeId: "f7-cover-2",
+    conceptId: "mesh",
+    reactors: [
+      { defender: "HL", trigger: "H", behavior: "wall_off", cue: "Walls off @H's drag — re-route inside-out so the crosser can't run clean across your face." },
+      { defender: "HR", trigger: "S", behavior: "wall_off", cue: "Walls off @S's drag — jam the second crosser as it comes through the middle." },
+      { defender: "HM", trigger: "X", behavior: "robber", cue: "Sits the middle hook 8-10 yds — robs any dig or post settling behind the mesh." },
+    ],
+  },
+  {
+    id: "f7-cover-2-vs-slant-flat",
+    name: "F7 Cover 2 vs Slant-Flat",
+    family: "reactor-pattern",
+    variants: ["flag_7v7"],
+    description: "Cover 2 vs Slant-Flat — corner caps the flat, hook drives the slant.",
+    body: "Cover 2 vs Slant-Flat — the quick game tests the underneath zones. The corner sits the flat (he's the flat defender), and the hook drives downhill on the slant as it enters his window. Cut off the easy completion underneath; the safeties stay top-down on anything vertical.",
+    variant: "flag_7v7",
+    schemeId: "f7-cover-2",
+    conceptId: "slant-flat",
+    reactors: [
+      { defender: "HR", trigger: "Z", behavior: "jump_route", cue: "Drives downhill on @Z's slant at the break — it hits your hook window; jump it." },
+      { defender: "CB2", trigger: "S", behavior: "follow_to_flat", cue: "Caps the flat by @S — the corner sits the flat in Cover 2; cut the quick throw off." },
+    ],
+  },
 
   // ── tackle_11 ──────────────────────────────────────────────────────
   // Note: T11 Cover 0 reactor pattern intentionally excluded — no T11
