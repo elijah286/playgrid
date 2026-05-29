@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 import { PLAY_SPEC_SCHEMA_VERSION, type PlaySpec } from "./spec";
-import { validatePlaySpecBallFlow } from "./specSemantics";
+import { validatePlaySpecBallFlow, validatePlaySpecProgression } from "./specSemantics";
 
 function bareSpec(overrides: Partial<PlaySpec> = {}): PlaySpec {
   return {
@@ -211,5 +211,69 @@ describe("validatePlaySpecBallFlow — combined violations", () => {
       ],
     });
     expect(validatePlaySpecBallFlow(spec).ok).toBe(true);
+  });
+});
+
+describe("validatePlaySpecProgression", () => {
+  it("passes when omitted (no explicit progression)", () => {
+    const spec = bareSpec({
+      assignments: [
+        { player: "X", action: { kind: "route", family: "Slant" } },
+        { player: "Z", action: { kind: "route", family: "Post" } },
+      ],
+    });
+    expect(validatePlaySpecProgression(spec).ok).toBe(true);
+  });
+
+  it("passes when every id is a route assignment", () => {
+    const spec = bareSpec({
+      progression: ["X", "Z", "RB"],
+      assignments: [
+        { player: "X", action: { kind: "route", family: "Slant" } },
+        { player: "Z", action: { kind: "route", family: "Post" } },
+        { player: "RB", action: { kind: "route", family: "Flat" } },
+      ],
+    });
+    expect(validatePlaySpecProgression(spec).ok).toBe(true);
+  });
+
+  it("rejects an id with no assignment at all", () => {
+    const spec = bareSpec({
+      progression: ["X", "Q"],
+      assignments: [
+        { player: "X", action: { kind: "route", family: "Slant" } },
+      ],
+    });
+    const result = validatePlaySpecProgression(spec);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.violations.map((v) => v.code)).toContain("progression_unknown_target");
+  });
+
+  it("rejects an id that is in the play but not a route (blocker / runner)", () => {
+    const spec = bareSpec({
+      progression: ["X", "RB"],
+      assignments: [
+        { player: "X", action: { kind: "route", family: "Slant" } },
+        { player: "RB", action: { kind: "carry", runType: "sweep" } },
+      ],
+    });
+    const result = validatePlaySpecProgression(spec);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.violations.map((v) => v.code)).toContain("progression_not_route");
+  });
+
+  it("rejects a duplicated id in the read order", () => {
+    const spec = bareSpec({
+      progression: ["X", "X"],
+      assignments: [
+        { player: "X", action: { kind: "route", family: "Slant" } },
+      ],
+    });
+    const result = validatePlaySpecProgression(spec);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.violations.map((v) => v.code)).toContain("progression_duplicate");
   });
 });

@@ -382,6 +382,28 @@ export type PlaySpec = {
    */
   defenderAssignments?: DefenderAssignment[];
   /**
+   * QB read progression — an ordered list of offensive player ids the
+   * quarterback works through ("1, 2, 3" on a wristband card). The
+   * renderer draws a numbered badge next to each listed player; the
+   * notes projector emits a "Progression:" block in this order instead
+   * of its depth-based heuristic.
+   *
+   * Semantics:
+   *   - Every id MUST be a player with a `kind: "route"` assignment —
+   *     the progression is the throw sequence, so non-receivers (blockers,
+   *     the QB, pure runners) can't appear. Validated at the resolver
+   *     boundary by validatePlaySpecProgression.
+   *   - Order is the read order: index 0 is the primary, last is the
+   *     check-down / outlet.
+   *   - Omitted / empty = no explicit progression. The notes projector
+   *     falls back to deriving a read order from route depth + concept.
+   *
+   * Why ids rather than a per-route field: a single ordered list at the
+   * play level makes it structurally impossible for two routes to both
+   * claim "1", and keeps the read sequence as one source of truth.
+   */
+  progression?: string[];
+  /**
    * Ordered ledger of ball-handling exchanges. Empty / omitted = single
    * carrier or pass play (the normal case). When present, MUST contain
    * at least one step; each step's `from` and `to` MUST resolve to
@@ -552,6 +574,7 @@ export const playSpecSchema = z.object({
   defense: defenseRefSchema.optional(),
   assignments: z.array(playerAssignmentSchema),
   defenderAssignments: z.array(defenderAssignmentSchema).optional(),
+  progression: z.array(z.string()).optional(),
   ballPath: z.array(handoffStepSchema).min(1).optional(),
   context: playContextSchema.optional(),
   notes: z.string().optional(),

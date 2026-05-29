@@ -116,3 +116,30 @@ export function validatePlaySpecBallFlow(spec: PlaySpec): SpecSemanticsResult {
 
   return violations.length === 0 ? { ok: true } : { ok: false, violations };
 }
+
+export type ProgressionViolation = {
+  /** Stable code identifying which rule fired. Tests assert on this. */
+  code:
+    | "progression_unknown_target"
+    | "progression_not_route"
+    | "progression_duplicate";
+  /** Coach-readable explanation suitable for surfacing in a tool result. */
+  message: string;
+};
+
+export type ProgressionResult =
+  | { ok: true }
+  | { ok: false; violations: ProgressionViolation[] };
+
+/**
+ * Validate spec.progression — the QB read order.
+ *
+ * Each id MUST name a player who has a `kind: "route"` assignment (the
+ * progression is the throw sequence) and MUST appear at most once.
+ * Omitted / empty progression is always ok (nothing to check).
+ */
+export function validatePlaySpecProgression(spec: PlaySpec): ProgressionResult {
+  // STUB — implemented below the failing-first tests.
+  void spec;
+  return { ok: true };
+}

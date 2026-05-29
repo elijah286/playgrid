@@ -32,6 +32,20 @@ function makeSpec(overrides: Partial<PlaySpec> = {}): PlaySpec {
   };
 }
 
+describe("Renderer — QB progression carries onto the diagram", () => {
+  it("copies spec.progression onto the diagram for badge rendering", () => {
+    const { diagram } = playSpecToCoachDiagram(
+      makeSpec({ progression: ["Z", "X", "S"] }),
+    );
+    expect(diagram.progression).toEqual(["Z", "X", "S"]);
+  });
+
+  it("omits progression on the diagram when the spec has none", () => {
+    const { diagram } = playSpecToCoachDiagram(makeSpec());
+    expect(diagram.progression).toBeUndefined();
+  });
+});
+
 describe("Renderer — unknown/unknown defense is structurally equivalent to no defense", () => {
   it("does NOT warn when defense.front and coverage are both 'unknown' (2026-05-04)", () => {
     // Production failure: Cal recreated 7 plays after the OL fix; 6 silently

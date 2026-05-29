@@ -354,6 +354,42 @@ describe("CoachDiagram → PlaySpec (parser)", () => {
   });
 });
 
+describe("PlaySpec progression — schema + round-trip", () => {
+  it("accepts an optional progression array in the strict schema", () => {
+    const parsed = parsePlaySpec({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "flag_7v7",
+      formation: { name: "Spread Doubles" },
+      progression: ["X", "Z", "S"],
+      assignments: [
+        { player: "X", action: { kind: "route", family: "Slant" } },
+      ],
+    });
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data.progression).toEqual(["X", "Z", "S"]);
+  });
+
+  it("round-trips progression diagram → spec → diagram", () => {
+    const spec = coachDiagramToPlaySpec({
+      variant: "flag_7v7",
+      progression: ["Z", "X"],
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "X", x: -13, y: 0, team: "O" },
+        { id: "Z", x: 13, y: 0, team: "O" },
+      ],
+      routes: [
+        { from: "X", path: [[-13, 3], [-7, 5.8]], route_kind: "slant" },
+        { from: "Z", path: [[13, 5], [12.5, 4]], route_kind: "hitch" },
+      ],
+    });
+    expect(spec.progression).toEqual(["Z", "X"]);
+    const { diagram } = playSpecToCoachDiagram(spec);
+    expect(diagram.progression).toEqual(["Z", "X"]);
+  });
+});
+
 describe("CoachDiagram → PlaySpec — confidence inference", () => {
   it("attaches high-confidence to formation when an explicit name is given", () => {
     const spec = coachDiagramToPlaySpec(

@@ -124,6 +124,14 @@ export type CoachDiagram = {
   players: CoachDiagramPlayer[];
   routes?: CoachDiagramRoute[];
   zones?: CoachDiagramZone[];
+  /**
+   * QB read progression — ordered offensive player ids ("1, 2, 3" on a
+   * wristband card). Carried through from PlaySpec.progression so the
+   * visual renderer can draw a numbered badge next to each listed
+   * player. Omitted = no explicit progression. Geometry-free: it only
+   * names players already present in `players`.
+   */
+  progression?: string[];
 };
 
 // ── Runtime schema (strict) ────────────────────────────────────────────
@@ -189,6 +197,7 @@ export const coachDiagramSchema = z.object({
   players: z.array(coachDiagramPlayerSchema),
   routes: z.array(coachDiagramRouteSchema).optional(),
   zones: z.array(coachDiagramZoneSchema).optional(),
+  progression: z.array(z.string()).optional(),
 }).strict();
 
 /** Strict parse for the legacy `diagram` input on create_play / update_play.
@@ -1028,6 +1037,11 @@ export function coachDiagramToPlayDocument(input: CoachDiagram): PlayDocument {
       ...base.metadata,
       coachName: diagram.title ?? "",
       formation: diagram.title ?? "",
+      // When the diagram is defense-focused, mark playType accordingly so
+      // downstream renderers (rush line, defense styling) see it as a
+      // defense play. Without this, library defense pages would render
+      // as offense and miss the defense-specific defaults.
+      ...(diagram.focus === "D" ? { playType: "defense" as const } : {}),
     },
     layers: {
       players,

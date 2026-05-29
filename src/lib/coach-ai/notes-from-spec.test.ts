@@ -704,6 +704,27 @@ describe("projectSpecToNotes — QB progression block (Item 1, 2026-05-25)", () 
     expect(notes).not.toMatch(/\*\*Progression:\*\*/);
   });
 
+  it("honors an explicit spec.progression order over the depth heuristic", () => {
+    // The coach set a custom read order on a wristband card. The deep Go
+    // (@Z) would lead the depth-based walker, but the explicit
+    // progression puts the Flat (@B) first — that order must win.
+    const notes = projectSpecToNotes(baseSpec({
+      variant: "flag_7v7",
+      progression: ["B", "H", "Z"],
+      assignments: [
+        { player: "Z", action: { kind: "route", family: "Go", depthYds: 18 } },
+        { player: "H", action: { kind: "route", family: "Curl", depthYds: 8 } },
+        { player: "B", action: { kind: "route", family: "Flat" } },
+      ],
+    }));
+    const bIdx = notes.indexOf("@B");
+    const hIdx = notes.indexOf("@H");
+    const zIdx = notes.indexOf("@Z");
+    expect(bIdx).toBeGreaterThan(-1);
+    expect(bIdx).toBeLessThan(hIdx);
+    expect(hIdx).toBeLessThan(zIdx);
+  });
+
   it("uses concept-specific order for Mesh (under-drag → over-drag → high → checkdown)", () => {
     // Mesh's read is structural, not depth-driven: under-drag (rub
     // setup) first, over-drag (the throwing window) second, deep clear
