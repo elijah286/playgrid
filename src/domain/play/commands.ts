@@ -29,6 +29,8 @@ export type PlayCommand =
   | { type: "player.setStyle"; playerId: string; style: PlayerStyle }
   | { type: "player.setRole"; playerId: string; role: PlayerRole }
   | { type: "player.setHotRoute"; playerId: string; isHotRoute: boolean }
+  | { type: "player.setBadgeText"; playerId: string; text: string }
+  | { type: "player.setBadgeVisible"; playerId: string; visible: boolean }
   | { type: "player.clearRoutes"; playerId: string }
   | {
       /** Mirror all route nodes for this player's routes over the vertical axis

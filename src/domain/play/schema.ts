@@ -81,6 +81,8 @@ const playerSchema = z.object({
   shape: playerShapeSchema.optional(),
   isHotRoute: z.boolean().optional(),
   progressionIndex: z.number().int().positive().optional(),
+  badge: z.string().max(4).optional(),
+  badgeHidden: z.boolean().optional(),
 }).strict();
 
 // ── Route ──────────────────────────────────────────────────────────────

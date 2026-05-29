@@ -212,6 +212,38 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
       );
       return { ...doc, layers: { ...doc.layers, players } };
     }
+    case "player.setBadgeText": {
+      const text = cmd.text.trim().slice(0, 4);
+      const players = doc.layers.players.map((p) => {
+        if (p.id !== cmd.playerId) return p;
+        // Empty text clears the manual override AND hides the badge.
+        if (text.length === 0) {
+          const { badge: _b, ...rest } = p;
+          return { ...rest, badgeHidden: true };
+        }
+        return { ...p, badge: text, badgeHidden: false };
+      });
+      return { ...doc, layers: { ...doc.layers, players } };
+    }
+    case "player.setBadgeVisible": {
+      const players = doc.layers.players.map((p) => {
+        if (p.id !== cmd.playerId) return p;
+        if (!cmd.visible) return { ...p, badgeHidden: true };
+        // Showing: clear the hide flag. If there's nothing to display yet
+        // (no manual text, no progression number), seed the next number so
+        // the badge appears and can be edited.
+        const hasText =
+          (p.badge && p.badge.length > 0) || typeof p.progressionIndex === "number";
+        if (hasText) return { ...p, badgeHidden: false };
+        const used = doc.layers.players.filter(
+          (q) =>
+            !q.badgeHidden &&
+            ((q.badge && q.badge.length > 0) || typeof q.progressionIndex === "number"),
+        ).length;
+        return { ...p, badge: String(used + 1), badgeHidden: false };
+      });
+      return { ...doc, layers: { ...doc.layers, players } };
+    }
     case "player.clearRoutes":
       return {
         ...doc,

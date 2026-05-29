@@ -448,6 +448,8 @@ function EditorCanvasImpl({
    *  be typed directly on the canvas. Committed on Enter/blur, cancelled on
    *  Esc. Capped at 2 characters. */
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
+  /** Player whose numbered badge is being edited (double-click on the badge). */
+  const [editingBadgePlayerId, setEditingBadgePlayerId] = useState<string | null>(null);
 
   /* ---------- Right-click context menu state ---------- */
   type SegmentMenu = {
@@ -3238,31 +3240,56 @@ function EditorCanvasImpl({
                 />
               </g>
             )}
-            {typeof pl.progressionIndex === "number" && (
-              <g pointerEvents="none">
-                <circle
-                  cx={px - r * 0.9}
-                  cy={py - r * 0.9}
-                  r={badgeR * 1.25}
-                  fill="#F59E0B"
-                  stroke="#1C1C1E"
-                  strokeWidth={1}
-                  vectorEffect="non-scaling-stroke"
-                />
-                <text
-                  x={px - r * 0.9}
-                  y={py - r * 0.9}
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fontSize={0.018}
-                  fontWeight={800}
-                  fill="#1C1C1E"
-                  style={{ fontFamily: "Inter, system-ui, sans-serif" }}
+            {(() => {
+              const badgeText =
+                pl.badge && pl.badge.length > 0
+                  ? pl.badge
+                  : typeof pl.progressionIndex === "number"
+                    ? String(pl.progressionIndex)
+                    : undefined;
+              if (badgeText === undefined || pl.badgeHidden) return null;
+              const bx = px - r * 0.95;
+              const by = py - r * 0.95;
+              const bs = 0.02; // half-side of the square
+              const fontSize =
+                badgeText.length <= 1 ? 0.026 : badgeText.length === 2 ? 0.02 : 0.014;
+              return (
+                <g
+                  style={{ cursor: "pointer" }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    setEditingBadgePlayerId(pl.id);
+                  }}
                 >
-                  {pl.progressionIndex}
-                </text>
-              </g>
-            )}
+                  <rect
+                    x={bx - bs}
+                    y={by - bs}
+                    width={bs * 2}
+                    height={bs * 2}
+                    rx={0.003}
+                    fill="#FFFFFF"
+                    stroke="#1C1C1E"
+                    strokeWidth={1.5}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  <text
+                    x={bx}
+                    y={by}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fontSize={fontSize}
+                    fontWeight={800}
+                    fill="#1C1C1E"
+                    pointerEvents="none"
+                    style={{ fontFamily: "Inter, system-ui, sans-serif" }}
+                  >
+                    {badgeText}
+                  </text>
+                </g>
+              );
+            })()}
           </g>
         );
       })}
@@ -3295,12 +3322,46 @@ function EditorCanvasImpl({
             svgRef={svgRef}
             wrapperRef={wrapperRef}
             fieldAspect={fieldAspect}
+            initialValue={pl.label}
+            maxLength={2}
+            uppercase
             onSave={(label) => {
               dispatch({ type: "player.setLabel", playerId: pl.id, label });
               notifyTutorialAction("player-renamed");
               setEditingPlayerId(null);
             }}
             onCancel={() => setEditingPlayerId(null)}
+          />
+        );
+      })()}
+
+      {/* Badge editor — same popover as the label editor, but commits to the
+          player's badge text. Empty input clears (and hides) the badge. */}
+      {editingBadgePlayerId && (() => {
+        const pl = doc.layers.players.find((p) => p.id === editingBadgePlayerId);
+        if (!pl) return null;
+        const current =
+          pl.badge && pl.badge.length > 0
+            ? pl.badge
+            : typeof pl.progressionIndex === "number"
+              ? String(pl.progressionIndex)
+              : "";
+        return (
+          <PlayerLabelEditor
+            key={`badge-${pl.id}`}
+            player={pl}
+            svgRef={svgRef}
+            wrapperRef={wrapperRef}
+            fieldAspect={fieldAspect}
+            initialValue={current}
+            maxLength={4}
+            uppercase={false}
+            placeholder="Badge"
+            onSave={(text) => {
+              dispatch({ type: "player.setBadgeText", playerId: pl.id, text });
+              setEditingBadgePlayerId(null);
+            }}
+            onCancel={() => setEditingBadgePlayerId(null)}
           />
         );
       })()}
@@ -3535,6 +3596,36 @@ function EditorCanvasImpl({
             >
               Flip route
             </button>
+            {/* Show / hide badge — available for any player. The badge shows
+                the manual text or the QB-progression number; hiding suppresses
+                it without losing the value. */}
+            {(() => {
+              const menuPlayer = doc.layers.players.find(
+                (p) => p.id === playerMenu.playerId,
+              );
+              if (!menuPlayer) return null;
+              const hasText =
+                (menuPlayer.badge && menuPlayer.badge.length > 0) ||
+                typeof menuPlayer.progressionIndex === "number";
+              const visible = hasText && !menuPlayer.badgeHidden;
+              return (
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-surface-inset"
+                  onClick={() => {
+                    dispatch({
+                      type: "player.setBadgeVisible",
+                      playerId: playerMenu.playerId,
+                      visible: !visible,
+                    });
+                    setPlayerMenu(null);
+                    setPlayerMenuSub(null);
+                  }}
+                >
+                  {visible ? "Hide badge" : "Show badge"}
+                </button>
+              );
+            })()}
             {/* Save as template — only when this player carries exactly one
                 route (template = single route, matches system catalog shape)
                 and a hook is available (non-edit canvases skip it). */}
@@ -3869,6 +3960,10 @@ function PlayerLabelEditor({
   svgRef,
   wrapperRef,
   fieldAspect,
+  initialValue,
+  maxLength = 2,
+  uppercase = true,
+  placeholder,
   onSave,
   onCancel,
 }: {
@@ -3876,10 +3971,18 @@ function PlayerLabelEditor({
   svgRef: React.RefObject<SVGSVGElement | null>;
   wrapperRef: React.RefObject<HTMLDivElement | null>;
   fieldAspect: number;
+  initialValue?: string;
+  maxLength?: number;
+  uppercase?: boolean;
+  placeholder?: string;
   onSave: (label: string) => void;
   onCancel: () => void;
 }) {
-  const [label, setLabel] = useState(player.label);
+  const normalize = (s: string) => {
+    const trimmed = s.slice(0, maxLength);
+    return uppercase ? trimmed.toUpperCase() : trimmed;
+  };
+  const [label, setLabel] = useState(initialValue ?? player.label);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -3928,10 +4031,11 @@ function PlayerLabelEditor({
   useEffect(() => {
     function onDoc(e: MouseEvent) {
       if (rootRef.current?.contains(e.target as Node)) return;
-      onSave(label.slice(0, 2).toUpperCase());
+      onSave(normalize(label));
     }
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [label, onSave]);
 
   return (
@@ -3946,19 +4050,23 @@ function PlayerLabelEditor({
       <input
         ref={inputRef}
         value={label}
-        maxLength={2}
+        maxLength={maxLength}
+        placeholder={placeholder}
         onChange={(e) => setLabel(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
             e.preventDefault();
-            onSave(label.slice(0, 2).toUpperCase());
+            onSave(normalize(label));
           } else if (e.key === "Escape") {
             e.preventDefault();
             onCancel();
           }
           e.stopPropagation();
         }}
-        className="w-24 rounded border-2 border-primary bg-surface-raised px-2 py-1 text-center text-sm font-bold uppercase text-foreground outline-none"
+        className={
+          "w-24 rounded border-2 border-primary bg-surface-raised px-2 py-1 text-center text-sm font-bold text-foreground outline-none" +
+          (uppercase ? " uppercase" : "")
+        }
         style={{ caretColor: "var(--color-primary)" }}
       />
     </div>

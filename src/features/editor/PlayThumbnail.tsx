@@ -276,14 +276,26 @@ export function PlayThumbnail({
                 <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize={0.035} fontWeight={700} fill={deriveLabelColor(p.style.fill)} style={{ fontFamily: "Inter, system-ui, sans-serif" }}>
                   {p.label}
                 </text>
-                {typeof p.progressionIndex === "number" && (
-                  <g>
-                    <circle cx={-R * 0.95} cy={-R * 0.95} r={R * 0.85} fill="#F59E0B" stroke="#1C1C1E" strokeWidth={playerSW} vectorEffect="non-scaling-stroke" />
-                    <text x={-R * 0.95} y={-R * 0.95} textAnchor="middle" dominantBaseline="central" fontSize={0.03} fontWeight={800} fill="#1C1C1E" style={{ fontFamily: "Inter, system-ui, sans-serif" }}>
-                      {p.progressionIndex}
-                    </text>
-                  </g>
-                )}
+                {(() => {
+                  const badgeText =
+                    p.badge && p.badge.length > 0
+                      ? p.badge
+                      : typeof p.progressionIndex === "number"
+                        ? String(p.progressionIndex)
+                        : undefined;
+                  if (badgeText === undefined || p.badgeHidden) return null;
+                  const bs = R * 0.95; // half-side
+                  const fontSize =
+                    badgeText.length <= 1 ? 0.038 : badgeText.length === 2 ? 0.028 : 0.02;
+                  return (
+                    <g>
+                      <rect x={-bs * 2} y={-bs * 2} width={bs * 2} height={bs * 2} rx={R * 0.18} fill="#FFFFFF" stroke="#1C1C1E" strokeWidth={playerSW * 1.4} vectorEffect="non-scaling-stroke" />
+                      <text x={-bs} y={-bs} textAnchor="middle" dominantBaseline="central" fontSize={fontSize} fontWeight={800} fill="#1C1C1E" style={{ fontFamily: "Inter, system-ui, sans-serif" }}>
+                        {badgeText}
+                      </text>
+                    </g>
+                  );
+                })()}
               </g>
             );
           })}

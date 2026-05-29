@@ -66,4 +66,51 @@ describe("applyCommand", () => {
       expect(p?.isHotRoute).toBe(false);
     });
   });
+
+  describe("badge text + visibility", () => {
+    it("sets manual badge text and forces the badge visible", () => {
+      const doc = createEmptyPlayDocument();
+      const pid = doc.layers.players[0].id;
+      const next = applyCommand(doc, { type: "player.setBadgeText", playerId: pid, text: "X" });
+      const p = next.layers.players.find((x) => x.id === pid);
+      expect(p?.badge).toBe("X");
+      expect(p?.badgeHidden).toBe(false);
+    });
+
+    it("trims and caps badge text at 4 chars", () => {
+      const doc = createEmptyPlayDocument();
+      const pid = doc.layers.players[0].id;
+      const next = applyCommand(doc, { type: "player.setBadgeText", playerId: pid, text: "  hotread  " });
+      expect(next.layers.players.find((x) => x.id === pid)?.badge).toBe("hotr");
+    });
+
+    it("empty badge text clears the override and hides the badge", () => {
+      const doc = createEmptyPlayDocument();
+      const pid = doc.layers.players[0].id;
+      const withBadge = applyCommand(doc, { type: "player.setBadgeText", playerId: pid, text: "A" });
+      const cleared = applyCommand(withBadge, { type: "player.setBadgeText", playerId: pid, text: "  " });
+      const p = cleared.layers.players.find((x) => x.id === pid);
+      expect(p?.badge).toBeUndefined();
+      expect(p?.badgeHidden).toBe(true);
+    });
+
+    it("hiding sets badgeHidden without losing the text", () => {
+      const doc = createEmptyPlayDocument();
+      const pid = doc.layers.players[0].id;
+      const withBadge = applyCommand(doc, { type: "player.setBadgeText", playerId: pid, text: "A" });
+      const hidden = applyCommand(withBadge, { type: "player.setBadgeVisible", playerId: pid, visible: false });
+      const p = hidden.layers.players.find((x) => x.id === pid);
+      expect(p?.badge).toBe("A");
+      expect(p?.badgeHidden).toBe(true);
+    });
+
+    it("showing a player with no value seeds the next number", () => {
+      const doc = createEmptyPlayDocument();
+      const pid = doc.layers.players[0].id;
+      const next = applyCommand(doc, { type: "player.setBadgeVisible", playerId: pid, visible: true });
+      const p = next.layers.players.find((x) => x.id === pid);
+      expect(p?.badge).toBe("1");
+      expect(p?.badgeHidden).toBe(false);
+    });
+  });
 });

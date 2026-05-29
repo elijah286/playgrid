@@ -168,6 +168,14 @@ export type Player = {
    *  ("1, 2, 3") at a glance on a wristband card. Derived from
    *  PlaySpec.progression via the diagram converter; never hand-set. */
   progressionIndex?: number;
+  /** Manual badge text override. When set (non-empty), the badge shows this
+   *  instead of the progression number. Coaches edit it by double-clicking
+   *  the badge. Undefined falls back to progressionIndex. */
+  badge?: string;
+  /** Explicit show/hide for the badge, toggled from the player right-click
+   *  menu. When true the badge is suppressed even if there's a value; when
+   *  false it's forced on. Undefined means "auto" (visible iff there's text). */
+  badgeHidden?: boolean;
 };
 
 export type Annotation = {
