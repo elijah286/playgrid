@@ -832,7 +832,7 @@ If the admin wants to add multiple related entries, propose them as a numbered l
 
 **Tone:** direct, brief, opinionated about KB quality. You can push back if the admin proposes a vague or duplicative entry.`;
 
-function contextBlock(ctx: ToolContext): string {
+export function contextBlock(ctx: ToolContext): string {
   // Resolve "today" in the coach's timezone, not the server's. Vercel runs in
   // UTC, so without this a coach asking at 9pm CDT would see "tomorrow" rolled
   // forward by a day.
@@ -950,22 +950,34 @@ function contextBlock(ctx: ToolContext): string {
     lines.push(`- Formation: ${ctx.playFormation ?? "unknown"}`);
     lines.push("");
     lines.push(
-      `When the coach says "this play", "this one", "the play I'm looking at", or asks ` +
-      `something with no other play context (e.g. "what's the best defense against this?"), ` +
-      `interpret it as the anchored play above. Do NOT ask the coach to clarify which play.`,
+      `**The coach is looking at this play RIGHT NOW.** Treat every reference to it — "this play", ` +
+      `"this one", "the play I'm looking at", a player on it ("the slant", "@Z", "the blue guy"), ` +
+      `or a bare request with no other play named ("make it deeper", "what beats this?", "add a ` +
+      `corner route") — as the anchored play above, then ACT: answer the question, or call the ` +
+      `edit tool directly. Do NOT ask which play, do NOT ask the coach to restate the ` +
+      `play / formation / variant, and do NOT ask "what's the context" — you can see the play, its ` +
+      `formation, and (below) its full diagram. Asking for context you already have wastes the ` +
+      `coach's turn.`,
     );
     lines.push("");
     lines.push(
-      `**Numeric references while anchored ("play 14", "#14", "play number 14"):** the orange ` +
-      `play-number badge the coach sees in the UI is a GLOBAL position (1-based across the whole ` +
-      `playbook), but the resolver uses per-group slots, so the two interpretations often disagree. ` +
-      `Default to the anchored play and CONFIRM before acting — reply with a short check like ` +
-      `"I see you're looking at ${ctx.playName ?? "this play"} — work on this one?" and wait for ` +
-      `a yes/no. \`get_play\` already prefers the anchored play for bare numeric input (you'll see ` +
-      `a "CONFIRM before acting" hint in the tool result when this happens). Never run defense ` +
-      `overlays, edits, or other write tools on a numerically-referenced play until the coach ` +
-      `confirms which play they meant. Explicit references (UUID, "Recommended #5", exact name) ` +
-      `are unambiguous and do NOT need confirmation — only bare numbers do.`,
+      `**Forbidden over-asking (these waste a turn EVERY time — never send one when a play is ` +
+      `anchored):** "Which play do you mean?", "Which play are you referring to?", "What play ` +
+      `should I work on?", "Can you confirm which play?", "What's the context here?", "Are you ` +
+      `talking about the play on screen?" The answer is always the anchored play — just proceed.`,
+    );
+    lines.push("");
+    lines.push(
+      `**The ONE exception — a BARE NUMBER ("play 14", "#14", "play number 14"):** the orange ` +
+      `play-number badge is a GLOBAL position (1-based across the whole playbook), but the ` +
+      `resolver uses per-group slots, so the two interpretations often disagree. ONLY for a bare ` +
+      `number: default to the anchored play and confirm first — "I see you're looking at ` +
+      `${ctx.playName ?? "this play"} — work on this one?" — and wait for a yes/no before running ` +
+      `any edit, defense overlay, or other write tool. \`get_play\` already prefers the anchored ` +
+      `play for bare numeric input (you'll see a "CONFIRM before acting" hint in its result). This ` +
+      `confirm step is for bare numbers and nothing else: explicit references (UUID, ` +
+      `"Recommended #5", exact name) AND every non-numeric reference above (this play, a color, a ` +
+      `label, a route description) are unambiguous — act immediately, no confirmation.`,
     );
     if (ctx.playDiagramText) {
       lines.push("");

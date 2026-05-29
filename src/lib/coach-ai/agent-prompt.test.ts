@@ -25,7 +25,9 @@ import {
   VISION_PASS_PROMPT,
   LAYOUT_DETECTION_PROMPT,
   PER_CROP_VISION_PROMPT,
+  contextBlock,
 } from "./agent";
+import type { ToolContext } from "./tools";
 
 describe("NORMAL_PROMPT — Rule 1a (tool names are private API)", () => {
   it("forbids telling the coach to call internal tools by name", () => {
@@ -1128,5 +1130,78 @@ describe("NORMAL_PROMPT — defense install offer (Item 3, 2026-05-25)", () => {
     expect(NORMAL_PROMPT).toMatch(
       /differentia|teach.*read|key.*capabilit|coaches install defenses to.*teach/i,
     );
+  });
+});
+
+// ── #16: Cal over-asks "which play / what context" when one is anchored ──────
+//
+// Coach feedback (2026-05-28): "it just constantly asks what play or context
+// to use, even if i'm clearly talking about the play being shown."
+//
+// Root cause: when a play is anchored, the context block had ONE one-line
+// "Do NOT ask which play" directive immediately followed by a long, emphatic
+// CONFIRM block ("CONFIRM before acting — ... — work on this one? ... wait for
+// a yes/no ... Never run ... edits ... until the coach confirms"). That block
+// is meant ONLY for ambiguous bare numbers ("play 14"), but its narrow scope
+// was buried at the very end, and it literally models the over-ask phrasing.
+// A cautious model over-generalizes it to every reference (color, label,
+// "this play", "make it deeper") and pings the coach instead of acting.
+//
+// These guard the contextBlock anchored-play directive: explicit "just act"
+// language + named forbidden phrasings + the confirm step scoped to bare
+// numbers only (mirrors the color-reference rule's "JUST APPLY THE EDIT" fix).
+// Content-level only — true behavior needs the eval harness (LLM in the loop).
+function anchoredCtx(overrides: Partial<ToolContext> = {}): ToolContext {
+  return {
+    playbookId: "pb-1",
+    playbookName: "Eagles",
+    sportVariant: "flag_7v7",
+    gameLevel: null,
+    sanctioningBody: null,
+    ageDivision: null,
+    playbookSettings: null,
+    isAdmin: false,
+    canEditPlaybook: true,
+    mode: "normal",
+    timezone: "America/Chicago",
+    playId: "11111111-1111-4111-8111-111111111111",
+    playName: "Mesh",
+    playFormation: "Trips Right",
+    playDiagramText: null,
+    playDiagramRecap: null,
+    threadId: null,
+    userId: null,
+    ...overrides,
+  };
+}
+
+describe("contextBlock — anchored play, no over-asking (#16)", () => {
+  it("tells Cal to ACT on the anchored play and never ask which play", () => {
+    const block = contextBlock(anchoredCtx());
+    // The coach is looking at the play right now; every reference resolves to it.
+    expect(block).toMatch(/looking at this play RIGHT NOW/i);
+    // Forbidden over-ask phrasings are named so Cal can pattern-match against them.
+    expect(block).toMatch(/Forbidden over-asking/i);
+    expect(block).toMatch(/Which play do you mean/i);
+    expect(block).toMatch(/What's the context/i);
+    // Positive default: just act — don't confirm a non-numeric reference.
+    expect(block).toMatch(/act immediately, no confirmation/i);
+  });
+
+  it("scopes the confirm-before-acting step to BARE NUMBERS only (no bleed)", () => {
+    const block = contextBlock(anchoredCtx());
+    // The confirm step is called out as the ONE narrow exception for bare numbers.
+    expect(block).toMatch(/The ONE exception/i);
+    expect(block).toMatch(/bare number/i);
+    // Non-numeric references are explicitly exempt from the confirm step.
+    expect(block).toMatch(/non-numeric reference[\s\S]*act immediately/i);
+    // The legitimate bare-number confirm phrasing is preserved (don't lose it).
+    expect(block).toMatch(/work on this one\?/i);
+  });
+
+  it("omits the anchored-play directive entirely when no play is anchored", () => {
+    const block = contextBlock(anchoredCtx({ playId: null }));
+    expect(block).not.toMatch(/looking at this play RIGHT NOW/i);
+    expect(block).not.toMatch(/Forbidden over-asking/i);
   });
 });
