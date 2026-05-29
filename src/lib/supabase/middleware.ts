@@ -160,6 +160,14 @@ export async function updateSession(request: NextRequest) {
     if (result === "revoked") {
       return signOutAndRedirect(request);
     }
+    // maybeTouchSession wrote the canonical domain-scoped device id via
+    // ensureDeviceId. Evict the legacy host-only twin as the response's
+    // FINAL mutation — it has to come after every cookies.set() call (the
+    // touch stamp included), because each .set() re-serializes the
+    // Set-Cookie headers and would otherwise clobber this raw eviction.
+    if (cookieDomain) {
+      appendHostOnlyDeletion(supabaseResponse, DEVICE_ID_COOKIE);
+    }
   }
 
   return supabaseResponse;
@@ -235,28 +243,46 @@ type TouchOutcome =
   | { kind: "result"; result: Awaited<ReturnType<typeof touchUserSession>> }
   | { kind: "timeout" };
 
+// Emit a HOST-ONLY cookie deletion as a raw Set-Cookie header.
+//
+// Why raw: NextResponse.cookies is keyed by name, so two `.set(name, ...)`
+// calls for the same cookie collapse into a single Set-Cookie (last wins).
+// That means you cannot write a domain-scoped cookie AND delete the
+// host-only variant of the same name through the cookies API — the delete
+// is silently dropped. Appending the deletion as a raw header bypasses the
+// map (the domain-scoped cookie is keyed separately by the browser, so the
+// two coexist and only the host-only one is expired here).
+//
+// IMPORTANT: NextResponse.cookies.set() RE-SERIALIZES every Set-Cookie
+// header from its internal map on each call, which clobbers any raw header
+// appended earlier. So this MUST be called as the final mutation on the
+// response — after every cookies.set() — or the eviction silently vanishes.
+function appendHostOnlyDeletion(response: NextResponse, name: string): void {
+  response.headers.append(
+    "set-cookie",
+    `${name}=; Path=/; Max-Age=0; SameSite=Lax`,
+  );
+}
+
 function ensureDeviceId(request: NextRequest, response: NextResponse): string {
   const existing = request.cookies.get(DEVICE_ID_COOKIE)?.value;
-  if (existing && existing.length >= 16) return existing;
-  const fresh = crypto.randomUUID();
-  // Scope the device id to `.xogridmaker.com` so the apex and the www host
-  // share ONE device id. The auth cookies are already domain-scoped (see
-  // server.ts / the setAll above); leaving the device id host-only made the
-  // apex→www canonical redirect mint a second device id for the same
-  // browser, which tripped the 1-desktop session cap and falsely evicted
-  // the user with "signed in on another device". When domain-scoping, also
-  // evict any pre-existing host-only cookie so it can't shadow the new one.
+  const value =
+    existing && existing.length >= 16 ? existing : crypto.randomUUID();
   const cookieDomain = cookieDomainForHost(
     request.headers.get("x-forwarded-host") ?? request.headers.get("host"),
   );
-  if (cookieDomain) {
-    response.cookies.set(DEVICE_ID_COOKIE, "", {
-      path: "/",
-      domain: undefined,
-      maxAge: 0,
-    });
-  }
-  response.cookies.set(DEVICE_ID_COOKIE, fresh, {
+  // Canonical: a single `.xogridmaker.com`-scoped device id so the apex and
+  // the www host share ONE id (the auth cookies are domain-scoped too — see
+  // server.ts). Re-write it on EVERY pass, not just when minting fresh: a
+  // browser that still carries the pre-2026-05-29 host-only cookie otherwise
+  // never gets upgraded, so the apex→www canonical redirect mints a second
+  // (domain-scoped) id alongside it. The browser then sends BOTH, middleware
+  // reads whichever wins that request, and the device id flaps per-request —
+  // tripping the 1-desktop session cap in a loop ("signed in on another
+  // device" → "Welcome back" forever). The legacy host-only twin is evicted
+  // separately, as the response's final mutation — see appendHostOnlyDeletion
+  // and the eviction at the tail of updateSession.
+  response.cookies.set(DEVICE_ID_COOKIE, value, {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
@@ -264,7 +290,7 @@ function ensureDeviceId(request: NextRequest, response: NextResponse): string {
     maxAge: 60 * 60 * 24 * 365 * 2,
     ...(cookieDomain ? { domain: cookieDomain } : {}),
   });
-  return fresh;
+  return value;
 }
 
 function clientIp(request: NextRequest): string | null {
@@ -291,18 +317,32 @@ function signOutAndRedirect(request: NextRequest): NextResponse {
   const cookieDomain = cookieDomainForHost(
     request.headers.get("x-forwarded-host") ?? request.headers.get("host"),
   );
-  const expire = (name: string) => {
-    res.cookies.delete(name);
+  // Domain-scoped expiry kills the post-2026-05-22 cookie; a raw host-only
+  // deletion kills any legacy pre-domain cookie the browser still carries.
+  // The two can't both go through res.cookies.set — the map collapses
+  // same-name writes — so the host-only one is a raw header. And because
+  // res.cookies.set() RE-SERIALIZES all Set-Cookie headers on each call,
+  // every domain expiry must be written FIRST, then the raw host-only
+  // deletions appended LAST in one batch, or the earlier raw headers get
+  // clobbered. Without this, a stale host-only cookie survives sign-out and
+  // the /login page still renders as authed.
+  const names = [
+    ...request.cookies
+      .getAll()
+      .filter((c) => c.name.startsWith("sb-"))
+      .map((c) => c.name),
+    SESSION_TOUCH_COOKIE,
+    DEVICE_ID_COOKIE,
+  ];
+  for (const name of names) {
     if (cookieDomain) {
       res.cookies.set(name, "", { path: "/", domain: cookieDomain, maxAge: 0 });
-    }
-  };
-  for (const cookie of request.cookies.getAll()) {
-    if (cookie.name.startsWith("sb-")) {
-      expire(cookie.name);
+    } else {
+      res.cookies.delete(name);
     }
   }
-  expire(SESSION_TOUCH_COOKIE);
-  expire(DEVICE_ID_COOKIE);
+  if (cookieDomain) {
+    for (const name of names) appendHostOnlyDeletion(res, name);
+  }
   return res;
 }

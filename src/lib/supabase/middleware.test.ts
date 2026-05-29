@@ -63,6 +63,26 @@ describe("updateSession eviction (signed_out_elsewhere)", () => {
     expect(authExpiry).toMatch(/Max-Age=0/i);
   });
 
+  it("ALSO emits a raw host-only expiry for the auth cookie (legacy pre-domain cookie)", async () => {
+    const res = await updateSession(makeRequest("www.xogridmaker.com"));
+
+    const setCookies = res.headers.getSetCookie();
+    const authWrites = setCookies.filter((c) =>
+      c.startsWith(`${SUPABASE_AUTH_COOKIE}=`),
+    );
+    // Domain-scoped expiry kills the post-2026-05-22 cookie...
+    expect(
+      authWrites.some((c) => /Domain=\.xogridmaker\.com/i.test(c)),
+    ).toBe(true);
+    // ...and a raw host-only expiry (no Domain) kills any legacy cookie a
+    // pre-domain browser still carries. Without it, sign-out doesn't stick.
+    expect(
+      authWrites.some(
+        (c) => /Max-Age=0/i.test(c) && !/Domain=/i.test(c),
+      ),
+    ).toBe(true);
+  });
+
   it("expires host-only on a non-xogridmaker host (localhost / native shell)", async () => {
     const res = await updateSession(makeRequest("localhost:3000"));
 
@@ -83,12 +103,62 @@ describe("updateSession device-id cookie", () => {
     const res = await updateSession(makeRequest("xogridmaker.com"));
 
     const setCookies = res.headers.getSetCookie();
-    const deviceCookie = setCookies.find((c) =>
-      c.startsWith("xog_device_id="),
+    const deviceCookie = setCookies.find(
+      (c) => c.startsWith("xog_device_id=") && !/Max-Age=0/i.test(c),
     );
     expect(deviceCookie).toBeDefined();
     // The fix: without a domain, the apex→www canonical redirect mints a
     // second device id and trips the 1-desktop cap → false eviction.
     expect(deviceCookie).toMatch(/Domain=\.xogridmaker\.com/i);
+  });
+
+  it("re-scopes an EXISTING host-only device id and evicts the legacy cookie (the Chrome-loop bug)", async () => {
+    // The Timothy case: a browser that signed in before the 2026-05-29 fix
+    // still carries a HOST-ONLY xog_device_id. The original fix early-returned
+    // on any existing id, so it never upgraded these browsers — the host-only
+    // cookie kept coexisting with the domain-scoped one minted on the apex→www
+    // redirect, the id flapped per-request, and the 1-desktop cap looped the
+    // user through "signed in on another device" → "Welcome back" forever.
+    vi.mocked(touchUserSession).mockResolvedValue({ kind: "ok" });
+    const req = makeRequest("www.xogridmaker.com");
+    req.cookies.set("xog_device_id", "legacy-host-only-device-id-1234");
+    const res = await updateSession(req);
+
+    const setCookies = res.headers.getSetCookie();
+    const deviceWrites = setCookies.filter((c) =>
+      c.startsWith("xog_device_id="),
+    );
+
+    // 1) The canonical id is (re)written domain-scoped, preserving the value.
+    const domainWrite = deviceWrites.find((c) =>
+      /Domain=\.xogridmaker\.com/i.test(c),
+    );
+    expect(domainWrite).toBeDefined();
+    expect(domainWrite).toContain("legacy-host-only-device-id-1234");
+    expect(domainWrite).not.toMatch(/Max-Age=0/i);
+
+    // 2) The legacy host-only variant is expired via a RAW header (no Domain),
+    //    which is the only way it actually reaches the browser — two
+    //    cookies.set() calls for the same name collapse to one.
+    const hostOnlyEviction = deviceWrites.find(
+      (c) => /Max-Age=0/i.test(c) && !/Domain=/i.test(c),
+    );
+    expect(hostOnlyEviction).toBeDefined();
+  });
+
+  it("does NOT emit a host-only eviction on localhost / native shell", async () => {
+    vi.mocked(touchUserSession).mockResolvedValue({ kind: "ok" });
+    const req = makeRequest("localhost:3000");
+    req.cookies.set("xog_device_id", "legacy-host-only-device-id-1234");
+    const res = await updateSession(req);
+
+    const setCookies = res.headers.getSetCookie();
+    const deviceWrites = setCookies.filter((c) =>
+      c.startsWith("xog_device_id="),
+    );
+    // Off the xogridmaker domain there is no domain/host-only split to
+    // reconcile, so we must not gratuitously expire the device id.
+    const eviction = deviceWrites.find((c) => /Max-Age=0/i.test(c));
+    expect(eviction).toBeUndefined();
   });
 });
