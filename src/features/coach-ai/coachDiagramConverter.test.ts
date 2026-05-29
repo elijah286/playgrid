@@ -429,3 +429,37 @@ describe("overlap resolver — no residual non-OL overlaps after resolution", ()
     }
   });
 });
+
+describe("progression → progressionIndex", () => {
+  it("maps diagram.progression to 1-indexed progressionIndex per player", () => {
+    const doc = coachDiagramToPlayDocument({
+      title: "Smash",
+      variant: "flag_7v7",
+      players: [
+        { id: "S", x: 6, y: 0, team: "O" },
+        { id: "Z", x: -6, y: 0, team: "O" },
+        { id: "B", x: 0, y: -3, team: "O" },
+        { id: "QB", x: 0, y: -5, team: "O" },
+      ],
+      routes: [],
+      progression: ["S", "Z", "B"],
+    });
+    const byLabel = new Map(doc.layers.players.map((p) => [p.label, p]));
+    expect(byLabel.get("S")!.progressionIndex).toBe(1);
+    expect(byLabel.get("Z")!.progressionIndex).toBe(2);
+    expect(byLabel.get("B")!.progressionIndex).toBe(3);
+    // Exactly the three listed receivers carry a badge; nobody else does.
+    const badged = doc.layers.players.filter((p) => p.progressionIndex !== undefined);
+    expect(badged.map((p) => p.label).sort()).toEqual(["B", "S", "Z"]);
+  });
+
+  it("omits progressionIndex entirely when no progression is set", () => {
+    const doc = coachDiagramToPlayDocument({
+      title: "Smash",
+      variant: "flag_7v7",
+      players: [{ id: "S", x: 6, y: 0, team: "O" }],
+      routes: [],
+    });
+    expect(doc.layers.players[0].progressionIndex).toBeUndefined();
+  });
+});
