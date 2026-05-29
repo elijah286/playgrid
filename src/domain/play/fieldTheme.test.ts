@@ -29,8 +29,8 @@ describe("resolveFieldTheme — known values", () => {
     expect(resolveFieldTheme("black").bgMain).toBe("#0A0A0A");
   });
 
-  it("legacy gray maps to white", () => {
-    expect(resolveFieldTheme("gray").bgMain).toBe("#FFFFFF");
+  it("gray ships as its own palette", () => {
+    expect(resolveFieldTheme("gray").bgMain).toBe("#E5E7EB");
   });
 
   it("null falls back to green", () => {
