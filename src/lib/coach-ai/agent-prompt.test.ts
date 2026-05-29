@@ -330,6 +330,65 @@ describe("NORMAL_PROMPT — Rule 9b (image input, waypoint mode)", () => {
   });
 });
 
+describe("NORMAL_PROMPT — eager posture (proactively offer to show/illustrate)", () => {
+  // Requested 2026-05-29: "I want Cal to be eager to help. Encourage cal
+  // to, based on the question from the coach, always offer to show or
+  // illustrate concepts since the user may not be fully aware of all the
+  // things cal can do." Coaches under-use Cal because they don't realize
+  // it can overlay a defense onto their play, number the QB's reads, save
+  // a whole install, or build a practice block. This posture directive
+  // makes Cal surface those capabilities with ONE concrete, question-
+  // tuned offer after the answer — without burying the answer itself.
+  // It is ADDITIVE to Rule 9 (auto-draw spatial answers); the regression
+  // it guards against is someone deleting it and Cal reverting to a
+  // passive "answer-and-stop" demeanor coaches never push past.
+
+  it("declares the eager posture and that coaches don't know Cal's full range", () => {
+    expect(NORMAL_PROMPT).toMatch(/Be eager/);
+    expect(NORMAL_PROMPT).toMatch(/coaches rarely know the half of what you can do/i);
+  });
+
+  it("instructs Cal to proactively offer the next thing to SHOW or BUILD", () => {
+    expect(NORMAL_PROMPT).toMatch(/proactively offer the next thing you could SHOW or BUILD/i);
+  });
+
+  it("surfaces concrete under-known capabilities so Cal can name them", () => {
+    // The whole point is reminding coaches what Cal can do — so the
+    // directive must enumerate a few capabilities coaches commonly miss.
+    expect(NORMAL_PROMPT).toMatch(/overlay a defense onto one of their existing plays/i);
+    expect(NORMAL_PROMPT).toMatch(/number the QB's progression reads/i);
+    expect(NORMAL_PROMPT).toMatch(/build a practice plan/i);
+  });
+
+  it("caps the offer at ONE concrete, question-tuned offer (not a menu)", () => {
+    expect(NORMAL_PROMPT).toMatch(/Make ONE concrete offer/);
+    expect(NORMAL_PROMPT).toMatch(/never a generic menu/i);
+  });
+
+  it("guards against burying the answer and against over-promising", () => {
+    expect(NORMAL_PROMPT).toMatch(/never let it bury or delay the actual answer/i);
+    expect(NORMAL_PROMPT).toMatch(/only offer what your tools can actually do/i);
+  });
+
+  it("is additive to Rule 9 — the offer is the NEXT step, not a substitute for drawing", () => {
+    // Rule 9 already forces a diagram by default for spatial questions.
+    // This directive must NOT regress that into "offer to draw" — it
+    // explicitly defers to Rule 9's auto-draw and positions the offer
+    // as the follow-on illustrative/constructive step.
+    expect(NORMAL_PROMPT).toMatch(/Spatial answers still get their diagram by default/i);
+    expect(NORMAL_PROMPT).toMatch(/the offer is the NEXT illustrative or constructive step/i);
+  });
+
+  it("sits in the intro between the capability bullets and the numbered Behavior rules", () => {
+    const bulletsIdx = NORMAL_PROMPT.indexOf("Strategic Q&A grounded in the user's playbook");
+    const eagerIdx = NORMAL_PROMPT.indexOf("Be eager");
+    const rulesIdx = NORMAL_PROMPT.indexOf("Behavior rules");
+    expect(bulletsIdx).toBeGreaterThan(-1);
+    expect(eagerIdx).toBeGreaterThan(bulletsIdx);
+    expect(rulesIdx).toBeGreaterThan(eagerIdx);
+  });
+});
+
 describe("IMAGE_TURN_PROMPT — fence-only emit on image turns (round 12)", () => {
   // Surfaced 2026-05-21 round 12: even with the focused IMAGE_TURN_PROMPT
   // (round 10) + numeric pass-1 (round 11), Cal still pattern-matched
