@@ -201,6 +201,9 @@ export function playSpecToCoachDiagram(spec: PlaySpec): RenderResult {
     players: [...offensePlayers, ...defensePlayers],
     routes,
     ...(defenseRender.zones.length > 0 ? { zones: defenseRender.zones } : {}),
+    ...(spec.progression && spec.progression.length > 0
+      ? { progression: spec.progression }
+      : {}),
   };
   const sanitized = sanitizeCoachDiagram(rawDiagram, spec.variant);
   for (const w of sanitized.warnings) {

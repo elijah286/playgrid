@@ -813,6 +813,12 @@ export function coachDiagramToPlayDocument(input: CoachDiagram): PlayDocument {
   const allPlayers: Player[] = [];
   const routeLookup = new Map<string, Player>();
   let receiverIdx = 0;
+  // QB read order → 1-indexed badge per diagram player id. Renders a
+  // numbered badge next to each receiver in the editor + thumbnails so
+  // the progression reads "1, 2, 3" on a wristband card.
+  const progressionByDiagramId = new Map<string, number>(
+    (diagram.progression ?? []).map((id, i) => [id, i + 1]),
+  );
   for (const sp of staged) {
     const dp = sp.dp;
     const team = sp.team;
@@ -914,6 +920,7 @@ export function coachDiagramToPlayDocument(input: CoachDiagram): PlayDocument {
     // explicit color is set — only the override path crosses the gate.
     if (dp.color) style = { ...style, fill: dp.color };
 
+    const progressionIndex = progressionByDiagramId.get(dp.id);
     const player: Player = {
       id:       uid(),
       role,
@@ -922,6 +929,7 @@ export function coachDiagramToPlayDocument(input: CoachDiagram): PlayDocument {
       eligible: team === "O",
       style,
       shape,
+      ...(progressionIndex !== undefined ? { progressionIndex } : {}),
     };
     allPlayers.push(player);
     // Player ids must be unique within a diagram. Without this guard the

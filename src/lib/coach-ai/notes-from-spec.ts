@@ -848,7 +848,24 @@ function progressionLines(spec: PlaySpec): string[] | null {
   type RouteAssignment = PlayerAssignment & { action: Extract<AssignmentAction, { kind: "route" }> };
 
   let ordered: RouteAssignment[];
-  if (conceptOrder) {
+  // Explicit coach-authored read order wins over every heuristic — it's
+  // the literal "1, 2, 3" the coach put on the wristband card. Validated
+  // upstream (validatePlaySpecProgression) so every id resolves to a
+  // route; any route the coach didn't list is appended via the generic
+  // walker so no receiver silently drops out of the notes.
+  const explicit = (spec.progression ?? [])
+    .map((id) => routes.find((r) => r.player === id))
+    .filter((r): r is RouteAssignment => !!r);
+  if (explicit.length >= 2) {
+    const listed = new Set(explicit.map((r) => r.player));
+    const rest = routes.filter((r) => !listed.has(r.player));
+    rest.sort((a, b) => {
+      const da = depthOf(a) ?? 0;
+      const db = depthOf(b) ?? 0;
+      return progressionPriority(a.action.family, da) - progressionPriority(b.action.family, db);
+    });
+    ordered = [...explicit, ...rest];
+  } else if (conceptOrder) {
     const matched = resolveProgressionSelectors(conceptOrder, routes);
     // Append any unmatched routes via the generic walker so every route
     // gets a numbered line (no silent drops).

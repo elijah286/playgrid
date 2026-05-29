@@ -3238,6 +3238,31 @@ function EditorCanvasImpl({
                 />
               </g>
             )}
+            {typeof pl.progressionIndex === "number" && (
+              <g pointerEvents="none">
+                <circle
+                  cx={px - r * 0.9}
+                  cy={py - r * 0.9}
+                  r={badgeR * 1.25}
+                  fill="#F59E0B"
+                  stroke="#1C1C1E"
+                  strokeWidth={1}
+                  vectorEffect="non-scaling-stroke"
+                />
+                <text
+                  x={px - r * 0.9}
+                  y={py - r * 0.9}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fontSize={0.018}
+                  fontWeight={800}
+                  fill="#1C1C1E"
+                  style={{ fontFamily: "Inter, system-ui, sans-serif" }}
+                >
+                  {pl.progressionIndex}
+                </text>
+              </g>
+            )}
           </g>
         );
       })}

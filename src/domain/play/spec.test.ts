@@ -20,6 +20,7 @@
 import { describe, expect, it } from "vitest";
 import {
   PLAY_SPEC_SCHEMA_VERSION,
+  parsePlaySpec,
   playSpecSchema,
   type PlaySpec,
   type PlayerAssignment,

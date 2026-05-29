@@ -80,6 +80,7 @@ const playerSchema = z.object({
   style: playerStyleSchema,
   shape: playerShapeSchema.optional(),
   isHotRoute: z.boolean().optional(),
+  progressionIndex: z.number().int().positive().optional(),
 }).strict();
 
 // ── Route ──────────────────────────────────────────────────────────────

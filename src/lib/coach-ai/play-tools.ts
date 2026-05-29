@@ -22,7 +22,7 @@ import { validateRouteAssignments, type RouteAssignmentError } from "./route-ass
 import { validatePlayContent, formatPlayContentErrors } from "./play-content-validate";
 import { defaultSettingsForVariant, normalizePlaybookSettings, type RuleCapability } from "@/domain/playbook/settings";
 import { validatePlaySpecVsRules } from "@/domain/playbook/playSpecRules";
-import { validatePlaySpecBallFlow } from "@/domain/play/specSemantics";
+import { validatePlaySpecBallFlow, validatePlaySpecProgression } from "@/domain/play/specSemantics";
 import { validateDefenderAssignments, formatDefenseValidationErrors } from "./defense-validate";
 import { projectSpecToNotes } from "./notes-from-spec";
 import {
@@ -751,6 +751,20 @@ function resolveDiagramAndSpec(
           `Fix the rpo_read / ballPath shape and re-emit.`,
       };
     }
+    // Progression semantics: every QB-read id must name a receiver
+    // running a route (the read order is the throw sequence) and may
+    // appear at most once. Caught here so the coach-readable error
+    // points at the spec, not a downstream render surprise.
+    const progressionCheck = validatePlaySpecProgression(spec);
+    if (!progressionCheck.ok) {
+      const lines = progressionCheck.violations.map((v) => `- ${v.message}`).join("\n");
+      return {
+        ok: false,
+        error:
+          `play_spec progression (QB read order) doesn't make sense:\n${lines}\n` +
+          `Fix the progression list and re-emit.`,
+      };
+    }
     const { diagram, warnings } = playSpecToCoachDiagram(spec);
     const hardWarnings = warnings.filter(isHardWarning);
     if (hardWarnings.length > 0) {
@@ -1274,6 +1288,8 @@ const create_play: CoachAiTool = {
             "Geometry is derived from the catalogs — no waypoints, no overlap risk. " +
             "Renderer rejects unknown formations, defenses, or route families instead of silently substituting. " +
             "Use this when you can describe the play in named primitives (catalog routes, named formation, named defense). " +
+            "Optional `progression`: an ordered array of receiver player ids (e.g. [\"X\",\"Z\",\"RB\"]) giving the QB's read order — " +
+            "renders numbered \"1, 2, 3\" badges on the play and drives the Progression block in the notes. Every id must be a player running a route. " +
             "When `play_spec` is provided, `diagram` is ignored.",
         },
         diagram: {

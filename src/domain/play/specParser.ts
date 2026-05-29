@@ -88,6 +88,9 @@ export function coachDiagramToPlaySpec(
     defense,
     assignments,
     ...(defenderAssignments.length > 0 ? { defenderAssignments } : {}),
+    ...(diagram.progression && diagram.progression.length > 0
+      ? { progression: diagram.progression }
+      : {}),
     ...(hints?.notes ? { notes: hints.notes } : {}),
   };
 }

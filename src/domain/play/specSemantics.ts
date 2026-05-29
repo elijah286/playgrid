@@ -139,7 +139,44 @@ export type ProgressionResult =
  * Omitted / empty progression is always ok (nothing to check).
  */
 export function validatePlaySpecProgression(spec: PlaySpec): ProgressionResult {
-  // STUB — implemented below the failing-first tests.
-  void spec;
-  return { ok: true };
+  const order = spec.progression;
+  if (!order || order.length === 0) return { ok: true };
+
+  const violations: ProgressionViolation[] = [];
+  const actionByPlayer = new Map(spec.assignments.map((a) => [a.player, a.action.kind]));
+  const seen = new Set<string>();
+
+  for (const id of order) {
+    if (seen.has(id)) {
+      violations.push({
+        code: "progression_duplicate",
+        message:
+          `Progression lists @${id} more than once. The read order is a sequence — ` +
+          `each receiver appears at most once.`,
+      });
+      continue;
+    }
+    seen.add(id);
+
+    const kind = actionByPlayer.get(id);
+    if (kind === undefined) {
+      violations.push({
+        code: "progression_unknown_target",
+        message:
+          `Progression includes @${id}, but no player by that id has an assignment in this play. ` +
+          `Progression ids must name receivers running routes.`,
+      });
+      continue;
+    }
+    if (kind !== "route") {
+      violations.push({
+        code: "progression_not_route",
+        message:
+          `Progression includes @${id}, but that player's assignment is "${kind}", not a pass route. ` +
+          `The QB read order can only contain receivers running routes — drop @${id} or give them a route.`,
+      });
+    }
+  }
+
+  return violations.length === 0 ? { ok: true } : { ok: false, violations };
 }

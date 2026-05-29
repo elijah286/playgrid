@@ -276,6 +276,14 @@ export function PlayThumbnail({
                 <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize={0.035} fontWeight={700} fill={deriveLabelColor(p.style.fill)} style={{ fontFamily: "Inter, system-ui, sans-serif" }}>
                   {p.label}
                 </text>
+                {typeof p.progressionIndex === "number" && (
+                  <g>
+                    <circle cx={-R * 0.95} cy={-R * 0.95} r={R * 0.85} fill="#F59E0B" stroke="#1C1C1E" strokeWidth={playerSW} vectorEffect="non-scaling-stroke" />
+                    <text x={-R * 0.95} y={-R * 0.95} textAnchor="middle" dominantBaseline="central" fontSize={0.03} fontWeight={800} fill="#1C1C1E" style={{ fontFamily: "Inter, system-ui, sans-serif" }}>
+                      {p.progressionIndex}
+                    </text>
+                  </g>
+                )}
               </g>
             );
           })}
