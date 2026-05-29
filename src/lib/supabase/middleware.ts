@@ -239,12 +239,30 @@ function ensureDeviceId(request: NextRequest, response: NextResponse): string {
   const existing = request.cookies.get(DEVICE_ID_COOKIE)?.value;
   if (existing && existing.length >= 16) return existing;
   const fresh = crypto.randomUUID();
+  // Scope the device id to `.xogridmaker.com` so the apex and the www host
+  // share ONE device id. The auth cookies are already domain-scoped (see
+  // server.ts / the setAll above); leaving the device id host-only made the
+  // apex→www canonical redirect mint a second device id for the same
+  // browser, which tripped the 1-desktop session cap and falsely evicted
+  // the user with "signed in on another device". When domain-scoping, also
+  // evict any pre-existing host-only cookie so it can't shadow the new one.
+  const cookieDomain = cookieDomainForHost(
+    request.headers.get("x-forwarded-host") ?? request.headers.get("host"),
+  );
+  if (cookieDomain) {
+    response.cookies.set(DEVICE_ID_COOKIE, "", {
+      path: "/",
+      domain: undefined,
+      maxAge: 0,
+    });
+  }
   response.cookies.set(DEVICE_ID_COOKIE, fresh, {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
     secure: process.env.NODE_ENV === "production",
     maxAge: 60 * 60 * 24 * 365 * 2,
+    ...(cookieDomain ? { domain: cookieDomain } : {}),
   });
   return fresh;
 }
@@ -264,12 +282,27 @@ function signOutAndRedirect(request: NextRequest): NextResponse {
   // Dropping the device id is intentional: when the user signs back in
   // they'll get a fresh row instead of immediately re-hitting this revoked
   // one and looping. The kicked row stays in the audit log either way.
+  //
+  // The auth cookies are written domain-scoped to `.xogridmaker.com`, so a
+  // host-only `delete()` does NOT remove them — the browser kept sending
+  // them and the /login page still rendered as authed (avatar + inbox
+  // badge) even though we'd just "signed out". Expire both the host-only
+  // and the domain-scoped variant so the sign-out actually sticks.
+  const cookieDomain = cookieDomainForHost(
+    request.headers.get("x-forwarded-host") ?? request.headers.get("host"),
+  );
+  const expire = (name: string) => {
+    res.cookies.delete(name);
+    if (cookieDomain) {
+      res.cookies.set(name, "", { path: "/", domain: cookieDomain, maxAge: 0 });
+    }
+  };
   for (const cookie of request.cookies.getAll()) {
     if (cookie.name.startsWith("sb-")) {
-      res.cookies.delete(cookie.name);
+      expire(cookie.name);
     }
   }
-  res.cookies.delete(SESSION_TOUCH_COOKIE);
-  res.cookies.delete(DEVICE_ID_COOKIE);
+  expire(SESSION_TOUCH_COOKIE);
+  expire(DEVICE_ID_COOKIE);
   return res;
 }
