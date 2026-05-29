@@ -25,7 +25,7 @@ function specWith(assignments: PlaySpec["assignments"]): PlaySpec {
     variant: "flag_7v7",
     formation: "trips_right",
     assignments,
-  } as PlaySpec;
+  } as unknown as PlaySpec;
 }
 
 const baseSpec = specWith([

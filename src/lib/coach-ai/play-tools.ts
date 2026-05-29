@@ -567,6 +567,36 @@ export const HARD_RENDER_WARNINGS: ReadonlySet<RenderWarning["code"]> = new Set(
   "sanitizer_dropped",
 ]);
 
+/**
+ * Validated transform behind the `set_progression` tool: returns a copy
+ * of `spec` with `progression` set to `order` (or cleared when `order`
+ * is empty), or an error if the read order doesn't make sense. Pure —
+ * never mutates the input. The geometry/persistence still flows through
+ * `resolveDiagramAndSpec`; this only owns the spec-level field + its
+ * focused, coach-readable error message.
+ */
+export function withProgression(
+  spec: PlaySpec,
+  order: string[],
+): { ok: true; spec: PlaySpec } | { ok: false; error: string } {
+  let next: PlaySpec;
+  if (order.length === 0) {
+    const { progression: _drop, ...rest } = spec;
+    next = rest as PlaySpec;
+  } else {
+    next = { ...spec, progression: [...order] };
+  }
+  const check = validatePlaySpecProgression(next);
+  if (!check.ok) {
+    const lines = check.violations.map((v) => `- ${v.message}`).join("\n");
+    return {
+      ok: false,
+      error: `Progression (QB read order) doesn't make sense:\n${lines}`,
+    };
+  }
+  return { ok: true, spec: next };
+}
+
 export function isHardWarning(w: RenderWarning): boolean {
   return HARD_RENDER_WARNINGS.has(w.code);
 }
@@ -1818,6 +1848,152 @@ const update_play_notes: CoachAiTool = {
   },
 };
 
+const set_progression: CoachAiTool = {
+  def: {
+    name: "set_progression",
+    description:
+      "Set the QB's read order (progression) on an EXISTING saved play so the diagram shows numbered \"1, 2, 3\" badges next to each receiver — the read sequence a coach puts on a wristband card. " +
+      "Use this WHENEVER a coach asks to add / change / clear read numbers, a progression, or \"who the QB looks at first/second/third.\" " +
+      "Do NOT use update_play_notes for this — notes are just prose; the badges come from this structured field. " +
+      "`order` is the on-field player labels in read order (e.g. [\"S\",\"Z\",\"B\"] = @S is the 1st read, @Z the 2nd, @B the checkdown). " +
+      "Every label must name a player running a pass route; blockers, runners, and the QB can't be in the read order (the tool rejects them with a clear message). " +
+      "Pass an empty array to clear the progression and remove all the badges. " +
+      "The play must have a saved PlaySpec (any play composed via compose_play or saved with play_spec qualifies); if it doesn't, the tool says so. " +
+      "ALWAYS confirm the order with the coach before calling.",
+    input_schema: {
+      type: "object",
+      properties: {
+        play_id: {
+          type: "string",
+          description: "UUID, group-qualified slot (\"Recommended #5\"), or exact name of the play to update.",
+        },
+        order: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Ordered list of player labels = the QB's read sequence. First entry is the 1st read. " +
+            "Each must be a receiver running a route. Empty array clears the progression.",
+        },
+        edit_note: {
+          type: "string",
+          description: "Short one-line note for the version history. Default: 'Set QB progression via Coach Cal'.",
+        },
+      },
+      required: ["play_id", "order"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    if (!ctx.playbookId) return { ok: false, error: "No playbook selected." };
+    if (!ctx.canEditPlaybook) return { ok: false, error: "You don't have edit access to this playbook." };
+    const rawId = typeof input.play_id === "string" ? input.play_id : "";
+    const order = Array.isArray(input.order)
+      ? input.order.filter((s): s is string => typeof s === "string")
+      : null;
+    if (order === null) {
+      return { ok: false, error: "Provide `order` — an array of player labels in read order (empty array clears the progression)." };
+    }
+    const resolved = await resolvePlayId(rawId, ctx.playbookId, { anchoredPlayId: ctx.playId });
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+    const playId = resolved.id;
+
+    try {
+      const admin = createServiceRoleClient();
+      const { data: play, error } = await admin
+        .from("plays")
+        .select("id, name, playbook_id, current_version_id, play_type")
+        .eq("id", playId)
+        .eq("playbook_id", ctx.playbookId)
+        .is("deleted_at", null)
+        .is("attached_to_play_id", null)
+        .maybeSingle();
+      if (error) return { ok: false, error: error.message };
+      if (!play) return { ok: false, error: "Play not found or not in this playbook." };
+
+      const parentId = play.current_version_id as string | null;
+      if (!parentId) return { ok: false, error: "Play has no current version to update." };
+      const { data: parent, error: parentErr } = await admin
+        .from("play_versions")
+        .select("document")
+        .eq("id", parentId)
+        .maybeSingle();
+      if (parentErr) return { ok: false, error: parentErr.message };
+      const parentDoc = parent?.document as PlayDocument | null;
+      if (!parentDoc) return { ok: false, error: "Could not read current play document." };
+
+      const savedSpec = parentDoc.metadata.spec ?? null;
+      if (!savedSpec) {
+        return {
+          ok: false,
+          error:
+            "This play has no saved PlaySpec, so its read order can't be set structurally. " +
+            "Recompose it via compose_play (which saves a spec), then set the progression.",
+        };
+      }
+
+      const updated = withProgression(savedSpec, order);
+      if (!updated.ok) return { ok: false, error: updated.error };
+
+      const resolvedVariant = (ctx.sportVariant ?? savedSpec.variant ?? "flag_7v7") as SportVariant;
+      const playType = ((play as { play_type?: string }).play_type as "offense" | "defense" | "special_teams" | undefined) ?? "offense";
+      const playbookSettings = await loadPlaybookSettings(ctx.playbookId, resolvedVariant);
+
+      const inputResolved = resolveDiagramAndSpec(updated.spec, undefined, resolvedVariant, {
+        playType,
+        advancedCapabilities: playbookSettings.advancedCapabilities,
+      });
+      if (!inputResolved.ok) return { ok: false, error: inputResolved.error };
+      const persistedSpec = inputResolved.spec;
+
+      const newDoc = coachDiagramToPlayDocument({ ...inputResolved.diagram, variant: resolvedVariant });
+      // Preserve the coach's existing metadata (notes, names) — only the
+      // progression (and the spec stamp) is changing here.
+      newDoc.metadata = { ...parentDoc.metadata };
+      if (persistedSpec) newDoc.metadata.spec = persistedSpec;
+
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { ok: false, error: "Not signed in." };
+
+      const editNote = typeof input.edit_note === "string" && input.edit_note.trim()
+        ? input.edit_note.trim()
+        : order.length === 0 ? "Cleared QB progression via Coach Cal" : "Set QB progression via Coach Cal";
+
+      const versionResult = await recordPlayVersion({
+        supabase: admin,
+        playId,
+        document: newDoc,
+        parentVersionId: parentId,
+        userId: user.id,
+        kind: "edit",
+        actor: "ai",
+        note: editNote,
+      });
+      if (!versionResult.ok) return { ok: false, error: versionResult.error };
+      if (versionResult.deduped) {
+        return { ok: true, result: "Progression already matches — no change." };
+      }
+      const { error: upErr } = await admin
+        .from("plays")
+        .update({ current_version_id: versionResult.versionId, updated_at: new Date().toISOString() })
+        .eq("id", playId);
+      if (upErr) return { ok: false, error: upErr.message };
+
+      const recap = order.length === 0
+        ? "Cleared the read order — the numbered badges are gone."
+        : order.map((label, i) => `${i + 1}. @${label}`).join("  ");
+      return {
+        ok: true,
+        result:
+          `Progression saved on "${play.name}" (version ${versionResult.versionId.slice(0, 8)}). ` +
+          `The diagram now shows numbered badges. Recap the read order to the coach:\n${recap}`,
+      };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "set_progression failed" };
+    }
+  },
+};
+
 const update_player: CoachAiTool = {
   def: {
     name: "update_player",
@@ -2992,6 +3168,7 @@ export const PLAY_TOOLS: CoachAiTool[] = [
   update_play,
   rename_play,
   update_play_notes,
+  set_progression,
   update_player,
   explain_play,
   list_play_versions,
