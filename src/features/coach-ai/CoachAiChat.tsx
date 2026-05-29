@@ -24,32 +24,35 @@ import type { SaveDefenseProposal } from "@/lib/coach-ai/save-defense-tools";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { AssistantMessageWithFeedback } from "./AssistantMessageWithFeedback";
 import { AssistantMessage } from "./AssistantMessage";
-import { CoachAiUsageMeter } from "./CoachAiUsageMeter";
+import { CoachCalCostMeter } from "./CoachCalCostMeter";
 import { createMessagePackCheckoutAction } from "@/app/actions/coach-cal-pack";
 import type { NoteProposal } from "@/lib/coach-ai/playbook-tools";
 import { readLivePlayDoc } from "@/lib/coach-ai/live-play-doc";
 import { useNativePlatform } from "@/lib/native/useIsNativeApp";
 import { detectAutoAnchorTarget } from "./auto-anchor";
 
-type OutOfMessagesPayload = {
-  count: number;
-  limit: number;
-  resetDate: string;
-  pack: { messageCount: number; priceUsdCents: number; priceConfigured: boolean };
+type OutOfBudgetPayload = {
+  /** which window tripped — drives copy + whether the pack CTA shows */
+  window: "burst" | "day" | "month";
+  /** ISO time the binding window frees up (null shouldn't happen here) */
+  resetAt: string | null;
+  pack: { budgetMicros: number; priceUsdCents: number; priceConfigured: boolean };
 };
+
+function formatBudgetReset(iso: string | null): string {
+  if (!iso) return "soon";
+  const diffMs = new Date(iso).getTime() - Date.now();
+  if (diffMs <= 0) return "now";
+  const mins = Math.round(diffMs / 60_000);
+  if (mins < 60) return `in ${mins} min`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `in ${hrs}h`;
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 
 function formatPackPriceCents(cents: number): string {
   if (cents % 100 === 0) return `$${cents / 100}`;
   return `$${(cents / 100).toFixed(2)}`;
-}
-
-function formatResetDate(iso: string): string {
-  // resetDate is YYYY-MM-DD UTC (first of next month). We want a short
-  // human form like "May 1".
-  const [y, m, d] = iso.split("-").map((s) => Number(s));
-  if (!y || !m || !d) return iso;
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  return dt.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
 // Bumped if the persisted shape changes — older blobs are then ignored.
@@ -318,7 +321,7 @@ export function CoachAiChat({
   const [partialText, setPartialText] = useState("");
   const [toolCallsDuringStream, setToolCallsDuringStream] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [outOfMessages, setOutOfMessages] = useState<OutOfMessagesPayload | null>(null);
+  const [outOfBudget, setOutOfBudget] = useState<OutOfBudgetPayload | null>(null);
   const [packCheckoutPending, setPackCheckoutPending] = useState(false);
   const [usageTick, setUsageTick] = useState(0);
   const [feedbackOptIn, setFeedbackOptIn] = useState<"loading" | "consenting" | "declined" | "unanswered">("loading");
@@ -791,7 +794,7 @@ export function CoachAiChat({
     const image = pendingImage;
     if ((!text && !image) || streaming) return;
     setError(null);
-    setOutOfMessages(null);
+    setOutOfBudget(null);
     setStatusText(null);
     setPartialText("");
     setToolCallsDuringStream([]);
@@ -927,13 +930,12 @@ export function CoachAiChat({
           setStatusText(null); // clear "Searching…" once text starts
         }
         if (event === "error") {
-          if (payload.code === "out_of_messages") {
+          if (payload.code === "out_of_budget") {
             blocked = true;
-            setOutOfMessages({
-              count: Number(payload.count) || 0,
-              limit: Number(payload.limit) || 0,
-              resetDate: String(payload.resetDate ?? ""),
-              pack: payload.pack as OutOfMessagesPayload["pack"],
+            setOutOfBudget({
+              window: (payload.window as OutOfBudgetPayload["window"]) ?? "month",
+              resetAt: (payload.resetAt as string | null) ?? null,
+              pack: payload.pack as OutOfBudgetPayload["pack"],
             });
             // Roll back the optimistically-appended user turn so it
             // doesn't sit there as if it was sent.
@@ -1106,7 +1108,7 @@ export function CoachAiChat({
       const res = await createMessagePackCheckoutAction();
       if (!res.ok) {
         setError(res.error);
-        setOutOfMessages(null);
+        setOutOfBudget(null);
         return;
       }
       window.location.href = res.url;
@@ -1323,44 +1325,65 @@ export function CoachAiChat({
         )}
       </div>
 
-      {outOfMessages && (
+      {outOfBudget && (
         <div className="mx-3 mb-2 rounded-lg bg-amber-50 px-3 py-2.5 text-xs text-amber-900 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-100 dark:ring-amber-900">
-          <p className="font-semibold">
-            You&rsquo;ve used all {outOfMessages.limit} Coach Cal messages this month.
-          </p>
-          <p className="mt-1 text-amber-800/90 dark:text-amber-100/90">
-            Resets {formatResetDate(outOfMessages.resetDate)}.
-            {outOfMessages.pack.priceConfigured
-              ? ` Or buy ${outOfMessages.pack.messageCount} more for ${formatPackPriceCents(outOfMessages.pack.priceUsdCents)} — they expire at month-end.`
-              : " Need more before then? Upgrade or buy a message pack on the pricing page."}
-          </p>
-          <div className="mt-2 flex items-center gap-2">
-            {outOfMessages.pack.priceConfigured ? (
-              <Button
-                variant="primary"
-                size="sm"
-                loading={packCheckoutPending}
-                disabled={packCheckoutPending}
-                onClick={() => void buyMessagePack()}
-              >
-                Buy {outOfMessages.pack.messageCount} more for {formatPackPriceCents(outOfMessages.pack.priceUsdCents)}
-              </Button>
-            ) : (
-              <Link
-                href="/pricing"
-                className="inline-flex items-center rounded-md bg-amber-900 px-3 py-1.5 text-xs font-medium text-amber-50 hover:bg-amber-950 dark:bg-amber-100 dark:text-amber-950 dark:hover:bg-amber-200"
-              >
-                View pricing
-              </Link>
-            )}
-            <button
-              type="button"
-              onClick={() => setOutOfMessages(null)}
-              className="text-xs font-medium text-amber-900/70 hover:underline dark:text-amber-100/70"
-            >
-              I&rsquo;ll wait
-            </button>
-          </div>
+          {outOfBudget.window === "month" ? (
+            <>
+              <p className="font-semibold">
+                You&rsquo;ve reached this month&rsquo;s Coach Cal limit.
+              </p>
+              <p className="mt-1 text-amber-800/90 dark:text-amber-100/90">
+                Resets {formatBudgetReset(outOfBudget.resetAt)}.
+                {outOfBudget.pack.priceConfigured
+                  ? ` Need more before then? Top up for ${formatPackPriceCents(outOfBudget.pack.priceUsdCents)}.`
+                  : " Need more before then? Get in touch and we'll sort you out."}
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                {outOfBudget.pack.priceConfigured ? (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    loading={packCheckoutPending}
+                    disabled={packCheckoutPending}
+                    onClick={() => void buyMessagePack()}
+                  >
+                    Top up for {formatPackPriceCents(outOfBudget.pack.priceUsdCents)}
+                  </Button>
+                ) : (
+                  <Link
+                    href="/contact"
+                    className="inline-flex items-center rounded-md bg-amber-900 px-3 py-1.5 text-xs font-medium text-amber-50 hover:bg-amber-950 dark:bg-amber-100 dark:text-amber-950 dark:hover:bg-amber-200"
+                  >
+                    Get in touch
+                  </Link>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setOutOfBudget(null)}
+                  className="text-xs font-medium text-amber-900/70 hover:underline dark:text-amber-100/70"
+                >
+                  I&rsquo;ll wait
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="font-semibold">Coach Cal needs a short break.</p>
+              <p className="mt-1 text-amber-800/90 dark:text-amber-100/90">
+                You&rsquo;ve sent a lot in a short window. Try again{" "}
+                {formatBudgetReset(outOfBudget.resetAt)}.
+              </p>
+              <div className="mt-2">
+                <button
+                  type="button"
+                  onClick={() => setOutOfBudget(null)}
+                  className="text-xs font-medium text-amber-900/70 hover:underline dark:text-amber-100/70"
+                >
+                  Got it
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -1483,7 +1506,7 @@ export function CoachAiChat({
             <Button
               variant="primary"
               size="sm"
-              disabled={(!draft.trim() && !pendingImage) || outOfMessages !== null}
+              disabled={(!draft.trim() && !pendingImage) || outOfBudget !== null}
               onClick={() => void send()}
               aria-label="Send"
             >
@@ -1499,7 +1522,7 @@ export function CoachAiChat({
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <CoachAiUsageMeter refreshTick={usageTick} />
+            <CoachCalCostMeter refreshTick={usageTick} />
             {turns.length > 0 && (
               <button
                 type="button"

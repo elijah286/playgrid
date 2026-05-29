@@ -6,7 +6,7 @@ import type { PlayDocument } from "@/domain/play/types";
 import type { ChatMessage, ContentBlock } from "@/lib/coach-ai/llm";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { canUseAiFeatures } from "@/lib/billing/features";
-import { getCoachCalCapState } from "@/lib/billing/coach-cal-cap";
+import { getCoachCalCostState } from "@/lib/billing/coach-cal-cost-cap";
 import { getCoachCalImageCapState } from "@/lib/billing/coach-cal-image-cap";
 import type { CoachAiMode, ToolContext } from "@/lib/coach-ai/tools";
 import { getCoachCalVersion } from "@/lib/site/coach-cal-version";
@@ -267,20 +267,27 @@ export async function POST(req: Request): Promise<Response> {
     }
   }
 
-  // Hard cap on Coach Cal usage. The meter is purely informational —
-  // this is the only enforcement point. Returns a structured payload
-  // so the chat client can render the buy/wait CTAs without parsing
-  // the message text.
-  const cap = await getCoachCalCapState(gate.userId);
-  if (cap.exceeded) {
+  // Cost-based Coach Cal cap. Three windows (5h burst / 24h day / calendar
+  // month) measured in micro-USD against coach_ai_token_usage — see
+  // getCoachCalCostState. This is the only enforcement point; the meter is
+  // informational. Admins get enforced=false and blow past every limit.
+  // The block payload tells the client which window tripped + when it
+  // frees up, so it can render the right CTA (pack for monthly, wait for
+  // burst/day) without parsing message text.
+  const cost = await getCoachCalCostState(gate.userId, gate.isAdmin);
+  if (cost.enforced && cost.exceeded) {
+    const w = cost[cost.binding];
+    const isMonthly = cost.binding === "month";
+    const message = isMonthly
+      ? "You've reached this month's Coach Cal limit."
+      : "Coach Cal needs a short break — you've sent a lot in a short window.";
     return new Response(
       sseChunk("error", {
-        message: `You've used all ${cap.limit} Coach Cal messages this month. Buy a pack for more, or wait until the period resets.`,
-        code: "out_of_messages",
-        count: cap.count,
-        limit: cap.limit,
-        resetDate: cap.resetDate,
-        pack: cap.pack,
+        message,
+        code: "out_of_budget",
+        window: cost.binding,
+        resetAt: w.resetAt,
+        pack: cost.pack,
       }) +
         sseChunk("done", { toolCalls: [], text: "" }),
       { status: 200, headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } },

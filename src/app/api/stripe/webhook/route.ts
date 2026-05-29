@@ -4,6 +4,7 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { getStripeClient, tierForPriceId, isSeatPriceId } from "@/lib/billing/stripe";
 import { getStripeConfig } from "@/lib/site/stripe-config";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
+import { COACH_CAL_PACK_BUDGET_MICROS } from "@/lib/billing/coach-cal-cost-cap";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -201,23 +202,19 @@ async function clearPendingChangeForSchedule(
     .eq("stripe_subscription_id", subId);
 }
 
-/** Add a Coach Cal message pack to the buyer's owner_seat_grants row.
- *  Stamps purchased_messages_month with the current UTC first-of-month
- *  so getCoachCalCapState ignores the credit once the month rolls over.
- *  If the buyer purchases a second pack in the same month, the counts
- *  add. If their last pack was last month, we reset to this month's
- *  count. */
+/** Grant a Coach Cal cost-budget top-up to the buyer's owner_seat_grants
+ *  row. The Cal cap is now cost-based (micro-USD windows, not message
+ *  count), so a pack purchase adds a fixed slice of monthly *budget*
+ *  (COACH_CAL_PACK_BUDGET_MICROS). Stamps purchased_budget_month with the
+ *  current UTC first-of-month so getCoachCalCostState ignores the credit
+ *  once the month rolls over. Second pack in the same month adds to the
+ *  running total; a pack after a month boundary resets to this month. */
 async function applyCoachCalPackPurchase(session: Stripe.Checkout.Session): Promise<void> {
   const userId =
     (session.metadata?.user_id as string | undefined) ??
     (typeof session.client_reference_id === "string" ? session.client_reference_id : undefined);
   if (!userId) {
     console.error("[stripe webhook] coach_cal_messages: no user_id on session", session.id);
-    return;
-  }
-  const messageCount = Number(session.metadata?.message_count ?? 0);
-  if (!Number.isFinite(messageCount) || messageCount <= 0) {
-    console.error("[stripe webhook] coach_cal_messages: invalid message_count", session.id);
     return;
   }
 
@@ -228,26 +225,26 @@ async function applyCoachCalPackPurchase(session: Stripe.Checkout.Session): Prom
   const admin = createServiceRoleClient();
   const { data: existing } = await admin
     .from("owner_seat_grants")
-    .select("purchased_messages, purchased_messages_month")
+    .select("purchased_budget_micros, purchased_budget_month")
     .eq("owner_id", userId)
     .maybeSingle();
   const current =
-    existing?.purchased_messages_month === monthStr
-      ? ((existing.purchased_messages as number | null) ?? 0)
+    existing?.purchased_budget_month === monthStr
+      ? ((existing.purchased_budget_micros as number | null) ?? 0)
       : 0;
-  const nextTotal = current + Math.floor(messageCount);
+  const nextTotal = current + COACH_CAL_PACK_BUDGET_MICROS;
 
   const { error } = await admin
     .from("owner_seat_grants")
     .upsert(
       {
         owner_id: userId,
-        purchased_messages: nextTotal,
-        purchased_messages_month: monthStr,
+        purchased_budget_micros: nextTotal,
+        purchased_budget_month: monthStr,
       },
       { onConflict: "owner_id" },
     );
-  if (error) throw new Error(`coach_cal_messages upsert failed: ${error.message}`);
+  if (error) throw new Error(`coach_cal_pack budget upsert failed: ${error.message}`);
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
