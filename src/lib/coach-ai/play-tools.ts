@@ -597,6 +597,29 @@ export function withProgression(
   return { ok: true, spec: next };
 }
 
+/**
+ * Identity-preserving stamp of `progressionIndex` (1-based) onto a play's
+ * EXISTING players, matched by label, leaving positions/ids/everything-else
+ * untouched. Players named in `order` get their badge number; players that
+ * previously had a badge but aren't in `order` are cleared. Pure — returns a
+ * new array, never mutates the input.
+ */
+export function stampProgressionIndex<P extends { label: string; progressionIndex?: number }>(
+  players: P[],
+  order: string[],
+): P[] {
+  const indexByLabel = new Map(order.map((label, i) => [label, i + 1]));
+  return players.map((p) => {
+    const idx = indexByLabel.get(p.label);
+    if (idx !== undefined) return { ...p, progressionIndex: idx };
+    if (p.progressionIndex !== undefined) {
+      const { progressionIndex: _drop, ...rest } = p;
+      return rest as P;
+    }
+    return p;
+  });
+}
+
 export function isHardWarning(w: RenderWarning): boolean {
   return HARD_RENDER_WARNINGS.has(w.code);
 }
@@ -1934,22 +1957,18 @@ const set_progression: CoachAiTool = {
       const updated = withProgression(savedSpec, order);
       if (!updated.ok) return { ok: false, error: updated.error };
 
-      const resolvedVariant = (ctx.sportVariant ?? savedSpec.variant ?? "flag_7v7") as SportVariant;
-      const playType = ((play as { play_type?: string }).play_type as "offense" | "defense" | "special_teams" | undefined) ?? "offense";
-      const playbookSettings = await loadPlaybookSettings(ctx.playbookId, resolvedVariant);
+      // Identity-preserving: stamp progressionIndex onto the play's EXISTING
+      // players in their current positions. No geometry re-render — that would
+      // run resolveDiagramAndSpec and trip formation_fallback on non-canonical
+      // formations (e.g. "Smash Right"). The coach asked for badges, not a
+      // re-layout.
+      const newPlayers = stampProgressionIndex(parentDoc.layers.players, order);
 
-      const inputResolved = resolveDiagramAndSpec(updated.spec, undefined, resolvedVariant, {
-        playType,
-        advancedCapabilities: playbookSettings.advancedCapabilities,
-      });
-      if (!inputResolved.ok) return { ok: false, error: inputResolved.error };
-      const persistedSpec = inputResolved.spec;
-
-      const newDoc = coachDiagramToPlayDocument({ ...inputResolved.diagram, variant: resolvedVariant });
-      // Preserve the coach's existing metadata (notes, names) — only the
-      // progression (and the spec stamp) is changing here.
-      newDoc.metadata = { ...parentDoc.metadata };
-      if (persistedSpec) newDoc.metadata.spec = persistedSpec;
+      const newDoc = {
+        ...parentDoc,
+        layers: { ...parentDoc.layers, players: newPlayers },
+        metadata: { ...parentDoc.metadata, spec: updated.spec },
+      };
 
       const supabase = await createClient();
       const { data: { user } } = await supabase.auth.getUser();

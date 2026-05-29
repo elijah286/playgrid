@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { withProgression } from "./play-tools";
+import { stampProgressionIndex, withProgression } from "./play-tools";
 import type { PlaySpec } from "@/domain/play/spec";
 
 function specWith(assignments: PlaySpec["assignments"]): PlaySpec {
@@ -74,5 +74,48 @@ describe("withProgression", () => {
     const before = JSON.stringify(baseSpec);
     withProgression(baseSpec, ["S", "Z"]);
     expect(JSON.stringify(baseSpec)).toBe(before);
+  });
+});
+
+describe("stampProgressionIndex", () => {
+  const players: { label: string; x: number; y: number; progressionIndex?: number }[] = [
+    { label: "S", x: 10, y: 20 },
+    { label: "Z", x: 30, y: 20 },
+    { label: "B", x: 50, y: 20 },
+    { label: "QB", x: 25, y: 5 },
+  ];
+
+  it("stamps 1-based badge numbers by label, preserving positions", () => {
+    const out = stampProgressionIndex(players, ["S", "Z", "B"]);
+    expect(out.map((p) => [p.label, p.progressionIndex])).toEqual([
+      ["S", 1],
+      ["Z", 2],
+      ["B", 3],
+      ["QB", undefined],
+    ]);
+    // positions untouched
+    out.forEach((p, i) => {
+      expect(p.x).toBe(players[i].x);
+      expect(p.y).toBe(players[i].y);
+    });
+  });
+
+  it("clears stale badges when a player drops out of the order", () => {
+    const stamped = stampProgressionIndex(players, ["S", "Z"]);
+    const cleared = stampProgressionIndex(stamped, ["S"]);
+    expect(cleared.find((p) => p.label === "Z")?.progressionIndex).toBeUndefined();
+    expect(cleared.find((p) => p.label === "S")?.progressionIndex).toBe(1);
+  });
+
+  it("clears all badges on an empty order", () => {
+    const stamped = stampProgressionIndex(players, ["S", "Z", "B"]);
+    const cleared = stampProgressionIndex(stamped, []);
+    expect(cleared.every((p) => p.progressionIndex === undefined)).toBe(true);
+  });
+
+  it("does not mutate the input array", () => {
+    const before = JSON.stringify(players);
+    stampProgressionIndex(players, ["S", "Z"]);
+    expect(JSON.stringify(players)).toBe(before);
   });
 });
