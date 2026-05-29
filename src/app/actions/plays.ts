@@ -1276,6 +1276,90 @@ export async function createDefensePlayFromFenceAction(args: {
   return { ok: true as const, playId: play.id as string };
 }
 
+/**
+ * Attach a chat-composed defense overlay to an EXISTING offensive play as its
+ * custom opponent — the "Add to this play" half of the post-compose_defense
+ * save chip (the other half, createDefensePlayFromFenceAction, makes a
+ * standalone defense play row). After this runs, opening the offensive play
+ * shows the defenders overlaid (parent.vs_play_id → hidden defense child); the
+ * offense itself is NOT modified.
+ *
+ * Reuses createCustomOpponentAction — the same machinery the editor's "add a
+ * custom opponent" button uses — seeded with the defenders + their routes
+ * parsed from the fence. Keeping ONE attach path (Rule 11 symmetry) means the
+ * lock checks, snapshotting, and parent relink stay in lockstep with the
+ * editor instead of drifting into a second implementation.
+ */
+export async function attachDefenseFromFenceAction(args: {
+  fenceJson: string;
+  offensivePlayId: string;
+  playbookId: string;
+}) {
+  const { fenceJson, offensivePlayId, playbookId } = args;
+  if (!hasSupabaseEnv()) {
+    return { ok: false as const, error: "Supabase is not configured." };
+  }
+  if (!fenceJson || !offensivePlayId || !playbookId) {
+    return { ok: false as const, error: "fenceJson, offensivePlayId, and playbookId are required." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  // Permission check mirrors createDefensePlayFromFenceAction — the RPC
+  // parameter is named `pb` (PostgREST resolves overloads by parameter NAME).
+  const { data: canEdit, error: permErr } = await supabase.rpc("can_edit_playbook", { pb: playbookId });
+  if (permErr) return { ok: false as const, error: permErr.message };
+  if (canEdit !== true) return { ok: false as const, error: "You don't have edit access to this playbook." };
+
+  // Parse the fence and keep ONLY the defenders + their routes — the offense
+  // already lives on the parent play; the custom opponent holds defense only.
+  let parsedFence: unknown;
+  try {
+    parsedFence = JSON.parse(fenceJson);
+  } catch (e) {
+    return { ok: false as const, error: `fenceJson is not valid JSON: ${(e as Error).message}` };
+  }
+  const { coachDiagramToPlayDocument, coachDiagramSchema } = await import("@/features/coach-ai/coachDiagramConverter");
+  const parseResult = coachDiagramSchema.safeParse(parsedFence);
+  if (!parseResult.success) {
+    return { ok: false as const, error: `fenceJson is not a valid CoachDiagram: ${parseResult.error.message}` };
+  }
+  const diagram = parseResult.data;
+  const defenseOnlyDiagram = {
+    ...diagram,
+    players: diagram.players.filter((p) => p.team === "D"),
+    routes: (diagram.routes ?? []).filter((r) => {
+      const carrier = diagram.players.find((p) => p.id === r.from);
+      return carrier?.team === "D";
+    }),
+  };
+  if (defenseOnlyDiagram.players.length === 0) {
+    return { ok: false as const, error: "fenceJson has no defenders to attach." };
+  }
+  let doc: PlayDocument;
+  try {
+    doc = coachDiagramToPlayDocument(defenseOnlyDiagram);
+  } catch (e) {
+    return { ok: false as const, error: `Could not convert fence to PlayDocument: ${(e as Error).message}` };
+  }
+
+  // Seed the editor's own attach machinery with the converted defenders +
+  // routes. createCustomOpponentAction creates the hidden child and relinks
+  // the parent (vs_play_id + snapshot), so the offense play renders the overlay.
+  const attached = await createCustomOpponentAction(offensivePlayId, {
+    players: doc.layers.players,
+    routes: doc.layers.routes,
+  });
+  if (!attached.ok) return { ok: false as const, error: attached.error };
+
+  // Link the coach back to the OFFENSE play — that's where the overlay shows.
+  return { ok: true as const, playId: offensivePlayId };
+}
+
 export async function unlinkDefenseVsPlayAction(defensePlayId: string) {
   if (!hasSupabaseEnv()) {
     return { ok: false as const, error: "Supabase is not configured." };

@@ -18,9 +18,13 @@ export type NoteProposalSavedState =
   | { status: "saved"; documentId: string; revisionNumber: number }
   | { status: "dismissed" };
 
-/** Save state for the SaveDefenseProposal chip (Fix 4). */
+/** Save state for the SaveDefenseProposal chip (Fix 4). `mode` records which
+ *  of the two commit paths the coach chose: "attached" overlays the defense on
+ *  the existing offense play (playId = the offense play); "new" creates a
+ *  standalone defense play (playId = the new defense play). The chip uses it to
+ *  word the confirmation and point the link at the right play. */
 export type SaveDefenseProposalState =
-  | { status: "saved"; playId: string }
+  | { status: "saved"; mode: "attached" | "new"; playId: string }
   | { status: "dismissed" };
 
 export type CoachAiTurn =

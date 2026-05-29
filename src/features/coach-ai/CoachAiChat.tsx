@@ -19,7 +19,11 @@ import {
 } from "@/app/actions/coach-ai-feedback";
 import { getCoachCalUpgradeBannerEnabledAction } from "@/app/actions/admin-coach-cal-banner";
 import { commitPlaybookNoteProposalAction } from "@/app/actions/coach-ai-playbook-notes";
-import { commitSaveDefenseProposalAction } from "@/app/actions/coach-ai-save-defense";
+import {
+  commitAttachDefenseToPlayAction,
+  commitSaveDefenseProposalAction,
+} from "@/app/actions/coach-ai-save-defense";
+import type { SaveDefenseProposalState } from "@/app/actions/coach-ai";
 import type { SaveDefenseProposal } from "@/lib/coach-ai/save-defense-tools";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { AssistantMessageWithFeedback } from "./AssistantMessageWithFeedback";
@@ -1715,19 +1719,23 @@ function SaveDefensePlayChip({
 }: {
   proposal: SaveDefenseProposal;
   playbookId: string;
-  state: { status: "saved"; playId: string } | { status: "dismissed" } | null;
-  onUpdate: (next: { status: "saved"; playId: string } | { status: "dismissed" }) => void;
+  state: SaveDefenseProposalState | null;
+  onUpdate: (next: SaveDefenseProposalState) => void;
 }) {
-  const [pending, setPending] = useState(false);
+  // Which button is in-flight, so we can disable both + label the right one.
+  const [pending, setPending] = useState<null | "attached" | "new">(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function save() {
-    setPending(true);
+  async function commit(mode: "attached" | "new") {
+    setPending(mode);
     setError(null);
-    const res = await commitSaveDefenseProposalAction(playbookId, proposal);
-    setPending(false);
+    const res =
+      mode === "attached"
+        ? await commitAttachDefenseToPlayAction(playbookId, proposal)
+        : await commitSaveDefenseProposalAction(playbookId, proposal);
+    setPending(null);
     if (res.ok) {
-      onUpdate({ status: "saved", playId: res.playId });
+      onUpdate({ status: "saved", mode, playId: res.playId });
     } else {
       setError(res.error);
     }
@@ -1741,7 +1749,9 @@ function SaveDefensePlayChip({
       >
         <Check className="size-3.5 shrink-0" />
         <span className="truncate">
-          Saved "{proposal.suggestedName}" — open the new play
+          {state.mode === "attached"
+            ? `Added the defense to ${proposal.offensivePlayName} — open the play`
+            : `Saved "${proposal.suggestedName}" — open the new play`}
         </span>
       </a>
     );
@@ -1749,13 +1759,15 @@ function SaveDefensePlayChip({
 
   if (state?.status === "dismissed") return null;
 
+  const busy = pending !== null;
+
   return (
     <div className="rounded-lg border border-emerald-300 bg-emerald-50/60 p-2.5 text-xs ring-1 ring-emerald-200/60 dark:border-emerald-700 dark:bg-emerald-950/30">
       <div className="flex items-start gap-2">
         <BookOpen className="mt-0.5 size-3.5 shrink-0 text-emerald-700 dark:text-emerald-300" />
         <div className="min-w-0 flex-1">
           <div className="truncate font-semibold text-emerald-900 dark:text-emerald-100">
-            Save as new defensive play: "{proposal.suggestedName}"
+            Keep this defense? "{proposal.suggestedName}"
           </div>
           <div className="mt-0.5 line-clamp-2 text-emerald-800/80 dark:text-emerald-200/70">
             {proposal.changeSummary} (vs {proposal.offensivePlayName})
@@ -1765,11 +1777,11 @@ function SaveDefensePlayChip({
           )}
         </div>
       </div>
-      <div className="mt-2 flex items-center justify-end gap-1.5">
+      <div className="mt-2 flex flex-wrap items-center justify-end gap-1.5">
         <button
           type="button"
           onClick={() => onUpdate({ status: "dismissed" })}
-          disabled={pending}
+          disabled={busy}
           className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-emerald-900/70 hover:bg-emerald-100/60 disabled:opacity-50 dark:text-emerald-200/70 dark:hover:bg-emerald-900/40"
         >
           <X className="size-3" />
@@ -1777,12 +1789,21 @@ function SaveDefensePlayChip({
         </button>
         <button
           type="button"
-          onClick={() => void save()}
-          disabled={pending}
+          onClick={() => void commit("attached")}
+          disabled={busy}
+          className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-emerald-800 shadow-sm hover:bg-emerald-50 disabled:opacity-60 dark:border-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-100 dark:hover:bg-emerald-900/50"
+        >
+          <Check className="size-3" />
+          {pending === "attached" ? "Adding…" : "Add to this play"}
+        </button>
+        <button
+          type="button"
+          onClick={() => void commit("new")}
+          disabled={busy}
           className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
         >
           <Check className="size-3" />
-          {pending ? "Saving…" : "Save as new defensive play"}
+          {pending === "new" ? "Saving…" : "Save as new defense play"}
         </button>
       </div>
     </div>

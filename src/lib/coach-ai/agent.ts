@@ -111,9 +111,9 @@ Behavior rules — follow these strictly:
       3. The fence didn't make it into your reply text (rare — only if you composed but then truncated the fence out). Force a save by passing the fence as \`diagram\`.
       For the common anchored-fence flow (rule 7c-paragraph-1), call \`compose_play\`, paste the fence, stop. The harness does the rest.
     - **\`create_play\` rules when you DO call it**: pass \`play_spec\` (preferred) when you can describe the play in named primitives — formation, optional defense, per-player assignments via catalog route families (Slant, Post, Dig, Curl, Hitch, Out, In). Fall back to \`diagram\` for off-catalog shapes. Strip defenders client-side before calling (the play is one-sided). Notes are auto-generated from spec — you don't need to call update_play_notes; the "when-to-use" opener is templated and you can rephrase later as an enhancement.
-    - **Defense saves are different — auto-commit ONLY fires on save-intent.** Offense fences auto-save on every full-roster fence (above). Defense overlays from \`compose_defense(on_play=...)\` auto-save ONLY when (a) chat is anchored to an offense play AND (b) the coach's most recent message uses save-intent verbs ("install Tampa 2", "add Cover 3", "save this defense", "keep this", "build me a Tampa 2", "set up a blitz"). When the coach uses exploration phrasing ("show me Tampa 2", "how does Cover 3 play this", "what about a blitz here", "walk me through Tampa 2"), drop the fence in your reply for the visual answer — do NOT claim "saved/added/installed/created" because nothing was. The harness appends "_Saved defense play: [name] — [play://uuid]_" when the auto-commit fires; that suffix IS the canonical confirmation, same rule as offense.
+    - **Defense saves are different — you OFFER, the coach saves.** Offense fences auto-save on every full-roster fence (above). Defense overlays from \`compose_defense(on_play=...)\` do NOT auto-save. When (a) chat is anchored to an offense play (or the overlay fence's title names one) AND (b) the coach's most recent message uses save-intent verbs ("install Tampa 2", "add Cover 3", "save this defense", "keep this", "build me a Tampa 2", "set up a blitz"), the harness renders a two-button chip under your reply: **"Add to this play"** (overlays the defense on that offense play as its opponent) and **"Save as new defense play"** (a standalone defense play linked to the offense). The coach picks; NOTHING is written until they click. So: drop the overlay fence in your reply and DESCRIBE the look — do NOT claim "saved/added/installed/created", because nothing is saved yet. Phrase it as an offer, e.g. "Here's Cover 2 over your Flood Right — use the buttons below to add it to this play or save it as its own defense play." When the coach uses exploration phrasing ("show me Tampa 2", "how does Cover 3 play this", "walk me through Tampa 2"), no chip is offered — just drop the fence as the visual answer. You may also call \`propose_save_defense_play\` yourself to emit the chip explicitly (e.g. after an exploration turn the coach now wants to keep); if you do, the harness won't double-offer.
     - **Defense-only fences (compose_defense WITHOUT on_play) NEVER auto-save.** Standalone defense ("just show me a 4-3 Cover 3") is visual answer only — there's no offense to link via vs_play_id. If the coach asks to save a standalone defense, re-run \`compose_defense\` WITH \`on_play\` set to an offensive play fence (or call \`propose_save_defense_play\` for the chip path).
-    - **\`update_play_notes\` on the OFFENSE play does NOT save a defense.** Common trap: calling \`compose_defense\` then \`update_play_notes\` on the anchored offense, thinking the offense's new notes "describe the defense". The defense play never lands and the coach sees nothing in the Defense tab. Use the auto-commit (save-intent flow) OR \`propose_save_defense_play\` (chip).
+    - **\`update_play_notes\` on the OFFENSE play does NOT save a defense.** Common trap: calling \`compose_defense\` then \`update_play_notes\` on the anchored offense, thinking the offense's new notes "describe the defense". The defense play never lands and the coach sees nothing in the Defense tab. To persist a defense, drop the overlay fence (the harness offers the save chip on save-intent) OR call \`propose_save_defense_play\` (chip) — the coach clicks "Add to this play" / "Save as new defense play" to keep it.
     - **READ NUMBERS / QB PROGRESSION → \`set_progression\`, NEVER \`update_play_notes\`.** When a coach asks to add / change / clear "read numbers", a "progression", or "who the QB looks at first / second / third" on an existing play (e.g. "number the reads on Smash Right", "make @S the 1st read", "put 1-2-3 on the receivers for the wristband"), call \`set_progression({ play_id, order: ["S","Z","B"] })\` — \`order\` is the receiver labels in read sequence. That writes the STRUCTURED field that renders the numbered badges on the diagram. \`update_play_notes\` only changes prose — it does NOT make the badges appear, so a coach who asked for read numbers and got only a notes edit will see no change on the field. Each label in \`order\` must be a receiver running a route (the tool rejects blockers / runners / the QB). Pass \`order: []\` to clear the numbers. The play must have a saved spec (anything composed via \`compose_play\` qualifies); if it doesn't, the tool says so and the fix is to recompose. The "Progression:" block in the notes follows automatically from this field — you don't need a separate notes edit for it.
     - **Notes shape depends on the play's side — DO NOT default to offense for defense plays.** Whether the auto-projector wrote them or you're rephrasing via \`update_play_notes\`, defense-play notes describe DEFENDER actions, not offensive reads.
       - **Offense play** → when-to-run summary, @Q's primary read, per-skill-player jobs, decision points on option routes. ✓ "@Q reads the safety; hit @X on the slant if the corner squats."
@@ -162,7 +162,7 @@ Behavior rules — follow these strictly:
    1. Read the prior turn's \`\`\`play fence(s) for the existing offense plays.
    2. For EACH offense play the coach wants the defense installed against, call \`compose_defense({ front: "<front>", coverage: "<coverage>", on_play: "<that offense play's fence verbatim>" })\` — one call per offense play.
    3. Each call returns a sanitized \`\`\`play fence with offense byte-preserved + defenders + zones overlaid. Drop each VERBATIM in your reply.
-   4. The auto-commit saves each defense play linked to its offense via \`vs_play_id\` because the coach's message used save-intent verbs ("install").
+   4. The harness renders a save chip under your reply for each overlay (the coach's "install" is save-intent) — the coach clicks "Add to this play" or "Save as new defense play" to keep each one. Do NOT claim the defenses are saved; say they're drawn up and ready to keep via the buttons.
 
    **You can re-read Rule 322 ("HOW SHOULD DEFENSE COVER THIS PLAY") for the OVERLAY case** — that's adjacent but different: 322 is when the coach asks "how does X defend this play" (visual answer, no save). 7h is when the coach asks to SAVE defensive plays. Both route to \`compose_defense\`; only the save-intent differs.
 
@@ -2023,6 +2023,28 @@ export function extractLastUserText(history: ChatMessage[]): string {
 export const SAVE_INTENT_DEFENSE_RE =
   /\b(install|save|add|create|build|make|keep|store|stick|lock\s+in|set\s+up|put\s+in|wire\s+up)\b/i;
 
+/** Build the display copy (suggested play name + chip subline) for a
+ *  harness-emitted defense save OFFER. When Cal composes a defense overlay
+ *  with clear save-intent but doesn't call propose_save_defense_play itself,
+ *  the agent loop fabricates the proposal so the coach still gets the
+ *  two-button chip ("Add to this play" / "Save as new defense play") instead
+ *  of a silent auto-save. Pure + exported so the naming convention
+ *  ("{Defense} vs {Offense}", clamped to 80 chars) is unit-tested without a DB.
+ *
+ *  As of 2026-05-29 the agent loop OFFERS rather than auto-commits — the
+ *  silent write was the source of the "Cal saved it without asking + then
+ *  errored" report. The chip lets the coach pick attach-vs-new. */
+export function buildDefenseSaveProposalCopy(args: {
+  defenseLabel: string;
+  offenseName: string;
+}): { suggestedName: string; changeSummary: string } {
+  const offense = args.offenseName.trim() || "play";
+  const defense = args.defenseLabel.trim() || "Defense";
+  const suggestedName = `${defense} vs ${offense}`.slice(0, 80);
+  const changeSummary = `${defense} overlaid on ${offense}`;
+  return { suggestedName, changeSummary };
+}
+
 /** Decide whether create-auto-commit should skip a fence based on side
  *  (offense vs defense-only) and the coach's save-intent.
  *
@@ -3155,8 +3177,14 @@ export async function runAgent(
   // Tracks whether the defense-auto-commit branch (below) actually ran a
   // successful save this turn. Used at the end of the function to detect
   // the hallucination-without-save case and surface a warning.
+  // (defenseAutoCommitSucceeded is still set by the defense-ONLY create-
+  // auto-commit path; the OVERLAY path now OFFERS a chip instead of saving.)
   let defenseAutoCommitAttempted = false;
   let defenseAutoCommitSucceeded = false;
+  // Set true when the overlay branch emitted a SaveDefenseProposal chip (the
+  // OFFER that replaced the silent auto-save). When true, a hallucinated
+  // "saved" claim is corrected toward the buttons, not toward "couldn't save".
+  let defenseOfferEmitted = false;
 
   // ── Defense auto-commit (resolvable offense play + clear save intent) ──
   // When Cal composed a defense overlay (compose_defense with on_play)
@@ -3207,9 +3235,9 @@ export async function runAgent(
           // Resolve offensive play: prefer ctx.playId (anchored), fall
           // back to the fence's title (compose_defense overlay carries
           // the prior play's title verbatim). This handles the common
-          // failure mode where the coach asks "install Tampa 2 on this
-          // play" from the playbook list page — ctx.playId is null but
-          // the fence's title still names the offense.
+          // case where the coach asks "install Tampa 2 on this play" from
+          // the playbook list page — ctx.playId is null but the fence's
+          // title still names the offense.
           let effectivePlayId: string | null = ctx.playId;
           let effectivePlayName: string | null = ctx.playName ?? null;
           if (!effectivePlayId) {
@@ -3229,36 +3257,32 @@ export async function runAgent(
             // and let the hallucination warning explain what to do.
             throw new Error("no resolvable offensive play");
           }
+          // OFFER, don't auto-save (2026-05-29). The coach reported that Cal
+          // saved the overlay silently AND then surfaced an error — they
+          // wanted to SEE the defense and pick between attaching it to the
+          // play vs. saving it as a new defense play. Instead of writing the
+          // DB here, fabricate a SaveDefenseProposal so the same two-button
+          // chip propose_save_defense_play would emit renders. If Cal already
+          // called that tool this turn, the gate above skipped us — no double
+          // chip. No DB write happens until the coach clicks a button.
           const offenseName = effectivePlayName?.trim() || "play";
           const defenseLabel = lastComposeDefenseArgs
             ? `${lastComposeDefenseArgs.front} ${lastComposeDefenseArgs.coverage}`.trim()
             : (typeof parsed.title === "string" ? parsed.title.trim() : "") || "Defense";
-          const suggestedName = `${defenseLabel} vs ${offenseName}`.slice(0, 80);
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const { createDefensePlayFromFenceAction } = require("@/app/actions/plays") as typeof import("@/app/actions/plays");
-          const commit = await createDefensePlayFromFenceAction({
-            fenceJson: lastFenceFromTool,
-            offensivePlayId: effectivePlayId,
-            suggestedName,
-            playbookId: ctx.playbookId,
+          const { suggestedName, changeSummary } = buildDefenseSaveProposalCopy({
+            defenseLabel,
+            offenseName,
           });
-          if (commit.ok) {
-            mutated = true;
-            defenseAutoCommitSucceeded = true;
-            toolCalls.push("create_play");
-            const suffix = `\n\n_Saved defense play: [${suggestedName}](play://${commit.playId})._`;
-            finalText = finalText + suffix;
-            onEvent?.({ type: "text_delta", text: suffix });
-          } else {
-            // Surface the failure so coach knows the defense didn't land.
-            // Same rationale as the existing failedSaves suffix on the
-            // create auto-commit: silent failure → coach thinks Cal saved
-            // it when nothing did.
-            const reason = commit.error.slice(0, 600);
-            const suffix = `\n\n_⚠️ Couldn't auto-save defense play "${suggestedName}": ${reason}_`;
-            finalText = finalText + suffix;
-            onEvent?.({ type: "text_delta", text: suffix });
-          }
+          const proposal: import("./save-defense-tools").SaveDefenseProposal = {
+            proposalId: globalThis.crypto.randomUUID(),
+            defenseFenceJson: lastFenceFromTool,
+            offensivePlayId: effectivePlayId,
+            offensivePlayName: offenseName,
+            suggestedName,
+            changeSummary,
+          };
+          saveDefenseProposals.push(proposal);
+          defenseOfferEmitted = true;
         }
       } catch {
         // Fence wasn't valid JSON — leave chat alone.
@@ -3580,7 +3604,12 @@ export async function runAgent(
   // would mis-fire on a save that actually landed (surfaced 2026-05-21).
   if (calHallucinatedDefenseSave && !defenseAutoCommitSucceeded) {
     let reason: string;
-    if (!defenseAutoCommitAttempted) {
+    if (defenseOfferEmitted) {
+      // We DID emit the save chip — Cal just jumped the gun claiming it
+      // landed. Point the coach at the buttons rather than implying failure.
+      reason =
+        "I haven't saved it yet — use the buttons below to add it to the play or save it as a new defense play.";
+    } else if (!defenseAutoCommitAttempted) {
       reason =
         "the request didn't read as a clear save (or the defense fence didn't include both offense + defenders). " +
         "Try \"install Tampa 2 on Smash Right\" (naming the offense play explicitly) — or click into the play first, then ask me.";

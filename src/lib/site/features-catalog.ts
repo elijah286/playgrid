@@ -826,12 +826,12 @@ export const FEATURES: FeatureEntry[] = [
   },
   {
     id: "coach-cal-save-defense-as-new-play",
-    name: "Coach Cal: save defense overlay as new play",
+    name: "Coach Cal: keep a defense overlay — your choice",
     description:
-      "After Coach Cal overlays a defense on one of your offensive plays, it now offers an inline \"Save as new defensive play\" chip. One click creates a new defense play in your playbook linked to the source offense — name defaults to \"{Defense} vs {OffensePlay}\" (e.g., \"Tampa 2 vs Noah\"). The new play stores the offense as a vs_play_snapshot so it always renders against the right look, and a wristband code is auto-assigned. Lives alongside your regular plays in the playbook so the whole staff can call it.",
+      "After Coach Cal overlays a defense on one of your offensive plays, it shows the look in chat and offers a two-button chip so YOU decide what to keep — Cal no longer saves silently behind your back. \"Add to this play\" attaches the defenders as that play's opponent overlay (they show whenever you open the offense, and your saved standalone coverages stay untouched). \"Save as new defense play\" creates a separate defense play linked to the source offense — name defaults to \"{Defense} vs {OffensePlay}\" (e.g., \"Cover 2 vs Flood Right\"), the offense is stored as a vs_play_snapshot so it always renders against the right look, and a wristband code is auto-assigned. Nothing is written until you click. Both options stay callable by the whole staff.",
     category: "Coach AI",
     status: "beta",
-    addedDate: "2026-05-20",
+    addedDate: "2026-05-29",
   },
   {
     id: "coach-cal-anchor-aware-play-resolution",

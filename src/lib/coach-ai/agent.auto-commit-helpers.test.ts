@@ -31,6 +31,7 @@ import {
   shouldEmitLobbyOrphanWarning,
   shouldSkipFenceInCreateAutoCommit,
   SAVE_INTENT_DEFENSE_RE,
+  buildDefenseSaveProposalCopy,
   findPriorOffenseFenceJson,
   stripBrokenFences,
 } from "./agent";
@@ -793,5 +794,42 @@ describe("stripBrokenFences — graceful handling when retry validation fails", 
   it("falls back to a generic message when errors array is empty", () => {
     const result = stripBrokenFences('```play\n{}\n```', []);
     expect(result).toContain("internal validation rejected the diagram");
+  });
+});
+
+describe("buildDefenseSaveProposalCopy", () => {
+  // The OVERLAY save path stopped auto-committing on 2026-05-29 — instead the
+  // agent loop fabricates a SaveDefenseProposal so the coach gets the same
+  // two-button chip. This helper pins the display copy that chip shows.
+
+  it("builds '{Defense} vs {Offense}' as the suggested name", () => {
+    const { suggestedName } = buildDefenseSaveProposalCopy({
+      defenseLabel: "7v7 Zone Cover 2",
+      offenseName: "Flood Right",
+    });
+    expect(suggestedName).toBe("7v7 Zone Cover 2 vs Flood Right");
+  });
+
+  it("describes the overlay in the change summary", () => {
+    const { changeSummary } = buildDefenseSaveProposalCopy({
+      defenseLabel: "Cover 2",
+      offenseName: "Flood Right",
+    });
+    expect(changeSummary).toBe("Cover 2 overlaid on Flood Right");
+  });
+
+  it("clamps the suggested name to 80 chars (DB column / chip width)", () => {
+    const { suggestedName } = buildDefenseSaveProposalCopy({
+      defenseLabel: "X".repeat(60),
+      offenseName: "Y".repeat(60),
+    });
+    expect(suggestedName.length).toBe(80);
+  });
+
+  it("falls back to readable defaults when a label is blank", () => {
+    expect(buildDefenseSaveProposalCopy({ defenseLabel: "  ", offenseName: "" })).toEqual({
+      suggestedName: "Defense vs play",
+      changeSummary: "Defense overlaid on play",
+    });
   });
 });
