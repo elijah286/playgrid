@@ -250,7 +250,7 @@ export function UsersAdminClient({
       if (bv == null) return -1;
       return (av - bv) * sign;
     });
-  }, [users, query, sortKey, sortDir]);
+  }, [users, query, sortKey, sortDir, excludedEmails]);
 
   function refresh() {
     startTransition(async () => {
