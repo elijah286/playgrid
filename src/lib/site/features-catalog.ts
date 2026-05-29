@@ -164,6 +164,15 @@ export const FEATURES: FeatureEntry[] = [
 
   // ── Plays & formations ──────────────────────────────────────────
   {
+    id: "qb-progression-numbers",
+    name: "QB progression (read-order) numbers on receivers",
+    description:
+      "Label receivers 1, 2, 3… in the order the QB should read them. Each numbered receiver gets a small amber badge next to their token in the play diagram and in playbook thumbnails, so a young QB can glance at a wristband card and know exactly where to look first, second, and third. The read order also drives the \"Progression\" block in the play notes — listing receivers in that exact sequence instead of the default depth-based guess. Coach Cal can set the progression when it composes a play, and it round-trips through the spec so editing the play keeps the numbers in sync. Only receivers running routes can be numbered; blockers and runners can't accidentally land in the read order.",
+    category: "Plays & formations",
+    status: "ga",
+    addedDate: "2026-05-28",
+  },
+  {
     id: "user-route-templates",
     name: "Save your own routes to Quick Routes",
     description:
