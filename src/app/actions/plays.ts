@@ -1147,7 +1147,10 @@ export async function createDefensePlayFromFenceAction(args: {
   if (!user) return { ok: false as const, error: "Not signed in." };
 
   // Permission check: user must have edit access to this playbook.
-  const { data: canEdit, error: permErr } = await supabase.rpc("can_edit_playbook", { p_playbook_id: playbookId });
+  // NOTE: the RPC parameter is named `pb` — PostgREST resolves overloads by
+  // parameter NAME, so calling with any other key 404s ("Could not find the
+  // function public.can_edit_playbook(...) in the schema cache").
+  const { data: canEdit, error: permErr } = await supabase.rpc("can_edit_playbook", { pb: playbookId });
   if (permErr) return { ok: false as const, error: permErr.message };
   if (canEdit !== true) return { ok: false as const, error: "You don't have edit access to this playbook." };
 
