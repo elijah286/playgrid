@@ -20,13 +20,6 @@ const WINDOW_LABEL: Record<CostWindowKey, string> = {
   month: "monthly",
 };
 
-function fmtDollars(micros: number): string {
-  const d = micros / 1_000_000;
-  if (d >= 1) return `$${d.toFixed(2)}`;
-  if (d >= 0.01) return `$${d.toFixed(3)}`;
-  return `$${d.toFixed(4)}`;
-}
-
 function fmtReset(iso: string | null): string {
   if (!iso) return "—";
   const diffMs = new Date(iso).getTime() - Date.now();
@@ -159,14 +152,18 @@ export function CoachCalCostMeter({ refreshTick }: { refreshTick: number }) {
             </div>
           )}
 
-          {/* Admin view: all three windows in dollars so caps can be tuned. */}
+          {/* Admin view: three bars, one per window. We deliberately do NOT
+              show $ amounts in this dialog — costs are admin-only data and
+              this surface could surface to a non-admin via a misconfigured
+              role check or future shared-screen scenario. Per-user dollar
+              numbers live in Site Admin → Cal usage instead. */}
           {state.isAdmin && (
             <div className="mt-3 space-y-2">
               {(["burst", "day", "month"] as CostWindowKey[]).map((k) => {
                 const w = state[k];
                 const pct = Math.round(w.ratio * 100);
                 return (
-                  <div key={k} className="flex items-center justify-between gap-3 text-[11px]">
+                  <div key={k} className="flex items-center gap-3 text-[11px]">
                     <span className="w-14 shrink-0 capitalize text-muted">{WINDOW_LABEL[k]}</span>
                     <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-inset">
                       <div
@@ -174,9 +171,6 @@ export function CoachCalCostMeter({ refreshTick }: { refreshTick: number }) {
                         style={{ width: `${Math.min(100, pct)}%` }}
                       />
                     </div>
-                    <span className="w-28 shrink-0 text-right tabular-nums text-muted">
-                      {fmtDollars(w.usedMicros)} / {fmtDollars(w.limitMicros)}
-                    </span>
                   </div>
                 );
               })}
