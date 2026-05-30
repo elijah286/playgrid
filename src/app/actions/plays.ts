@@ -25,6 +25,7 @@ import { recordPlayVersion } from "@/lib/versions/play-version-writer";
 import { recordPlaybookVersion } from "@/lib/versions/playbook-version-writer";
 import { revalidateExampleSurfacesIfPublicPlaybook } from "@/lib/site/example-playbooks";
 import { timed } from "@/lib/perf/timed";
+import { resolveOpponentHiddenOnLoad } from "@/lib/playbook/opponent-visibility";
 
 /**
  * Returns true if the signed-in user has created at least one play in a
@@ -816,7 +817,13 @@ export async function getPlayForEditorAction(playId: string) {
     version: ver,
     document: docWithLink,
     customOpponentPlayId,
-    opponentHidden: Boolean(play.opponent_hidden),
+    // A play saved as "Offense vs Defense" must SHOW its defense on load — the
+    // persisted opponent_hidden flag is only a within-session peek toggle, never
+    // a durable hide. See resolveOpponentHiddenOnLoad + opponent-visibility.test.ts.
+    opponentHidden: resolveOpponentHiddenOnLoad(
+      customOpponentPlayId,
+      Boolean(play.opponent_hidden),
+    ),
   };
 }
 
