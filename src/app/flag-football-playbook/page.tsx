@@ -191,7 +191,7 @@ export default function FlagFootballPlaybookPage() {
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Link
-            href="/login"
+            href="/login?mode=signup"
             className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-dark"
           >
             Start your free playbook
@@ -328,7 +328,7 @@ export default function FlagFootballPlaybookPage() {
           already run; let XO Gridmaker handle the diagrams and wristbands.
         </p>
         <Link
-          href="/login"
+          href="/login?mode=signup"
           className="mt-5 inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-primary transition-colors hover:bg-surface-raised"
         >
           Start your free playbook

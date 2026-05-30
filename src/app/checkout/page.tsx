@@ -48,7 +48,7 @@ export default async function CheckoutPage({
     // payment intent isn't lost. Pricing already gates the CTA on
     // auth, but a deep-linked /checkout URL needs the same fallback.
     const next = encodeURIComponent(`/checkout?tier=${tier}&interval=${interval}`);
-    redirect(`/login?next=${next}`);
+    redirect(`/login?mode=signup&next=${next}`);
   }
 
   return (

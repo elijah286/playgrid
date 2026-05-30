@@ -19,7 +19,7 @@ export default async function CoachCalChatPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/login?redirect=/coach-cal/chat");
+  if (!user) redirect("/login?next=/coach-cal/chat");
 
   const [entitlement, role] = await Promise.all([
     getCurrentEntitlement(),

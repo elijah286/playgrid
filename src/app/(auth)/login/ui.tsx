@@ -31,17 +31,31 @@ export function LoginForm({
 
   const [step, setStep] = useState<Step>("email");
 
-  // "Welcome back" once AuthFlow advances to the password step (we've
-  // confirmed the email has an account) or any existing-user follow-ups.
-  // "Get started" for the email step in signup mode and for the code step
-  // (which new signups always land on).
+  // Three-state title. Prospects landing on /login overwhelmingly bounced
+  // when they saw "Welcome back" — they assumed the page wasn't for them
+  // (88.8% of /login sessions in the last 30d never fired a single auth
+  // event). Default to a neutral framing that works for both audiences and
+  // let AuthFlow's email step route them once we know who they are.
+  //   - "Welcome back": only after we've confirmed an existing account
+  //     (password / recovery steps).
+  //   - "Get started": when an upstream link explicitly signalled signup
+  //     intent (mode=signup or a /copy/* claim flow).
+  //   - Neutral default: the email step when intent is unknown.
   const welcomeSteps: Step[] = ["password", "offer-reset", "set-new-password"];
-  const showWelcomeBack =
-    welcomeSteps.includes(step) || (step === "email" && !isSignup);
-  const title = showWelcomeBack ? "Welcome back" : "Get started";
-  const subtitle = showWelcomeBack
-    ? "Sign in to your XO Gridmaker account to access your playbooks."
-    : "Create your XO Gridmaker account to start building playbooks.";
+  const isWelcomeBackStep = welcomeSteps.includes(step);
+  let title: string;
+  let subtitle: string;
+  if (isWelcomeBackStep) {
+    title = "Welcome back";
+    subtitle = "Sign in to your XO Gridmaker account to access your playbooks.";
+  } else if (isSignup) {
+    title = "Get started";
+    subtitle = "Create your XO Gridmaker account to start building playbooks.";
+  } else {
+    title = "Sign in or create an account";
+    subtitle =
+      "Enter your email — we'll sign you in if you have an account, or get you started if you're new.";
+  }
 
   return (
     <div className="space-y-6">
