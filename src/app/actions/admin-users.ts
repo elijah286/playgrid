@@ -351,13 +351,18 @@ export async function getAdminUserStatsAction(
     playbooksShared = sharedBookSet.size;
   }
 
+  // Excludes label = 'copied' so claimed/copied plays don't inflate authorship
+  // counts. Mirrors admin_play_counts_by_user (see migration
+  // 20260531120000_admin_play_counts_exclude_copies.sql).
   const { data: versionRows, error: versionsErr } = await admin
     .from("play_versions")
-    .select("play_id")
+    .select("play_id, label")
     .eq("created_by", userId);
   if (versionsErr) return { ok: false, error: versionsErr.message };
   const playsCreated = new Set(
-    (versionRows ?? []).map((r) => r.play_id as string),
+    (versionRows ?? [])
+      .filter((r) => (r.label as string | null) !== "copied")
+      .map((r) => r.play_id as string),
   ).size;
 
   const { data: profileRow } = await admin

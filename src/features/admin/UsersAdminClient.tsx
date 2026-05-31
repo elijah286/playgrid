@@ -420,7 +420,7 @@ export function UsersAdminClient({
                   </td>
                   <td
                     className="px-4 py-3 align-middle text-xs text-foreground tabular-nums"
-                    title={`${u.playsCreated} distinct play${u.playsCreated === 1 ? "" : "s"} authored`}
+                    title={`${u.playsCreated} play${u.playsCreated === 1 ? "" : "s"} authored (excludes plays inherited via copy/claim)`}
                   >
                     {u.playsCreated > 0 ? (
                       u.playsCreated
