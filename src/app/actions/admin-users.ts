@@ -74,8 +74,12 @@ export async function listUsersForAdminAction() {
   if (!gate.ok) return { ok: false as const, error: gate.error, users: [] };
 
   const admin = createServiceRoleClient();
+  // 2026-05-30: bumped perPage from 200 → 1000 after the silent cap started
+  // hiding recent signups in the admin Users panel (auth crossed 200). Good
+  // until we approach ~1k users — at which point this needs proper pagination
+  // (loop pages until one returns fewer than perPage) to stay accurate.
   const { data: authData, error: authErr } = await admin.auth.admin.listUsers({
-    perPage: 200,
+    perPage: 1000,
     page: 1,
   });
   if (authErr) return { ok: false as const, error: authErr.message, users: [] };
