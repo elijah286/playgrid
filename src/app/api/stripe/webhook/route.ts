@@ -5,6 +5,7 @@ import { getStripeClient, tierForPriceId, isSeatPriceId } from "@/lib/billing/st
 import { getStripeConfig } from "@/lib/site/stripe-config";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
 import { COACH_CAL_PACK_BUDGET_MICROS } from "@/lib/billing/coach-cal-cost-cap";
+import { sendCancellationFeedbackEmail } from "@/lib/notifications/cancellation-feedback-email";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -123,6 +124,77 @@ async function upsertSubscriptionFromStripe(sub: Stripe.Subscription): Promise<v
         { onConflict: "owner_id" },
       );
     if (seatErr) throw new Error(`owner_seat_grants upsert failed: ${seatErr.message}`);
+  }
+}
+
+/**
+ * Send the cancellation-feedback email exactly once per subscription, gated
+ * on an atomic UPDATE-with-guard so Stripe webhook retries / duplicate events
+ * can't double-send. Best-effort: any error is logged but never propagates
+ * back to Stripe — the subscription state sync already succeeded above, and
+ * the email is supplementary. Call AFTER upsertSubscriptionFromStripe.
+ */
+async function maybeFireCancellationFeedback(
+  stripeSubscriptionId: string,
+): Promise<void> {
+  try {
+    const admin = createServiceRoleClient();
+    // Claim the slot atomically. Only succeeds for a sub that has been
+    // canceled (either cancel_at_period_end = true while still active, or
+    // status = canceled) AND hasn't already received this email.
+    const { data: claimed, error: claimErr } = await admin
+      .from("subscriptions")
+      .update({ cancellation_feedback_email_sent_at: new Date().toISOString() })
+      .eq("stripe_subscription_id", stripeSubscriptionId)
+      .is("cancellation_feedback_email_sent_at", null)
+      .or("cancel_at_period_end.eq.true,status.eq.canceled")
+      .select("user_id, current_period_end")
+      .maybeSingle();
+    if (claimErr) {
+      console.error("[stripe webhook] cancellation-email claim failed", claimErr.message);
+      return;
+    }
+    if (!claimed?.user_id) return; // already sent or not eligible — quiet no-op
+
+    const { data: authUser } = await admin.auth.admin.getUserById(claimed.user_id);
+    const email = authUser?.user?.email ?? null;
+    if (!email) {
+      console.error(
+        "[stripe webhook] cancellation-email: no email on auth user",
+        claimed.user_id,
+      );
+      return;
+    }
+    const { data: prof } = await admin
+      .from("profiles")
+      .select("display_name")
+      .eq("id", claimed.user_id)
+      .maybeSingle();
+    const displayName = (prof?.display_name as string | null) ?? null;
+    const firstName = displayName ? displayName.trim().split(/\s+/)[0] || null : null;
+    const periodEndDate = claimed.current_period_end
+      ? new Date(claimed.current_period_end as string)
+      : null;
+
+    const send = await sendCancellationFeedbackEmail({
+      toEmail: email,
+      firstName,
+      periodEndDate,
+    });
+    if (!send.ok) {
+      console.error("[stripe webhook] cancellation-email send failed", send.error);
+      // We intentionally do NOT unset the claim — avoids double-sends on
+      // retry at the cost of losing this email on transient Resend failure.
+      return;
+    }
+    console.log(
+      `[stripe webhook] cancellation-email sent to ${email} (id=${send.messageId})`,
+    );
+  } catch (e) {
+    console.error(
+      "[stripe webhook] cancellation-email unexpected error",
+      (e as Error).message,
+    );
   }
 }
 
@@ -296,6 +368,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       case "customer.subscription.updated":
       case "customer.subscription.deleted": {
         await upsertSubscriptionFromStripe(event.data.object);
+        await maybeFireCancellationFeedback(event.data.object.id);
         break;
       }
       case "subscription_schedule.released":
