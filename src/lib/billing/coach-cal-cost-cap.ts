@@ -9,17 +9,27 @@ import { getCoachCalPackConfig } from "@/lib/site/coach-cal-pack-config";
 //
 //   - month: the real ceiling. Keeps a $9 paid coach under ~$5/mo of API
 //     spend so the tier stays margin-positive.
-//   - day (rolling 24h) + burst (rolling 5h): abuse guards. The monthly
-//     cap binds first for sustained-but-legit use (~$12/mo of daily
-//     headroom > the $5 monthly cap), so these only ever trip on an
-//     overnight-loop / scripted-abuse pattern — and when they do, the
-//     lockout is hours, not the rest of the month.
+//   - day (rolling 24h) + burst (rolling 5h): abuse guards, NOT the real
+//     budget. They exist only to stop an overnight-loop / scripted-abuse
+//     pattern from burning the whole month in an hour — the month cap is
+//     what enforces the $5/user target.
+//
+// Sizing (calibrated 2026-06-02 against real usage): a Cal turn that hits
+// the prompt cache costs ~$0.012; a cold-cache turn (75k-token prefix
+// re-written after the 5-min cache TTL lapses) costs ~$0.095. A single
+// multi-tool query fans out to ~6-9 API calls (one cold write + warm
+// reads) ≈ $0.10-0.15. A heavy-but-legit 30-turn sitting runs ~$0.75.
+// The old burst=$0.20 tripped after ~2 cold queries — i.e. it bound on
+// normal use and made the meter read ~100% almost immediately, which is
+// the false alarm we're fixing. burst/day are now set comfortably above a
+// heavy honest session but well under the month cap, so they only catch
+// true runaway loops.
 //
 // Tune these as real usage data accumulates (Site Admin → Cal usage).
 export const COACH_CAL_COST_LIMITS = {
-  monthMicros: 5_000_000, // $5.00 / calendar month
-  dayMicros: 400_000, //     $0.40 / rolling 24h
-  burstMicros: 200_000, //   $0.20 / rolling 5h
+  monthMicros: 5_000_000, // $5.00 / calendar month — the real ceiling
+  dayMicros: 2_500_000, //   $2.50 / rolling 24h  — abuse guard
+  burstMicros: 1_000_000, // $1.00 / rolling 5h   — abuse guard
 } as const;
 
 // One message pack grants this much extra monthly cost budget. The pack's

@@ -1,8 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
-import { getCoachCalCostStateAction } from "@/app/actions/coach-cal-cost";
+import { ExternalLink, X } from "lucide-react";
+import {
+  getCoachCalCostStateAction,
+  resetCoachCalUsageAction,
+} from "@/app/actions/coach-cal-cost";
+import { createMessagePackCheckoutAction } from "@/app/actions/coach-cal-pack";
 import type {
   CoachCalCostState,
   CostWindowKey,
@@ -54,9 +58,15 @@ function RingProgress({ pct, danger }: { pct: number; danger: boolean }) {
   );
 }
 
+function fmtPrice(cents: number): string {
+  return cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`;
+}
+
 export function CoachCalCostMeter({ refreshTick }: { refreshTick: number }) {
   const [state, setState] = useState<CoachCalCostState | null>(null);
   const [open, setOpen] = useState(false);
+  const [packPending, setPackPending] = useState(false);
+  const [resetPending, setResetPending] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -67,6 +77,32 @@ export function CoachCalCostMeter({ refreshTick }: { refreshTick: number }) {
       /* non-critical */
     }
   }, []);
+
+  const buyMore = useCallback(async () => {
+    setPackPending(true);
+    try {
+      const res = await createMessagePackCheckoutAction();
+      if (res.ok) {
+        window.location.href = res.url;
+      } else {
+        setPackPending(false);
+      }
+    } catch {
+      setPackPending(false);
+    }
+  }, []);
+
+  const resetUsage = useCallback(async () => {
+    setResetPending(true);
+    try {
+      const res = await resetCoachCalUsageAction();
+      if (res.ok) await load();
+    } catch {
+      /* non-critical */
+    } finally {
+      setResetPending(false);
+    }
+  }, [load]);
 
   useEffect(() => { void load(); }, [load, refreshTick]);
   useEffect(() => {
@@ -98,6 +134,11 @@ export function CoachCalCostMeter({ refreshTick }: { refreshTick: number }) {
 
   const danger = state.exceeded;
   const binding = state[state.binding];
+  // The pack tops up the monthly budget only — burst/day are abuse guards a
+  // top-up can't clear. Offer it once the monthly window is near or over.
+  const showBuyMore =
+    state.pack.priceConfigured &&
+    (state.month.exceeded || state.month.ratio >= VISIBLE_RATIO);
 
   return (
     <div className="relative">
@@ -174,7 +215,37 @@ export function CoachCalCostMeter({ refreshTick }: { refreshTick: number }) {
                   </div>
                 );
               })}
+              <button
+                type="button"
+                onClick={() => void resetUsage()}
+                disabled={resetPending}
+                className="mt-1 w-full rounded-lg border border-border px-3 py-1.5 text-[11px] font-medium text-muted transition-colors hover:bg-surface-inset hover:text-foreground disabled:opacity-60"
+              >
+                {resetPending ? "Resetting…" : "Reset usage"}
+              </button>
             </div>
+          )}
+
+          {showBuyMore && (
+            <button
+              type="button"
+              onClick={() => void buyMore()}
+              disabled={packPending}
+              className={`mt-3 flex w-full items-center justify-between gap-1 rounded-lg px-3 py-2 text-[12px] font-medium transition-colors disabled:opacity-60 ${
+                state.month.exceeded
+                  ? "bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-300"
+                  : "bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300"
+              }`}
+            >
+              <span>
+                {packPending
+                  ? "Opening checkout…"
+                  : state.month.exceeded
+                    ? `Out of budget — purchase more for ${fmtPrice(state.pack.priceUsdCents)}`
+                    : `Running low — purchase more for ${fmtPrice(state.pack.priceUsdCents)}`}
+              </span>
+              <ExternalLink className="size-3 shrink-0" />
+            </button>
           )}
         </div>
       )}
