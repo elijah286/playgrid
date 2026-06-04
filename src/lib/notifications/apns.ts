@@ -27,8 +27,8 @@ import http2 from "node:http2";
  * dev/TestFlight testing without per-token environment tracking).
  */
 
-const PROD_HOST = "api.push.apple.com";
-const SANDBOX_HOST = "api.development.push.apple.com";
+export const PROD_HOST = "api.push.apple.com";
+export const SANDBOX_HOST = "api.development.push.apple.com";
 
 export type ApnsMessage = {
   title: string;
@@ -39,49 +39,18 @@ export type ApnsMessage = {
   data?: Record<string, string>;
 };
 
-type ApnsConfig = {
+export type ApnsConfig = {
   keyId: string;
   teamId: string;
   bundleId: string;
   privateKey: string;
-  /** Primary host derived from APNS_USE_SANDBOX. */
+  /** Primary host: PROD_HOST normally, SANDBOX_HOST for dev builds. */
   primaryHost: string;
 };
 
-function loadApnsConfig(): ApnsConfig | null {
-  const keyId = process.env.APNS_KEY_ID?.trim();
-  const teamId = process.env.APNS_TEAM_ID?.trim();
-  const bundleId = process.env.APNS_BUNDLE_ID?.trim();
-
-  let privateKey = process.env.APNS_AUTH_KEY;
-  if (!privateKey && process.env.APNS_AUTH_KEY_BASE64) {
-    try {
-      privateKey = Buffer.from(
-        process.env.APNS_AUTH_KEY_BASE64,
-        "base64",
-      ).toString("utf8");
-    } catch {
-      privateKey = undefined;
-    }
-  }
-  if (!keyId || !teamId || !bundleId || !privateKey || !privateKey.trim()) {
-    return null;
-  }
-  return {
-    keyId,
-    teamId,
-    bundleId,
-    // Secret stores often escape newlines; normalize back to real ones.
-    privateKey: privateKey.replace(/\\n/g, "\n"),
-    primaryHost:
-      process.env.APNS_USE_SANDBOX === "true" ? SANDBOX_HOST : PROD_HOST,
-  };
-}
-
-/** True when the APNs path can send in this environment. */
-export function apnsConfigured(): boolean {
-  return loadApnsConfig() !== null;
-}
+// Config is sourced from the database (site_settings.apns_*) — see
+// src/lib/site/apns-config.ts — so it's managed in Site Admin alongside the
+// other third-party keys, not via deploy-time env vars.
 
 function base64url(input: string | Buffer): string {
   return Buffer.from(input).toString("base64url");
@@ -258,16 +227,15 @@ async function sendOneApns(
 }
 
 /**
- * Send a message to a set of iOS APNs device tokens. Returns delivered count
- * and the ids of tokens that are permanently dead (so the caller can
- * soft-disable them), or null when APNs isn't configured in this env.
+ * Send a message to a set of iOS APNs device tokens. The caller supplies the
+ * config (loaded from the DB via apns-config.ts). Returns delivered count and
+ * the ids of tokens that are permanently dead (so the caller can soft-disable).
  */
 export async function sendApnsToTokens(
+  cfg: ApnsConfig,
   tokens: { id: string; token: string }[],
   message: ApnsMessage,
-): Promise<{ delivered: number; deadTokenIds: string[] } | null> {
-  const cfg = loadApnsConfig();
-  if (!cfg) return null;
+): Promise<{ delivered: number; deadTokenIds: string[] }> {
   if (tokens.length === 0) return { delivered: 0, deadTokenIds: [] };
 
   const nowSeconds = Math.floor(Date.now() / 1000);

@@ -27,6 +27,14 @@ function makeAdmin(data: TableData) {
       is() { return builder; },
       in(_col: string, ids: string[]) { inIds = ids; return builder; },
       update(p: Record<string, unknown>) { op = "update"; payload = p; return builder; },
+      // Single-row reads (e.g. loadApnsConfig on site_settings). Absent table
+      // → null, which makes the APNs path a no-op so these FCM goldens are
+      // unaffected by the iOS push routing.
+      maybeSingle() {
+        const rows = (data as Record<string, unknown[]>)[table];
+        const row = Array.isArray(rows) ? (rows[0] ?? null) : (rows ?? null);
+        return Promise.resolve({ data: row, error: null });
+      },
       then(resolve: (v: { data: unknown; error: null }) => void) {
         if (op === "update") {
           updates.push({ table, payload, ids: inIds });

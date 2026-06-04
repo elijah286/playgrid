@@ -1,6 +1,7 @@
 import { createSign } from "node:crypto";
 import type { createServiceRoleClient } from "@/lib/supabase/admin";
-import { apnsConfigured, sendApnsToTokens } from "@/lib/notifications/apns";
+import { sendApnsToTokens } from "@/lib/notifications/apns";
+import { loadApnsConfig } from "@/lib/site/apns-config";
 
 type Admin = ReturnType<typeof createServiceRoleClient>;
 
@@ -279,7 +280,8 @@ export async function sendPushToUsers(opts: {
   // Cheap check first: bail before any DB work when neither push transport
   // (FCM for Android, APNs for iOS) can be configured in this environment.
   const fcmReady = fcmConfigured();
-  const apnsReady = apnsConfigured();
+  const apnsCfg = await loadApnsConfig(opts.admin);
+  const apnsReady = apnsCfg !== null;
   if (!fcmReady && !apnsReady) {
     return { delivered: 0, configured: false };
   }
@@ -318,15 +320,14 @@ export async function sendPushToUsers(opts: {
   }
 
   // --- APNs (iOS) ---
-  if (apnsReady && iosTokens.length > 0) {
+  if (apnsCfg && iosTokens.length > 0) {
     const r = await sendApnsToTokens(
+      apnsCfg,
       iosTokens.map((t) => ({ id: t.id, token: t.token })),
       opts.message,
     );
-    if (r) {
-      delivered += r.delivered;
-      deadApnsIds.push(...r.deadTokenIds);
-    }
+    delivered += r.delivered;
+    deadApnsIds.push(...r.deadTokenIds);
   }
 
   if (deadFcmIds.length > 0) {
