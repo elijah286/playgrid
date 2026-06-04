@@ -46,4 +46,19 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return ApplicationDelegateProxy.shared.application(application, continue: userActivity, restorationHandler: restorationHandler)
     }
 
+    // MARK: - Push notifications (APNs)
+    // Forward the APNs device token (and failures) to the Capacitor
+    // PushNotifications plugin. Without these, PushNotifications.register()
+    // triggers the OS prompt but the resulting token never reaches the JS
+    // `registration` listener, so it's never persisted server-side. We send
+    // to APNs directly (no Firebase iOS SDK), so the raw token is exactly
+    // what the backend stores for the APNs send path.
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        NotificationCenter.default.post(name: .capacitorDidRegisterForRemoteNotifications, object: deviceToken)
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        NotificationCenter.default.post(name: .capacitorDidFailToRegisterForRemoteNotifications, object: error)
+    }
+
 }
