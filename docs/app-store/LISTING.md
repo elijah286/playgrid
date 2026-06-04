@@ -128,10 +128,9 @@ play in under a minute.
 ## Promotional Text (170 chars max — editable without resubmitting)
 
 ```
-Now with offline downloads — drop into any field with no signal and your
-full playbook is waiting on your phone.
+Build your football playbook in minutes, share it with your whole team, and call the right play on game day — all from your phone.
 ```
-(135/170)
+(132/170)
 
 ---
 
