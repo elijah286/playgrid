@@ -20,6 +20,10 @@ import {
   canUseNativeGoogleAuth,
   signInWithGoogleNative,
 } from "@/lib/native/googleAuth";
+import {
+  canUseNativeAppleAuth,
+  signInWithAppleNative,
+} from "@/lib/native/appleAuth";
 
 function GoogleGlyph({ className }: { className?: string }) {
   return (
@@ -102,6 +106,16 @@ export function AuthFlow({
   const native = useIsNativeApp();
   const hideGoogleOnNative =
     native && !canUseNativeGoogleAuth(googleOAuthWebClientId);
+
+  // Apple button visibility:
+  //  - Web (and any non-native browser, incl. Windows/Android laptops):
+  //    always show when enabled — uses Supabase-hosted Apple OAuth.
+  //  - iOS native: show only when the SocialLogin plugin is registered in
+  //    the running build (older builds predate it), so we use the native
+  //    Sign in with Apple sheet instead of a broken web redirect.
+  //  - Android native: hidden (those users have Google + email).
+  const appleNativeUsable = canUseNativeAppleAuth();
+  const showAppleButton = appleEnabled && (!native || appleNativeUsable);
 
   const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/home";
 
@@ -224,7 +238,55 @@ export function AuthFlow({
     }
   }
 
-  const signInWithApple = () => signInWithOAuthProvider("apple", "Apple");
+  // Native Sign in with Apple: uses the iOS system sheet via the
+  // SocialLogin plugin (ASAuthorization) instead of the web redirect, then
+  // hands the identity token to Supabase. Replicates the same post-signup
+  // side-effects the /auth/callback route runs for web OAuth (first-touch
+  // attribution + Reddit signup pixel) so the native flow ends in the same
+  // state as a successful web OAuth — mirrors signInWithGoogleOnNative.
+  async function signInWithAppleOnNative() {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setPending(true);
+    clearErrors();
+    track({ event: "auth_oauth_started", target: "apple" });
+    try {
+      const supabase = createClient();
+      const { isFreshSignup } = await signInWithAppleNative(supabase);
+
+      if (inviteCode) {
+        await afterSignupSyncRoleAction();
+      }
+      // Fire-and-forget — action is idempotent and self-gated.
+      void runSignupAttributionAction();
+
+      track({ event: "auth_oauth_success", target: "apple" });
+      hardNavigate(isFreshSignup ? withRedditSignupMarker(safeNext) : safeNext);
+      return; // keep pending true through navigation
+    } catch (e: unknown) {
+      // The plugin rejects when the user dismisses the Apple sheet. Don't
+      // surface an error for an intentional cancellation — just reset.
+      const code = (e as { code?: string } | null)?.code;
+      const msg = e instanceof Error ? e.message.toLowerCase() : "";
+      const cancelled =
+        code === "USER_CANCELLED" ||
+        code === "1001" ||
+        msg.includes("canceled") ||
+        msg.includes("cancelled");
+      if (!cancelled) {
+        setFormError(
+          e instanceof Error ? e.message : "Could not start Apple sign-in.",
+        );
+      }
+      setPending(false);
+      submittingRef.current = false;
+    }
+  }
+
+  const signInWithApple = () =>
+    canUseNativeAppleAuth()
+      ? signInWithAppleOnNative()
+      : signInWithOAuthProvider("apple", "Apple");
   const signInWithGoogle = () =>
     isNativeApp()
       ? signInWithGoogleOnNative()
@@ -576,7 +638,7 @@ export function AuthFlow({
               never surface a button that 400s when the provider isn't
               configured in Supabase. Apple is required by App Store Review
               Guideline 4.8 once the iOS app ships, so flip it back on then. */}
-          {step === "email" && (appleEnabled || googleEnabled) && (
+          {step === "email" && (showAppleButton || googleEnabled) && (
             <>
               {googleEnabled && !hideGoogleOnNative && (
                 <Button
@@ -590,7 +652,7 @@ export function AuthFlow({
                   Continue with Google
                 </Button>
               )}
-              {appleEnabled && (
+              {showAppleButton && (
                 <Button
                   type="button"
                   variant="secondary"
