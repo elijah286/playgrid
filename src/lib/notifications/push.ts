@@ -1,5 +1,6 @@
 import { createSign } from "node:crypto";
 import type { createServiceRoleClient } from "@/lib/supabase/admin";
+import { apnsConfigured, sendApnsToTokens } from "@/lib/notifications/apns";
 
 type Admin = ReturnType<typeof createServiceRoleClient>;
 
@@ -166,7 +167,7 @@ async function getAuth(): Promise<{ accessToken: string; projectId: string } | n
   return { accessToken: minted.value, projectId };
 }
 
-type TokenRow = { id: string; token: string };
+type TokenRow = { id: string; token: string; platform: string | null };
 
 async function activeTokensForUsers(
   admin: Admin,
@@ -175,10 +176,19 @@ async function activeTokensForUsers(
   if (userIds.length === 0) return [];
   const { data } = await admin
     .from("device_tokens")
-    .select("id, token")
+    .select("id, token, platform")
     .in("user_id", userIds)
     .is("disabled_at", null);
   return (data ?? []) as TokenRow[];
+}
+
+/** True when the FCM (Android) send path can authenticate in this env. */
+function fcmConfigured(): boolean {
+  return (
+    Boolean(loadServiceAccount()) ||
+    Boolean(process.env.K_SERVICE) ||
+    Boolean(process.env.FCM_PROJECT_ID)
+  );
 }
 
 async function filterOptedOut(
@@ -266,9 +276,11 @@ export async function sendPushToUsers(opts: {
   category: PushCategory;
   message: PushMessage;
 }): Promise<{ delivered: number; configured: boolean }> {
-  // Cheap check first: bail before any DB work when push can't be configured
-  // in this environment (no service account, not on Cloud Run).
-  if (!loadServiceAccount() && !process.env.K_SERVICE && !process.env.FCM_PROJECT_ID) {
+  // Cheap check first: bail before any DB work when neither push transport
+  // (FCM for Android, APNs for iOS) can be configured in this environment.
+  const fcmReady = fcmConfigured();
+  const apnsReady = apnsConfigured();
+  if (!fcmReady && !apnsReady) {
     return { delivered: 0, configured: false };
   }
 
@@ -277,32 +289,57 @@ export async function sendPushToUsers(opts: {
   const tokens = await activeTokensForUsers(opts.admin, eligible);
   if (tokens.length === 0) return { delivered: 0, configured: true };
 
-  const auth = await getAuth();
-  if (!auth) return { delivered: 0, configured: true };
+  // iOS device tokens are raw APNs tokens and go directly to Apple; every
+  // other platform (Android) is an FCM registration token.
+  const iosTokens = tokens.filter((t) => t.platform === "ios");
+  const fcmTokens = tokens.filter((t) => t.platform !== "ios");
 
-  const deadTokenIds: string[] = [];
   let delivered = 0;
-  await Promise.all(
-    tokens.map(async (t) => {
-      const r = await sendOne({
-        projectId: auth.projectId,
-        accessToken: auth.accessToken,
-        token: t.token,
-        message: opts.message,
-      });
-      if (r.ok) {
-        delivered += 1;
-      } else if (r.dead) {
-        deadTokenIds.push(t.id);
-      }
-    }),
-  );
+  const deadFcmIds: string[] = [];
+  const deadApnsIds: string[] = [];
 
-  if (deadTokenIds.length > 0) {
+  // --- FCM (Android) ---
+  if (fcmReady && fcmTokens.length > 0) {
+    const auth = await getAuth();
+    if (auth) {
+      await Promise.all(
+        fcmTokens.map(async (t) => {
+          const r = await sendOne({
+            projectId: auth.projectId,
+            accessToken: auth.accessToken,
+            token: t.token,
+            message: opts.message,
+          });
+          if (r.ok) delivered += 1;
+          else if (r.dead) deadFcmIds.push(t.id);
+        }),
+      );
+    }
+  }
+
+  // --- APNs (iOS) ---
+  if (apnsReady && iosTokens.length > 0) {
+    const r = await sendApnsToTokens(
+      iosTokens.map((t) => ({ id: t.id, token: t.token })),
+      opts.message,
+    );
+    if (r) {
+      delivered += r.delivered;
+      deadApnsIds.push(...r.deadTokenIds);
+    }
+  }
+
+  if (deadFcmIds.length > 0) {
     await opts.admin
       .from("device_tokens")
       .update({ disabled_at: new Date().toISOString(), disabled_reason: "fcm_unregistered" })
-      .in("id", deadTokenIds);
+      .in("id", deadFcmIds);
+  }
+  if (deadApnsIds.length > 0) {
+    await opts.admin
+      .from("device_tokens")
+      .update({ disabled_at: new Date().toISOString(), disabled_reason: "apns_unregistered" })
+      .in("id", deadApnsIds);
   }
 
   return { delivered, configured: true };

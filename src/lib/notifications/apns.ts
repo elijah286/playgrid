@@ -1,0 +1,292 @@
+import { createSign } from "node:crypto";
+import http2 from "node:http2";
+
+/**
+ * Direct APNs (Apple Push Notification service) sender for iOS devices.
+ *
+ * Why a separate path from FCM: the iOS app registers via
+ * `@capacitor/push-notifications`, which returns a raw **APNs device token**
+ * (not an FCM registration token). Feeding that to FCM's v1 endpoint fails,
+ * so iOS pushes go straight to Apple over HTTP/2 here, while Android keeps
+ * using FCM in push.ts. Backend auth uses an APNs Auth Key (.p8, ES256 JWT)
+ * — the same token-based auth Apple recommends, refreshed well within the
+ * 1-hour ceiling.
+ *
+ * Config comes from env (graceful no-op when absent, same contract as the
+ * FCM path and Resend email):
+ *   APNS_KEY_ID            — 10-char Key ID of the .p8 APNs auth key
+ *   APNS_TEAM_ID           — Apple Team ID (X8KHNQJC32)
+ *   APNS_BUNDLE_ID         — apns-topic, the app bundle id (com.xogridmaker.app)
+ *   APNS_AUTH_KEY          — the .p8 PEM contents (or APNS_AUTH_KEY_BASE64)
+ *   APNS_USE_SANDBOX=true  — target the development APNs host (debug builds)
+ *
+ * APNs distinguishes a "sandbox" host (development-signed builds) from the
+ * production host (TestFlight + App Store). A token minted by a dev build
+ * only works on sandbox and vice versa, so when a production send returns
+ * BadDeviceToken we transparently retry once on sandbox (covers mixed
+ * dev/TestFlight testing without per-token environment tracking).
+ */
+
+const PROD_HOST = "api.push.apple.com";
+const SANDBOX_HOST = "api.development.push.apple.com";
+
+export type ApnsMessage = {
+  title: string;
+  body: string;
+  /** Deep-link path opened on tap (delivered as a top-level `link` key). */
+  link?: string;
+  /** Extra string key/values delivered alongside `aps`. */
+  data?: Record<string, string>;
+};
+
+type ApnsConfig = {
+  keyId: string;
+  teamId: string;
+  bundleId: string;
+  privateKey: string;
+  /** Primary host derived from APNS_USE_SANDBOX. */
+  primaryHost: string;
+};
+
+function loadApnsConfig(): ApnsConfig | null {
+  const keyId = process.env.APNS_KEY_ID?.trim();
+  const teamId = process.env.APNS_TEAM_ID?.trim();
+  const bundleId = process.env.APNS_BUNDLE_ID?.trim();
+
+  let privateKey = process.env.APNS_AUTH_KEY;
+  if (!privateKey && process.env.APNS_AUTH_KEY_BASE64) {
+    try {
+      privateKey = Buffer.from(
+        process.env.APNS_AUTH_KEY_BASE64,
+        "base64",
+      ).toString("utf8");
+    } catch {
+      privateKey = undefined;
+    }
+  }
+  if (!keyId || !teamId || !bundleId || !privateKey || !privateKey.trim()) {
+    return null;
+  }
+  return {
+    keyId,
+    teamId,
+    bundleId,
+    // Secret stores often escape newlines; normalize back to real ones.
+    privateKey: privateKey.replace(/\\n/g, "\n"),
+    primaryHost:
+      process.env.APNS_USE_SANDBOX === "true" ? SANDBOX_HOST : PROD_HOST,
+  };
+}
+
+/** True when the APNs path can send in this environment. */
+export function apnsConfigured(): boolean {
+  return loadApnsConfig() !== null;
+}
+
+function base64url(input: string | Buffer): string {
+  return Buffer.from(input).toString("base64url");
+}
+
+// APNs provider tokens are valid up to 1 hour; Apple rejects tokens older
+// than that and also rate-limits very frequent regeneration. Refresh at
+// ~50 minutes — comfortably inside both bounds.
+let cachedJwt: { value: string; iat: number } | null = null;
+const JWT_REFRESH_SECONDS = 50 * 60;
+
+/** Mint (or reuse) the ES256 provider JWT for APNs token-based auth. */
+export function mintApnsJwt(
+  cfg: Pick<ApnsConfig, "keyId" | "teamId" | "privateKey">,
+  nowSeconds: number = Math.floor(Date.now() / 1000),
+): string {
+  if (cachedJwt && nowSeconds - cachedJwt.iat < JWT_REFRESH_SECONDS) {
+    return cachedJwt.value;
+  }
+  const header = base64url(JSON.stringify({ alg: "ES256", kid: cfg.keyId }));
+  const claims = base64url(JSON.stringify({ iss: cfg.teamId, iat: nowSeconds }));
+  const signingInput = `${header}.${claims}`;
+  const signature = createSign("SHA256")
+    .update(signingInput)
+    // EC P-256 signatures are DER by default; APNs/JOSE need raw r||s.
+    .sign({ key: cfg.privateKey, dsaEncoding: "ieee-p1363" })
+    .toString("base64url");
+  const jwt = `${signingInput}.${signature}`;
+  cachedJwt = { value: jwt, iat: nowSeconds };
+  return jwt;
+}
+
+/** Build the APNs JSON payload from a platform-neutral message. */
+export function buildApnsPayload(message: ApnsMessage): string {
+  const payload: Record<string, unknown> = {
+    aps: {
+      alert: { title: message.title, body: message.body },
+      sound: "default",
+    },
+  };
+  for (const [k, v] of Object.entries(message.data ?? {})) payload[k] = v;
+  if (message.link) payload.link = message.link;
+  return JSON.stringify(payload);
+}
+
+export type ApnsSendResult =
+  | { ok: true }
+  | { ok: false; dead: boolean; retrySandbox: boolean };
+
+/**
+ * Classify an APNs HTTP/2 response. 410 (Unregistered) and the terminal
+ * 400 reasons mean the token will never work again → soft-disable it.
+ * BadDeviceToken on the production host may just be a dev-build token, so we
+ * flag a one-time sandbox retry before giving up.
+ */
+export function classifyApnsResponse(
+  status: number,
+  reason: string,
+  triedSandbox: boolean,
+): ApnsSendResult {
+  if (status === 200) return { ok: true };
+  const retrySandbox = !triedSandbox && reason === "BadDeviceToken";
+  const dead =
+    !retrySandbox &&
+    (status === 410 ||
+      reason === "Unregistered" ||
+      reason === "BadDeviceToken" ||
+      reason === "DeviceTokenNotForTopic");
+  return { ok: false, dead, retrySandbox };
+}
+
+function postToApns(
+  host: string,
+  cfg: ApnsConfig,
+  jwt: string,
+  token: string,
+  body: string,
+  nowSeconds: number,
+): Promise<{ status: number; reason: string } | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (v: { status: number; reason: string } | null) => {
+      if (settled) return;
+      settled = true;
+      resolve(v);
+    };
+    let client: http2.ClientHttp2Session;
+    try {
+      client = http2.connect(`https://${host}`);
+    } catch {
+      done(null);
+      return;
+    }
+    client.on("error", () => {
+      done(null);
+      try {
+        client.close();
+      } catch {
+        /* noop */
+      }
+    });
+    const req = client.request({
+      ":method": "POST",
+      ":path": `/3/device/${token}`,
+      authorization: `bearer ${jwt}`,
+      "apns-topic": cfg.bundleId,
+      "apns-push-type": "alert",
+      "apns-priority": "10",
+      // Allow APNs to retry delivery for a day (good for reminders).
+      "apns-expiration": String(nowSeconds + 24 * 60 * 60),
+      "content-type": "application/json",
+    });
+    let status = 0;
+    let data = "";
+    req.on("response", (headers) => {
+      status = Number(headers[":status"]) || 0;
+    });
+    req.setEncoding("utf8");
+    req.on("data", (chunk) => {
+      data += chunk;
+    });
+    req.on("end", () => {
+      let reason = "";
+      if (data) {
+        try {
+          reason = (JSON.parse(data) as { reason?: string }).reason ?? "";
+        } catch {
+          /* non-JSON body */
+        }
+      }
+      done({ status, reason });
+      try {
+        client.close();
+      } catch {
+        /* noop */
+      }
+    });
+    req.on("error", () => {
+      done(null);
+      try {
+        client.close();
+      } catch {
+        /* noop */
+      }
+    });
+    req.end(body);
+  });
+}
+
+async function sendOneApns(
+  cfg: ApnsConfig,
+  jwt: string,
+  token: string,
+  body: string,
+  nowSeconds: number,
+): Promise<ApnsSendResult> {
+  const otherHost =
+    cfg.primaryHost === PROD_HOST ? SANDBOX_HOST : PROD_HOST;
+
+  const first = await postToApns(cfg.primaryHost, cfg, jwt, token, body, nowSeconds);
+  if (!first) return { ok: false, dead: false, retrySandbox: false };
+
+  const verdict = classifyApnsResponse(
+    first.status,
+    first.reason,
+    cfg.primaryHost === SANDBOX_HOST,
+  );
+  if (!verdict.ok && verdict.retrySandbox) {
+    const second = await postToApns(otherHost, cfg, jwt, token, body, nowSeconds);
+    if (!second) return { ok: false, dead: false, retrySandbox: false };
+    return classifyApnsResponse(second.status, second.reason, true);
+  }
+  return verdict;
+}
+
+/**
+ * Send a message to a set of iOS APNs device tokens. Returns delivered count
+ * and the ids of tokens that are permanently dead (so the caller can
+ * soft-disable them), or null when APNs isn't configured in this env.
+ */
+export async function sendApnsToTokens(
+  tokens: { id: string; token: string }[],
+  message: ApnsMessage,
+): Promise<{ delivered: number; deadTokenIds: string[] } | null> {
+  const cfg = loadApnsConfig();
+  if (!cfg) return null;
+  if (tokens.length === 0) return { delivered: 0, deadTokenIds: [] };
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const jwt = mintApnsJwt(cfg, nowSeconds);
+  const body = buildApnsPayload(message);
+
+  const deadTokenIds: string[] = [];
+  let delivered = 0;
+  await Promise.all(
+    tokens.map(async (t) => {
+      const r = await sendOneApns(cfg, jwt, t.token, body, nowSeconds);
+      if (r.ok) delivered += 1;
+      else if (r.dead) deadTokenIds.push(t.id);
+    }),
+  );
+  return { delivered, deadTokenIds };
+}
+
+/** Test seam: clear the cached provider JWT between unit tests. */
+export function __resetApnsJwtCacheForTests(): void {
+  cachedJwt = null;
+}
