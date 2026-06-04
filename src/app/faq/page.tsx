@@ -52,10 +52,10 @@ function buildSections(
         },
         {
           q: "Who is it for?",
-          a: "Flag football, youth tackle, middle school, and 7v7 coaches — plus anyone who coaches their own kids at the kitchen table. It was built by a coach for coaches who want a faster alternative to PowerPoint, whiteboards, and napkin sketches.",
+          a: "Flag football, youth tackle, middle school, and 7v7 coaches — plus anyone who coaches their own kids at the kitchen table. It was built by a coach for coaches who want a faster alternative to slide software, whiteboards, and napkin sketches.",
         },
         {
-          q: "How is this different from drawing plays in PowerPoint or Keynote?",
+          q: "How is this different from drawing plays in slide software?",
           a: "XO Gridmaker understands football. Players have positions, routes are route trees, formations are formations — not just shapes. That means the app can animate plays, keep them legible at any size, share them as live pages instead of static images, and feed structured data to Coach Cal so its suggestions are grounded in real X's and O's.",
         },
       ],

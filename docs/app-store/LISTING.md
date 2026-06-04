@@ -91,7 +91,7 @@ Use these answers when filling out App Privacy in App Store Connect.
 
 ```
 XO Gridmaker is the playbook designer for football coaches who'd rather
-spend their week on Xs and Os than wrestling with PowerPoint.
+spend their week on Xs and Os than wrestling with slide software.
 
 Build plays in seconds. Drag players, draw routes, swap formations,
 animate the motion. Every change saves automatically and syncs to every

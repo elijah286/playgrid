@@ -26,7 +26,7 @@ Football playbook designer. Build, share, and call plays from the sideline.
 **Full description** (4000 chars max)
 ```
 XO Gridmaker is the playbook designer for football coaches who'd rather
-spend their week on Xs and Os than wrestling with PowerPoint.
+spend their week on Xs and Os than wrestling with slide software.
 
 Build plays in seconds. Drag players, draw routes, swap formations,
 animate the motion. Every change saves automatically and syncs to every

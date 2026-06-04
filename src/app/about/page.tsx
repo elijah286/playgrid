@@ -37,7 +37,7 @@ export default async function AboutPage() {
       <div className="mt-6 space-y-5 text-base leading-relaxed text-muted">
         <p>
           XO Gridmaker is a football play designer built for coaches who want to
-          spend more time coaching and less time fighting with PowerPoint,
+          spend more time coaching and less time fighting with slide software,
           whiteboards, or napkin sketches.
         </p>
         {hideOwnerInfo ? (
