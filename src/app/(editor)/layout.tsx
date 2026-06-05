@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { FeedbackWidget } from "@/components/feedback/FeedbackWidget";
+import { EditorOverscrollLock } from "@/components/native/EditorOverscrollLock";
 import { TimeOnSiteTracker } from "@/components/TimeOnSiteTracker";
 import { getFeedbackWidgetSettings } from "@/lib/site/feedback-config";
 import { userHasCreatedPlayAction } from "@/app/actions/plays";
@@ -28,6 +29,7 @@ export default async function EditorLayout({ children }: { children: React.React
       <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-3 py-5 sm:px-6">
         {children}
       </div>
+      <EditorOverscrollLock />
       <TimeOnSiteTracker />
       {feedbackSettings.enabled && (
         <FeedbackWidget

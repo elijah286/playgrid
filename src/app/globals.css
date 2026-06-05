@@ -687,17 +687,19 @@ html.native-shell.native-ready #native-loading-overlay {
   .indeterminate-bar::after { animation: none; width: 100%; opacity: 0.5; }
 }
 
-/* Disable iOS WKWebView rubber-band / overscroll-bounce. Without this, a
- * downward drag at the top of the page pulls the entire document — sticky
- * header included — below the status bar, exposing a white gap. Android
- * WebView doesn't bounce by default, so this was iOS-only. Scoped to the
- * native shell (`html.native-shell` is added by the pre-paint script in
- * layout.tsx before hydration) so web users still get native browser
- * scroll affordances. We don't use pull-to-refresh anywhere in the app,
- * so killing the gesture entirely is safe. Requires iOS 16+ in WKWebView;
- * iOS 15 will still bounce (a Swift backstop is possible if that matters). */
-html.native-shell,
-html.native-shell body {
+/* Native rubber-band bounce: allowed app-wide (overscroll-behavior: auto, the
+ * default) so a coach can pull a short list — e.g. a playbook with 4 plays —
+ * and feel it give, a "nothing more below" cue, instead of the page feeling
+ * frozen. The TOP pull that used to drag the sticky header below the status
+ * bar (exposing a white gap) is now owned by pull-to-refresh
+ * (PullToRefresh.tsx), which preventDefaults it — so the bounce only manifests
+ * at the bottom. The editor route opts out via `.no-overscroll-bounce`
+ * (EditorOverscrollLock): bottom-bounce adds nothing on that focused surface,
+ * and edit mode suppresses pull-to-refresh, which would otherwise reopen the
+ * gap. Scoped to `.native-shell` (added pre-paint in layout.tsx) so web users
+ * are untouched. Requires iOS 16+ in WKWebView. */
+html.native-shell.no-overscroll-bounce,
+html.native-shell.no-overscroll-bounce body {
   overscroll-behavior: none;
 }
 
