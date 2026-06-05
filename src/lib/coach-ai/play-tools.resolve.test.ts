@@ -17,9 +17,58 @@ import { describe, expect, it } from "vitest";
 import {
   _buildOrderedPlaybookForTest,
   clampSpecDepthsToFamilyMin,
+  reconcileCenterAssignment,
   resolvePlayIdFromOrdered,
 } from "./play-tools";
 import type { PlaySpec } from "@/domain/play/spec";
+
+describe("reconcileCenterAssignment — center route reconciliation (fix-and-tell)", () => {
+  function specWith(
+    variant: string,
+    assignments: Array<{ player: string; action: Record<string, unknown> }>,
+  ): PlaySpec {
+    return { title: "T", variant, formation: { name: "Doubles" }, assignments } as unknown as PlaySpec;
+  }
+
+  it("5v5: gives a routeless eligible center the canonical Sit outlet", () => {
+    const spec = specWith("flag_5v5", [
+      { player: "X", action: { kind: "route", family: "Go", depthYds: 18 } },
+    ]);
+    const summaries = reconcileCenterAssignment(spec, true);
+    expect(summaries).toHaveLength(1);
+    const center = spec.assignments.find((a) => a.player === "C");
+    expect(center).toBeDefined();
+    expect((center!.action as { kind: string; family: string }).kind).toBe("route");
+    expect((center!.action as { family: string }).family).toBe("Sit");
+  });
+
+  it("5v5: leaves a center that already has a route alone", () => {
+    const spec = specWith("flag_5v5", [
+      { player: "C", action: { kind: "route", family: "Sit", depthYds: 5 } },
+    ]);
+    const before = JSON.stringify(spec);
+    expect(reconcileCenterAssignment(spec, true)).toHaveLength(0);
+    expect(JSON.stringify(spec)).toBe(before);
+  });
+
+  it("7v7: drops an illegal route from the ineligible center", () => {
+    const spec = specWith("flag_7v7", [
+      { player: "C", action: { kind: "route", family: "Drag", depthYds: 3 } },
+      { player: "Z", action: { kind: "route", family: "Go", depthYds: 18 } },
+    ]);
+    const summaries = reconcileCenterAssignment(spec, false);
+    expect(summaries).toHaveLength(1);
+    expect(spec.assignments.find((a) => a.player === "C")).toBeUndefined();
+    expect(spec.assignments.find((a) => a.player === "Z")).toBeDefined();
+  });
+
+  it("7v7: leaves an ineligible center with no route alone", () => {
+    const spec = specWith("flag_7v7", [
+      { player: "Z", action: { kind: "route", family: "Go", depthYds: 18 } },
+    ]);
+    expect(reconcileCenterAssignment(spec, false)).toHaveLength(0);
+  });
+});
 
 describe("clampSpecDepthsToFamilyMin — raise below-floor route depths so the play saves", () => {
   // Reported 2026-06-04: Cal authored specs with route depths below the

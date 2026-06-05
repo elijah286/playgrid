@@ -690,6 +690,58 @@ export function clampSpecDepthsToFamilyMin(
 }
 
 /**
+ * Reconcile the center's assignment so the play passes the content gate
+ * instead of being rejected (AGENTS.md Rule 5; "fix-and-tell"):
+ *  - centerEligible (flag 5v5): the center is an eligible receiver and
+ *    MUST have an action. If it has none, give it the canonical short
+ *    outlet (Sit @5 — the depth the seeded skeletons use for the center
+ *    outlet). A center that already has a route/motion/block is left
+ *    alone (that's a deliberate or ambiguous case, not a forgotten one).
+ *  - !centerEligible (7v7 / tackle): a route from the center is illegal —
+ *    the center snaps and stays at the LOS. Drop the route (any non-route
+ *    action like a block stays).
+ * Mutates spec.assignments in place; returns a coach-facing summary.
+ */
+export function reconcileCenterAssignment(spec: PlaySpec, centerEligible: boolean): string[] {
+  const assignments = spec.assignments;
+  if (!Array.isArray(assignments)) return [];
+  const idx = assignments.findIndex(
+    (a) => typeof a.player === "string" && a.player.toUpperCase() === "C",
+  );
+  const center = idx >= 0 ? assignments[idx] : null;
+  const centerActionKind = center ? (center.action as { kind?: string }).kind : undefined;
+
+  if (centerEligible) {
+    // Only auto-fill when the center clearly has NO action (Cal forgot
+    // it). A deliberate route/motion/block is left for the validator —
+    // ambiguous cases fall to the "ask the coach" path, not a silent fix.
+    const hasAction =
+      center != null && typeof centerActionKind === "string" && centerActionKind !== "unspecified";
+    if (hasAction) return [];
+    const outlet = {
+      player: "C",
+      confidence: "med" as const,
+      action: { kind: "route" as const, family: "Sit", depthYds: 5 },
+    } as (typeof assignments)[number];
+    if (idx >= 0) assignments[idx] = outlet;
+    else assignments.push(outlet);
+    console.log(`[coach-ai:auto-correct] center @C → Sit@5 outlet (5v5 eligible, was missing a route)`);
+    return [`gave @C a short Sit outlet at 5 yds (the center is an eligible receiver in 5v5 and needs a route)`];
+  }
+
+  // Center ineligible: a route is illegal. Drop it; leave any block.
+  if (center && centerActionKind === "route") {
+    assignments.splice(idx, 1);
+    console.log(`[coach-ai:auto-correct] center @C route dropped (ineligible in this variant)`);
+    return [
+      `removed @C's route — the center can't be a receiver in this game type (it snaps and stays at the LOS); ` +
+        `if you wanted that route, tell me which eligible receiver should run it`,
+    ];
+  }
+  return [];
+}
+
+/**
  * Format resolver-level auto-corrections (a route depth raised to its
  * family floor, a token recolored off a clash, etc.) as a non-fatal note
  * appended to a successful save, so Cal tells the coach what it adjusted
@@ -745,7 +797,7 @@ function summarizeConfidence(spec: PlaySpec | null): string {
  * PlayDocument.metadata.spec for downstream notes generation.
  */
 type ResolvedInput =
-  | { ok: true; diagram: CoachDiagram; spec: PlaySpec | null; softWarnings: ReadonlyArray<RenderWarning>; depthClampSummaries: ReadonlyArray<string> }
+  | { ok: true; diagram: CoachDiagram; spec: PlaySpec | null; softWarnings: ReadonlyArray<RenderWarning>; autoCorrections: ReadonlyArray<string> }
   | { ok: false; error: string };
 
 /**
@@ -781,6 +833,16 @@ function resolveDiagramAndSpec(
      * hand-drawn plays that pre-date this capability set.
      */
     advancedCapabilities?: readonly RuleCapability[];
+    /**
+     * Whether the center is an eligible receiver in this playbook
+     * (settings.centerIsEligible, defaulting to variant === flag_5v5).
+     * When supplied, the resolver reconciles the center's assignment so
+     * the play saves: 5v5 (eligible) gets the canonical short outlet if
+     * the center has no route; 7v7/tackle (ineligible) drops an illegal
+     * center route. Omitted by lower-level callers / tests that don't
+     * have playbook context.
+     */
+    centerEligible?: boolean;
   } = {},
 ): ResolvedInput {
   // SCHEMA TOOL-INPUT BOUNDARY (AGENTS.md Rule: strict at write).
@@ -810,11 +872,21 @@ function resolveDiagramAndSpec(
       };
     }
     const spec = parsed.data as PlaySpec;
-    // Family-floor clamp (shallow-only), BEFORE every gate + render so
-    // the persisted spec and rendered diagram agree and the
-    // route-assignment validator never hard-rejects a too-shallow named
-    // route. Too-deep + nonCanonical are untouched. Reported 2026-06-04.
-    const depthClampSummaries = clampSpecDepthsToFamilyMin(spec);
+    // Resolver-level auto-corrections (AGENTS.md Rule 5: derive the right
+    // thing, don't validate-and-reject). Run BEFORE every gate + render
+    // so the persisted spec and the rendered diagram agree:
+    //  - depth floor (shallow-only): a Seam at 8yd → 10yd.
+    //  - center reconciliation: in 5v5 the eligible center MUST have a
+    //    route — add the canonical short outlet if it's missing; in
+    //    7v7/tackle a center route is illegal — drop it. Only runs when
+    //    the caller supplied centerEligible (create/update do; lower-level
+    //    callers and tests opt out so they aren't surprised).
+    const autoCorrections = [
+      ...clampSpecDepthsToFamilyMin(spec),
+      ...(options.centerEligible === undefined
+        ? []
+        : reconcileCenterAssignment(spec, options.centerEligible)),
+    ];
     // Playbook-rule gate: refuse specs that use a capability the
     // playbook hasn't opted into (RPOs, multi-handoff reverses,
     // designed QB runs). Runs BEFORE render so the coach-readable
@@ -882,7 +954,7 @@ function resolveDiagramAndSpec(
       return { ok: false, error: formatSpecRenderWarnings(hardWarnings) };
     }
     const softWarnings = warnings.filter((w) => !isHardWarning(w));
-    return { ok: true, diagram, spec, softWarnings, depthClampSummaries };
+    return { ok: true, diagram, spec, softWarnings, autoCorrections };
   }
 
   // Path 2: legacy CoachDiagram input.
@@ -906,7 +978,7 @@ function resolveDiagramAndSpec(
       formation: options.formationName,
       playType: options.playType,
     });
-    return { ok: true, diagram, spec: derivedSpec, softWarnings: [], depthClampSummaries: [] };
+    return { ok: true, diagram, spec: derivedSpec, softWarnings: [], autoCorrections: [] };
   }
 
   return {
@@ -1221,6 +1293,7 @@ const update_play: CoachAiTool = {
       const inputResolved = resolveDiagramAndSpec(input.play_spec, input.diagram, resolvedVariant, {
         playType,
         advancedCapabilities: playbookSettings.advancedCapabilities,
+        centerEligible: playbookSettings.centerIsEligible ?? (resolvedVariant === "flag_5v5"),
       });
       if (!inputResolved.ok) return { ok: false, error: inputResolved.error };
       const diagram = inputResolved.diagram;
@@ -1364,7 +1437,7 @@ const update_play: CoachAiTool = {
           `. Recap to the coach which specific changes you just shipped (not just "done") so they can verify the edit matches their request.` +
           summarizeConfidence(persistedSpec) +
           formatSpecRenderSoftWarnings(updateSoftWarnings) +
-          formatAutoCorrectionNote([...inputResolved.depthClampSummaries, ...colorFixes]),
+          formatAutoCorrectionNote([...inputResolved.autoCorrections, ...colorFixes]),
       };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "update_play failed" };
@@ -1493,6 +1566,7 @@ const create_play: CoachAiTool = {
       formationName,
       playType,
       advancedCapabilities: playbookSettingsPreCreate.advancedCapabilities,
+      centerEligible: playbookSettingsPreCreate.centerIsEligible ?? (resolvedVariant === "flag_5v5"),
     });
     if (!resolved.ok) return { ok: false, error: resolved.error };
     let diagram = resolved.diagram;
@@ -1668,7 +1742,7 @@ const create_play: CoachAiTool = {
           `[Open ${name}](${url}).${stripNote}${notesNote}` +
           summarizeConfidence(persistedSpec) +
           formatSpecRenderSoftWarnings(softWarnings) +
-          formatAutoCorrectionNote([...resolved.depthClampSummaries, ...colorFixes]),
+          formatAutoCorrectionNote([...resolved.autoCorrections, ...colorFixes]),
       };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "create_play failed" };
