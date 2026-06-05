@@ -183,6 +183,32 @@ describe("compose_play — registered + returns valid fence", () => {
     expect(r.error).toMatch(/H \(declared "Drag"\)/);
     expect(r.error).toMatch(/30 yds/);
   });
+
+  it("snaps a below-floor override UP to the family floor and composes cleanly (Seam @6 → 10)", async () => {
+    // Companion to the reject test above. Too-DEEP (Drag @30) still
+    // rejects — the coach likely wants a different, deeper route. But
+    // too-SHALLOW (Seam @6, below the 10yd floor) snaps UP to the floor
+    // so the play composes + saves instead of hard-failing. Reported
+    // 2026-06-04: "a seam route can't be 8 yards" — the coach just
+    // wanted it shorter, so give them the shortest legal seam.
+    const tool = loadTool("compose_play");
+    const r = await tool.handler(
+      { concept: "Four Verticals", overrides: [{ player: "H", set_depth_yds: 6 }] },
+      TACKLE_CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const fence = extractFence(r.result);
+    const routes = fence.routes as Array<{ from: string; path: [number, number][] }>;
+    const hRoute = routes.find((rt) => rt.from === "H");
+    expect(hRoute).toBeDefined();
+    if (!hRoute) return;
+    const hMaxY = Math.max(...hRoute.path.map((p) => p[1]));
+    // Snapped to the Seam floor of 10 (was 6).
+    expect(Math.abs(hMaxY - 10)).toBeLessThanOrEqual(0.7);
+    // Cal is told about the adjustment so it can relay it to the coach.
+    expect(r.result.toLowerCase()).toContain("raised");
+  });
 });
 
 describe("autoCapSpecDepthsToMaxThrow — youth playbook max-throw-depth cap", () => {

@@ -272,6 +272,46 @@ export function findTemplate(rawName: string): RouteTemplate | null {
   return null;
 }
 
+/**
+ * Raise a requested past-LOS depth (yards) UP to a route family's
+ * canonical floor when it falls below it. This is the structural
+ * counterpart to the route-assignment validator's depth check for the
+ * too-SHALLOW direction: instead of REJECTING a named route that's
+ * shorter than its family allows (a Seam asked for at 8yd when Seams
+ * run [10, 25]), the write path snaps it to the floor so the play SAVES.
+ *
+ * The asymmetry is deliberate. Too-shallow means "I want THIS route,
+ * just shorter than it goes" → snap to the shortest legal version and
+ * keep the family. Too-DEEP is intentionally left alone here: a route
+ * asked for DEEPER than its family allows (a 30yd Drag, a 12yd Slant)
+ * usually means the coach wants a DIFFERENT, deeper family — so that
+ * case keeps the validator's reject + suggest-alternative path
+ * (route-assignment-validate.ts) rather than silently shrinking 30yd
+ * down to 5yd, which would be nonsense.
+ *
+ * Coach-explicit off-catalog depths (`nonCanonical`) pass through
+ * untouched — the validator tolerates them the same way.
+ *
+ * See AGENTS.md Rule 5 ("make it impossible, then validate"): derive the
+ * right geometry deterministically rather than validate-and-reject.
+ * Mirrors `autoCapSpecDepthsToMaxThrow` (tools.ts) for the floor the
+ * max-throw cap doesn't cover. Reported 2026-06-04 (coach hit repeated
+ * "can't save — a seam can't be 8 yards" on Cal-composed plays).
+ *
+ * Returns the depth to render plus, when a raise happened, the original
+ * value so callers can tell the coach ("set to 10 — Seams run 10–25").
+ */
+export function clampDepthToFamilyMin(
+  template: RouteTemplate,
+  depthYds: number,
+  nonCanonical: boolean,
+): { depthYds: number; raisedFrom: number | null } {
+  if (nonCanonical) return { depthYds, raisedFrom: null };
+  const min = template.constraints.depthRangeYds.min;
+  if (!Number.isFinite(depthYds) || depthYds >= min) return { depthYds, raisedFrom: null };
+  return { depthYds: min, raisedFrom: depthYds };
+}
+
 /* ------------------------------------------------------------------ */
 /*  Instantiate a template for a player                               */
 /* ------------------------------------------------------------------ */

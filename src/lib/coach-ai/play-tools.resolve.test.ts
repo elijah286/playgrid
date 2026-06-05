@@ -14,7 +14,74 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { _buildOrderedPlaybookForTest, resolvePlayIdFromOrdered } from "./play-tools";
+import {
+  _buildOrderedPlaybookForTest,
+  clampSpecDepthsToFamilyMin,
+  resolvePlayIdFromOrdered,
+} from "./play-tools";
+import type { PlaySpec } from "@/domain/play/spec";
+
+describe("clampSpecDepthsToFamilyMin — raise below-floor route depths so the play saves", () => {
+  // Reported 2026-06-04: Cal authored specs with route depths below the
+  // family floor (e.g. a Seam at 8yd when Seams run 10–25) and the
+  // save-time route-assignment validator hard-rejected — "can't save".
+  // resolveDiagramAndSpec now snaps below-floor depths UP to the floor
+  // before render/validate so the play saves. Too-DEEP is intentionally
+  // left alone (validator reject + suggest-alternative).
+  function specWith(assignments: Array<{ player: string; action: Record<string, unknown> }>): PlaySpec {
+    return { title: "T", variant: "flag_7v7", formation: { name: "Doubles" }, assignments } as unknown as PlaySpec;
+  }
+
+  it("raises a Seam @8 up to the family floor of 10 and reports it", () => {
+    const spec = specWith([
+      { player: "Z", action: { kind: "route", family: "Seam", depthYds: 8 } },
+    ]);
+    const summaries = clampSpecDepthsToFamilyMin(spec);
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]).toContain("8");
+    expect(summaries[0]).toContain("10");
+    expect((spec.assignments[0].action as { depthYds: number }).depthYds).toBe(10);
+  });
+
+  it("leaves an explicit below-floor depth alone when nonCanonical is set", () => {
+    const spec = specWith([
+      { player: "Z", action: { kind: "route", family: "Seam", depthYds: 8, nonCanonical: true } },
+    ]);
+    const summaries = clampSpecDepthsToFamilyMin(spec);
+    expect(summaries).toHaveLength(0);
+    expect((spec.assignments[0].action as { depthYds: number }).depthYds).toBe(8);
+  });
+
+  it("leaves a too-DEEP route alone (shallow-only) — Drag @30 stays 30 for the validator to reject", () => {
+    const spec = specWith([
+      { player: "H", action: { kind: "route", family: "Drag", depthYds: 30 } },
+    ]);
+    const summaries = clampSpecDepthsToFamilyMin(spec);
+    expect(summaries).toHaveLength(0);
+    expect((spec.assignments[0].action as { depthYds: number }).depthYds).toBe(30);
+  });
+
+  it("is a no-op when every route is at or above its family floor", () => {
+    const spec = specWith([
+      { player: "X", action: { kind: "route", family: "Curl", depthYds: 5 } },
+      { player: "B", action: { kind: "route", family: "Flat", depthYds: 2 } },
+    ]);
+    const before = JSON.stringify(spec);
+    const summaries = clampSpecDepthsToFamilyMin(spec);
+    expect(summaries).toHaveLength(0);
+    expect(JSON.stringify(spec)).toBe(before);
+  });
+
+  it("leaves non-route actions and unknown families alone", () => {
+    const spec = specWith([
+      { player: "C", action: { kind: "block" } },
+      { player: "B", action: { kind: "carry", runType: "inside_zone" } },
+      { player: "Z", action: { kind: "route", family: "Nonsense", depthYds: 1 } },
+    ]);
+    const summaries = clampSpecDepthsToFamilyMin(spec);
+    expect(summaries).toHaveLength(0);
+  });
+});
 
 const groups = [
   { id: "g-rec", name: "Recommended", sort_order: 0 },

@@ -47,6 +47,57 @@ describe("applyRouteMod — single mod", () => {
     expect(Math.abs(maxY - 6)).toBeLessThanOrEqual(0.6);
   });
 
+  it("raises a too-shallow named route up to the family floor (Seam @8 → 10)", () => {
+    // Reported 2026-06-04: Cal composed plays then refused to save with
+    // "a seam route can't be 8 yards, it has to be 10 to 25". A depth
+    // below the family floor (Cal's own pick or a coach's "make it
+    // shorter") should SNAP UP to the shortest legal version of that
+    // route and save — not hard-fail. The explicit-override exception
+    // (set_non_canonical) is the next test.
+    const f = fence([
+      { from: "S", path: [[10, 12]], route_kind: "Seam" },
+    ]);
+    const r = applyRouteMod(f, { player: "S", set_depth_yds: 8 });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const newPath = (r.fence.routes as Array<{ path: [number, number][] }>)[0].path;
+    const maxY = Math.max(...newPath.map((p) => p[1]));
+    // Seam floor is 10yd (past LOS) — 8 snaps to 10.
+    expect(Math.abs(maxY - 10)).toBeLessThanOrEqual(0.6);
+    // The applied summary tells the coach what happened.
+    expect(r.appliedSummary.toLowerCase()).toContain("raised");
+    expect(r.appliedSummary).toContain("10");
+  });
+
+  it("honors an explicit below-floor depth when set_non_canonical is set (Seam @8 stays 8)", () => {
+    const f = fence([
+      { from: "S", path: [[10, 12]], route_kind: "Seam" },
+    ]);
+    const r = applyRouteMod(f, { player: "S", set_depth_yds: 8, set_non_canonical: true });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const newPath = (r.fence.routes as Array<{ path: [number, number][] }>)[0].path;
+    const maxY = Math.max(...newPath.map((p) => p[1]));
+    // Coach was explicit — honored at 8, NOT snapped to the floor.
+    expect(Math.abs(maxY - 8)).toBeLessThanOrEqual(0.6);
+  });
+
+  it("leaves a too-DEEP named route alone (Slant @12 not clamped — that's the validator's reject+suggest path)", () => {
+    // Asymmetry by design: too-deep usually means the coach wants a
+    // DIFFERENT, deeper family (a 12yd Slant is really a Dig). We don't
+    // silently shrink it; the route-assignment validator rejects it and
+    // suggests an alternative. So applyRouteMod renders the 12 as asked.
+    const f = fence([
+      { from: "X", path: [[-13, 5]], route_kind: "Slant" },
+    ]);
+    const r = applyRouteMod(f, { player: "X", set_depth_yds: 12 });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const newPath = (r.fence.routes as Array<{ path: [number, number][] }>)[0].path;
+    const maxY = Math.max(...newPath.map((p) => p[1]));
+    expect(Math.abs(maxY - 12)).toBeLessThanOrEqual(0.6);
+  });
+
   it("swaps route family from Curl to Post", () => {
     const f = fence([
       { from: "X", path: [[-13, 5], [-13, 8]], route_kind: "Curl" },

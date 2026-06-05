@@ -23,7 +23,7 @@
  * invariant this module exists for.
  */
 
-import { findTemplate } from "@/domain/play/routeTemplates";
+import { clampDepthToFamilyMin, findTemplate } from "@/domain/play/routeTemplates";
 import { sanitizeCoachDiagram } from "@/domain/play/sanitize";
 import {
   PLAYBOOK_PALETTE,
@@ -102,6 +102,12 @@ export function applyRouteMod(fence: Fence, mod: RouteMod): ApplyRouteModResult 
   const setDepth = typeof mod.set_depth_yds === "number" && Number.isFinite(mod.set_depth_yds)
     ? mod.set_depth_yds
     : null;
+  // Depth actually rendered. Starts as the requested depth; a too-shallow
+  // named route gets raised to its family floor below (see
+  // clampDepthToFamilyMin) so the play saves instead of failing the
+  // route-assignment validator's depth check.
+  let effectiveDepth = setDepth;
+  let depthRaisedFrom: number | null = null;
   const setNonCanonical = typeof mod.set_non_canonical === "boolean" ? mod.set_non_canonical : null;
   const setDirection = mod.set_direction === "left" || mod.set_direction === "right" ? mod.set_direction : null;
   const setPlayerColor = typeof mod.set_player_color === "string" && mod.set_player_color in PLAYBOOK_PALETTE
@@ -166,6 +172,24 @@ export function applyRouteMod(fence: Fence, mod: RouteMod): ApplyRouteModResult 
     if (!template) {
       return { ok: false, error: `unknown route family "${resolvedFamily}" — use a catalog name (Slant, Curl, Drag, Dig, etc.).` };
     }
+    // Family-floor clamp (shallow-only). A coach-explicit off-catalog
+    // depth (set_non_canonical, or a route already flagged nonCanonical)
+    // passes through; otherwise a depth below the family floor snaps up
+    // so the route renders + saves as the shortest legal version of its
+    // named family. Too-deep is left to the validator's reject+suggest.
+    const resolvedNonCanonical =
+      setNonCanonical !== null ? setNonCanonical : oldRoute.nonCanonical === true;
+    if (setDepth !== null) {
+      const clamped = clampDepthToFamilyMin(template, setDepth, resolvedNonCanonical);
+      effectiveDepth = clamped.depthYds;
+      depthRaisedFrom = clamped.raisedFrom;
+      if (depthRaisedFrom !== null) {
+        console.log(
+          `[coach-ai:depth-clamp] applyRouteMod @${mod.player} ${template.name} ` +
+          `${depthRaisedFrom}→${effectiveDepth}yd (family floor)`,
+        );
+      }
+    }
     const carrierX = typeof carrier.x === "number" ? carrier.x : 0;
     const carrierY = typeof carrier.y === "number" ? carrier.y : 0;
     const fieldWidthYds = fieldWidthFor(variantStr);
@@ -194,8 +218,8 @@ export function applyRouteMod(fence: Fence, mod: RouteMod): ApplyRouteModResult 
     // carrierY, a back at y=-5 running Drag @ 5 would land at the LOS
     // (y=0) instead of 5yd downfield. The catalog's depth ranges are
     // in the past-LOS convention; this scaling matches.
-    const yScale = setDepth !== null && templateMaxYds > 0.5
-      ? (setDepth - carrierY) / templateMaxYds
+    const yScale = effectiveDepth !== null && templateMaxYds > 0.5
+      ? (effectiveDepth - carrierY) / templateMaxYds
       : 1;
     const waypoints = template.points[0]?.x === 0 && template.points[0]?.y === 0
       ? template.points.slice(1)
@@ -219,7 +243,13 @@ export function applyRouteMod(fence: Fence, mod: RouteMod): ApplyRouteModResult 
   newRoutes[routeIdx] = newRoute;
   const summary: string[] = [];
   if (setFamily) summary.push(`family→${setFamily}`);
-  if (setDepth !== null) summary.push(`depth→${setDepth}yd`);
+  if (setDepth !== null) {
+    summary.push(
+      depthRaisedFrom !== null
+        ? `depth→${effectiveDepth}yd (raised from ${depthRaisedFrom}yd; ${resolvedFamily ?? "route"} runs no shorter than ${effectiveDepth}yd)`
+        : `depth→${setDepth}yd`,
+    );
+  }
   if (setNonCanonical !== null) summary.push(`nonCanonical→${setNonCanonical}`);
   if (setDirection !== null) summary.push(`direction→${setDirection}`);
   if (setPlayerColor !== null) summary.push(`color→${setPlayerColor}`);

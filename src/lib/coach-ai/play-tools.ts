@@ -15,6 +15,7 @@ import type { PlaySpec } from "@/domain/play/spec";
 import { parsePlaySpec } from "@/domain/play/spec";
 import { coachDiagramToPlaySpec } from "@/domain/play/specParser";
 import { playSpecToCoachDiagram, type RenderWarning } from "@/domain/play/specRenderer";
+import { clampDepthToFamilyMin, findTemplate } from "@/domain/play/routeTemplates";
 import { parseCoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
 import { sanitizeCoachDiagram } from "@/domain/play/sanitize";
 import type { CoachAiTool, ToolContext } from "./tools";
@@ -652,6 +653,57 @@ function formatSpecRenderSoftWarnings(warnings: ReadonlyArray<RenderWarning>): s
 }
 
 /**
+ * Raise any route assignment whose `depthYds` falls below its family's
+ * catalog floor up to that floor, IN PLACE, and return a per-route
+ * summary of what changed. Shallow-only by design (see
+ * clampDepthToFamilyMin): a Seam asked for at 8yd renders + saves at 10
+ * (the shortest legal seam) instead of hard-failing the save-time
+ * route-assignment validator. Coach-explicit `nonCanonical` depths and
+ * too-DEEP depths are left untouched.
+ *
+ * Mirrors `autoCapSpecDepthsToMaxThrow` (tools.ts) — same in-place spec
+ * mutation + summary-return shape, for the opposite (floor) bound.
+ * Runs inside resolveDiagramAndSpec BEFORE render so the persisted spec
+ * and the rendered diagram agree. Reported 2026-06-04.
+ */
+export function clampSpecDepthsToFamilyMin(
+  spec: { assignments?: Array<{ player: string; action: Record<string, unknown> }> },
+): string[] {
+  const summaries: string[] = [];
+  for (const asn of spec.assignments ?? []) {
+    const action = asn.action as { kind?: string; family?: string; depthYds?: number; nonCanonical?: boolean };
+    if (action.kind !== "route") continue;
+    if (typeof action.depthYds !== "number") continue;
+    if (typeof action.family !== "string") continue;
+    const template = findTemplate(action.family);
+    if (!template) continue;
+    const clamped = clampDepthToFamilyMin(template, action.depthYds, action.nonCanonical === true);
+    if (clamped.raisedFrom === null) continue;
+    action.depthYds = clamped.depthYds;
+    summaries.push(`@${asn.player}: ${clamped.raisedFrom}yd → ${clamped.depthYds}yd (${template.name} runs no shorter than ${clamped.depthYds}yd)`);
+    console.log(
+      `[coach-ai:depth-clamp] spec @${asn.player} ${template.name} ` +
+      `${clamped.raisedFrom}→${clamped.depthYds}yd (family floor)`,
+    );
+  }
+  return summaries;
+}
+
+/**
+ * Format depth-clamp summaries as a non-fatal note appended to a
+ * successful save, so Cal tells the coach what it adjusted instead of
+ * silently rewriting their number.
+ */
+function formatDepthClampNote(summaries: ReadonlyArray<string>): string {
+  if (summaries.length === 0) return "";
+  return (
+    `\n\n⚠️ Adjusted ${summaries.length} route depth(s) up to the family minimum so the play saves: ` +
+    `${summaries.join("; ")}. Tell the coach in plain English (e.g. "Seams run 10–25 yds, so I set that one at 10"). ` +
+    `If they genuinely want it shorter, that's a different route (hitch/slant) or an explicit non-canonical depth.`
+  );
+}
+
+/**
  * Walk a saved spec and produce a one-line confidence summary. Used in
  * create_play / update_play tool results so Cal sees, immediately after
  * a save, which elements (if any) are low-confidence — and can prompt
@@ -692,7 +744,7 @@ function summarizeConfidence(spec: PlaySpec | null): string {
  * PlayDocument.metadata.spec for downstream notes generation.
  */
 type ResolvedInput =
-  | { ok: true; diagram: CoachDiagram; spec: PlaySpec | null; softWarnings: ReadonlyArray<RenderWarning> }
+  | { ok: true; diagram: CoachDiagram; spec: PlaySpec | null; softWarnings: ReadonlyArray<RenderWarning>; depthClampSummaries: ReadonlyArray<string> }
   | { ok: false; error: string };
 
 /**
@@ -757,6 +809,11 @@ function resolveDiagramAndSpec(
       };
     }
     const spec = parsed.data as PlaySpec;
+    // Family-floor clamp (shallow-only), BEFORE every gate + render so
+    // the persisted spec and rendered diagram agree and the
+    // route-assignment validator never hard-rejects a too-shallow named
+    // route. Too-deep + nonCanonical are untouched. Reported 2026-06-04.
+    const depthClampSummaries = clampSpecDepthsToFamilyMin(spec);
     // Playbook-rule gate: refuse specs that use a capability the
     // playbook hasn't opted into (RPOs, multi-handoff reverses,
     // designed QB runs). Runs BEFORE render so the coach-readable
@@ -824,7 +881,7 @@ function resolveDiagramAndSpec(
       return { ok: false, error: formatSpecRenderWarnings(hardWarnings) };
     }
     const softWarnings = warnings.filter((w) => !isHardWarning(w));
-    return { ok: true, diagram, spec, softWarnings };
+    return { ok: true, diagram, spec, softWarnings, depthClampSummaries };
   }
 
   // Path 2: legacy CoachDiagram input.
@@ -848,7 +905,7 @@ function resolveDiagramAndSpec(
       formation: options.formationName,
       playType: options.playType,
     });
-    return { ok: true, diagram, spec: derivedSpec, softWarnings: [] };
+    return { ok: true, diagram, spec: derivedSpec, softWarnings: [], depthClampSummaries: [] };
   }
 
   return {
@@ -1300,7 +1357,8 @@ const update_play: CoachAiTool = {
           (routeSummary ? ` (carriers: ${routeSummary})` : "") +
           `. Recap to the coach which specific changes you just shipped (not just "done") so they can verify the edit matches their request.` +
           summarizeConfidence(persistedSpec) +
-          formatSpecRenderSoftWarnings(updateSoftWarnings),
+          formatSpecRenderSoftWarnings(updateSoftWarnings) +
+          formatDepthClampNote(inputResolved.depthClampSummaries),
       };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "update_play failed" };
@@ -1597,7 +1655,8 @@ const create_play: CoachAiTool = {
           `Created play "${name}" in the current playbook. Tell the coach it's ready and link them: ` +
           `[Open ${name}](${url}).${stripNote}${notesNote}` +
           summarizeConfidence(persistedSpec) +
-          formatSpecRenderSoftWarnings(softWarnings),
+          formatSpecRenderSoftWarnings(softWarnings) +
+          formatDepthClampNote(resolved.depthClampSummaries),
       };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "create_play failed" };
