@@ -477,8 +477,8 @@ export const ROUTES: RouteDef[] = [
     name: "Drag",
     family: "route",
     variants: [...ALL_VARIANTS],
-    description: "Shallow crossing route at 2-4 yds — foundation of mesh.",
-    body: "Shallow crossing route — receiver takes a 1-yard inside release then crosses the formation on a SMOOTH NEARLY-HORIZONTAL ARC at 2-4 yds depth (canonical default ~3yd). The cross itself is at a very shallow angle (~2-3° from horizontal) — the receiver gains essentially no depth as he travels laterally; he is NOT climbing diagonally and the path is NOT a rigid straight line. Coaches reading the diagram should see a HORIZONTAL line across the formation that VISIBLY clears the LOS, not crammed against it. Foundation of mesh, drive, and shallow-cross concepts. Beats man coverage — the defender has to fight through traffic that the offense's other routes generate underneath.",
+    description: "Shallow crossing route at 2-4 yds (mesh over-drag rides to ~6) — foundation of mesh.",
+    body: "Shallow crossing route — receiver takes a 1-yard inside release then crosses the formation on a SMOOTH NEARLY-HORIZONTAL ARC at 2-4 yds depth (canonical default ~3yd; in a mesh the OVER-drag rides slightly deeper, to ~5-6 yds, to clear the under-drag with ~1yd of vertical separation). The cross itself is at a very shallow angle (~2-3° from horizontal) — the receiver gains essentially no depth as he travels laterally; he is NOT climbing diagonally and the path is NOT a rigid straight line. Coaches reading the diagram should see a HORIZONTAL line across the formation that VISIBLY clears the LOS, not crammed against it. Foundation of mesh, drive, and shallow-cross concepts. Beats man coverage — the defender has to fight through traffic that the offense's other routes generate underneath.",
     aliases: ["Shallow", "Shallow Cross"],
     complexity: "basic",
     directional: true,
@@ -491,7 +491,12 @@ export const ROUTES: RouteDef[] = [
     shapes: ["straight", "curve", "curve"],
     breakStyle: "none",
     breakDir: "toward_qb",
-    constraints: { depthRangeYds: { min: 1, max: 5 }, side: "toward_qb" },
+    // Max 6 (was 5) so a mesh OVER-drag at 6yd renders + saves as a
+    // canonical Drag. The Mesh concept def (concepts.ts) already expects
+    // the over-drag in [5.5, 7]; this aligns the route family with it.
+    // Drag stays a SHALLOW cross — typical 2-4yd, 6yd is the mesh-over
+    // ceiling, not an everyday depth.
+    constraints: { depthRangeYds: { min: 1, max: 6 }, side: "toward_qb" },
     kbSubtopic: "route_drag",
   },
   {

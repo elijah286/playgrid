@@ -169,7 +169,7 @@ describe("compose_play — registered + returns valid fence", () => {
     // runs at save-time fires INSIDE compose_play, so Cal sees the
     // critique in its tool result and can react (different overrides,
     // different concept, or honest fallback). Drag's canonical depth
-    // range is [1, 9]; pushing to 30 yds without nonCanonical:true must
+    // range is [1, 6]; pushing to 30 yds without nonCanonical:true must
     // reject here so it doesn't reach the coach.
     const tool = loadTool("compose_play");
     const r = await tool.handler(
