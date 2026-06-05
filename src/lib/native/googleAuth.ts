@@ -13,6 +13,7 @@
  * var — that way the Site Admin can rotate it without redeploying.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { nativePlatform } from "./isNativeApp";
 
 let initializedForClientId: string | null = null;
 let initPromise: Promise<unknown> | null = null;
@@ -40,18 +41,30 @@ async function ensureInitialized(webClientId: string) {
 }
 
 /**
- * True when (a) a Web Client ID is configured in site_settings and
- * (b) the Capacitor native shell has the SocialLogin plugin registered.
+ * True when (a) a Web Client ID is configured in site_settings,
+ * (b) we're on Android (native Google sign-in is Android-only today),
+ * and (c) the Capacitor native shell has the SocialLogin plugin registered.
+ *
  * The plugin check matters because the live website JS is fetched by
  * every installed app version — an old APK that shipped before this
  * plugin was added will load the new JS but lacks the native bridge
  * code, so we hide the button rather than crash on click.
+ *
+ * The iOS exclusion matters because iOS native sign-in needs a separate
+ * iOS OAuth client: `iOSClientId` plumbed through site_settings AND the
+ * reversed-client-ID URL scheme baked into the iOS binary's Info.plist.
+ * Neither exists yet — `ensureInitialized` only passes `webClientId`,
+ * which the @capgo plugin's iOS `initialize()` ignores entirely, so it
+ * registers no provider and rejects with "No provider was initialized"
+ * (the red error coaches saw). Until the iOS client ships, hide the
+ * button on iOS so those users fall back to email / Apple sign-in.
  */
 export function canUseNativeGoogleAuth(
   webClientId: string | null | undefined,
 ): boolean {
   if (!webClientId) return false;
   if (typeof window === "undefined") return false;
+  if (nativePlatform() !== "android") return false;
   const cap = (window as unknown as {
     Capacitor?: { isPluginAvailable?: (name: string) => boolean };
   }).Capacitor;
