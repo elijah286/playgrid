@@ -703,6 +703,18 @@ html.native-shell.no-overscroll-bounce body {
   overscroll-behavior: none;
 }
 
+/* iOS only rubber-bands a scroll view that actually has somewhere to scroll.
+ * A short list — a playbook with a few plays — fits the viewport, so on its
+ * own it sits dead: no give, feels frozen. Force the scroll root a hair taller
+ * than the viewport so the page is always minimally scrollable; iOS then
+ * rubber-bands it (the bounce itself is full-sized, not limited to that 1px).
+ * Overrides the `min-h-[100dvh]` utility on <body>. Scoped to bounce-enabled
+ * native views — the editor opts out via `.no-overscroll-bounce`. The extra
+ * pixel sits below the fold, invisible. */
+html.native-shell:not(.no-overscroll-bounce) body {
+  min-height: calc(100dvh + 1px);
+}
+
 /* Safe-area handling: only horizontal padding goes on <body>. Vertical
  * insets are owned by the components that anchor to the top (sticky site
  * header) and bottom (fixed bottom navs) of the viewport, so their
