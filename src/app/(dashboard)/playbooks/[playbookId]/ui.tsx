@@ -1467,7 +1467,7 @@ function PlaybookDetailClientInner({
           ).length <= 1 &&
           initialInvites.filter(
             (i) => !i.revoked_at && new Date(i.expires_at) > new Date(),
-          ).length === 0 && <ShareFirstBanner />}
+          ).length === 0 && <ShareFirstBanner playbookId={playbookId} />}
 
         {/* Tabs: top bar visible on tablet/desktop only. Mobile gets the
             fixed-position PlaybookBottomNav further down — seven tabs in a
@@ -5232,9 +5232,40 @@ function PlayCapBanner({ count, limit }: { count: number; limit: number }) {
  * existing share dialog via the ?share=1 query param that PlaybookHeader
  * watches. Disappears as soon as a coach is added or an invite is sent.
  */
-function ShareFirstBanner() {
+function ShareFirstBanner({ playbookId }: { playbookId: string }) {
+  const dismissKey = `pb-${playbookId}-share-first-dismissed`;
+  const [hidden, setHidden] = useState(true);
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(dismissKey)) return;
+    } catch {
+      // localStorage unavailable — show the banner
+    }
+    setHidden(false);
+  }, [dismissKey]);
+  if (hidden) return null;
+  function dismiss() {
+    try {
+      window.localStorage.setItem(dismissKey, "1");
+    } catch {
+      // ignore
+    }
+    setHidden(true);
+  }
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-primary/30 bg-primary/[0.04] px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+    <div className="relative flex flex-col gap-2 rounded-lg border border-primary/30 bg-primary/[0.04] px-3 py-2 pr-9 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:pr-9">
+      {/* Dismiss X is corner-pinned (top-right) — that's the convention
+          coaches expect from banners. Anchoring it inside the row pushed
+          it to the bottom-right alongside the CTA, which read as a second
+          action button. */}
+      <button
+        type="button"
+        onClick={dismiss}
+        aria-label="Dismiss"
+        className="absolute right-1 top-1 rounded-md p-1 text-muted hover:bg-surface hover:text-foreground"
+      >
+        <X className="size-4" />
+      </button>
       <p className="min-w-0 flex-1 text-sm text-foreground">
         <span className="font-semibold">Share this playbook.</span>{" "}
         <span className="text-muted">
