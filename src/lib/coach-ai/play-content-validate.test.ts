@@ -20,6 +20,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  autoResolveColorClashes,
   validateColorClash,
   validateCenterEligibility,
   validateMotion,
@@ -69,6 +70,48 @@ describe("validateColorClash", () => {
     expect(errors).toHaveLength(1);
     expect(errors[0]).toMatch(/@H.*@A|@A.*@H/);
     expect(errors[0]).toMatch(/yellow/i);
+  });
+
+  it("autoResolveColorClashes recolors a clashing skill player so the clash is gone", () => {
+    // Save-time backstop: rather than refuse to save on a cosmetic color
+    // collision, recolor one of the clashing tokens to a free palette hue.
+    const diagram: CoachDiagram = {
+      variant: "flag_5v5",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "C", x: 0, y: 0, team: "O" },
+        { id: "Z", x: 10, y: 0, team: "O" },
+        { id: "H", x: 5, y: -1, team: "O" },
+        { id: "A", x: 7, y: -1, team: "O" },
+      ],
+      routes: [],
+    };
+    expect(validateColorClash(diagram)).toHaveLength(1); // precondition: clash
+    const fixes = autoResolveColorClashes(diagram);
+    expect(fixes.length).toBeGreaterThan(0);
+    expect(fixes[0]).toMatch(/recolored @[HA]/);
+    // The clash is resolved — the play would now pass the save-time gate.
+    expect(validateColorClash(diagram)).toHaveLength(0);
+    // Exactly one of the two clashing tokens got an explicit color.
+    const colored = (diagram.players as Array<{ id: string; color?: string }>).filter(
+      (p) => (p.id === "H" || p.id === "A") && typeof p.color === "string",
+    );
+    expect(colored).toHaveLength(1);
+  });
+
+  it("autoResolveColorClashes is a no-op when colors are already distinct", () => {
+    const diagram: CoachDiagram = {
+      variant: "flag_5v5",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "X", x: -10, y: 0, team: "O" }, // red
+        { id: "Z", x: 10, y: 0, team: "O" },  // blue
+      ],
+      routes: [],
+    };
+    const before = JSON.stringify(diagram);
+    expect(autoResolveColorClashes(diagram)).toEqual([]);
+    expect(JSON.stringify(diagram)).toBe(before);
   });
 
   it("rejects two X's (X + X2 both → red)", () => {

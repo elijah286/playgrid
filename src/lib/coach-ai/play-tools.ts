@@ -20,7 +20,7 @@ import { parseCoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
 import { sanitizeCoachDiagram } from "@/domain/play/sanitize";
 import type { CoachAiTool, ToolContext } from "./tools";
 import { validateRouteAssignments, type RouteAssignmentError } from "./route-assignment-validate";
-import { validatePlayContent, formatPlayContentErrors } from "./play-content-validate";
+import { autoResolveColorClashes, validatePlayContent, formatPlayContentErrors } from "./play-content-validate";
 import { defaultSettingsForVariant, normalizePlaybookSettings, type RuleCapability } from "@/domain/playbook/settings";
 import { validatePlaySpecVsRules } from "@/domain/playbook/playSpecRules";
 import { validatePlaySpecBallFlow, validatePlaySpecProgression } from "@/domain/play/specSemantics";
@@ -690,16 +690,17 @@ export function clampSpecDepthsToFamilyMin(
 }
 
 /**
- * Format depth-clamp summaries as a non-fatal note appended to a
- * successful save, so Cal tells the coach what it adjusted instead of
- * silently rewriting their number.
+ * Format resolver-level auto-corrections (a route depth raised to its
+ * family floor, a token recolored off a clash, etc.) as a non-fatal note
+ * appended to a successful save, so Cal tells the coach what it adjusted
+ * instead of silently changing the play.
  */
-function formatDepthClampNote(summaries: ReadonlyArray<string>): string {
+function formatAutoCorrectionNote(summaries: ReadonlyArray<string>): string {
   if (summaries.length === 0) return "";
   return (
-    `\n\n⚠️ Adjusted ${summaries.length} route depth(s) up to the family minimum so the play saves: ` +
-    `${summaries.join("; ")}. Tell the coach in plain English (e.g. "Seams run 10–25 yds, so I set that one at 10"). ` +
-    `If they genuinely want it shorter, that's a different route (hitch/slant) or an explicit non-canonical depth.`
+    `\n\n⚠️ Auto-corrected ${summaries.length} thing(s) so the play saves cleanly: ${summaries.join("; ")}. ` +
+    `Tell the coach in plain English what changed (e.g. "Seams run 10–25 yds, so I set that one at 10"). ` +
+    `If any of it wasn't what they wanted, it's one revise_play away.`
   );
 }
 
@@ -1249,6 +1250,11 @@ const update_play: CoachAiTool = {
       void updateStripped;
       const diagramWithVariant: CoachDiagram = cleanDiagram;
 
+      // Auto-correct a cosmetic color clash in place before the content
+      // gate validates it (and before it's persisted), so an edit is never
+      // blocked on two tokens sharing a hue.
+      const colorFixes = autoResolveColorClashes(diagramWithVariant);
+
       // Depth-cap fallback uses the same playbookSettings loaded above
       // (we don't re-fetch — it's the same record).
       const effectiveMaxRouteDepthYds =
@@ -1358,7 +1364,7 @@ const update_play: CoachAiTool = {
           `. Recap to the coach which specific changes you just shipped (not just "done") so they can verify the edit matches their request.` +
           summarizeConfidence(persistedSpec) +
           formatSpecRenderSoftWarnings(updateSoftWarnings) +
-          formatDepthClampNote(inputResolved.depthClampSummaries),
+          formatAutoCorrectionNote([...inputResolved.depthClampSummaries, ...colorFixes]),
       };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "update_play failed" };
@@ -1542,6 +1548,12 @@ const create_play: CoachAiTool = {
     // residue.
     const diagramWithVariant: CoachDiagram = { ...diagram, variant: resolvedVariant, title: diagram.title ?? name };
 
+    // Auto-correct a cosmetic color clash in place (before the content
+    // gate validates it AND before it's persisted) so a save is never
+    // blocked on two tokens sharing a hue. Combined with the resolver's
+    // depth-floor fixes for the coach-facing note below.
+    const colorFixes = autoResolveColorClashes(diagramWithVariant);
+
     // Depth-cap fallback uses the same playbookSettingsPreCreate
     // loaded above the resolver call (we don't re-fetch — it's the
     // same record). The persistent setting closes the gap from Cal
@@ -1656,7 +1668,7 @@ const create_play: CoachAiTool = {
           `[Open ${name}](${url}).${stripNote}${notesNote}` +
           summarizeConfidence(persistedSpec) +
           formatSpecRenderSoftWarnings(softWarnings) +
-          formatDepthClampNote(resolved.depthClampSummaries),
+          formatAutoCorrectionNote([...resolved.depthClampSummaries, ...colorFixes]),
       };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "create_play failed" };

@@ -93,6 +93,70 @@ export function validateColorClash(diagram: CoachDiagram): string[] {
 }
 
 /**
+ * Resolver-side companion to validateColorClash. Instead of REJECTING a
+ * play where two skill-position tokens derive the same color, assign the
+ * later clashing player(s) an unused palette color IN PLACE so the play
+ * saves. Color is cosmetic — recoloring never changes the play's intent
+ * — so this is a pure auto-fix (the caller surfaces a coach-facing note).
+ * The validator still fires at chat-time, so Cal prefers to fix labels
+ * itself; this is the save-time backstop that guarantees a color
+ * collision can't block a save. Mutates diagram.players[].color in
+ * place; returns a per-recolor summary (empty when nothing clashed).
+ */
+export function autoResolveColorClashes(diagram: CoachDiagram): string[] {
+  const players = Array.isArray(diagram.players) ? diagram.players : [];
+  const offense = players.filter((p) => (p as { team?: string }).team !== "D");
+  if (offense.length === 0) return [];
+  const variant = typeof diagram.variant === "string" ? diagram.variant : undefined;
+
+  // Effective hex per skill player, mirroring validateColorClash's
+  // detection. Track every used hex (including exempt singletons like QB
+  // white / C / linemen) so a reassignment never collides with them.
+  const groups = new Map<string, Array<{ p: Record<string, unknown>; id: string }>>();
+  const usedHex = new Set<string>();
+  for (const p of offense as Array<Record<string, unknown>>) {
+    const id = typeof p.id === "string" ? p.id : null;
+    if (!id) continue;
+    const roleHint = typeof p.role === "string" ? p.role : undefined;
+    const group = derivedColorGroupForLabel(id, roleHint);
+    // Linemen / rotation render neutral (gray) hues that aren't in the
+    // reassignment palette — skip before derivedHexFor (which only types
+    // the skill + QB/C groups).
+    if (group === "LINEMAN" || group === "ROTATION") continue;
+    const explicit = typeof p.color === "string" && p.color.trim() !== "" ? p.color.trim() : null;
+    const hex = explicit ?? derivedHexFor(group, variant);
+    usedHex.add(hex);
+    // QB / C are tracked in usedHex (so we never reassign onto their hue)
+    // but are singleton roles, never clash candidates themselves.
+    if (group === "QB" || group === "C") continue;
+    const list = groups.get(hex) ?? [];
+    list.push({ p, id });
+    groups.set(hex, list);
+  }
+
+  // Palette hues available for reassignment (skip neutral/structural ones).
+  const palette = Object.entries(PLAYBOOK_PALETTE).filter(
+    ([name]) => name !== "white" && name !== "black" && name !== "gray",
+  );
+
+  const summaries: string[] = [];
+  for (const list of groups.values()) {
+    if (list.length < 2) continue;
+    // Keep the first; recolor the rest to the next free palette hue.
+    for (let i = 1; i < list.length; i++) {
+      const free = palette.find(([, hex]) => !usedHex.has(hex));
+      if (!free) break; // every palette color taken — leave it; the chat-time note covers this rare case
+      const [name, hex] = free;
+      list[i].p.color = hex;
+      usedHex.add(hex);
+      summaries.push(`recolored @${list[i].id} to ${name} (it was sharing a color with @${list[0].id})`);
+      console.log(`[coach-ai:auto-correct] color @${list[i].id} → ${name} (clash with @${list[0].id})`);
+    }
+  }
+  return summaries;
+}
+
+/**
  * Center is a snapper, not a receiver, in playbooks where
  * `centerIsEligible:false` (7v7, tackle_11 default). A route from @C
  * is illegal there.
