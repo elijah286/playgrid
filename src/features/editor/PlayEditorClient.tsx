@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Archive as ArchiveIcon, ChevronDown, ChevronLeft, ChevronRight, FlaskConical, GraduationCap } from "lucide-react";
+import { Archive as ArchiveIcon, ChevronDown, ChevronLeft, ChevronRight, FlaskConical, GraduationCap, RotateCcw } from "lucide-react";
 import type { EndDecoration, PlayDocument, Player, Point2, Route, SegmentShape, StrokePattern, VsPlaySnapshot } from "@/domain/play/types";
 import type { SavedFormation } from "@/app/actions/formations";
 import { saveFormationAction } from "@/app/actions/formations";
@@ -2471,19 +2471,38 @@ function PlayEditorClientInner({
                 userTemplates={userTemplates}
               />
               <AnimationOverlay doc={animDoc} anim={anim} fieldAspect={fieldAspect} />
-              {/* Read-only viewers (shared, archived, examples) get the
-               *  same tap-to-step gesture as landscape fullscreen so
-               *  coaches and parents can flip through the animation
-               *  with one finger without hunting for the play button.
-               *  pointer-events-auto overrides the wrapper's
-               *  pointer-events-none — the rest of the canvas stays
-               *  inert. Hidden when canEdit since taps need to reach
-               *  the editing affordances underneath. */}
-              {!canEdit && !libraryMode && (
+              {/* Tap-the-field-to-play gesture. Two audiences:
+               *   1. Read-only viewers (shared, archived, examples) —
+               *      flip through the animation with one finger.
+               *   2. Editor-coaches on a touch device in VIEW mode — on
+               *      phones/tablets editing is gated behind "Edit play",
+               *      so until they opt in the whole field is a play
+               *      button (the explicit playback card is hidden on
+               *      touch; a thin reset/speed strip lives below the
+               *      field instead).
+               *  Tap toggles play → pause → resume, and replays once the
+               *  play has finished — same single-button logic as the
+               *  library overlay and the spacebar shortcut. pointer-
+               *  events-auto overrides the wrapper's pointer-events-none;
+               *  the rest of the canvas stays inert. Hidden once the
+               *  coach enters edit mode (canEdit && mode==="edit") so
+               *  taps reach the editing affordances underneath. */}
+              {(!canEdit || (isTouchDevice && mode === "view")) && !libraryMode && (
                 <button
                   type="button"
-                  onClick={anim.step}
-                  aria-label="Advance play"
+                  onClick={() => {
+                    if (anim.phase === "motion" || anim.phase === "play") {
+                      anim.togglePause();
+                    } else if (anim.phase === "done") {
+                      anim.reset();
+                      // Reset is synchronous — kick the replay off on the
+                      // same tap so the coach doesn't need a second one.
+                      setTimeout(() => anim.step(), 0);
+                    } else {
+                      anim.step();
+                    }
+                  }}
+                  aria-label="Play"
                   className="pointer-events-auto absolute inset-0 cursor-pointer bg-transparent"
                 />
               )}
@@ -2517,6 +2536,17 @@ function PlayEditorClientInner({
                 </>
               )}
             </div>
+
+            {/* Touch view-mode: thin reset/speed strip immediately below
+                the field. On touch the full PlayControlsPanel is hidden
+                (it lived below the notes, off-screen on phones) — the
+                field itself is the play/pause button, so this strip only
+                needs the two controls a tap can't express: scrub-to-start
+                and playback speed. Hidden in edit mode (nothing to play)
+                and in library mode (floating overlay handles it). */}
+            {isTouchDevice && mode === "view" && !libraryMode && (
+              <TouchPlaybackStrip anim={anim} />
+            )}
 
             {/* Mobile: notes card immediately below the field, in
                 both view and edit modes. Desktop keeps its sidebar version
@@ -2562,12 +2592,13 @@ function PlayEditorClientInner({
               </div>
             )}
 
-            {/* Mobile playback controls — only in view mode. The Edit toggle
-                moved above the field so this section now just surfaces
-                play/animate controls. Desktop always uses the sidebar.
-                Library mode uses the floating overlay on the field
-                instead, so we skip this entirely. */}
-            {mode === "view" && !isExamplePreview && !libraryMode && (
+            {/* Mobile playback controls — only in view mode, and only on
+                NON-touch narrow viewports (e.g. a resized desktop window).
+                Touch devices use the tap-to-play field + the thin
+                reset/speed strip above instead, so this full card is
+                suppressed there. Desktop always uses the sidebar. Library
+                mode uses the floating overlay on the field instead. */}
+            {mode === "view" && !isExamplePreview && !libraryMode && !isTouchDevice && (
               <div className="rounded-xl border border-border bg-surface-raised p-4 sm:hidden">
                 <PlayControlsPanel anim={anim} />
               </div>
@@ -2657,7 +2688,9 @@ function PlayEditorClientInner({
                 mode === "edit" ? "hidden sm:flex" : "hidden sm:flex"
               } min-h-0 flex-col gap-4 rounded-xl border border-border bg-surface-raised p-4`}
             >
-              {(!showToolbar || !canEdit) && <PlayControlsPanel anim={anim} />}
+              {/* Touch tablets get the tap-to-play field + thin reset/speed
+                  strip below the field instead of this sidebar panel. */}
+              {(!showToolbar || !canEdit) && !isTouchDevice && <PlayControlsPanel anim={anim} />}
               {canEdit && showToolbar && selectedPlayerId != null && (
                 <TagsCard doc={doc} dispatch={dispatch} linkedFormation={linkedFormation} />
               )}
@@ -2903,6 +2936,61 @@ function LibraryPlaybackBar({ anim }: { anim: PlayAnimation }) {
               onClick={() => setSpeed(s.value)}
               className={`rounded-full px-2 py-0.5 transition-colors ${
                 active ? "bg-white text-black" : "text-white/70 hover:text-white"
+              }`}
+              aria-pressed={active}
+              aria-label={`Speed ${s.label}`}
+            >
+              {s.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Thin inline playback strip shown directly below the field on touch
+ * devices in view mode. The field itself is the play/pause button (see the
+ * tap-to-play overlay), so this strip carries only the two controls a tap
+ * can't express: reset-to-start and speed. Kept deliberately short so it
+ * never pushes the field off-screen the way the full PlayControlsPanel did.
+ */
+function TouchPlaybackStrip({ anim }: { anim: PlayAnimation }) {
+  const { phase, reset, speed, setSpeed } = anim;
+  // Reset is dead UI before any frame has advanced — disable rather than
+  // hide so the strip's width doesn't pop when the play starts.
+  const canReset = phase !== "idle";
+  const SPEED_OPTIONS: Array<{ value: number; label: string }> = [
+    { value: 0.5, label: "0.5×" },
+    { value: 1, label: "1×" },
+    { value: 1.5, label: "1.5×" },
+    { value: 2, label: "2×" },
+  ];
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface-raised px-3 py-1.5">
+      <button
+        type="button"
+        onClick={reset}
+        disabled={!canReset}
+        className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold text-muted transition-colors hover:bg-surface-inset hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+        aria-label="Reset to start"
+      >
+        <RotateCcw className="size-4" />
+        Reset
+      </button>
+      <div className="flex items-center gap-0.5 rounded-md border border-border bg-surface-inset p-0.5">
+        {SPEED_OPTIONS.map((s) => {
+          const active = Math.abs(speed - s.value) < 0.01;
+          return (
+            <button
+              key={s.value}
+              type="button"
+              onClick={() => setSpeed(s.value)}
+              className={`rounded px-2.5 py-1 text-xs font-semibold transition-colors ${
+                active
+                  ? "bg-primary text-white"
+                  : "text-muted hover:text-foreground"
               }`}
               aria-pressed={active}
               aria-label={`Speed ${s.label}`}
