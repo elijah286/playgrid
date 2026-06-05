@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Archive as ArchiveIcon, ChevronDown, ChevronLeft, ChevronRight, FlaskConical, GraduationCap, RotateCcw } from "lucide-react";
+import { registerReloadGuard } from "@/lib/native/reloadGuard";
 import type { EndDecoration, PlayDocument, Player, Point2, Route, SegmentShape, StrokePattern, VsPlaySnapshot } from "@/domain/play/types";
 import type { SavedFormation } from "@/app/actions/formations";
 import { saveFormationAction } from "@/app/actions/formations";
@@ -1314,6 +1315,17 @@ function PlayEditorClientInner({
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [isSaving]);
+
+  // Block the native app's pull-to-refresh / reload-on-resume while the coach
+  // is editing, has unsaved local edits, or a save is in flight — so a stray
+  // pull or a backgrounded-then-reopened resume can't discard route work. The
+  // predicate is evaluated at gesture/resume time (not during render), so it
+  // reads the live `isDirtyRef`; it re-registers only when mode/saving flips.
+  useEffect(() => {
+    return registerReloadGuard(
+      () => effectiveMode === "edit" || isDirtyRef.current || isSaving,
+    );
+  }, [effectiveMode, isSaving]);
 
   const saveAsNewFormation = useCallback(
     async (name: string) => {

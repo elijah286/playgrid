@@ -5,7 +5,15 @@ import { isNativeApp, nativePlatform } from "@/lib/native/isNativeApp";
 import { registerOfflineServiceWorker } from "@/lib/native/registerServiceWorker";
 import { registerPush, unregisterPush } from "@/lib/native/registerPush";
 import { registerAppOpen } from "@/lib/native/registerAppOpen";
+import { isReloadBlocked, triggerAppReload } from "@/lib/native/reloadGuard";
 import { createClient } from "@/lib/supabase/client";
+
+// How long the app must have been backgrounded before a return-to-foreground
+// triggers a reload. The WebView points at the live site, so reloading picks
+// up any deploy that landed while the coach was away. Long enough that a quick
+// app-switch (check a text, glance at a notification) never yanks the page out
+// from under them; short enough that a real "came back later" gets fresh code.
+const RESUME_RELOAD_AFTER_MS = 20 * 60 * 1000; // 20 minutes
 
 export function NativeAppShell() {
   useEffect(() => {
@@ -46,6 +54,35 @@ export function NativeAppShell() {
         await SplashScreen.hide({ fadeOutDuration: 280 });
       } catch {
         /* plugin may be absent or already hidden */
+      }
+    })();
+
+    // Reload-on-resume: when the app comes back to the foreground after being
+    // away a while, reload so it picks up the latest deploy without the coach
+    // needing to know the pull-to-refresh gesture. Guarded (reloadGuard) so it
+    // never reloads out from under an active edit or a fullscreen Cal thread.
+    let lastHiddenAt = 0;
+    let appStateHandle: { remove: () => void } | undefined;
+    void (async () => {
+      try {
+        const { App } = await import("@capacitor/app");
+        if (cancelled) return;
+        const handle = await App.addListener("appStateChange", ({ isActive }) => {
+          if (!isActive) {
+            lastHiddenAt = Date.now();
+            return;
+          }
+          if (lastHiddenAt === 0) return;
+          const away = Date.now() - lastHiddenAt;
+          lastHiddenAt = 0;
+          if (away >= RESUME_RELOAD_AFTER_MS && !isReloadBlocked()) {
+            triggerAppReload();
+          }
+        });
+        if (cancelled) handle.remove();
+        else appStateHandle = handle;
+      } catch {
+        /* @capacitor/app missing (web) — ignore */
       }
     })();
 
@@ -104,6 +141,7 @@ export function NativeAppShell() {
       cancelled = true;
       if (hideTimer) clearTimeout(hideTimer);
       window.removeEventListener("load", markReady);
+      appStateHandle?.remove();
       teardownPush?.();
       authSub.subscription.unsubscribe();
       document.body.classList.remove("native-app");

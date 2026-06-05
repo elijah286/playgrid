@@ -13,6 +13,7 @@ import WebVitalsReporter from "@/components/WebVitalsReporter";
 import ConsentGate from "@/components/ConsentGate";
 import RedditPixel from "@/components/RedditPixel";
 import { NativeAppShell } from "@/components/native/NativeAppShell";
+import { PullToRefresh } from "@/components/native/PullToRefresh";
 import { AppInstallBanner } from "@/components/native/AppInstallBanner";
 import { OfflineStatusBanner } from "@/components/offline/OfflineStatusBanner";
 import { ConnectionRecovery } from "@/components/system/ConnectionRecovery";
@@ -254,6 +255,7 @@ export default async function RootLayout({
                 <ConsentGate />
                 <RedditPixel />
                 <NativeAppShell />
+                <PullToRefresh />
                 <OfflineStatusBanner />
                 <ConnectionRecovery />
                 {isAuthed && <InboxBadgeRefresher />}
