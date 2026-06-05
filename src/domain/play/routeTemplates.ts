@@ -90,6 +90,11 @@ export type RouteConstraints = {
    *  Mirrors `breakDir` semantically but is what the validator checks
    *  against the assignment's geometry. */
   side: BreakDirection;
+  /** Per-route slack (yds) the validator allows beyond [min, max] before
+   *  rejecting. Defaults to DEPTH_TOLERANCE_YDS (0.5) when unset. Higher
+   *  for latitude routes (deep verticals, settle/zone); default for sharp
+   *  timing routes. Authored in the KG def (defs/routes.ts). */
+  toleranceYds?: number;
 };
 
 export type RouteTemplate = {

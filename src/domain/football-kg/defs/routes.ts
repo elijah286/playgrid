@@ -39,7 +39,7 @@ export const ROUTES: RouteDef[] = [
     shapes: ["straight"],
     breakStyle: "none",
     breakDir: "vertical",
-    constraints: { depthRangeYds: { min: 10, max: 25 }, side: "vertical" },
+    constraints: { depthRangeYds: { min: 10, max: 25 }, side: "vertical", toleranceYds: 1.5 },
     kbSubtopic: "route_go",
   },
   {
@@ -68,7 +68,7 @@ export const ROUTES: RouteDef[] = [
     shapes: ["straight", "straight"],
     breakStyle: "none",
     breakDir: "vertical",
-    constraints: { depthRangeYds: { min: 10, max: 25 }, side: "vertical" },
+    constraints: { depthRangeYds: { min: 10, max: 25 }, side: "vertical", toleranceYds: 1.5 },
     kbSubtopic: "route_seam",
   },
   {
@@ -88,7 +88,7 @@ export const ROUTES: RouteDef[] = [
     shapes: ["curve", "curve"],
     breakStyle: "rounded",
     breakDir: "toward_sideline",
-    constraints: { depthRangeYds: { min: 10, max: 22 }, side: "toward_sideline" },
+    constraints: { depthRangeYds: { min: 10, max: 22 }, side: "toward_sideline", toleranceYds: 1.5 },
     kbSubtopic: "route_fade",
   },
 
@@ -193,7 +193,7 @@ export const ROUTES: RouteDef[] = [
     shapes: ["straight", "straight", "straight"],
     breakStyle: "multi",
     breakDir: "toward_sideline",
-    constraints: { depthRangeYds: { min: 10, max: 16 }, side: "toward_sideline" },
+    constraints: { depthRangeYds: { min: 10, max: 16 }, side: "toward_sideline", toleranceYds: 1 },
     kbSubtopic: "route_z_out",
   },
   {
@@ -214,7 +214,7 @@ export const ROUTES: RouteDef[] = [
     shapes: ["straight", "straight", "straight"],
     breakStyle: "multi",
     breakDir: "toward_qb",
-    constraints: { depthRangeYds: { min: 10, max: 16 }, side: "toward_qb" },
+    constraints: { depthRangeYds: { min: 10, max: 16 }, side: "toward_qb", toleranceYds: 1 },
     kbSubtopic: "route_z_in",
   },
   {
@@ -299,7 +299,7 @@ export const ROUTES: RouteDef[] = [
     shapes: ["straight", "straight"],
     breakStyle: "sharp",
     breakDir: "toward_qb",
-    constraints: { depthRangeYds: { min: 8, max: 18 }, side: "toward_qb" },
+    constraints: { depthRangeYds: { min: 8, max: 18 }, side: "toward_qb", toleranceYds: 1 },
     kbSubtopic: "route_post",
   },
   {
@@ -320,7 +320,7 @@ export const ROUTES: RouteDef[] = [
     shapes: ["straight", "straight"],
     breakStyle: "sharp",
     breakDir: "toward_sideline",
-    constraints: { depthRangeYds: { min: 10, max: 18 }, side: "toward_sideline" },
+    constraints: { depthRangeYds: { min: 10, max: 18 }, side: "toward_sideline", toleranceYds: 1 },
     kbSubtopic: "route_corner",
   },
   {
@@ -341,7 +341,7 @@ export const ROUTES: RouteDef[] = [
     shapes: ["straight", "straight"],
     breakStyle: "sharp",
     breakDir: "toward_qb",
-    constraints: { depthRangeYds: { min: 10, max: 16 }, side: "toward_qb" },
+    constraints: { depthRangeYds: { min: 10, max: 16 }, side: "toward_qb", toleranceYds: 1 },
     kbSubtopic: "route_dig",
   },
   {
@@ -362,7 +362,7 @@ export const ROUTES: RouteDef[] = [
     shapes: ["straight", "straight"],
     breakStyle: "sharp",
     breakDir: "toward_qb",
-    constraints: { depthRangeYds: { min: 10, max: 18 }, side: "toward_qb" },
+    constraints: { depthRangeYds: { min: 10, max: 18 }, side: "toward_qb", toleranceYds: 1 },
     kbSubtopic: "route_skinny_post",
   },
 
@@ -385,7 +385,7 @@ export const ROUTES: RouteDef[] = [
     shapes: ["straight", "curve"],
     breakStyle: "rounded",
     breakDir: "toward_qb",
-    constraints: { depthRangeYds: { min: 4, max: 13 }, side: "toward_qb" },
+    constraints: { depthRangeYds: { min: 4, max: 13 }, side: "toward_qb", toleranceYds: 1 },
     kbSubtopic: "route_curl",
   },
   {
@@ -405,7 +405,7 @@ export const ROUTES: RouteDef[] = [
     shapes: ["straight", "curve"],
     breakStyle: "rounded",
     breakDir: "toward_sideline",
-    constraints: { depthRangeYds: { min: 9, max: 14 }, side: "toward_sideline" },
+    constraints: { depthRangeYds: { min: 9, max: 14 }, side: "toward_sideline", toleranceYds: 1 },
     kbSubtopic: "route_comeback",
   },
   {
@@ -446,7 +446,7 @@ export const ROUTES: RouteDef[] = [
     shapes: ["straight", "curve"],
     breakStyle: "rounded",
     breakDir: "toward_qb",
-    constraints: { depthRangeYds: { min: 3, max: 7 }, side: "toward_qb" },
+    constraints: { depthRangeYds: { min: 3, max: 7 }, side: "toward_qb", toleranceYds: 1 },
     kbSubtopic: "route_stick",
   },
   {
@@ -467,7 +467,7 @@ export const ROUTES: RouteDef[] = [
     shapes: ["straight", "curve"],
     breakStyle: "rounded",
     breakDir: "toward_qb",
-    constraints: { depthRangeYds: { min: 3, max: 7 }, side: "toward_qb" },
+    constraints: { depthRangeYds: { min: 3, max: 7 }, side: "toward_qb", toleranceYds: 1 },
     kbSubtopic: "route_snag",
   },
 
@@ -496,7 +496,7 @@ export const ROUTES: RouteDef[] = [
     // the over-drag in [5.5, 7]; this aligns the route family with it.
     // Drag stays a SHALLOW cross — typical 2-4yd, 6yd is the mesh-over
     // ceiling, not an everyday depth.
-    constraints: { depthRangeYds: { min: 1, max: 6 }, side: "toward_qb" },
+    constraints: { depthRangeYds: { min: 1, max: 6 }, side: "toward_qb", toleranceYds: 1 },
     kbSubtopic: "route_drag",
   },
   {
@@ -558,7 +558,7 @@ export const ROUTES: RouteDef[] = [
     shapes: ["straight", "curve", "straight"],
     breakStyle: "rounded",
     breakDir: "toward_sideline",
-    constraints: { depthRangeYds: { min: 10, max: 22 }, side: "toward_sideline" },
+    constraints: { depthRangeYds: { min: 10, max: 22 }, side: "toward_sideline", toleranceYds: 1.5 },
     kbSubtopic: "route_wheel",
   },
   {
@@ -580,7 +580,7 @@ export const ROUTES: RouteDef[] = [
     shapes: ["straight", "straight", "straight"],
     breakStyle: "multi",
     breakDir: "toward_sideline",
-    constraints: { depthRangeYds: { min: 10, max: 22 }, side: "toward_sideline" },
+    constraints: { depthRangeYds: { min: 10, max: 22 }, side: "toward_sideline", toleranceYds: 1.5 },
     kbSubtopic: "route_out_and_up",
   },
   {
@@ -623,7 +623,7 @@ export const ROUTES: RouteDef[] = [
     shapes: ["straight", "curve", "straight"],
     breakStyle: "multi",
     breakDir: "vertical",
-    constraints: { depthRangeYds: { min: 12, max: 25 }, side: "vertical" },
+    constraints: { depthRangeYds: { min: 12, max: 25 }, side: "vertical", toleranceYds: 1.5 },
     kbSubtopic: "route_hitch_and_go",
   },
 

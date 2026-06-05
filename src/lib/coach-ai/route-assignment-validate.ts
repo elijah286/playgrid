@@ -348,8 +348,13 @@ function checkRouteAgainstTemplate(
   }
 
   const { depthRangeYds, side } = template.constraints;
-  const minWithTolerance = depthRangeYds.min - DEPTH_TOLERANCE_YDS;
-  const maxWithTolerance = depthRangeYds.max + DEPTH_TOLERANCE_YDS;
+  // Per-route slack (defaults to the global 0.5 when the route doesn't
+  // set one). Latitude routes (deep verticals, settle/zone) carry a
+  // wider tolerance so a play a yard outside the canonical band still
+  // saves; sharp timing routes keep the tight default.
+  const tolerance = template.constraints.toleranceYds ?? DEPTH_TOLERANCE_YDS;
+  const minWithTolerance = depthRangeYds.min - tolerance;
+  const maxWithTolerance = depthRangeYds.max + tolerance;
   if (deepestSigned < minWithTolerance || deepestSigned > maxWithTolerance) {
     // Explicit user-requested override: the coach said "8-yard drag"
     // and Cal honored it by setting nonCanonical: true. The depth
@@ -464,7 +469,8 @@ function suggestAlternativesByDepth(depthYds: number, side: BreakDirection): str
   const candidates = ROUTE_TEMPLATES.filter((t) => {
     const { depthRangeYds, side: tSide } = t.constraints;
     if (tSide !== side) return false;
-    return depthYds >= depthRangeYds.min - DEPTH_TOLERANCE_YDS && depthYds <= depthRangeYds.max + DEPTH_TOLERANCE_YDS;
+    const tol = t.constraints.toleranceYds ?? DEPTH_TOLERANCE_YDS;
+    return depthYds >= depthRangeYds.min - tol && depthYds <= depthRangeYds.max + tol;
   });
   if (candidates.length === 0) {
     return `No catalog family fits ${formatYds(depthYds)} yds with that side — the geometry may be a custom shape (omit route_kind).`;

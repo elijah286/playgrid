@@ -67,6 +67,32 @@ describe("validateRouteAssignments — depth constraints", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("accepts a Go at 26.4yd — per-route toleranceYds (1.5) widens the slack beyond max", () => {
+    // Go's canonical band is [10,25] with toleranceYds 1.5, so a deepest
+    // waypoint up to 26.5 is tolerated. A deep vertical a yard past the
+    // band is still a Go — don't reject the play over it.
+    const result = validateRouteAssignments(
+      single({ id: "Z", x: 12, y: 0 }, { path: [[12, 13], [12, 26.4]], route_kind: "go" }),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects a Go at 27yd — past the canonical band AND its tolerance", () => {
+    const result = validateRouteAssignments(
+      single({ id: "Z", x: 12, y: 0 }, { path: [[12, 13], [12, 27]], route_kind: "go" }),
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("still rejects an 8yd slant — per-route tolerance is NOT global; sharp routes stay tight", () => {
+    // Slant keeps the default 0.5 tolerance ([3,7] → max 7.5). 8yd is a
+    // dig, not a slant; the wider Go/Curl tolerance must not leak here.
+    const result = validateRouteAssignments(
+      single({ id: "X", x: -13, y: 0 }, { path: [[-13, 3], [-7, 8]], route_kind: "slant" }),
+    );
+    expect(result.ok).toBe(false);
+  });
+
   it("ACCEPTS a 10-yard slant when nonCanonical: true (explicit coach override)", () => {
     // Coach asked for "10-yard slant" — Cal honors with nonCanonical:true.
     // Validator skips depth check; renders the route.

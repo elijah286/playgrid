@@ -64,10 +64,19 @@ export const SegmentShapeZ = z.enum(["straight", "curve"]);
  *  [3, 7] depth range; "slant outside" violates Slant's "toward_qb" side). */
 export type RouteConstraints = {
   /** Inclusive yard range for the route's deepest waypoint, measured from
-   *  the receiver's start. */
+   *  the receiver's start. This is the CANONICAL band — where the
+   *  skeleton/Cal should aim (the renderer defaults to its midpoint). */
   depthRangeYds: { min: number; max: number };
   /** Required final-waypoint side relative to the receiver's start. */
   side: BreakDirection;
+  /** Per-route slack (yds) the validator allows beyond [min, max] before
+   *  rejecting a route_kind/geometry mismatch. Defaults to
+   *  DEPTH_TOLERANCE_YDS (0.5) when unset. Set HIGHER for routes with
+   *  natural depth latitude (deep verticals, settle/zone routes) so a
+   *  play a yard outside the canonical band still saves; leave at the
+   *  default for sharp timing routes (Slant, Quick Out) where an extra
+   *  yard would blur the route's identity into a different family. */
+  toleranceYds?: number;
 };
 
 export const RouteConstraintsZ = z.object({
@@ -76,6 +85,7 @@ export const RouteConstraintsZ = z.object({
     max: z.number(),
   }).refine((r) => r.max >= r.min, "depthRangeYds.max must be >= min"),
   side: BreakDirectionZ,
+  toleranceYds: z.number().positive().optional(),
 });
 
 /** A waypoint in NORMALIZED field coordinates (relative to receiver's start).

@@ -40,6 +40,7 @@ export type LegacyRouteTemplate = {
   constraints: {
     depthRangeYds: { min: number; max: number };
     side: "toward_qb" | "toward_sideline" | "vertical" | "varies";
+    toleranceYds?: number;
   };
   kbSubtopic: string;
   description: string;
