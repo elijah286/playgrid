@@ -12,13 +12,12 @@ import http2 from "node:http2";
  * — the same token-based auth Apple recommends, refreshed well within the
  * 1-hour ceiling.
  *
- * Config comes from env (graceful no-op when absent, same contract as the
- * FCM path and Resend email):
- *   APNS_KEY_ID            — 10-char Key ID of the .p8 APNs auth key
- *   APNS_TEAM_ID           — Apple Team ID (X8KHNQJC32)
- *   APNS_BUNDLE_ID         — apns-topic, the app bundle id (com.xogridmaker.app)
- *   APNS_AUTH_KEY          — the .p8 PEM contents (or APNS_AUTH_KEY_BASE64)
- *   APNS_USE_SANDBOX=true  — target the development APNs host (debug builds)
+ * Config is loaded from the database (site_settings.apns_*) via
+ * src/lib/site/apns-config.ts — managed in Site Admin alongside the other
+ * third-party keys (Stripe, Resend, Claude, MaxMind, …), not via deploy-time
+ * env vars. Graceful no-op when unset, same contract as the FCM path and
+ * Resend email. Columns: apns_key_p8 (the .p8 PEM), apns_key_id,
+ * apns_team_id, apns_bundle_id, apns_use_sandbox (bool).
  *
  * APNs distinguishes a "sandbox" host (development-signed builds) from the
  * production host (TestFlight + App Store). A token minted by a dev build

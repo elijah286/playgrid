@@ -222,9 +222,15 @@ export default function PrivacyPage() {
             <li>Stripe — payment processing for paid plans</li>
             <li>
               Firebase Cloud Messaging (Google) — delivers push
-              notifications to the iOS / Android app. We send Google a
+              notifications to the Android app. We send Google a
               per-device messaging token and the notification text; Google
               does not retain the message beyond delivering it
+            </li>
+            <li>
+              Apple Push Notification service (APNs) — delivers push
+              notifications to the iOS app. We send Apple a per-device
+              token and the notification text; Apple does not retain the
+              message beyond delivering it
             </li>
             <li>Sentry — browser and server error reporting (web only)</li>
             <li>
