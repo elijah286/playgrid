@@ -58,7 +58,7 @@ export default function EditorLoading() {
         aria-label="Loading"
         className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-surface-raised opacity-60 sm:hidden"
         style={{
-          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
           paddingLeft: "env(safe-area-inset-left, 0px)",
           paddingRight: "env(safe-area-inset-right, 0px)",
         }}
@@ -74,7 +74,7 @@ export default function EditorLoading() {
 
 function NavSkeleton({ label, Icon }: { label: string; Icon: React.ElementType }) {
   return (
-    <div className="flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[11px] font-semibold tracking-tight text-muted">
+    <div className="flex min-h-[48px] flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[11px] font-semibold tracking-tight text-muted">
       <Icon className="size-5" aria-hidden />
       <span className="truncate">{label}</span>
     </div>

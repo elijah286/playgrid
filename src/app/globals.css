@@ -498,15 +498,16 @@ html.coach-docked .coach-dock-aware {
    * `top` reads `--playbook-content-top` (set by the parent's
    * ResizeObserver in ui.tsx after measuring the sticky banner) with
    * a 96px fallback for the first paint before the layout effect runs.
-   * `bottom` is 60px above the bottom nav's top edge — enough room
-   * that the input doesn't crowd the nav, plus the home-indicator
-   * safe area so it clears the iPhone notch / Android gesture bar. */
+   * `bottom` clears the bottom nav's top edge — enough room that the
+   * input doesn't crowd the nav, plus the home-indicator safe area so it
+   * clears the iPhone notch / Android gesture bar. (Tracks the nav's
+   * content height: 48px row + 0 extra cushion above the safe-area inset.) */
   .messages-mobile-fixed {
     position: fixed;
     left: 0;
     right: 0;
     top: var(--playbook-content-top, 96px);
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 60px);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 44px);
     z-index: 10;
   }
 }

@@ -27,7 +27,7 @@ export function CalNavButton() {
       aria-label="Open Coach Cal"
       aria-current={isActive ? "true" : undefined}
       title={isGated ? reason : "Coach Cal"}
-      className={`flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[11px] font-semibold tracking-tight transition-colors ${
+      className={`flex min-h-[48px] flex-1 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[11px] font-semibold tracking-tight transition-colors ${
         isActive ? "text-primary" : "text-muted hover:text-foreground"
       } ${isGated ? "opacity-50" : ""}`}
     >

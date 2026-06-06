@@ -86,11 +86,12 @@ export function HomeBottomNav({
         // peeks through next to the toolbar where the scrollbar lives.
         className="fixed left-0 bottom-0 z-40 flex w-screen items-stretch border-t border-border bg-surface-raised shadow-[0_-1px_0_0_rgba(0,0,0,0.02)] sm:hidden"
         style={{
-          // 12px above the home indicator keeps tap targets out of the
-          // bottom-edge gesture zone iOS reserves for "drag up to home."
-          // safe-area-inset-left/right keeps tabs clear of the curved
-          // corners on iPhone Pro / Plus / Max.
-          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
+          // Pad up by exactly the home-indicator safe area (no extra
+          // cushion) so the tab row sits right above the indicator the way
+          // a native iOS UITabBar does — the inset already reserves the
+          // "drag up to home" gesture zone. safe-area-inset-left/right
+          // keeps tabs clear of the curved corners on iPhone Pro/Plus/Max.
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
           paddingLeft: "env(safe-area-inset-left, 0px)",
           paddingRight: "env(safe-area-inset-right, 0px)",
         }}
@@ -184,7 +185,7 @@ function NavLink({
       }}
       aria-current={isActive ? "page" : undefined}
       aria-busy={pending || undefined}
-      className={`flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[11px] font-semibold tracking-tight transition-all duration-100 active:scale-[0.94] active:bg-surface-inset ${
+      className={`flex min-h-[48px] flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[11px] font-semibold tracking-tight transition-all duration-100 active:scale-[0.94] active:bg-surface-inset ${
         isActive || pending ? "text-primary" : "text-muted hover:text-foreground"
       }`}
     >
@@ -230,7 +231,7 @@ function NavButton({
       type="button"
       onClick={onClick}
       aria-current={isActive ? "page" : undefined}
-      className={`flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[11px] font-semibold tracking-tight transition-all duration-100 active:scale-[0.94] active:bg-surface-inset ${
+      className={`flex min-h-[48px] flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[11px] font-semibold tracking-tight transition-all duration-100 active:scale-[0.94] active:bg-surface-inset ${
         isActive ? "text-primary" : "text-muted hover:text-foreground"
       }`}
     >
@@ -260,7 +261,7 @@ function MorePopover({
         aria-label="More options"
         className="fixed right-2 z-40 w-56 animate-in slide-in-from-bottom-2 fade-in rounded-xl border border-black/10 bg-surface-raised p-1 shadow-elevated duration-150 sm:hidden"
         style={{
-          bottom: "calc(env(safe-area-inset-bottom, 0px) + 68px)",
+          bottom: "calc(env(safe-area-inset-bottom, 0px) + 52px)",
         }}
       >
         {items.map((it) => (
