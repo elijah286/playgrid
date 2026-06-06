@@ -53,10 +53,16 @@ type Props = {
 // mobile — hide the global header there so mobile isn't stuck with two
 // stacked headers. Desktop always shows both.
 const PLAYBOOK_DETAIL_RE = /^\/playbooks\/[^/]+(?:\/.*)?$/;
+// ...except the print sub-route. It has no playbook banner of its own —
+// just a back-link row — so hiding the global header there leaves nothing
+// to push content below the iOS status bar (the back button ends up under
+// the clock) and removes the header the user expects. Keep it visible.
+const PLAYBOOK_PRINT_RE = /^\/playbooks\/[^/]+\/print(?:\/|$)/;
 
 export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAiAvailable, showCoachCalPromo, coachAiEvalDays, coachAiImageUploadAvailable, userTier, coachProTrialUsed, footballLibraryAvailable, feedbackEnabled }: Props) {
   const pathname = usePathname();
-  const hideOnMobile = PLAYBOOK_DETAIL_RE.test(pathname);
+  const hideOnMobile =
+    PLAYBOOK_DETAIL_RE.test(pathname) && !PLAYBOOK_PRINT_RE.test(pathname);
   // Pricing is a top-level nav affordance on every public page — the
   // earlier homepage-only gate hid Pricing on /learn and similar surfaces
   // and coaches lost track of where to find it.

@@ -36,6 +36,10 @@ export type HomeBottomNavTab = "playbooks" | "calendar" | "inbox";
 /** Routes that render their own bottom toolbar (PlaybookBottomNav,
  *  EditorBottomNav). Hide the global one there to avoid stacking. */
 const HIDE_ON_RE = /^\/(playbooks\/[^/]+|plays\/[^/]+\/edit)/;
+/** ...but the playbook print sub-route renders no bottom toolbar of its
+ *  own, so hiding the global nav there strands the user with no way out
+ *  (the in-app back button can sit under the iOS status bar). Keep it. */
+const PRINT_RE = /^\/playbooks\/[^/]+\/print(?:\/|$)/;
 
 export function HomeBottomNav({
   showCalendar,
@@ -60,7 +64,7 @@ export function HomeBottomNav({
   }, [moreOpen]);
 
   // Bail when a context-specific toolbar owns the bottom of the screen.
-  if (HIDE_ON_RE.test(pathname)) return null;
+  if (HIDE_ON_RE.test(pathname) && !PRINT_RE.test(pathname)) return null;
 
   // Active-state derivation. On /home the active tab is whichever
   // ?tab= search param is set (defaulting to playbooks); on /account
