@@ -490,7 +490,8 @@ export function CoachSeatsAdminClient({
         {rows.length === 0 ? (
           <p className="mt-4 text-xs text-muted">No paying coaches yet.</p>
         ) : (
-          <div className="mt-4 overflow-x-auto">
+          <>
+          <div className="mt-4 hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wide text-muted">
@@ -570,6 +571,91 @@ export function CoachSeatsAdminClient({
               </tbody>
             </table>
           </div>
+
+          <div className="mt-4 space-y-2 md:hidden">
+            {rows.map((r) => {
+              const updatingSeats = updatingSeatsId === r.ownerId;
+              const updatingMsg = updatingMsgId === r.ownerId;
+              return (
+                <div
+                  key={r.ownerId}
+                  className="rounded-xl border border-border bg-surface-raised p-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-medium text-foreground">
+                        {r.displayName ?? r.email ?? "—"}
+                      </div>
+                      {r.displayName && r.email ? (
+                        <div className="text-xs text-muted">{r.email}</div>
+                      ) : null}
+                    </div>
+                    <span className="shrink-0 rounded bg-surface px-2 py-0.5 text-[11px] font-medium text-muted ring-1 ring-border">
+                      {r.tier === "coach_ai" ? "Coach Pro" : "Team Coach"}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                      Bonus seats
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-foreground">+{r.bonusSeats}</span>
+                      <button
+                        type="button"
+                        disabled={updatingSeats || r.bonusSeats === 0}
+                        onClick={() => updateRowSeats(r, r.bonusSeats - 1)}
+                        className="rounded-md border border-border px-2 py-0.5 text-xs font-medium text-foreground hover:bg-surface disabled:opacity-50"
+                      >
+                        −
+                      </button>
+                      <button
+                        type="button"
+                        disabled={updatingSeats}
+                        onClick={() => updateRowSeats(r, r.bonusSeats + 1)}
+                        className="rounded-md border border-border px-2 py-0.5 text-xs font-medium text-foreground hover:bg-surface disabled:opacity-50"
+                      >
+                        +
+                      </button>
+                      {r.bonusSeats > 0 && (
+                        <button
+                          type="button"
+                          disabled={updatingSeats}
+                          onClick={() => updateRowSeats(r, 0)}
+                          className="text-xs font-medium text-danger hover:underline disabled:opacity-50"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                      Bonus messages
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-foreground">+{r.bonusMessages}</span>
+                      {r.tier !== "coach_ai" && r.bonusMessages === 0 ? (
+                        <span className="text-[11px] text-muted">(Pro-only)</span>
+                      ) : null}
+                      {r.bonusMessages > 0 && (
+                        <button
+                          type="button"
+                          disabled={updatingMsg}
+                          onClick={() => clearRowMessages(r)}
+                          className="text-xs font-medium text-danger hover:underline disabled:opacity-50"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          </>
         )}
       </div>
     </div>

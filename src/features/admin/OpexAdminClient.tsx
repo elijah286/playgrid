@@ -151,6 +151,20 @@ export function OpexAdminClient({
     });
   }
 
+  function deleteService(svc: OpexService) {
+    if (!globalThis.confirm(`Delete service "${svc.name}" and all its entries?`)) return;
+    startTransition(async () => {
+      const res = await deleteOpexServiceAction(svc.id);
+      if (!res.ok) {
+        toast(res.error, "error");
+        return;
+      }
+      setServices((prev) => prev.filter((s) => s.id !== svc.id));
+      setEntries((prev) => prev.filter((e) => e.serviceId !== svc.id));
+      toast("Service deleted.", "success");
+    });
+  }
+
   function refreshAuto() {
     startTransition(async () => {
       const res = await refreshAutoCostsAction(ym);
@@ -230,7 +244,7 @@ export function OpexAdminClient({
           </p>
         )}
 
-        <div className="mt-4 overflow-x-auto">
+        <div className="mt-4 hidden overflow-x-auto md:block">
           <table className="w-full min-w-[720px] text-sm">
             <thead>
               <tr className="border-b border-black/5 text-left text-xs uppercase tracking-wide text-muted">
@@ -254,19 +268,7 @@ export function OpexAdminClient({
                     pending={pending}
                     onSaveManual={(val) => saveManual(svc.id, val, entry?.notes ?? null)}
                     onSaveNotes={(val) => saveNotes(svc.id, val, entry?.amountCentsManual ?? null)}
-                    onDelete={() => {
-                      if (!globalThis.confirm(`Delete service "${svc.name}" and all its entries?`)) return;
-                      startTransition(async () => {
-                        const res = await deleteOpexServiceAction(svc.id);
-                        if (!res.ok) {
-                          toast(res.error, "error");
-                          return;
-                        }
-                        setServices((prev) => prev.filter((s) => s.id !== svc.id));
-                        setEntries((prev) => prev.filter((e) => e.serviceId !== svc.id));
-                        toast("Service deleted.", "success");
-                      });
-                    }}
+                    onDelete={() => deleteService(svc)}
                   />
                 );
               })}
@@ -282,6 +284,33 @@ export function OpexAdminClient({
               </tr>
             </tfoot>
           </table>
+        </div>
+
+        <div className="mt-4 space-y-2 md:hidden">
+          {services.length === 0 ? (
+            <p className="rounded-xl border border-border bg-surface-raised p-3 text-sm text-muted">
+              No services yet.
+            </p>
+          ) : (
+            services.map((svc) => {
+              const entry = entryByService.get(svc.id);
+              return (
+                <ServiceCard
+                  key={svc.id}
+                  svc={svc}
+                  entry={entry}
+                  pending={pending}
+                  onSaveManual={(val) => saveManual(svc.id, val, entry?.notes ?? null)}
+                  onSaveNotes={(val) => saveNotes(svc.id, val, entry?.amountCentsManual ?? null)}
+                  onDelete={() => deleteService(svc)}
+                />
+              );
+            })
+          )}
+          <div className="flex items-center justify-between rounded-xl border border-border bg-surface-raised p-3 text-sm font-semibold">
+            <span>Monthly total</span>
+            <span className="tabular-nums">${dollars(total)}</span>
+          </div>
         </div>
       </Card>
     </div>
@@ -388,6 +417,133 @@ function ServiceRow({
         </Button>
       </td>
     </tr>
+  );
+}
+
+function ServiceCard({
+  svc,
+  entry,
+  pending,
+  onSaveManual,
+  onSaveNotes,
+  onDelete,
+}: {
+  svc: OpexService;
+  entry: OpexEntry | undefined;
+  pending: boolean;
+  onSaveManual: (val: string) => void;
+  onSaveNotes: (val: string) => void;
+  onDelete: () => void;
+}) {
+  const [manualDraft, setManualDraft] = useState(dollars(entry?.amountCentsManual));
+  const [notesDraft, setNotesDraft] = useState(entry?.notes ?? "");
+  const [syncedManual, setSyncedManual] = useState(entry?.amountCentsManual ?? null);
+  const [syncedNotes, setSyncedNotes] = useState(entry?.notes ?? null);
+
+  // Reset drafts during render when the underlying entry changes (React-recommended
+  // alternative to a setState-in-effect; keeps inputs in sync with saved values).
+  if ((entry?.amountCentsManual ?? null) !== syncedManual) {
+    setSyncedManual(entry?.amountCentsManual ?? null);
+    setManualDraft(dollars(entry?.amountCentsManual));
+  }
+  if ((entry?.notes ?? null) !== syncedNotes) {
+    setSyncedNotes(entry?.notes ?? null);
+    setNotesDraft(entry?.notes ?? "");
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-surface-raised p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          {svc.website ? (
+            <a
+              href={svc.website}
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-foreground hover:underline"
+            >
+              {svc.name}
+              <ExternalLink className="ml-1 inline size-3 align-baseline text-muted" />
+            </a>
+          ) : (
+            <div className="font-medium text-foreground">{svc.name}</div>
+          )}
+          {svc.website && (
+            <a
+              href={svc.website}
+              target="_blank"
+              rel="noreferrer"
+              className="block truncate text-xs text-muted hover:underline"
+            >
+              {svc.website.replace(/^https?:\/\//, "")}
+            </a>
+          )}
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={pending}
+          onClick={onDelete}
+          className="shrink-0 text-danger hover:bg-danger/10 hover:text-danger"
+          aria-label={`Delete ${svc.name}`}
+        >
+          <Trash2 className="size-4" />
+        </Button>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center rounded-full bg-surface-inset px-2 py-0.5 text-xs text-muted">
+          {svc.category}
+        </span>
+        <span className="text-xs text-muted">
+          Auto $:{" "}
+          <span className="tabular-nums text-foreground">
+            {svc.autoFetch ? (entry?.amountCentsAuto != null ? `$${dollars(entry.amountCentsAuto)}` : "—") : "—"}
+          </span>
+        </span>
+      </div>
+
+      <div className="mt-3 space-y-2">
+        <label className="block">
+          <span className="mb-1 block text-xs uppercase tracking-wide text-muted">Manual $</span>
+          <Input
+            type="number"
+            inputMode="decimal"
+            step="0.01"
+            min="0"
+            value={manualDraft}
+            onChange={(e) => setManualDraft(e.target.value)}
+            onBlur={() => {
+              const before = dollars(entry?.amountCentsManual);
+              if (manualDraft !== before) onSaveManual(manualDraft);
+            }}
+            disabled={pending}
+            className="w-full"
+            placeholder="0.00"
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs uppercase tracking-wide text-muted">Notes</span>
+          <Input
+            type="text"
+            value={notesDraft}
+            onChange={(e) => setNotesDraft(e.target.value)}
+            onBlur={() => {
+              if (notesDraft !== (entry?.notes ?? "")) onSaveNotes(notesDraft);
+            }}
+            disabled={pending}
+            className="w-full"
+            placeholder=""
+          />
+        </label>
+      </div>
+
+      {entry?.autoFetchedAt && (
+        <p className="mt-2 text-xs text-muted">
+          Last auto: {new Date(entry.autoFetchedAt).toLocaleString()}
+        </p>
+      )}
+    </div>
   );
 }
 

@@ -705,63 +705,121 @@ function MobileEngagementPanel({ data }: { data: MobileEngagementSummary }) {
           /m/play, /copy, or /examples surfaces.
         </p>
       ) : (
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left text-xs">
-            <thead className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-              <tr>
-                <th className="sticky left-0 z-10 bg-surface-raised pb-2 pr-3 shadow-[1px_0_0_0_var(--color-border)]">
-                  Cohort
-                </th>
-                <th className="pb-2 pr-3 text-right">Sessions</th>
-                <th className="pb-2 pr-3 text-right">Viewer sessions</th>
-                <th className="pb-2 pr-3 text-right">Viewer bounce</th>
-                <th className="pb-2 pr-3 text-right">Pages / session</th>
-                <th className="pb-2 text-right">Avg viewer dwell</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/60">
-              {(["mobile", "desktop"] as const).map((cls) => {
-                const c = current[cls];
-                const p = prior[cls];
-                const sessDelta = deltaFmt(c.sessions, p.sessions, { kind: "int" });
-                const viewerSessDelta = deltaFmt(c.viewerSessions, p.viewerSessions, { kind: "int" });
-                const bounceDelta = deltaFmt(c.viewerBounceRate, p.viewerBounceRate, {
-                  kind: "ratio",
-                  lowerIsBetter: true,
-                });
-                const depthDelta = deltaFmt(c.viewsPerSession, p.viewsPerSession, { kind: "int" });
-                const dwellDelta = deltaFmt(
-                  c.viewerAvgDwellMs ?? 0,
-                  p.viewerAvgDwellMs ?? 0,
-                  { kind: "ms" },
-                );
-                return (
-                  <tr key={cls}>
-                    <td className="sticky left-0 z-10 bg-surface-raised py-2 pr-3 text-foreground shadow-[1px_0_0_0_var(--color-border)]">
-                      <div className="font-medium capitalize">{cls}</div>
-                      <div className="text-[10px] text-muted">
-                        {cls === "mobile" ? "phone + tablet" : "desktop only"}
-                      </div>
-                    </td>
-                    <DeltaCell value={formatInt(c.sessions)} delta={sessDelta} />
-                    <DeltaCell value={formatInt(c.viewerSessions)} delta={viewerSessDelta} />
-                    <DeltaCell value={pct(c.viewerBounceRate)} delta={bounceDelta} />
-                    <DeltaCell value={c.viewsPerSession.toFixed(2)} delta={depthDelta} />
-                    <DeltaCell
+        <>
+          <div className="mt-3 hidden overflow-x-auto md:block">
+            <table className="w-full min-w-[760px] text-left text-xs">
+              <thead className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                <tr>
+                  <th className="sticky left-0 z-10 bg-surface-raised pb-2 pr-3 shadow-[1px_0_0_0_var(--color-border)]">
+                    Cohort
+                  </th>
+                  <th className="pb-2 pr-3 text-right">Sessions</th>
+                  <th className="pb-2 pr-3 text-right">Viewer sessions</th>
+                  <th className="pb-2 pr-3 text-right">Viewer bounce</th>
+                  <th className="pb-2 pr-3 text-right">Pages / session</th>
+                  <th className="pb-2 text-right">Avg viewer dwell</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {(["mobile", "desktop"] as const).map((cls) => {
+                  const c = current[cls];
+                  const p = prior[cls];
+                  const sessDelta = deltaFmt(c.sessions, p.sessions, { kind: "int" });
+                  const viewerSessDelta = deltaFmt(c.viewerSessions, p.viewerSessions, { kind: "int" });
+                  const bounceDelta = deltaFmt(c.viewerBounceRate, p.viewerBounceRate, {
+                    kind: "ratio",
+                    lowerIsBetter: true,
+                  });
+                  const depthDelta = deltaFmt(c.viewsPerSession, p.viewsPerSession, { kind: "int" });
+                  const dwellDelta = deltaFmt(
+                    c.viewerAvgDwellMs ?? 0,
+                    p.viewerAvgDwellMs ?? 0,
+                    { kind: "ms" },
+                  );
+                  return (
+                    <tr key={cls}>
+                      <td className="sticky left-0 z-10 bg-surface-raised py-2 pr-3 text-foreground shadow-[1px_0_0_0_var(--color-border)]">
+                        <div className="font-medium capitalize">{cls}</div>
+                        <div className="text-[10px] text-muted">
+                          {cls === "mobile" ? "phone + tablet" : "desktop only"}
+                        </div>
+                      </td>
+                      <DeltaCell value={formatInt(c.sessions)} delta={sessDelta} />
+                      <DeltaCell value={formatInt(c.viewerSessions)} delta={viewerSessDelta} />
+                      <DeltaCell value={pct(c.viewerBounceRate)} delta={bounceDelta} />
+                      <DeltaCell value={c.viewsPerSession.toFixed(2)} delta={depthDelta} />
+                      <DeltaCell
+                        value={formatDwell(c.viewerAvgDwellMs)}
+                        delta={dwellDelta}
+                      />
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-3 space-y-2 md:hidden">
+            {(["mobile", "desktop"] as const).map((cls) => {
+              const c = current[cls];
+              const p = prior[cls];
+              const sessDelta = deltaFmt(c.sessions, p.sessions, { kind: "int" });
+              const viewerSessDelta = deltaFmt(c.viewerSessions, p.viewerSessions, { kind: "int" });
+              const bounceDelta = deltaFmt(c.viewerBounceRate, p.viewerBounceRate, {
+                kind: "ratio",
+                lowerIsBetter: true,
+              });
+              const depthDelta = deltaFmt(c.viewsPerSession, p.viewsPerSession, { kind: "int" });
+              const dwellDelta = deltaFmt(
+                c.viewerAvgDwellMs ?? 0,
+                p.viewerAvgDwellMs ?? 0,
+                { kind: "ms" },
+              );
+              return (
+                <div
+                  key={cls}
+                  className="rounded-xl border border-border bg-surface-raised p-3"
+                >
+                  <div className="font-medium capitalize text-foreground">{cls}</div>
+                  <div className="text-[10px] text-muted">
+                    {cls === "mobile" ? "phone + tablet" : "desktop only"}
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted">
+                    <MobileMetric
+                      label="Sessions"
+                      value={formatInt(c.sessions)}
+                      delta={sessDelta}
+                    />
+                    <MobileMetric
+                      label="Viewer sessions"
+                      value={formatInt(c.viewerSessions)}
+                      delta={viewerSessDelta}
+                    />
+                    <MobileMetric
+                      label="Viewer bounce"
+                      value={pct(c.viewerBounceRate)}
+                      delta={bounceDelta}
+                    />
+                    <MobileMetric
+                      label="Pages / session"
+                      value={c.viewsPerSession.toFixed(2)}
+                      delta={depthDelta}
+                    />
+                    <MobileMetric
+                      label="Avg viewer dwell"
                       value={formatDwell(c.viewerAvgDwellMs)}
                       delta={dwellDelta}
                     />
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
           <p className="mt-2 text-[10px] text-muted">
             Lower bounce + higher pages/session + longer dwell on the mobile row is
             the signal that mobile-UX work is paying off. Sessions with unknown
             device class are excluded from both cohorts.
           </p>
-        </div>
+        </>
       )}
     </div>
   );
@@ -785,6 +843,30 @@ function DeltaCell({
       <div>{value}</div>
       <div className={`text-[10px] ${toneClass}`}>{delta.label}</div>
     </td>
+  );
+}
+
+function MobileMetric({
+  label,
+  value,
+  delta,
+}: {
+  label: string;
+  value: string;
+  delta?: { label: string; tone: "positive" | "negative" | "neutral" };
+}) {
+  const toneClass =
+    delta?.tone === "positive"
+      ? "text-emerald-400/90"
+      : delta?.tone === "negative"
+        ? "text-amber-300/90"
+        : "text-muted";
+  return (
+    <div>
+      <div>{label}</div>
+      <div className="font-semibold tabular-nums text-foreground">{value}</div>
+      {delta && <div className={`text-[10px] ${toneClass}`}>{delta.label}</div>}
+    </div>
   );
 }
 
@@ -812,57 +894,82 @@ function CoachCalCtaPanel({ rows }: { rows: CoachCalCtaRow[] }) {
           appear here.
         </p>
       ) : (
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[600px] text-left text-xs">
-            <thead className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-              <tr>
-                <th className="pb-2 pr-3">Surface</th>
-                <th className="pb-2 pr-3 text-right">Impressions</th>
-                <th className="pb-2 pr-3 text-right">Clicks</th>
-                <th className="pb-2 pr-3 text-right">Click rate</th>
-                <th className="pb-2 pr-3 text-right">Dismisses</th>
-                <th className="pb-2 pr-3 text-right">Dismiss rate</th>
-                <th className="pb-2 text-right">Walk-aways</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/60">
-              {rows.map((r) => (
-                <tr key={r.surface}>
-                  <td className="py-2 pr-3 text-foreground">
-                    <div className="font-medium">
-                      {COACH_CAL_SURFACE_LABELS[r.surface] ?? r.surface}
-                    </div>
-                    <div className="text-[10px] text-muted">
-                      {formatInt(r.uniqueImpressionUsers)} unique
-                    </div>
-                  </td>
-                  <td className="py-2 pr-3 text-right tabular-nums text-foreground">
-                    {formatInt(r.impressions)}
-                  </td>
-                  <td className="py-2 pr-3 text-right tabular-nums text-foreground">
-                    {formatInt(r.clicks)}
-                  </td>
-                  <td className="py-2 pr-3 text-right tabular-nums text-emerald-400/90">
-                    {pct(r.clickRate)}
-                  </td>
-                  <td className="py-2 pr-3 text-right tabular-nums text-foreground">
-                    {formatInt(r.dismisses)}
-                  </td>
-                  <td className="py-2 pr-3 text-right tabular-nums text-amber-300/90">
-                    {pct(r.dismissRate)}
-                  </td>
-                  <td className="py-2 text-right tabular-nums text-muted">
-                    {formatInt(r.walkAways)}
-                  </td>
+        <>
+          <div className="mt-3 hidden overflow-x-auto md:block">
+            <table className="w-full min-w-[600px] text-left text-xs">
+              <thead className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                <tr>
+                  <th className="pb-2 pr-3">Surface</th>
+                  <th className="pb-2 pr-3 text-right">Impressions</th>
+                  <th className="pb-2 pr-3 text-right">Clicks</th>
+                  <th className="pb-2 pr-3 text-right">Click rate</th>
+                  <th className="pb-2 pr-3 text-right">Dismisses</th>
+                  <th className="pb-2 pr-3 text-right">Dismiss rate</th>
+                  <th className="pb-2 text-right">Walk-aways</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {rows.map((r) => (
+                  <tr key={r.surface}>
+                    <td className="py-2 pr-3 text-foreground">
+                      <div className="font-medium">
+                        {COACH_CAL_SURFACE_LABELS[r.surface] ?? r.surface}
+                      </div>
+                      <div className="text-[10px] text-muted">
+                        {formatInt(r.uniqueImpressionUsers)} unique
+                      </div>
+                    </td>
+                    <td className="py-2 pr-3 text-right tabular-nums text-foreground">
+                      {formatInt(r.impressions)}
+                    </td>
+                    <td className="py-2 pr-3 text-right tabular-nums text-foreground">
+                      {formatInt(r.clicks)}
+                    </td>
+                    <td className="py-2 pr-3 text-right tabular-nums text-emerald-400/90">
+                      {pct(r.clickRate)}
+                    </td>
+                    <td className="py-2 pr-3 text-right tabular-nums text-foreground">
+                      {formatInt(r.dismisses)}
+                    </td>
+                    <td className="py-2 pr-3 text-right tabular-nums text-amber-300/90">
+                      {pct(r.dismissRate)}
+                    </td>
+                    <td className="py-2 text-right tabular-nums text-muted">
+                      {formatInt(r.walkAways)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-3 space-y-2 md:hidden">
+            {rows.map((r) => (
+              <div
+                key={r.surface}
+                className="rounded-xl border border-border bg-surface-raised p-3"
+              >
+                <div className="font-medium text-foreground">
+                  {COACH_CAL_SURFACE_LABELS[r.surface] ?? r.surface}
+                </div>
+                <div className="text-[10px] text-muted">
+                  {formatInt(r.uniqueImpressionUsers)} unique
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted">
+                  <MobileMetric label="Impressions" value={formatInt(r.impressions)} />
+                  <MobileMetric label="Clicks" value={formatInt(r.clicks)} />
+                  <MobileMetric label="Click rate" value={pct(r.clickRate)} />
+                  <MobileMetric label="Dismisses" value={formatInt(r.dismisses)} />
+                  <MobileMetric label="Dismiss rate" value={pct(r.dismissRate)} />
+                  <MobileMetric label="Walk-aways" value={formatInt(r.walkAways)} />
+                </div>
+              </div>
+            ))}
+          </div>
           <p className="mt-2 text-[10px] text-muted">
             Walk-away = saw the CTA, didn&rsquo;t click, didn&rsquo;t explicitly dismiss
             (closed the tab, navigated away, etc.). The three actions sum to impressions.
           </p>
-        </div>
+        </>
       )}
     </div>
   );

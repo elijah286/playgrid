@@ -231,7 +231,8 @@ export function BillingAdminClient({
         {codes.length === 0 ? (
           <p className="text-sm text-muted">No gift codes yet.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-muted">
                 <tr>
@@ -301,6 +302,76 @@ export function BillingAdminClient({
               </tbody>
             </table>
           </div>
+
+          <div className="space-y-2 md:hidden">
+            {codes.map((c) => (
+              <div
+                key={c.id}
+                className="rounded-xl border border-border bg-surface-raised p-3"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => copy(c.code)}
+                    className="inline-flex items-center gap-1 rounded font-mono text-xs hover:bg-surface"
+                    title="Copy"
+                  >
+                    {c.code}
+                    {copied === c.code ? (
+                      <Check className="size-3 text-emerald-600" />
+                    ) : (
+                      <Copy className="size-3 text-muted" />
+                    )}
+                  </button>
+                  <GiftStatusPill row={c} />
+                </div>
+
+                <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm">
+                  <dt className="text-xs uppercase tracking-wide text-muted">Tier</dt>
+                  <dd className="text-right">{TIER_LABEL[c.tier]}</dd>
+
+                  <dt className="text-xs uppercase tracking-wide text-muted">Duration</dt>
+                  <dd className="flex justify-end">
+                    <DurationCell row={c} disabled={pending} onSave={onUpdateDuration} />
+                  </dd>
+
+                  <dt className="text-xs uppercase tracking-wide text-muted">Uses</dt>
+                  <dd className="flex justify-end">
+                    <UsesCell row={c} disabled={pending} onSave={onUpdateMaxUses} />
+                  </dd>
+
+                  <dt className="text-xs uppercase tracking-wide text-muted">Expires</dt>
+                  <dd className="text-right text-xs text-muted">{formatDate(c.expiresAt)}</dd>
+
+                  <dt className="text-xs uppercase tracking-wide text-muted">Note</dt>
+                  <dd className="text-right text-xs text-muted">{c.note ?? "—"}</dd>
+                </dl>
+
+                <div className="mt-3 flex justify-end border-t border-border pt-2">
+                  {!c.revokedAt ? (
+                    <button
+                      type="button"
+                      onClick={() => onRevoke(c.id)}
+                      disabled={pending}
+                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50"
+                    >
+                      <Trash2 className="size-3" /> Revoke
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onReinstate(c.id)}
+                      disabled={pending}
+                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                    >
+                      <RotateCcw className="size-3" /> Reinstate
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          </>
         )}
       </section>
 
@@ -350,7 +421,8 @@ function CancellationFeedbackSection({
       {initialRows.length === 0 ? (
         <p className="text-sm text-muted">No cancellation feedback yet.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead className="text-left text-xs uppercase tracking-wide text-muted">
               <tr>
@@ -389,6 +461,31 @@ function CancellationFeedbackSection({
             </tbody>
           </table>
         </div>
+
+        <div className="space-y-2 md:hidden">
+          {initialRows.map((r) => (
+            <div
+              key={r.id}
+              className="rounded-xl border border-border bg-surface-raised p-3"
+            >
+              <div className="text-xs text-muted">{formatDate(r.createdAt)}</div>
+              <div className="mt-1 text-sm font-medium text-foreground">
+                {r.displayName ?? "—"}
+              </div>
+              <div className="text-xs text-muted">{r.email || "—"}</div>
+              <div className="mt-2">
+                <span className="inline-flex items-center rounded-full bg-surface px-2 py-0.5 text-[11px] font-medium text-muted ring-1 ring-border">
+                  {r.source === "in_app" ? "In-app survey" : "Stripe portal"}
+                </span>
+              </div>
+              <p className="mt-2 text-sm text-foreground">{r.feedback ?? r.reason ?? "—"}</p>
+              {r.message ? (
+                <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">{r.message}</p>
+              ) : null}
+            </div>
+          ))}
+        </div>
+        </>
       )}
     </section>
   );

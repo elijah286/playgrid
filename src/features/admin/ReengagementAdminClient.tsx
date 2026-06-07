@@ -111,44 +111,70 @@ function SendsTable({ rows }: { rows: ReengagementSendRow[] }) {
     );
   }
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-surface-raised">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border bg-surface-inset text-left text-xs uppercase tracking-wide text-muted">
-            <th className="px-3 py-2 font-medium">Recipient</th>
-            <th className="px-3 py-2 font-medium">Kind</th>
-            <th className="px-3 py-2 font-medium">Variant</th>
-            <th className="px-3 py-2 font-medium">Sent</th>
-            <th className="px-3 py-2 font-medium">Outcome</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr
-              key={`${r.userId}-${r.kind}`}
-              className="border-b border-border last:border-0 hover:bg-surface-inset/50"
-            >
-              <td className="px-3 py-2">
-                <div className="text-foreground">{r.displayName ?? "(no name)"}</div>
-                <div className="text-[11px] text-muted">{r.email ?? "(no email)"}</div>
-              </td>
-              <td className="px-3 py-2 text-foreground">{r.kind}</td>
-              <td className="px-3 py-2 text-muted">{r.sportVariant ?? "—"}</td>
-              <td className="px-3 py-2 text-muted">{relativeTime(r.sentAt)}</td>
-              <td className="px-3 py-2">
-                <div className="flex flex-wrap gap-1">
-                  <StatusPill on={r.clicked} label="Click" />
-                  <StatusPill on={r.returned} label="Return" />
-                  <StatusPill on={r.addedPlay} label="+Play" />
-                  <StatusPill on={r.subscribed} label="Subscribe" />
-                  {r.optedOut ? <StatusPill on={false} label="Opted out" /> : null}
-                </div>
-              </td>
+    <>
+      <div className="hidden overflow-hidden rounded-2xl border border-border bg-surface-raised md:block">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border bg-surface-inset text-left text-xs uppercase tracking-wide text-muted">
+              <th className="px-3 py-2 font-medium">Recipient</th>
+              <th className="px-3 py-2 font-medium">Kind</th>
+              <th className="px-3 py-2 font-medium">Variant</th>
+              <th className="px-3 py-2 font-medium">Sent</th>
+              <th className="px-3 py-2 font-medium">Outcome</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr
+                key={`${r.userId}-${r.kind}`}
+                className="border-b border-border last:border-0 hover:bg-surface-inset/50"
+              >
+                <td className="px-3 py-2">
+                  <div className="text-foreground">{r.displayName ?? "(no name)"}</div>
+                  <div className="text-[11px] text-muted">{r.email ?? "(no email)"}</div>
+                </td>
+                <td className="px-3 py-2 text-foreground">{r.kind}</td>
+                <td className="px-3 py-2 text-muted">{r.sportVariant ?? "—"}</td>
+                <td className="px-3 py-2 text-muted">{relativeTime(r.sentAt)}</td>
+                <td className="px-3 py-2">
+                  <div className="flex flex-wrap gap-1">
+                    <StatusPill on={r.clicked} label="Click" />
+                    <StatusPill on={r.returned} label="Return" />
+                    <StatusPill on={r.addedPlay} label="+Play" />
+                    <StatusPill on={r.subscribed} label="Subscribe" />
+                    {r.optedOut ? <StatusPill on={false} label="Opted out" /> : null}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="space-y-2 md:hidden">
+        {rows.map((r) => (
+          <div
+            key={`${r.userId}-${r.kind}`}
+            className="rounded-xl border border-border bg-surface-raised p-3"
+          >
+            <div className="font-medium text-foreground">{r.displayName ?? "(no name)"}</div>
+            <div className="text-xs text-muted">{r.email ?? "(no email)"}</div>
+            <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
+              <span>Kind {r.kind}</span>
+              <span>Variant {r.sportVariant ?? "—"}</span>
+              <span>Sent {relativeTime(r.sentAt)}</span>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1">
+              <StatusPill on={r.clicked} label="Click" />
+              <StatusPill on={r.returned} label="Return" />
+              <StatusPill on={r.addedPlay} label="+Play" />
+              <StatusPill on={r.subscribed} label="Subscribe" />
+              {r.optedOut ? <StatusPill on={false} label="Opted out" /> : null}
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 

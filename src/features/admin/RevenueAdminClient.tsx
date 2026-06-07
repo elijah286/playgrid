@@ -289,38 +289,66 @@ function TopCustomersTable({
   rows: RevenueBreakdown["topCustomers"];
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-surface-raised">
-      <table className="w-full text-left text-sm">
-        <thead className="bg-surface-inset text-xs font-semibold uppercase tracking-wide text-muted">
-          <tr>
-            <th className="px-4 py-3">Customer</th>
-            <th className="px-4 py-3">Tier</th>
-            <th className="px-4 py-3 text-right">Lifetime spend</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {rows.map((r) => (
-            <tr key={r.customerId}>
-              <td className="px-4 py-3 align-middle">
-                <div className="flex flex-col">
-                  <span className="font-medium text-foreground">
-                    {r.displayName ?? r.email ?? "Unknown customer"}
-                  </span>
-                  {r.email && r.displayName ? (
-                    <span className="text-xs text-muted">{r.email}</span>
-                  ) : null}
-                </div>
-              </td>
-              <td className="px-4 py-3 align-middle text-xs text-muted">
-                {r.tier ? TIER_LABEL[r.tier] : <span className="text-muted-light">—</span>}
-              </td>
-              <td className="px-4 py-3 align-middle text-right text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
-                {formatCurrency(r.lifetimeSpend)}
-              </td>
+    <>
+      <div className="hidden overflow-hidden rounded-2xl border border-border bg-surface-raised md:block">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-surface-inset text-xs font-semibold uppercase tracking-wide text-muted">
+            <tr>
+              <th className="px-4 py-3">Customer</th>
+              <th className="px-4 py-3">Tier</th>
+              <th className="px-4 py-3 text-right">Lifetime spend</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {rows.map((r) => (
+              <tr key={r.customerId}>
+                <td className="px-4 py-3 align-middle">
+                  <div className="flex flex-col">
+                    <span className="font-medium text-foreground">
+                      {r.displayName ?? r.email ?? "Unknown customer"}
+                    </span>
+                    {r.email && r.displayName ? (
+                      <span className="text-xs text-muted">{r.email}</span>
+                    ) : null}
+                  </div>
+                </td>
+                <td className="px-4 py-3 align-middle text-xs text-muted">
+                  {r.tier ? TIER_LABEL[r.tier] : <span className="text-muted-light">—</span>}
+                </td>
+                <td className="px-4 py-3 align-middle text-right text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                  {formatCurrency(r.lifetimeSpend)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="space-y-2 md:hidden">
+        {rows.map((r) => (
+          <div
+            key={r.customerId}
+            className="rounded-xl border border-border bg-surface-raised p-3"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex flex-col">
+                <span className="truncate font-medium text-foreground">
+                  {r.displayName ?? r.email ?? "Unknown customer"}
+                </span>
+                {r.email && r.displayName ? (
+                  <span className="truncate text-xs text-muted">{r.email}</span>
+                ) : null}
+              </div>
+              <span className="shrink-0 text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                {formatCurrency(r.lifetimeSpend)}
+              </span>
+            </div>
+            <div className="mt-1 text-xs text-muted">
+              {r.tier ? TIER_LABEL[r.tier] : "—"}
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }

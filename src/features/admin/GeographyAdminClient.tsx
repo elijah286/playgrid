@@ -263,34 +263,67 @@ export function GeographyAdminClient({
           {summary.cities.length === 0 ? (
             <p className="text-sm text-muted">No located views yet in this window.</p>
           ) : (
-            <div className="overflow-hidden rounded-xl ring-1 ring-border">
-              <table className="min-w-full text-sm">
-                <thead className="bg-surface-inset text-left text-xs uppercase tracking-wide text-muted">
-                  <tr>
-                    <th className="px-3 py-2 font-medium">City</th>
-                    <th className="px-3 py-2 text-right font-medium">Views</th>
-                    <th className="px-3 py-2 text-right font-medium">Sessions</th>
-                    <th className="px-3 py-2 text-right font-medium">Signups</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border bg-surface-raised">
-                  {summary.cities.slice(0, 25).map((c) => (
-                    <tr key={c.key}>
-                      <td className="px-3 py-2 text-foreground">{cityLabel(c)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-foreground">
-                        {formatInt(c.views)}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-muted">
-                        {formatInt(c.sessions)}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-muted">
-                        {c.signups > 0 ? formatInt(c.signups) : "—"}
-                      </td>
+            <>
+              <div className="hidden overflow-hidden rounded-xl ring-1 ring-border md:block">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-surface-inset text-left text-xs uppercase tracking-wide text-muted">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">City</th>
+                      <th className="px-3 py-2 text-right font-medium">Views</th>
+                      <th className="px-3 py-2 text-right font-medium">Sessions</th>
+                      <th className="px-3 py-2 text-right font-medium">Signups</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-border bg-surface-raised">
+                    {summary.cities.slice(0, 25).map((c) => (
+                      <tr key={c.key}>
+                        <td className="px-3 py-2 text-foreground">{cityLabel(c)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-foreground">
+                          {formatInt(c.views)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted">
+                          {formatInt(c.sessions)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted">
+                          {c.signups > 0 ? formatInt(c.signups) : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="space-y-2 md:hidden">
+                {summary.cities.slice(0, 25).map((c) => (
+                  <div
+                    key={c.key}
+                    className="rounded-xl border border-border bg-surface-raised p-3"
+                  >
+                    <p className="font-medium text-foreground">{cityLabel(c)}</p>
+                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+                      <span>
+                        Views{" "}
+                        <span className="font-semibold tabular-nums text-foreground">
+                          {formatInt(c.views)}
+                        </span>
+                      </span>
+                      <span>
+                        Sessions{" "}
+                        <span className="font-semibold tabular-nums text-foreground">
+                          {formatInt(c.sessions)}
+                        </span>
+                      </span>
+                      <span>
+                        Signups{" "}
+                        <span className="font-semibold tabular-nums text-foreground">
+                          {c.signups > 0 ? formatInt(c.signups) : "—"}
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
 
@@ -299,37 +332,73 @@ export function GeographyAdminClient({
           {summary.countries.length === 0 ? (
             <p className="text-sm text-muted">No country data yet in this window.</p>
           ) : (
-            <div className="overflow-hidden rounded-xl ring-1 ring-border">
-              <table className="min-w-full text-sm">
-                <thead className="bg-surface-inset text-left text-xs uppercase tracking-wide text-muted">
-                  <tr>
-                    <th className="px-3 py-2 font-medium">Country</th>
-                    <th className="px-3 py-2 text-right font-medium">Views</th>
-                    <th className="px-3 py-2 text-right font-medium">Sessions</th>
-                    <th className="px-3 py-2 text-right font-medium">Signups</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border bg-surface-raised">
-                  {summary.countries.slice(0, 25).map((c) => (
-                    <tr key={c.country}>
-                      <td className="px-3 py-2 text-foreground">
-                        {countryName(c.country)}{" "}
-                        <span className="text-xs text-muted">({c.country})</span>
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-foreground">
-                        {formatInt(c.views)}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-muted">
-                        {formatInt(c.sessions)}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-muted">
-                        {c.signups > 0 ? formatInt(c.signups) : "—"}
-                      </td>
+            <>
+              <div className="hidden overflow-hidden rounded-xl ring-1 ring-border md:block">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-surface-inset text-left text-xs uppercase tracking-wide text-muted">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">Country</th>
+                      <th className="px-3 py-2 text-right font-medium">Views</th>
+                      <th className="px-3 py-2 text-right font-medium">Sessions</th>
+                      <th className="px-3 py-2 text-right font-medium">Signups</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-border bg-surface-raised">
+                    {summary.countries.slice(0, 25).map((c) => (
+                      <tr key={c.country}>
+                        <td className="px-3 py-2 text-foreground">
+                          {countryName(c.country)}{" "}
+                          <span className="text-xs text-muted">({c.country})</span>
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-foreground">
+                          {formatInt(c.views)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted">
+                          {formatInt(c.sessions)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted">
+                          {c.signups > 0 ? formatInt(c.signups) : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="space-y-2 md:hidden">
+                {summary.countries.slice(0, 25).map((c) => (
+                  <div
+                    key={c.country}
+                    className="rounded-xl border border-border bg-surface-raised p-3"
+                  >
+                    <p className="font-medium text-foreground">
+                      {countryName(c.country)}{" "}
+                      <span className="text-xs font-normal text-muted">({c.country})</span>
+                    </p>
+                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+                      <span>
+                        Views{" "}
+                        <span className="font-semibold tabular-nums text-foreground">
+                          {formatInt(c.views)}
+                        </span>
+                      </span>
+                      <span>
+                        Sessions{" "}
+                        <span className="font-semibold tabular-nums text-foreground">
+                          {formatInt(c.sessions)}
+                        </span>
+                      </span>
+                      <span>
+                        Signups{" "}
+                        <span className="font-semibold tabular-nums text-foreground">
+                          {c.signups > 0 ? formatInt(c.signups) : "—"}
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
       </div>

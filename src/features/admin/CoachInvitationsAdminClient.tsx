@@ -127,7 +127,7 @@ export function CoachInvitationsAdminClient({
         <span>{counts.expired} expired</span>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-border bg-surface-raised">
+      <div className="hidden overflow-hidden rounded-2xl border border-border bg-surface-raised md:block">
         <table className="w-full text-left text-sm">
           <thead className="bg-surface-inset text-xs font-semibold uppercase tracking-wide text-muted">
             <tr>
@@ -276,6 +276,161 @@ export function CoachInvitationsAdminClient({
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="space-y-2 md:hidden">
+        {items.length === 0 ? (
+          <p className="rounded-xl border border-border bg-surface-raised p-3 text-center text-sm text-muted">
+            No invitations yet. Tap <span className="font-medium">New invite</span> to create one.
+          </p>
+        ) : (
+          items.map((row) => {
+            const codeKey = `code:${row.id}`;
+            const urlKey = `url:${row.id}`;
+            return (
+              <div
+                key={row.id}
+                className="rounded-xl border border-border bg-surface-raised p-3"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-sm font-semibold text-foreground">
+                        {row.code}
+                      </span>
+                      {row.maxUses > 1 && (
+                        <span className="rounded-full bg-surface-inset px-2 py-0.5 text-[11px] text-muted">
+                          {row.usedCount} / {row.maxUses} used
+                        </span>
+                      )}
+                    </div>
+                    {row.note && (
+                      <p className="mt-1 text-xs text-muted line-clamp-2">{row.note}</p>
+                    )}
+                  </div>
+                  <StatusPill status={row.status} />
+                </div>
+
+                <dl className="mt-3 space-y-1.5 text-xs text-muted">
+                  <div className="flex justify-between gap-2">
+                    <dt className="font-medium uppercase tracking-wide text-muted-light">
+                      Recipient
+                    </dt>
+                    <dd className="min-w-0 break-words text-right text-muted">
+                      {row.recipientEmail ?? <span className="text-muted-light">—</span>}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt className="font-medium uppercase tracking-wide text-muted-light">
+                      Expires
+                    </dt>
+                    <dd className="text-right text-muted">{formatDate(row.expiresAt)}</dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt className="font-medium uppercase tracking-wide text-muted-light">
+                      Redeemed
+                    </dt>
+                    <dd className="min-w-0 break-words text-right text-muted">
+                      {row.redeemedAt ? (
+                        <>
+                          <div>{formatDate(row.redeemedAt)}</div>
+                          {row.redeemedByEmail && (
+                            <div className="text-muted-light">{row.redeemedByEmail}</div>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-muted-light">—</span>
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(row.code, codeKey)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-medium text-foreground hover:bg-surface-inset"
+                    title="Copy code"
+                  >
+                    {copied === codeKey ? (
+                      <Check className="size-3.5" />
+                    ) : (
+                      <Copy className="size-3.5" />
+                    )}
+                    Code
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(signupUrlFor(row.code), urlKey)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-medium text-foreground hover:bg-surface-inset"
+                    title="Copy signup link"
+                  >
+                    {copied === urlKey ? (
+                      <Check className="size-3.5" />
+                    ) : (
+                      <Copy className="size-3.5" />
+                    )}
+                    Link
+                  </button>
+                  <button
+                    type="button"
+                    disabled={row.status !== "active"}
+                    onClick={() => setEmailFor(row)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-medium text-foreground hover:bg-surface-inset disabled:opacity-40"
+                    title="Email invite"
+                  >
+                    <Mail className="size-3.5" />
+                    Email
+                  </button>
+                  {row.status === "active" && (
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => {
+                        if (!globalThis.confirm(`Revoke ${row.code}? It can no longer be redeemed.`)) return;
+                        setMsg(null);
+                        startTransition(async () => {
+                          const res = await revokeCoachInvitationAction(row.id);
+                          if (!res.ok) setMsg({ kind: "error", text: res.error });
+                          else {
+                            setMsg({ kind: "success", text: "Invite revoked." });
+                            refresh();
+                          }
+                        });
+                      }}
+                      className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-surface px-2.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-40 dark:border-amber-800 dark:text-amber-200 dark:hover:bg-amber-950/40"
+                      title="Revoke"
+                    >
+                      <X className="size-3.5" />
+                      Revoke
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => {
+                      if (!globalThis.confirm(`Delete invite ${row.code}? This cannot be undone.`)) return;
+                      setMsg(null);
+                      startTransition(async () => {
+                        const res = await deleteCoachInvitationAction(row.id);
+                        if (!res.ok) setMsg({ kind: "error", text: res.error });
+                        else {
+                          setMsg({ kind: "success", text: "Invite deleted." });
+                          refresh();
+                        }
+                      });
+                    }}
+                    className="inline-flex items-center gap-1 rounded-lg border border-danger/30 bg-surface px-2.5 py-1 text-xs font-medium text-danger hover:bg-danger/10 disabled:opacity-40"
+                    title="Delete"
+                  >
+                    <Trash2 className="size-3.5" />
+                    Delete
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       {addOpen && (

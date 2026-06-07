@@ -84,7 +84,8 @@ export function CoachAiTokenUsageClient({ initial }: Props) {
         </div>
       </Card>
 
-      <Card className="p-0 overflow-hidden">
+      <Card className="hidden p-0 overflow-hidden md:block">
+        <div className="overflow-x-auto">
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 text-slate-600">
             <tr>
@@ -109,7 +110,18 @@ export function CoachAiTokenUsageClient({ initial }: Props) {
             ))}
           </tbody>
         </table>
+        </div>
       </Card>
+
+      <div className="space-y-2 md:hidden">
+        {rows.length === 0 ? (
+          <Card className="p-4 text-center text-sm text-slate-500">
+            No usage recorded this month yet.
+          </Card>
+        ) : (
+          rows.map((r) => <UserCard key={r.userId} row={r} paidCap={paidCap} />)
+        )}
+      </div>
 
       <div className="text-xs text-slate-500">
         Numbers reflect raw Anthropic API spend (input + output + cache
@@ -164,5 +176,55 @@ function UserRow({ row, paidCap }: { row: CoachAiTokenUsageRow; paidCap: number 
         {fmtTimeAgo(row.lastActivity)}
       </td>
     </tr>
+  );
+}
+
+function UserCard({ row, paidCap }: { row: CoachAiTokenUsageRow; paidCap: number }) {
+  const pct = paidCap > 0 ? Math.min(100, (row.costMicros / paidCap) * 100) : 0;
+  const overCap = row.costMicros > paidCap;
+  const barColor = overCap
+    ? "bg-red-500"
+    : pct >= 75
+      ? "bg-amber-500"
+      : "bg-emerald-500";
+  return (
+    <div className="rounded-xl border border-border bg-surface-raised p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="font-medium">
+            {row.displayName ?? row.email ?? row.userId.slice(0, 8)}
+          </div>
+          {row.displayName && row.email && (
+            <div className="text-xs text-slate-500">{row.email}</div>
+          )}
+          {row.role === "admin" && (
+            <span className="inline-block mt-0.5 text-[10px] uppercase tracking-wide text-purple-700">
+              admin
+            </span>
+          )}
+        </div>
+        <div className="font-semibold tabular-nums">{fmtMicros(row.costMicros)}</div>
+      </div>
+
+      <div className="mt-2 flex items-center gap-2">
+        <div className="h-1.5 w-full rounded-full bg-slate-200 overflow-hidden">
+          <div className={`h-full ${barColor}`} style={{ width: `${pct}%` }} />
+        </div>
+        <span className={`shrink-0 text-xs ${overCap ? "text-red-600 font-semibold" : "text-slate-500"}`}>
+          {pct.toFixed(0)}% of $5
+        </span>
+      </div>
+
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+        <span>
+          Tokens {fmtTokens(row.inputTokens)} in / {fmtTokens(row.outputTokens)} out
+        </span>
+        <span>Last {fmtTimeAgo(row.lastActivity)}</span>
+      </div>
+
+      <div className="mt-1 text-xs text-muted">
+        {formatContextBreakdown(row.contextBreakdown)}
+      </div>
+    </div>
   );
 }
