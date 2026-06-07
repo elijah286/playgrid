@@ -19,12 +19,14 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
-import { UsersAdminClient, type AdminUserRow } from "@/features/admin/UsersAdminClient";
+import {
+  UsersAdminClient,
+  type AdminUserRow,
+} from "@/features/admin/UsersAdminClient";
 import { OpenAISettingsClient } from "@/features/admin/OpenAISettingsClient";
 import { ClaudeSettingsClient } from "@/features/admin/ClaudeSettingsClient";
 import { LlmProviderToggleClient } from "@/features/admin/LlmProviderToggleClient";
 import { RagEmbeddingsAdminClient } from "@/features/admin/RagEmbeddingsAdminClient";
-import type { LlmProvider } from "@/lib/site/llm-provider";
 import { ResendSettingsClient } from "@/features/admin/ResendSettingsClient";
 import { GoogleMapsSettingsClient } from "@/features/admin/GoogleMapsSettingsClient";
 import { MaxMindSettingsClient } from "@/features/admin/MaxMindSettingsClient";
@@ -34,7 +36,6 @@ import { RevenueAdminClient } from "@/features/admin/RevenueAdminClient";
 import { FeedbackAdminClient } from "@/features/admin/FeedbackAdminClient";
 import { CoachAiFeedbackTabs } from "@/features/admin/CoachAiFeedbackTabs";
 import { CoachAiTokenUsageClient } from "@/features/admin/CoachAiTokenUsageClient";
-import type { CoachAiTokenUsageSummary } from "@/app/actions/coach-ai-token-usage";
 import type { KbMissRow } from "@/app/actions/coach-ai-feedback";
 import { CoachInvitationsAdminClient } from "@/features/admin/CoachInvitationsAdminClient";
 import { BillingAdminClient } from "@/features/admin/BillingAdminClient";
@@ -42,20 +43,12 @@ import { TrafficAdminClient } from "@/features/admin/TrafficAdminClient";
 import { GeographyAdminClient } from "@/features/admin/GeographyAdminClient";
 import { ActivationAdminClient } from "@/features/admin/ActivationAdminClient";
 import { ReengagementAdminClient } from "@/features/admin/ReengagementAdminClient";
-import type { ReengagementMetrics } from "@/app/actions/admin-reengagement";
 import { AnalyticsExclusionsAdminClient } from "@/features/admin/AnalyticsExclusionsAdminClient";
 import { SiteSettingsAdminClient } from "@/features/admin/SiteSettingsAdminClient";
 import { CoachSeatsAdminClient } from "@/features/admin/CoachSeatsAdminClient";
-import type { SeatDefaults } from "@/lib/site/seat-defaults-config";
-import type { CoachCalPackConfig } from "@/lib/site/coach-cal-pack-config";
-import type { ReferralConfig } from "@/lib/site/referral-config";
-import type { CoachBonusRow } from "@/app/actions/admin-seat-config";
 import { PlaybookSeedsAdminClient } from "@/features/admin/PlaybookSeedsAdminClient";
 import { BetaFeaturesAdminClient } from "@/features/admin/BetaFeaturesAdminClient";
 import { OpexAdminClient } from "@/features/admin/OpexAdminClient";
-import type { OpexService, OpexEntry } from "@/app/actions/admin-opex";
-import type { BetaFeatures } from "@/lib/site/beta-features-config";
-import type { SavedFormation } from "@/app/actions/formations";
 import type { FeedbackRow } from "@/app/actions/feedback";
 import type { CoachInvitationRow } from "@/app/actions/coach-invitations";
 import type {
@@ -76,50 +69,20 @@ import {
   type OverviewJumpTarget,
   type OverviewWindow,
 } from "@/features/admin/OverviewAdminClient";
-import type {
-  BillingSummary,
-  RevenueBreakdown,
-} from "@/app/actions/admin-billing";
+import type { BillingSummary } from "@/app/actions/admin-billing";
 import type { ShareLifetimeSummary } from "@/app/actions/admin-traffic-insights";
 
-type IntegrationProps =
-  | { ok: true; configured: boolean; statusLabel: string; updatedAt: string | null }
-  | { ok: false; error: string };
-
-type ClaudeProps =
-  | {
-      ok: true;
-      configured: boolean;
-      statusLabel: string;
-      provider: LlmProvider;
-      updatedAt: string | null;
-    }
-  | { ok: false; error: string };
-
-type ResendProps =
-  | {
-      ok: true;
-      configured: boolean;
-      statusLabel: string;
-      fromEmail: string | null;
-      contactToEmail: string | null;
-      updatedAt: string | null;
-    }
-  | { ok: false; error: string };
-
-type GoogleMapsProps =
-  | { ok: true; configured: boolean; statusLabel: string; updatedAt: string | null }
-  | { ok: false; error: string };
-
-type MaxMindProps =
-  | { ok: true; configured: boolean; statusLabel: string; downloadedAt: string | null }
-  | { ok: false; error: string };
-
-type RedditPixelProps =
-  | { ok: true; configured: boolean; statusLabel: string }
-  | { ok: false; error: string };
-
-type AdminKeyProps = { configured: boolean; statusLabel: string };
+import { useLazyData, LazyContent } from "./_components/lazyTab";
+import {
+  loadIntegrationsTabData,
+  loadSiteTabData,
+  loadOpexTabData,
+  loadRevenueTabData,
+  loadTokenUsageTabData,
+  loadSeedsTabData,
+  loadBetaTabData,
+  loadReengagementTabData,
+} from "./lazy-data";
 
 type Tab =
   | "overview"
@@ -164,12 +127,6 @@ export function SettingsClient({
   currentUserId,
   initialUsers,
   usersError,
-  integration,
-  claude,
-  resend,
-  googleMaps,
-  maxmind,
-  redditPixel,
   initialFeedback,
   feedbackError,
   initialFeedbackWidgetEnabled,
@@ -180,60 +137,25 @@ export function SettingsClient({
   giftCodesError,
   stripeStatus,
   initialCoachAiEnabled,
-  initialHideLobbyAnimation,
-  initialExamplesPageEnabled,
-  initialFreeMaxPlays,
-  initialMobileEditingEnabled,
   initialTrafficSummary,
   trafficError,
   initialGeoSummary,
   geoError,
   initialActivationSummary,
   activationError,
-  initialReengagementMetrics,
-  reengagementError,
-  initialSeeds,
-  initialBetaFeatures,
-  initialHideOwnerInfoAbout,
-  initialAppleSigninEnabled,
-  initialGoogleSigninEnabled,
-  initialGoogleOAuthWebClientId,
   initialCoachAiKbMisses,
   coachAiKbMissesError,
-  initialCoachAiTokenUsage,
-  initialOpexServices,
-  initialOpexEntries,
-  initialOpexPeriod,
-  opexError,
-  anthropicAdminKey,
-  openaiAdminKey,
-  initialSeatDefaults,
-  initialCoachBonusRows,
-  initialCoachCalPack,
-  initialReferralConfig,
   initialExcludedEmails,
-  initialCoachCalUpgradeBannerEnabled,
-  initialCoachCalVersion,
-  initialCoachAiEvalDays,
   initialCancellationFeedback,
   cancellationFeedbackError,
   overviewWindow,
   initialBillingSummary,
   billingSummaryError,
   initialShareLifetime,
-  shareLifetimeError: _shareLifetimeError,
-  initialRevenueBreakdown,
-  revenueBreakdownError,
 }: {
   currentUserId: string;
   initialUsers: AdminUserRow[];
   usersError: string | null;
-  integration: IntegrationProps;
-  claude: ClaudeProps;
-  resend: ResendProps;
-  googleMaps: GoogleMapsProps;
-  maxmind: MaxMindProps;
-  redditPixel: RedditPixelProps;
   initialFeedback: FeedbackRow[];
   feedbackError: string | null;
   initialFeedbackWidgetEnabled: boolean;
@@ -244,41 +166,15 @@ export function SettingsClient({
   giftCodesError: string | null;
   stripeStatus: StripeConfigStatus;
   initialCoachAiEnabled: boolean;
-  initialHideLobbyAnimation: boolean;
-  initialExamplesPageEnabled: boolean;
-  initialFreeMaxPlays: number;
-  initialMobileEditingEnabled: boolean;
   initialTrafficSummary: TrafficSummary;
   trafficError: string | null;
   initialGeoSummary: GeoSummary;
   geoError: string | null;
   initialActivationSummary: MonetizationSummary | null;
   activationError: string | null;
-  initialReengagementMetrics: ReengagementMetrics | null;
-  reengagementError: string | null;
-  initialSeeds: SavedFormation[];
-  initialBetaFeatures: BetaFeatures;
-  initialHideOwnerInfoAbout: boolean;
-  initialAppleSigninEnabled: boolean;
-  initialGoogleSigninEnabled: boolean;
-  initialGoogleOAuthWebClientId: string | null;
   initialCoachAiKbMisses: KbMissRow[];
   coachAiKbMissesError: string | null;
-  initialCoachAiTokenUsage: CoachAiTokenUsageSummary;
-  initialOpexServices: OpexService[];
-  initialOpexEntries: OpexEntry[];
-  initialOpexPeriod: string;
-  opexError: string | null;
-  anthropicAdminKey: AdminKeyProps;
-  openaiAdminKey: AdminKeyProps;
-  initialSeatDefaults: SeatDefaults;
-  initialCoachBonusRows: CoachBonusRow[];
-  initialCoachCalPack: CoachCalPackConfig;
-  initialReferralConfig: ReferralConfig;
   initialExcludedEmails: string[];
-  initialCoachCalUpgradeBannerEnabled: boolean;
-  initialCoachCalVersion: "v1" | "v2";
-  initialCoachAiEvalDays: number;
   initialCancellationFeedback: CancellationFeedbackRow[];
   cancellationFeedbackError: string | null;
   overviewWindow: OverviewWindow;
@@ -286,8 +182,6 @@ export function SettingsClient({
   billingSummaryError: string | null;
   initialShareLifetime: ShareLifetimeSummary | null;
   shareLifetimeError: string | null;
-  initialRevenueBreakdown: RevenueBreakdown | null;
-  revenueBreakdownError: string | null;
 }) {
   const searchParams = useSearchParams();
   const urlTab = searchParams?.get("tab") ?? null;
@@ -298,6 +192,24 @@ export function SettingsClient({
   >("traffic");
   const [usersSubTab, setUsersSubTab] = useState<"list" | "settings">("list");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  // Lazy-loaded tab data — fetched the first time each heavy tab is opened
+  // (and cached for the session), so the initial page load only pays for the
+  // Overview + always-visible tabs. See lazy-data.ts and _components/lazyTab.tsx.
+  const integrationsData = useLazyData(
+    tab === "integrations",
+    loadIntegrationsTabData
+  );
+  const siteData = useLazyData(tab === "site", loadSiteTabData);
+  const opexData = useLazyData(tab === "opex", loadOpexTabData);
+  const revenueData = useLazyData(tab === "revenue", loadRevenueTabData);
+  const tokenUsageData = useLazyData(tab === "ai_usage", loadTokenUsageTabData);
+  const seedsData = useLazyData(tab === "seeds", loadSeedsTabData);
+  const betaData = useLazyData(tab === "beta", loadBetaTabData);
+  const reengagementData = useLazyData(
+    tab === "analytics" && analyticsSubTab === "reengagement",
+    loadReengagementTabData
+  );
 
   // Persist last-viewed tab so refreshing the page doesn't lose context.
   // localStorage is fine here — this is a single-admin tool and the
@@ -489,7 +401,9 @@ export function SettingsClient({
               <TrafficAdminClient
                 initialSummary={initialTrafficSummary}
                 initialError={trafficError}
-                initialWindow={overviewWindow === "all" ? "90d" : overviewWindow}
+                initialWindow={
+                  overviewWindow === "all" ? "90d" : overviewWindow
+                }
               />
             )}
             {analyticsSubTab === "monetization" && (
@@ -498,14 +412,19 @@ export function SettingsClient({
                 initialError={activationError}
               />
             )}
-            {analyticsSubTab === "reengagement" &&
-              (initialReengagementMetrics ? (
-                <ReengagementAdminClient initial={initialReengagementMetrics} />
-              ) : (
-                <p className="rounded-2xl border border-border bg-surface-raised p-4 text-sm text-muted">
-                  {reengagementError ?? "No re-engagement data available yet."}
-                </p>
-              ))}
+            {analyticsSubTab === "reengagement" && (
+              <LazyContent state={reengagementData}>
+                {(d) =>
+                  d.metrics ? (
+                    <ReengagementAdminClient initial={d.metrics} />
+                  ) : (
+                    <p className="rounded-2xl border border-border bg-surface-raised p-4 text-sm text-muted">
+                      {d.error ?? "No re-engagement data available yet."}
+                    </p>
+                  )
+                }
+              </LazyContent>
+            )}
           </div>
         )}
 
@@ -524,10 +443,11 @@ export function SettingsClient({
         )}
 
         {tab === "revenue" && (
-          <RevenueAdminClient
-            breakdown={initialRevenueBreakdown}
-            error={revenueBreakdownError}
-          />
+          <LazyContent state={revenueData}>
+            {(d) => (
+              <RevenueAdminClient breakdown={d.breakdown} error={d.error} />
+            )}
+          </LazyContent>
         )}
 
         {tab === "payments" && (
@@ -551,109 +471,144 @@ export function SettingsClient({
         )}
 
         {tab === "integrations" && (
-          <div className="space-y-4">
-            <div
-              role="alert"
-              className="rounded-2xl border-2 border-red-500 bg-red-50 p-4 text-sm text-red-800 dark:border-red-500 dark:bg-red-950/40 dark:text-red-200"
-            >
-              <p className="font-semibold">Heads up — production-critical settings</p>
-              <p className="mt-1">
-                Changing or deleting these will break or disable key functionality
-                that impacts all users. Please be very careful when modifying these
-                values.
-              </p>
-            </div>
-            {claude.ok && (
-              <LlmProviderToggleClient initial={claude.provider} />
-            )}
+          <LazyContent state={integrationsData}>
+            {(d) => {
+              const {
+                integration,
+                claude,
+                resend,
+                googleMaps,
+                maxmind,
+                redditPixel,
+                anthropicAdminKey,
+                openaiAdminKey,
+                googleOAuthWebClientId: initialGoogleOAuthWebClientId,
+              } = d;
+              return (
+                <div className="space-y-4">
+                  <div
+                    role="alert"
+                    className="rounded-2xl border-2 border-red-500 bg-red-50 p-4 text-sm text-red-800 dark:border-red-500 dark:bg-red-950/40 dark:text-red-200"
+                  >
+                    <p className="font-semibold">
+                      Heads up — production-critical settings
+                    </p>
+                    <p className="mt-1">
+                      Changing or deleting these will break or disable key
+                      functionality that impacts all users. Please be very
+                      careful when modifying these values.
+                    </p>
+                  </div>
+                  {claude.ok && (
+                    <LlmProviderToggleClient initial={claude.provider} />
+                  )}
 
-            <RagEmbeddingsAdminClient />
+                  <RagEmbeddingsAdminClient />
 
-            {claude.ok ? (
-              <ClaudeSettingsClient
-                initial={{
-                  configured: claude.configured,
-                  statusLabel: claude.statusLabel,
-                  updatedAt: claude.updatedAt,
-                }}
-                adminInitial={anthropicAdminKey}
-              />
-            ) : (
-              <p className="text-sm text-red-700 dark:text-red-300">{claude.error}</p>
-            )}
+                  {claude.ok ? (
+                    <ClaudeSettingsClient
+                      initial={{
+                        configured: claude.configured,
+                        statusLabel: claude.statusLabel,
+                        updatedAt: claude.updatedAt,
+                      }}
+                      adminInitial={anthropicAdminKey}
+                    />
+                  ) : (
+                    <p className="text-sm text-red-700 dark:text-red-300">
+                      {claude.error}
+                    </p>
+                  )}
 
-            {integration.ok ? (
-              <OpenAISettingsClient
-                initial={{
-                  configured: integration.configured,
-                  statusLabel: integration.statusLabel,
-                  updatedAt: integration.updatedAt,
-                }}
-                adminInitial={openaiAdminKey}
-              />
-            ) : (
-              <div className="space-y-2">
-                <p className="text-sm text-red-700 dark:text-red-300">{integration.error}</p>
-                <p className="text-sm text-muted">
-                  Saving keys requires <code className="font-mono">SUPABASE_SERVICE_ROLE_KEY</code> on the
-                  app server so secrets are not exposed to browsers.
-                </p>
-              </div>
-            )}
+                  {integration.ok ? (
+                    <OpenAISettingsClient
+                      initial={{
+                        configured: integration.configured,
+                        statusLabel: integration.statusLabel,
+                        updatedAt: integration.updatedAt,
+                      }}
+                      adminInitial={openaiAdminKey}
+                    />
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-sm text-red-700 dark:text-red-300">
+                        {integration.error}
+                      </p>
+                      <p className="text-sm text-muted">
+                        Saving keys requires{" "}
+                        <code className="font-mono">
+                          SUPABASE_SERVICE_ROLE_KEY
+                        </code>{" "}
+                        on the app server so secrets are not exposed to
+                        browsers.
+                      </p>
+                    </div>
+                  )}
 
-            {resend.ok ? (
-              <ResendSettingsClient
-                initial={{
-                  configured: resend.configured,
-                  statusLabel: resend.statusLabel,
-                  fromEmail: resend.fromEmail,
-                  contactToEmail: resend.contactToEmail,
-                  updatedAt: resend.updatedAt,
-                }}
-              />
-            ) : (
-              <p className="text-sm text-red-700 dark:text-red-300">{resend.error}</p>
-            )}
+                  {resend.ok ? (
+                    <ResendSettingsClient
+                      initial={{
+                        configured: resend.configured,
+                        statusLabel: resend.statusLabel,
+                        fromEmail: resend.fromEmail,
+                        contactToEmail: resend.contactToEmail,
+                        updatedAt: resend.updatedAt,
+                      }}
+                    />
+                  ) : (
+                    <p className="text-sm text-red-700 dark:text-red-300">
+                      {resend.error}
+                    </p>
+                  )}
 
-            {googleMaps.ok ? (
-              <GoogleMapsSettingsClient
-                initial={{
-                  configured: googleMaps.configured,
-                  statusLabel: googleMaps.statusLabel,
-                  updatedAt: googleMaps.updatedAt,
-                }}
-              />
-            ) : (
-              <p className="text-sm text-red-700 dark:text-red-300">{googleMaps.error}</p>
-            )}
+                  {googleMaps.ok ? (
+                    <GoogleMapsSettingsClient
+                      initial={{
+                        configured: googleMaps.configured,
+                        statusLabel: googleMaps.statusLabel,
+                        updatedAt: googleMaps.updatedAt,
+                      }}
+                    />
+                  ) : (
+                    <p className="text-sm text-red-700 dark:text-red-300">
+                      {googleMaps.error}
+                    </p>
+                  )}
 
-            {maxmind.ok ? (
-              <MaxMindSettingsClient
-                initial={{
-                  configured: maxmind.configured,
-                  statusLabel: maxmind.statusLabel,
-                  downloadedAt: maxmind.downloadedAt,
-                }}
-              />
-            ) : (
-              <p className="text-sm text-red-700 dark:text-red-300">{maxmind.error}</p>
-            )}
+                  {maxmind.ok ? (
+                    <MaxMindSettingsClient
+                      initial={{
+                        configured: maxmind.configured,
+                        statusLabel: maxmind.statusLabel,
+                        downloadedAt: maxmind.downloadedAt,
+                      }}
+                    />
+                  ) : (
+                    <p className="text-sm text-red-700 dark:text-red-300">
+                      {maxmind.error}
+                    </p>
+                  )}
 
-            {redditPixel.ok ? (
-              <RedditPixelSettingsClient
-                initial={{
-                  configured: redditPixel.configured,
-                  statusLabel: redditPixel.statusLabel,
-                }}
-              />
-            ) : (
-              <p className="text-sm text-red-700 dark:text-red-300">{redditPixel.error}</p>
-            )}
+                  {redditPixel.ok ? (
+                    <RedditPixelSettingsClient
+                      initial={{
+                        configured: redditPixel.configured,
+                        statusLabel: redditPixel.statusLabel,
+                      }}
+                    />
+                  ) : (
+                    <p className="text-sm text-red-700 dark:text-red-300">
+                      {redditPixel.error}
+                    </p>
+                  )}
 
-            <GoogleNativeSigninSettingsClient
-              initial={{ clientId: initialGoogleOAuthWebClientId }}
-            />
-          </div>
+                  <GoogleNativeSigninSettingsClient
+                    initial={{ clientId: initialGoogleOAuthWebClientId }}
+                  />
+                </div>
+              );
+            }}
+          </LazyContent>
         )}
 
         {tab === "ai_feedback" && (
@@ -664,47 +619,63 @@ export function SettingsClient({
         )}
 
         {tab === "ai_usage" && (
-          <CoachAiTokenUsageClient initial={initialCoachAiTokenUsage} />
+          <LazyContent state={tokenUsageData}>
+            {(d) => <CoachAiTokenUsageClient initial={d} />}
+          </LazyContent>
         )}
 
         {tab === "seeds" && (
-          <PlaybookSeedsAdminClient initial={initialSeeds} />
+          <LazyContent state={seedsData}>
+            {(d) => <PlaybookSeedsAdminClient initial={d.seeds} />}
+          </LazyContent>
         )}
 
         {tab === "beta" && (
-          <BetaFeaturesAdminClient initialFeatures={initialBetaFeatures} />
+          <LazyContent state={betaData}>
+            {(d) => <BetaFeaturesAdminClient initialFeatures={d} />}
+          </LazyContent>
         )}
 
         {tab === "opex" && (
-          <OpexAdminClient
-            initialServices={initialOpexServices}
-            initialEntries={initialOpexEntries}
-            initialPeriodMonth={initialOpexPeriod}
-            initialError={opexError}
-          />
+          <LazyContent state={opexData}>
+            {(d) => (
+              <OpexAdminClient
+                initialServices={d.services}
+                initialEntries={d.entries}
+                initialPeriodMonth={d.period}
+                initialError={d.error}
+              />
+            )}
+          </LazyContent>
         )}
 
         {tab === "site" && (
-          <div className="space-y-4">
-            <CoachSeatsAdminClient
-              initialDefaults={initialSeatDefaults}
-              initialBonusRows={initialCoachBonusRows}
-              initialPack={initialCoachCalPack}
-            />
-            <SiteSettingsAdminClient
-              initialHideLobbyAnimation={initialHideLobbyAnimation}
-              initialExamplesPageEnabled={initialExamplesPageEnabled}
-              initialFreeMaxPlays={initialFreeMaxPlays}
-              initialMobileEditingEnabled={initialMobileEditingEnabled}
-              initialHideOwnerInfoAbout={initialHideOwnerInfoAbout}
-              initialReferralConfig={initialReferralConfig}
-              initialAppleSigninEnabled={initialAppleSigninEnabled}
-              initialGoogleSigninEnabled={initialGoogleSigninEnabled}
-              initialCoachCalUpgradeBannerEnabled={initialCoachCalUpgradeBannerEnabled}
-              initialCoachCalVersion={initialCoachCalVersion}
-              initialCoachAiEvalDays={initialCoachAiEvalDays}
-            />
-          </div>
+          <LazyContent state={siteData}>
+            {(d) => (
+              <div className="space-y-4">
+                <CoachSeatsAdminClient
+                  initialDefaults={d.seatDefaults}
+                  initialBonusRows={d.coachBonusRows}
+                  initialPack={d.coachCalPack}
+                />
+                <SiteSettingsAdminClient
+                  initialHideLobbyAnimation={d.hideLobbyAnimation}
+                  initialExamplesPageEnabled={d.examplesPageEnabled}
+                  initialFreeMaxPlays={d.freeMaxPlays}
+                  initialMobileEditingEnabled={d.mobileEditingEnabled}
+                  initialHideOwnerInfoAbout={d.hideOwnerInfoAbout}
+                  initialReferralConfig={d.referralConfig}
+                  initialAppleSigninEnabled={d.appleSigninEnabled}
+                  initialGoogleSigninEnabled={d.googleSigninEnabled}
+                  initialCoachCalUpgradeBannerEnabled={
+                    d.coachCalUpgradeBannerEnabled
+                  }
+                  initialCoachCalVersion={d.coachCalVersion}
+                  initialCoachAiEvalDays={d.coachAiEvalDays}
+                />
+              </div>
+            )}
+          </LazyContent>
         )}
       </div>
     </div>
