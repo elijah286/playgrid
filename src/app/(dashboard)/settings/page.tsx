@@ -1,6 +1,5 @@
-import Link from "next/link";
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { getCurrentUserProfile } from "@/app/actions/admin-guard";
 import { listUsersForAdminAction } from "@/app/actions/admin-users";
 import {
@@ -56,15 +55,25 @@ import {
   getOpenAIAdminKeyStatusAction,
 } from "@/app/actions/admin-integrations";
 import { SettingsClient } from "./ui";
+import {
+  AdminBodySkeleton,
+  AdminHeader,
+  AdminRouteProgress,
+} from "./_components/AdminSkeleton";
 
 function currentMonthYM(): string {
   const d = new Date();
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(
+    2,
+    "0"
+  )}`;
 }
 
 export type OverviewWindow = "7d" | "30d" | "90d" | "all";
 
-function resolveOverviewWindow(raw: string | string[] | undefined): OverviewWindow {
+function resolveOverviewWindow(
+  raw: string | string[] | undefined
+): OverviewWindow {
   const value = Array.isArray(raw) ? raw[0] : raw;
   if (value === "7d" || value === "30d" || value === "90d" || value === "all") {
     return value;
@@ -93,6 +102,42 @@ export default async function SettingsPage({
 
   const resolvedParams = (await searchParams) ?? {};
   const overviewWindow = resolveOverviewWindow(resolvedParams.overview_window);
+
+  // Stream the data-heavy body so the page shell paints immediately.
+  // The header renders as real content; the ~40 server actions resolve
+  // inside <SettingsBody> behind a Suspense boundary instead of blocking
+  // the first byte (TTFB/FCP no longer wait on the slowest query).
+  // loading.tsx covers the brief auth gate above this point; this
+  // boundary covers the data fetch.
+  return (
+    <div className="space-y-6">
+      <AdminHeader />
+      <Suspense
+        fallback={
+          <>
+            <AdminRouteProgress />
+            <AdminBodySkeleton />
+          </>
+        }
+      >
+        <SettingsBody userId={user.id} overviewWindow={overviewWindow} />
+      </Suspense>
+    </div>
+  );
+}
+
+/**
+ * Streamed body of the Site admin page. Runs the full data fetch and
+ * renders the interactive client. Isolated behind a Suspense boundary
+ * (see SettingsPage) so its latency doesn't delay the page shell.
+ */
+async function SettingsBody({
+  userId,
+  overviewWindow,
+}: {
+  userId: string;
+  overviewWindow: OverviewWindow;
+}) {
   const overviewWindowDays = windowDaysFor(overviewWindow);
 
   const opexPeriod = currentMonthYM();
@@ -187,222 +232,223 @@ export default async function SettingsPage({
   ]);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <Link
-          href="/home"
-          className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="size-4" />
-          Home
-        </Link>
-        <h1 className="mt-2 text-xl font-semibold tracking-tight text-foreground">Site admin</h1>
-      </div>
-
-      <SettingsClient
-        currentUserId={user.id}
-        initialUsers={usersRes.ok ? usersRes.users : []}
-        usersError={usersRes.ok ? null : usersRes.error}
-        integration={
-          integrationRes.ok
-            ? {
-                ok: true,
-                configured: integrationRes.configured,
-                statusLabel: integrationRes.statusLabel,
-                updatedAt: integrationRes.updatedAt,
-              }
-            : { ok: false, error: integrationRes.error }
-        }
-        claude={
-          claudeRes.ok
-            ? {
-                ok: true,
-                configured: claudeRes.configured,
-                statusLabel: claudeRes.statusLabel,
-                provider: claudeRes.provider,
-                updatedAt: claudeRes.updatedAt,
-              }
-            : { ok: false, error: claudeRes.error }
-        }
-        resend={
-          resendRes.ok
-            ? {
-                ok: true,
-                configured: resendRes.configured,
-                statusLabel: resendRes.statusLabel,
-                fromEmail: resendRes.fromEmail,
-                contactToEmail: resendRes.contactToEmail,
-                updatedAt: resendRes.updatedAt,
-              }
-            : { ok: false, error: resendRes.error }
-        }
-        googleMaps={
-          googleMapsRes.ok
-            ? {
-                ok: true,
-                configured: googleMapsRes.configured,
-                statusLabel: googleMapsRes.statusLabel,
-                updatedAt: googleMapsRes.updatedAt,
-              }
-            : { ok: false, error: googleMapsRes.error }
-        }
-        maxmind={
-          maxmindRes.ok
-            ? {
-                ok: true,
-                configured: maxmindRes.configured,
-                statusLabel: maxmindRes.statusLabel,
-                downloadedAt: maxmindRes.downloadedAt,
-              }
-            : { ok: false, error: maxmindRes.error }
-        }
-        redditPixel={
-          redditPixelRes.ok
-            ? {
-                ok: true,
-                configured: redditPixelRes.configured,
-                statusLabel: redditPixelRes.statusLabel,
-              }
-            : { ok: false, error: redditPixelRes.error }
-        }
-        initialFeedback={feedbackRes.ok ? feedbackRes.items : []}
-        feedbackError={feedbackRes.ok ? null : feedbackRes.error}
-        initialFeedbackWidgetEnabled={feedbackWidgetRes.enabled}
-        initialFeedbackWidgetTouchEnabled={feedbackWidgetRes.touchEnabled}
-        initialInvites={invitesRes.ok ? invitesRes.items : []}
-        invitesError={invitesRes.ok ? null : invitesRes.error}
-        initialGiftCodes={giftCodesRes.ok ? giftCodesRes.codes : []}
-        giftCodesError={giftCodesRes.ok ? null : giftCodesRes.error}
-        stripeStatus={
-          stripeStatusRes.ok
-            ? stripeStatusRes.status
-            : {
-                hasSecretKey: false,
-                hasWebhookSecret: false,
-                hasPublishableKey: false,
-                mode: null,
-                updatedAt: null,
-                publishableKey: null,
-                priceIds: {
-                  coach_month: null,
-                  coach_year: null,
-                  coach_ai_month: null,
-                  coach_ai_year: null,
-                  seat_month: null,
-                  seat_year: null,
-                  coach_cal_pack: null,
-                },
-              }
-        }
-        initialCoachAiEnabled={coachAiEnabled}
-        initialHideLobbyAnimation={hideLobbyAnimation}
-        initialExamplesPageEnabled={examplesPageEnabled}
-        initialFreeMaxPlays={freeMaxPlays}
-        initialMobileEditingEnabled={mobileEditingEnabled}
-        initialTrafficSummary={
-          trafficRes.ok
-            ? trafficRes.summary
-            : {
-                windowDays: 30,
-                totals: {
-                  views: 0,
-                  uniqueSessions: 0,
-                  signups: 0,
-                  totalUsers: 0,
-                  activeLast7: 0,
-                  activeLast30: 0,
-                },
-                conversion: { sessions: 0, sessionsWithSignup: 0, rate: 0 },
-                byDay: [],
-                topReferrers: [],
-                topPaths: [],
-                topCountries: [],
-                deviceMix: { mobile: 0, tablet: 0, desktop: 0, unknown: 0 },
-                utmSources: [],
-              }
-        }
-        trafficError={trafficRes.ok ? null : trafficRes.error}
-        initialGeoSummary={
-          geoRes.ok
-            ? geoRes.summary
-            : {
-                windowDays: 30,
-                totals: {
-                  plottedViews: 0,
-                  plottedSessions: 0,
-                  plottedUsers: 0,
-                  cities: 0,
-                  countries: 0,
-                  missingLocation: 0,
-                },
-                cities: [],
-                countries: [],
-              }
-        }
-        geoError={geoRes.ok ? null : geoRes.error}
-        initialActivationSummary={
-          activationRes.ok
-            ? activationRes.summary
-            : null
-        }
-        activationError={activationRes.ok ? null : activationRes.error}
-        initialReengagementMetrics={reengagementRes.ok ? reengagementRes.metrics : null}
-        reengagementError={reengagementRes.ok ? null : reengagementRes.error}
-        initialExcludedEmails={analyticsExcludedEmails}
-        initialSeeds={seedsRes.ok ? seedsRes.formations : []}
-        initialBetaFeatures={betaFeatures}
-        initialHideOwnerInfoAbout={hideOwnerInfoAbout}
-        initialReferralConfig={referralConfig}
-        initialAppleSigninEnabled={authProviders.apple}
-        initialGoogleSigninEnabled={authProviders.google}
-        initialGoogleOAuthWebClientId={authProviders.googleOAuthWebClientId}
-        initialCoachCalUpgradeBannerEnabled={coachCalUpgradeBannerEnabled}
-        initialCoachCalVersion={coachCalVersion}
-        initialCoachAiEvalDays={coachAiEvalDays}
-        initialCoachAiKbMisses={coachAiKbMissesRes.ok ? coachAiKbMissesRes.items : []}
-        coachAiKbMissesError={coachAiKbMissesRes.ok ? null : coachAiKbMissesRes.error}
-        initialCoachAiTokenUsage={coachAiTokenUsageRes}
-        initialOpexServices={opexServicesRes.ok ? opexServicesRes.services : []}
-        initialOpexEntries={opexEntriesRes.ok ? opexEntriesRes.entries : []}
-        initialOpexPeriod={opexPeriod}
-        opexError={
-          opexServicesRes.ok && opexEntriesRes.ok
-            ? null
-            : opexServicesRes.ok
-              ? (opexEntriesRes as { ok: false; error: string }).error
-              : (opexServicesRes as { ok: false; error: string }).error
-        }
-        anthropicAdminKey={
-          anthropicAdminKeyRes.ok
-            ? { configured: anthropicAdminKeyRes.configured, statusLabel: anthropicAdminKeyRes.statusLabel }
-            : { configured: false, statusLabel: "No admin key is saved yet." }
-        }
-        openaiAdminKey={
-          openaiAdminKeyRes.ok
-            ? { configured: openaiAdminKeyRes.configured, statusLabel: openaiAdminKeyRes.statusLabel }
-            : { configured: false, statusLabel: "No admin key is saved yet." }
-        }
-        initialSeatDefaults={seatDefaults}
-        initialCoachBonusRows={coachBonusRes.ok ? coachBonusRes.rows : []}
-        initialCoachCalPack={coachCalPack}
-        initialCancellationFeedback={
-          cancellationFeedbackRes.ok ? cancellationFeedbackRes.rows : []
-        }
-        cancellationFeedbackError={
-          cancellationFeedbackRes.ok ? null : cancellationFeedbackRes.error
-        }
-        overviewWindow={overviewWindow}
-        initialBillingSummary={billingSummaryRes.ok ? billingSummaryRes.summary : null}
-        billingSummaryError={billingSummaryRes.ok ? null : billingSummaryRes.error}
-        initialShareLifetime={shareLifetimeRes.ok ? shareLifetimeRes.summary : null}
-        shareLifetimeError={shareLifetimeRes.ok ? null : shareLifetimeRes.error}
-        initialRevenueBreakdown={
-          revenueBreakdownRes.ok ? revenueBreakdownRes.breakdown : null
-        }
-        revenueBreakdownError={
-          revenueBreakdownRes.ok ? null : revenueBreakdownRes.error
-        }
-      />
-    </div>
+    <SettingsClient
+      currentUserId={userId}
+      initialUsers={usersRes.ok ? usersRes.users : []}
+      usersError={usersRes.ok ? null : usersRes.error}
+      integration={
+        integrationRes.ok
+          ? {
+              ok: true,
+              configured: integrationRes.configured,
+              statusLabel: integrationRes.statusLabel,
+              updatedAt: integrationRes.updatedAt,
+            }
+          : { ok: false, error: integrationRes.error }
+      }
+      claude={
+        claudeRes.ok
+          ? {
+              ok: true,
+              configured: claudeRes.configured,
+              statusLabel: claudeRes.statusLabel,
+              provider: claudeRes.provider,
+              updatedAt: claudeRes.updatedAt,
+            }
+          : { ok: false, error: claudeRes.error }
+      }
+      resend={
+        resendRes.ok
+          ? {
+              ok: true,
+              configured: resendRes.configured,
+              statusLabel: resendRes.statusLabel,
+              fromEmail: resendRes.fromEmail,
+              contactToEmail: resendRes.contactToEmail,
+              updatedAt: resendRes.updatedAt,
+            }
+          : { ok: false, error: resendRes.error }
+      }
+      googleMaps={
+        googleMapsRes.ok
+          ? {
+              ok: true,
+              configured: googleMapsRes.configured,
+              statusLabel: googleMapsRes.statusLabel,
+              updatedAt: googleMapsRes.updatedAt,
+            }
+          : { ok: false, error: googleMapsRes.error }
+      }
+      maxmind={
+        maxmindRes.ok
+          ? {
+              ok: true,
+              configured: maxmindRes.configured,
+              statusLabel: maxmindRes.statusLabel,
+              downloadedAt: maxmindRes.downloadedAt,
+            }
+          : { ok: false, error: maxmindRes.error }
+      }
+      redditPixel={
+        redditPixelRes.ok
+          ? {
+              ok: true,
+              configured: redditPixelRes.configured,
+              statusLabel: redditPixelRes.statusLabel,
+            }
+          : { ok: false, error: redditPixelRes.error }
+      }
+      initialFeedback={feedbackRes.ok ? feedbackRes.items : []}
+      feedbackError={feedbackRes.ok ? null : feedbackRes.error}
+      initialFeedbackWidgetEnabled={feedbackWidgetRes.enabled}
+      initialFeedbackWidgetTouchEnabled={feedbackWidgetRes.touchEnabled}
+      initialInvites={invitesRes.ok ? invitesRes.items : []}
+      invitesError={invitesRes.ok ? null : invitesRes.error}
+      initialGiftCodes={giftCodesRes.ok ? giftCodesRes.codes : []}
+      giftCodesError={giftCodesRes.ok ? null : giftCodesRes.error}
+      stripeStatus={
+        stripeStatusRes.ok
+          ? stripeStatusRes.status
+          : {
+              hasSecretKey: false,
+              hasWebhookSecret: false,
+              hasPublishableKey: false,
+              mode: null,
+              updatedAt: null,
+              publishableKey: null,
+              priceIds: {
+                coach_month: null,
+                coach_year: null,
+                coach_ai_month: null,
+                coach_ai_year: null,
+                seat_month: null,
+                seat_year: null,
+                coach_cal_pack: null,
+              },
+            }
+      }
+      initialCoachAiEnabled={coachAiEnabled}
+      initialHideLobbyAnimation={hideLobbyAnimation}
+      initialExamplesPageEnabled={examplesPageEnabled}
+      initialFreeMaxPlays={freeMaxPlays}
+      initialMobileEditingEnabled={mobileEditingEnabled}
+      initialTrafficSummary={
+        trafficRes.ok
+          ? trafficRes.summary
+          : {
+              windowDays: 30,
+              totals: {
+                views: 0,
+                uniqueSessions: 0,
+                signups: 0,
+                totalUsers: 0,
+                activeLast7: 0,
+                activeLast30: 0,
+              },
+              conversion: { sessions: 0, sessionsWithSignup: 0, rate: 0 },
+              byDay: [],
+              topReferrers: [],
+              topPaths: [],
+              topCountries: [],
+              deviceMix: { mobile: 0, tablet: 0, desktop: 0, unknown: 0 },
+              utmSources: [],
+            }
+      }
+      trafficError={trafficRes.ok ? null : trafficRes.error}
+      initialGeoSummary={
+        geoRes.ok
+          ? geoRes.summary
+          : {
+              windowDays: 30,
+              totals: {
+                plottedViews: 0,
+                plottedSessions: 0,
+                plottedUsers: 0,
+                cities: 0,
+                countries: 0,
+                missingLocation: 0,
+              },
+              cities: [],
+              countries: [],
+            }
+      }
+      geoError={geoRes.ok ? null : geoRes.error}
+      initialActivationSummary={activationRes.ok ? activationRes.summary : null}
+      activationError={activationRes.ok ? null : activationRes.error}
+      initialReengagementMetrics={
+        reengagementRes.ok ? reengagementRes.metrics : null
+      }
+      reengagementError={reengagementRes.ok ? null : reengagementRes.error}
+      initialExcludedEmails={analyticsExcludedEmails}
+      initialSeeds={seedsRes.ok ? seedsRes.formations : []}
+      initialBetaFeatures={betaFeatures}
+      initialHideOwnerInfoAbout={hideOwnerInfoAbout}
+      initialReferralConfig={referralConfig}
+      initialAppleSigninEnabled={authProviders.apple}
+      initialGoogleSigninEnabled={authProviders.google}
+      initialGoogleOAuthWebClientId={authProviders.googleOAuthWebClientId}
+      initialCoachCalUpgradeBannerEnabled={coachCalUpgradeBannerEnabled}
+      initialCoachCalVersion={coachCalVersion}
+      initialCoachAiEvalDays={coachAiEvalDays}
+      initialCoachAiKbMisses={
+        coachAiKbMissesRes.ok ? coachAiKbMissesRes.items : []
+      }
+      coachAiKbMissesError={
+        coachAiKbMissesRes.ok ? null : coachAiKbMissesRes.error
+      }
+      initialCoachAiTokenUsage={coachAiTokenUsageRes}
+      initialOpexServices={opexServicesRes.ok ? opexServicesRes.services : []}
+      initialOpexEntries={opexEntriesRes.ok ? opexEntriesRes.entries : []}
+      initialOpexPeriod={opexPeriod}
+      opexError={
+        opexServicesRes.ok && opexEntriesRes.ok
+          ? null
+          : opexServicesRes.ok
+          ? (opexEntriesRes as { ok: false; error: string }).error
+          : (opexServicesRes as { ok: false; error: string }).error
+      }
+      anthropicAdminKey={
+        anthropicAdminKeyRes.ok
+          ? {
+              configured: anthropicAdminKeyRes.configured,
+              statusLabel: anthropicAdminKeyRes.statusLabel,
+            }
+          : { configured: false, statusLabel: "No admin key is saved yet." }
+      }
+      openaiAdminKey={
+        openaiAdminKeyRes.ok
+          ? {
+              configured: openaiAdminKeyRes.configured,
+              statusLabel: openaiAdminKeyRes.statusLabel,
+            }
+          : { configured: false, statusLabel: "No admin key is saved yet." }
+      }
+      initialSeatDefaults={seatDefaults}
+      initialCoachBonusRows={coachBonusRes.ok ? coachBonusRes.rows : []}
+      initialCoachCalPack={coachCalPack}
+      initialCancellationFeedback={
+        cancellationFeedbackRes.ok ? cancellationFeedbackRes.rows : []
+      }
+      cancellationFeedbackError={
+        cancellationFeedbackRes.ok ? null : cancellationFeedbackRes.error
+      }
+      overviewWindow={overviewWindow}
+      initialBillingSummary={
+        billingSummaryRes.ok ? billingSummaryRes.summary : null
+      }
+      billingSummaryError={
+        billingSummaryRes.ok ? null : billingSummaryRes.error
+      }
+      initialShareLifetime={
+        shareLifetimeRes.ok ? shareLifetimeRes.summary : null
+      }
+      shareLifetimeError={shareLifetimeRes.ok ? null : shareLifetimeRes.error}
+      initialRevenueBreakdown={
+        revenueBreakdownRes.ok ? revenueBreakdownRes.breakdown : null
+      }
+      revenueBreakdownError={
+        revenueBreakdownRes.ok ? null : revenueBreakdownRes.error
+      }
+    />
   );
 }
