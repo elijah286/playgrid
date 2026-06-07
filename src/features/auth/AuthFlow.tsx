@@ -37,10 +37,16 @@ function GoogleGlyph({ className }: { className?: string }) {
 }
 
 function AppleGlyph({ className }: { className?: string }) {
+  // The Apple mark is a solid shape, so it reads visually heavier than the
+  // thin multi-color Google "G" at the same box size — and the raw path only
+  // fills ~92% of a 0 0 24 24 viewBox, leaving it rendering noticeably smaller
+  // than the Google glyph. This viewBox is the apple's bounding box expanded
+  // into a centered square so that inside a size-4 (16px) box the glyph renders
+  // ~15.5px optical, matching the Google glyph's apparent size.
   return (
     <svg
       className={className}
-      viewBox="0 0 24 24"
+      viewBox="0.58 0.65 22.71 22.71"
       fill="currentColor"
       xmlns="http://www.w3.org/2000/svg"
     >
