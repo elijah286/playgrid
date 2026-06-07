@@ -30,6 +30,7 @@ import {
   revokeCompAction,
 } from "@/app/actions/admin-billing";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
+import type { FormerSubscription } from "@/lib/billing/former-subscription";
 import { Modal } from "@/components/ui";
 
 const TIER_LABELS: Record<SubscriptionTier, string> = {
@@ -37,6 +38,26 @@ const TIER_LABELS: Record<SubscriptionTier, string> = {
   coach: "Coach",
   coach_ai: "Coach AI",
 };
+
+/** Humanize a Stripe cancellation-feedback enum, e.g. "too_expensive" → "too expensive". */
+function formatChurnReason(reason: string | null): string | null {
+  if (!reason) return null;
+  return reason.replace(/_/g, " ");
+}
+
+/** Tooltip for the churned ex-payer badge. */
+function churnTitle(f: FormerSubscription): string {
+  const tier = TIER_LABELS[f.tier] ?? f.tier;
+  const verb =
+    f.status === "canceled"
+      ? "Canceled"
+      : f.status === "unpaid"
+        ? "Lapsed (unpaid)"
+        : "Expired";
+  const when = f.endedAt ? ` on ${formatExpiry(f.endedAt)}` : "";
+  const reason = formatChurnReason(f.reason);
+  return `Former paying customer · ${verb} ${tier} (Stripe)${when}${reason ? ` · "${reason}"` : ""}`;
+}
 
 function plusOneYearISO(): string {
   const d = new Date();
@@ -128,6 +149,7 @@ export type AdminUserRow = {
     label: string;
     detail: string | null;
   };
+  formerSubscription: FormerSubscription | null;
 };
 
 /** Color/tone for the signup-source chip in the users list. Distinct
@@ -416,6 +438,14 @@ export function UsersAdminClient({
                           comp
                         </span>
                       )}
+                      {u.formerSubscription && (
+                        <span
+                          className="rounded bg-rose-500/10 px-1 text-[10px] font-semibold uppercase text-rose-700 dark:text-rose-300"
+                          title={churnTitle(u.formerSubscription)}
+                        >
+                          churned
+                        </span>
+                      )}
                     </button>
                   </td>
                   <td
@@ -581,6 +611,14 @@ export function UsersAdminClient({
                           {u.entitlementSource === "comp" && (
                             <span className="rounded bg-primary/10 px-1 text-[9px] font-semibold uppercase text-primary">
                               comp
+                            </span>
+                          )}
+                          {u.formerSubscription && (
+                            <span
+                              className="rounded bg-rose-500/10 px-1 text-[9px] font-semibold uppercase text-rose-700 dark:text-rose-300"
+                              title={churnTitle(u.formerSubscription)}
+                            >
+                              churned
                             </span>
                           )}
                         </button>

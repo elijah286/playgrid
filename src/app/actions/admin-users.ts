@@ -17,6 +17,10 @@ import {
   type SignupSourceKind,
 } from "@/lib/analytics/signup-source";
 import { getAttributedSignupsByUserAction } from "./admin-traffic-insights";
+import {
+  buildFormerSubscriptionMap,
+  type FormerSubscription,
+} from "@/lib/billing/former-subscription";
 
 export type AdminUserRowData = {
   id: string;
@@ -47,6 +51,11 @@ export type AdminUserRowData = {
     label: string;
     detail: string | null;
   };
+  /** Set when this user once held a paid Stripe subscription that has since
+   *  lapsed (canceled / unpaid / incomplete_expired) AND they are not currently
+   *  on an active paid Stripe plan. Lets the list flag churned ex-payers who now
+   *  read as "Free" (or comped). Null for users who never paid. */
+  formerSubscription: FormerSubscription | null;
 };
 
 async function assertAdmin() {
@@ -92,6 +101,7 @@ export async function listUsersForAdminAction() {
     { data: profiles },
     { data: entitlements },
     { data: playCountRows },
+    { data: subscriptionRows },
     attributionRes,
   ] = await Promise.all([
     admin
@@ -105,12 +115,20 @@ export async function listUsersForAdminAction() {
         "user_id, tier, source, expires_at, comp_grant_id, subscription_id",
       ),
     admin.rpc("admin_play_counts_by_user"),
+    admin
+      .from("subscriptions")
+      .select(
+        "user_id, tier, status, current_period_end, updated_at, stripe_cancellation_feedback",
+      ),
     getAttributedSignupsByUserAction(),
   ]);
   const attributionByUser = attributionRes.ok ? attributionRes.counts : {};
 
   const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
   const entMap = new Map((entitlements ?? []).map((e) => [e.user_id, e]));
+  // Map of churned ex-payers, derived from the raw subscriptions table since the
+  // user_entitlements view only surfaces *active* subscriptions.
+  const formerSubByUser = buildFormerSubscriptionMap(subscriptionRows ?? []);
 
   const playsByUser = new Map<string, number>();
   for (const r of (playCountRows ?? []) as {
@@ -136,6 +154,13 @@ export async function listUsersForAdminAction() {
         }
       | undefined;
     const e = entMap.get(u.id);
+    const entitlementSource = (e?.source as "comp" | "stripe" | "free") ?? "free";
+    // Don't flag churn for users who currently hold an active paid Stripe plan
+    // (they re-subscribed). Free and comped ex-payers still get the badge.
+    const formerSubscription =
+      entitlementSource === "stripe"
+        ? null
+        : (formerSubByUser.get(u.id) ?? null);
     const cls = classifySignupSource({
       landingPath: pr?.first_landing_path ?? null,
       utmSource: pr?.first_utm_source ?? null,
@@ -151,7 +176,7 @@ export async function listUsersForAdminAction() {
       createdAt: u.created_at,
       lastSignIn: u.last_sign_in_at ?? null,
       tier: (e?.tier as SubscriptionTier) ?? "free",
-      entitlementSource: (e?.source as "comp" | "stripe" | "free") ?? "free",
+      entitlementSource,
       entitlementExpiresAt: (e?.expires_at as string | null) ?? null,
       compGrantId: (e?.comp_grant_id as string | null) ?? null,
       subscriptionId: (e?.subscription_id as string | null) ?? null,
@@ -162,6 +187,7 @@ export async function listUsersForAdminAction() {
       playsCreated: playsByUser.get(u.id) ?? 0,
       attributedSignups: attributionByUser[u.id] ?? 0,
       signupSource: { kind: cls.kind, label: cls.label, detail: cls.detail },
+      formerSubscription,
     };
   });
 
