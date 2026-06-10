@@ -240,7 +240,7 @@ export function AuthFlow({
       void runSignupAttributionAction();
 
       track({ event: "auth_oauth_success", target: "google" });
-      hardNavigate(isFreshSignup ? withRedditSignupMarker(safeNext) : safeNext);
+      hardNavigate(isFreshSignup ? withSignupMarkers(safeNext) : safeNext);
       return; // keep pending true through navigation
     } catch (e: unknown) {
       // capgo plugin rejects with code USER_CANCELLED when the user
@@ -280,7 +280,7 @@ export function AuthFlow({
       void runSignupAttributionAction();
 
       track({ event: "auth_oauth_success", target: "apple" });
-      hardNavigate(isFreshSignup ? withRedditSignupMarker(safeNext) : safeNext);
+      hardNavigate(isFreshSignup ? withSignupMarkers(safeNext) : safeNext);
       return; // keep pending true through navigation
     } catch (e: unknown) {
       // The plugin rejects when the user dismisses the Apple sheet. Don't
@@ -484,18 +484,19 @@ export function AuthFlow({
     window.location.assign(to);
   }
 
-  // Tack the rdt_signup marker onto a path so RedditPixel fires SignUp on
-  // the next page load. Mirrors the marker the /auth/callback route adds
-  // after OAuth. Both flows funnel into one client-side rdt('track')
-  // call so the conversion is attributed to the originating click.
-  function withRedditSignupMarker(to: string): string {
+  // Tack the ad-pixel signup markers onto a path so RedditPixel and MetaPixel
+  // fire their conversion events (SignUp / CompleteRegistration) on the next
+  // page load. Mirrors the markers the /auth/callback route adds after OAuth.
+  // Each pixel reads + strips its own distinct marker, so they're independent.
+  function withSignupMarkers(to: string): string {
     try {
       const u = new URL(to, window.location.origin);
       u.searchParams.set("rdt_signup", "1");
+      u.searchParams.set("fbq_signup", "1");
       return u.pathname + u.search + u.hash;
     } catch {
       const sep = to.includes("?") ? "&" : "?";
-      return `${to}${sep}rdt_signup=1`;
+      return `${to}${sep}rdt_signup=1&fbq_signup=1`;
     }
   }
 
@@ -538,7 +539,7 @@ export function AuthFlow({
       // Fresh signup — append the marker so RedditPixel fires SignUp on
       // the next page load. The OAuth callback adds this marker
       // server-side; the email-OTP path adds it here.
-      hardNavigate(withRedditSignupMarker(safeNext));
+      hardNavigate(withSignupMarkers(safeNext));
       return; // keep pending=true through navigation to block double-clicks
     } catch (e: unknown) {
       setFormError(e instanceof Error ? e.message : "Could not finish sign-up.");

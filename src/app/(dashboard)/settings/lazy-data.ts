@@ -29,6 +29,7 @@ import { getResendStatusAction } from "@/app/actions/admin-resend";
 import { getGoogleMapsStatusAction } from "@/app/actions/admin-google-maps";
 import { getMaxMindStatusAction } from "@/app/actions/admin-maxmind";
 import { getRedditPixelStatusAction } from "@/app/actions/admin-reddit-pixel";
+import { getMetaPixelStatusAction } from "@/app/actions/admin-meta-pixel";
 import { getAuthProvidersConfig } from "@/lib/site/auth-providers-config";
 import { getSeatDefaults } from "@/lib/site/seat-defaults-config";
 import { getCoachCalPackConfig } from "@/lib/site/coach-cal-pack-config";
@@ -74,6 +75,7 @@ export async function loadIntegrationsTabData() {
     googleMapsRes,
     maxmindRes,
     redditPixelRes,
+    metaPixelRes,
     anthropicAdminKeyRes,
     openaiAdminKeyRes,
     authProviders,
@@ -84,6 +86,7 @@ export async function loadIntegrationsTabData() {
     getGoogleMapsStatusAction(),
     getMaxMindStatusAction(),
     getRedditPixelStatusAction(),
+    getMetaPixelStatusAction(),
     getAnthropicAdminKeyStatusAction(),
     getOpenAIAdminKeyStatusAction(),
     getAuthProvidersConfig(),
@@ -140,6 +143,13 @@ export async function loadIntegrationsTabData() {
           statusLabel: redditPixelRes.statusLabel,
         }
       : { ok: false as const, error: redditPixelRes.error },
+    metaPixel: metaPixelRes.ok
+      ? {
+          ok: true as const,
+          configured: metaPixelRes.configured,
+          statusLabel: metaPixelRes.statusLabel,
+        }
+      : { ok: false as const, error: metaPixelRes.error },
     anthropicAdminKey: anthropicAdminKeyRes.ok
       ? {
           configured: anthropicAdminKeyRes.configured,

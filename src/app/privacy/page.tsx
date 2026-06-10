@@ -9,7 +9,7 @@ export default function PrivacyPage() {
   return (
     <article className="mx-auto max-w-2xl px-6 py-16 text-foreground">
       <h1 className="text-3xl font-extrabold tracking-tight">Privacy Policy</h1>
-      <p className="mt-2 text-sm text-muted">Last updated: May 29, 2026</p>
+      <p className="mt-2 text-sm text-muted">Last updated: June 9, 2026</p>
 
       {/* The "Your rights" section below already covers deletion — keep that
           and the new dedicated section consistent if either is edited. */}
@@ -187,9 +187,13 @@ export default function PrivacyPage() {
         <section>
           <h2 className="text-base font-semibold text-foreground">What we don&apos;t do</h2>
           <p className="mt-2">
-            We don&apos;t run advertising trackers or behavioral profiling. We
-            don&apos;t sell your data. We don&apos;t share your content with anyone
-            except the people you explicitly share it with.
+            We don&apos;t sell your data, and we don&apos;t share your content
+            with anyone except the people you explicitly share it with. When we
+            run ads on Reddit or Meta, their conversion pixels count ad-driven
+            page visits and signups so we can tell which ads work (see
+            Sub-processors) — they&apos;re consent-gated for EU/UK visitors and
+            we don&apos;t use them to build cross-site behavioral profiles or to
+            upload personally identifying information.
           </p>
         </section>
 
@@ -240,6 +244,15 @@ export default function PrivacyPage() {
               uploading any personally identifying information. The
               pixel is suppressed for EU/UK visitors who have not
               accepted tracking.
+            </li>
+            <li>
+              Meta (Facebook/Instagram) — when we run ads on Meta, the
+              Meta Ads pixel loads on our site to count page visits and
+              signups from ad clicks, so we can measure which ads work and
+              reach similar coaches. It reports a page-view and a
+              signup-completion event; we don&apos;t upload personally
+              identifying information through it. The pixel is suppressed
+              for EU/UK visitors who have not accepted tracking.
             </li>
             <li>
               Apple — if you choose &ldquo;Sign in with Apple,&rdquo; Apple

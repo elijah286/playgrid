@@ -31,6 +31,7 @@ import { ResendSettingsClient } from "@/features/admin/ResendSettingsClient";
 import { GoogleMapsSettingsClient } from "@/features/admin/GoogleMapsSettingsClient";
 import { MaxMindSettingsClient } from "@/features/admin/MaxMindSettingsClient";
 import { RedditPixelSettingsClient } from "@/features/admin/RedditPixelSettingsClient";
+import { MetaPixelSettingsClient } from "@/features/admin/MetaPixelSettingsClient";
 import { GoogleNativeSigninSettingsClient } from "@/features/admin/GoogleNativeSigninSettingsClient";
 import { RevenueAdminClient } from "@/features/admin/RevenueAdminClient";
 import { FeedbackAdminClient } from "@/features/admin/FeedbackAdminClient";
@@ -480,6 +481,7 @@ export function SettingsClient({
                 googleMaps,
                 maxmind,
                 redditPixel,
+                metaPixel,
                 anthropicAdminKey,
                 openaiAdminKey,
                 googleOAuthWebClientId: initialGoogleOAuthWebClientId,
@@ -599,6 +601,19 @@ export function SettingsClient({
                   ) : (
                     <p className="text-sm text-red-700 dark:text-red-300">
                       {redditPixel.error}
+                    </p>
+                  )}
+
+                  {metaPixel.ok ? (
+                    <MetaPixelSettingsClient
+                      initial={{
+                        configured: metaPixel.configured,
+                        statusLabel: metaPixel.statusLabel,
+                      }}
+                    />
+                  ) : (
+                    <p className="text-sm text-red-700 dark:text-red-300">
+                      {metaPixel.error}
                     </p>
                   )}
 

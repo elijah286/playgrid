@@ -53,6 +53,12 @@ export async function GET(request: NextRequest) {
   }
 
   const dest = new URL(`${origin}${safeNext}`);
-  if (isFreshSignup) dest.searchParams.set("rdt_signup", "1");
+  if (isFreshSignup) {
+    // Fire both ad-pixel signup conversions on the next page load. Each pixel
+    // reads + strips its own distinct marker (RedditPixel: rdt_signup,
+    // MetaPixel: fbq_signup) so they stay fully independent.
+    dest.searchParams.set("rdt_signup", "1");
+    dest.searchParams.set("fbq_signup", "1");
+  }
   return NextResponse.redirect(dest.toString());
 }

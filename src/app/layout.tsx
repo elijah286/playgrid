@@ -12,6 +12,7 @@ import PageViewTracker from "@/components/PageViewTracker";
 import WebVitalsReporter from "@/components/WebVitalsReporter";
 import ConsentGate from "@/components/ConsentGate";
 import RedditPixel from "@/components/RedditPixel";
+import MetaPixel from "@/components/MetaPixel";
 import { NativeAppShell } from "@/components/native/NativeAppShell";
 import { PullToRefresh } from "@/components/native/PullToRefresh";
 import { AppInstallBanner } from "@/components/native/AppInstallBanner";
@@ -254,6 +255,7 @@ export default async function RootLayout({
                 <WebVitalsReporter />
                 <ConsentGate />
                 <RedditPixel />
+                <MetaPixel />
                 <NativeAppShell />
                 <PullToRefresh />
                 <OfflineStatusBanner />
