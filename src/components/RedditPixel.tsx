@@ -7,6 +7,7 @@ import {
   shouldSuppressTracking,
 } from "@/lib/attribution/consent";
 import { getStoredRedditPixelId } from "@/lib/site/reddit-pixel-config";
+import { isNativeAppRequest } from "@/lib/native/nativeRequest";
 
 // Reddit Ads conversion pixel. Loads the rdt.js library, fires PageVisit
 // on every page, and exposes window.rdt() for downstream SignUp /
@@ -22,6 +23,11 @@ import { getStoredRedditPixelId } from "@/lib/site/reddit-pixel-config";
 // rotate. Without an ID the component renders nothing.
 
 export default async function RedditPixel() {
+  // Never load the conversion pixel inside the native app shell — App Store
+  // Guideline 5.1.2(i) requires App Tracking Transparency before any tracking,
+  // and we collect none in the app. Web visitors are unaffected.
+  if (await isNativeAppRequest()) return null;
+
   const PIXEL_ID = await getStoredRedditPixelId();
   if (!PIXEL_ID) return null;
 

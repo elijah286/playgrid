@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { lookupGeo } from "@/lib/geo/maxmind";
 import { clientIpFromHeaders } from "@/lib/geo/request-ip";
 import { readConsentCookie } from "@/lib/attribution/consent";
+import { isNativeAppRequest } from "@/lib/native/nativeRequest";
 import ConsentBanner from "./ConsentBanner";
 
 // Server component. Renders the banner only when the visitor is in a
@@ -9,6 +10,12 @@ import ConsentBanner from "./ConsentBanner";
 // posture means most users never see this; EU travelers and anyone behind a
 // European VPN will.
 export default async function ConsentGate() {
+  // No cookie-consent prompt inside the native app shell. The app loads no
+  // tracking pixels (see MetaPixel/RedditPixel), so there's nothing to consent
+  // to — and a cookie prompt in the app is exactly what App Store Guideline
+  // 5.1.2(i) flags. Web visitors are unaffected.
+  if (await isNativeAppRequest()) return null;
+
   const consent = await readConsentCookie();
   if (consent !== null) return null;
 

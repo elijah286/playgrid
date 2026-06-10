@@ -7,6 +7,7 @@ import {
   shouldSuppressTracking,
 } from "@/lib/attribution/consent";
 import { getStoredMetaPixelId } from "@/lib/site/meta-pixel-config";
+import { isNativeAppRequest } from "@/lib/native/nativeRequest";
 
 // Meta (Facebook) Ads conversion pixel. Loads fbevents.js, fires PageView on
 // every page, and fires CompleteRegistration after a fresh signup so Meta's
@@ -28,6 +29,11 @@ import { getStoredMetaPixelId } from "@/lib/site/meta-pixel-config";
 // marker and strip only it, so the two pixels stay fully independent.
 
 export default async function MetaPixel() {
+  // Never load the conversion pixel inside the native app shell — App Store
+  // Guideline 5.1.2(i) requires App Tracking Transparency before any tracking,
+  // and we collect none in the app. Web visitors are unaffected.
+  if (await isNativeAppRequest()) return null;
+
   const PIXEL_ID = await getStoredMetaPixelId();
   if (!PIXEL_ID) return null;
 

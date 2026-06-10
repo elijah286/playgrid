@@ -171,7 +171,9 @@ export default function PrivacyPage() {
           </ul>
           <p className="mt-3">
             <strong>Inside the iOS / Android app:</strong> detailed in-app
-            product-usage event tracking and error reporting are turned off. The
+            product-usage event tracking and error reporting are turned off, and
+            the advertising-conversion pixels (Reddit, Meta) do not load — so the
+            app does not track you and shows no cookie-consent prompt. The
             native app collects the account info, content, and standard server
             logs above, plus: a per-install identifier together with your device
             platform, app version, and the dates the app was installed and last
@@ -243,7 +245,8 @@ export default function PrivacyPage() {
               ad clicks. This lets us see which ads work without
               uploading any personally identifying information. The
               pixel is suppressed for EU/UK visitors who have not
-              accepted tracking.
+              accepted tracking, and it does not load inside the iOS /
+              Android app.
             </li>
             <li>
               Meta (Facebook/Instagram) — when we run ads on Meta, the
@@ -252,7 +255,8 @@ export default function PrivacyPage() {
               reach similar coaches. It reports a page-view and a
               signup-completion event; we don&apos;t upload personally
               identifying information through it. The pixel is suppressed
-              for EU/UK visitors who have not accepted tracking.
+              for EU/UK visitors who have not accepted tracking, and it
+              does not load inside the iOS / Android app.
             </li>
             <li>
               Apple — if you choose &ldquo;Sign in with Apple,&rdquo; Apple

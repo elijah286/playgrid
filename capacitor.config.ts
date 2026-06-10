@@ -5,6 +5,14 @@ const useLiveSite = process.env.CAP_USE_LIVE !== "false";
 const config: CapacitorConfig = {
   appId: "com.xogridmaker.app",
   appName: "xogridmaker",
+  // Append a marker to the WebView User-Agent so the server can tell native-app
+  // requests apart from plain web browsers (both load the same live site via
+  // `server.url`). The server uses this to strip ad-conversion pixels and the
+  // cookie-consent banner from pages served inside the app — App Store
+  // Guideline 5.1.2(i): no tracking/cookies in the app without App Tracking
+  // Transparency. Must match `NATIVE_APP_UA_MARKER` in
+  // src/lib/native/nativeRequest.ts (enforced by capacitor-config.test.ts).
+  appendUserAgent: "XOGridmakerApp",
   // `webDir` is required by the CLI but unused when `server.url` is set.
   // We point it at `public/` so `cap sync` always has a valid directory.
   webDir: "public",

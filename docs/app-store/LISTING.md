@@ -225,6 +225,16 @@ To exercise the native-only features:
 
 Location permission is requested only inside Game Mode and is purely
 optional. Coaches who decline still get a fully working game session.
+
+Tracking / App Tracking Transparency (Guideline 5.1.2(i)): the app does
+not track users and requires no ATT prompt. Although the app loads our
+web content, the advertising-conversion pixels (Reddit, Meta) and the
+cookie-consent banner are disabled inside the app: the WebView's
+User-Agent carries an "XOGridmakerApp" marker that the server detects and
+uses to strip those tags from the page. As a result no third-party
+tracking cookies are set and no cookie prompt appears in the app. You can
+confirm this in the WebView's network log — no fbevents.js or
+redditstatic pixel requests fire.
 ```
 
 ---
