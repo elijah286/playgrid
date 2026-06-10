@@ -17,6 +17,7 @@ import { DEFAULT_LIBRARY_VARIANT } from "@/lib/learn/variant";
 import { getLibraryVariantCookie } from "@/lib/learn/variant-preference";
 import { CategoryNav } from "../CategoryNav";
 import { VariantPill } from "../VariantPill";
+import { LibraryConversionCta } from "../_components/LibraryConversionCta";
 
 // Canonical for this page points at the corresponding variant rollup
 // (/learn/library/plays/variant/{slug}). The rollup has the indexable
@@ -148,6 +149,8 @@ export default async function PlaysIndexPage(
           </li>
         ))}
       </ul>
+
+      <LibraryConversionCta surface="library-plays-index" />
 
       <p className="mt-10 text-xs text-muted">
         {concepts.length} concepts in {VARIANT_LABEL[variant]}

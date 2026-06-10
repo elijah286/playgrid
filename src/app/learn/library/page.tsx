@@ -27,6 +27,7 @@ import { withFullContext } from "@/lib/seo/ld-json";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
 import { VariantPill } from "./VariantPill";
 import { CategoryPill } from "./CategoryPill";
+import { LibraryConversionCta } from "./_components/LibraryConversionCta";
 import {
   DEFAULT_LIBRARY_CATEGORY,
   isLibraryCategory,
@@ -383,6 +384,8 @@ export default async function LibraryLandingPage(
       {activeNote ? (
         <p className="mt-8 text-xs text-muted">{activeNote}</p>
       ) : null}
+
+      <LibraryConversionCta surface="library-hub" />
     </div>
   );
 }

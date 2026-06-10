@@ -1484,6 +1484,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-04-29",
   },
   {
+    id: "library-conversion-cta",
+    name: "Football Library build-your-own CTA",
+    description:
+      "Every Football Library hub and category-index page ends with a conversion band that turns a read-only reference page into a path into the product. Anonymous visitors (the bulk of organic library traffic) see a 'Start your free playbook' button into the signup flow plus a 'Take the tour' secondary; signed-in coaches see 'Go to your playbooks' instead. Clicks fire a library_cta_click event so library → signup conversion is measurable. Added because ~9% of all sessions now enter cold via the library but were bouncing without ever reaching the builder.",
+    category: "Marketing site",
+    status: "ga",
+    addedDate: "2026-06-09",
+  },
+  {
     id: "admin-feature-list",
     name: "Feature catalog",
     description:
