@@ -8,6 +8,7 @@ import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { canUseAiFeatures } from "@/lib/billing/features";
 import { getCoachCalCostState } from "@/lib/billing/coach-cal-cost-cap";
 import { getCoachCalImageCapState } from "@/lib/billing/coach-cal-image-cap";
+import { COACH_CAL_IMAGE_UPLOADS_ENABLED } from "@/lib/coach-ai/image-upload";
 import type { CoachAiMode, ToolContext } from "@/lib/coach-ai/tools";
 import { getCoachCalVersion } from "@/lib/site/coach-cal-version";
 import { normalizePlaybookSettings } from "@/domain/playbook/settings";
@@ -243,6 +244,18 @@ export async function POST(req: Request): Promise<Response> {
   if (!text && !userImage) {
     return new Response(
       sseChunk("error", { message: "Empty message." }),
+      { status: 200, headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } },
+    );
+  }
+  // Coach Cal photo attachments are disabled (see COACH_CAL_IMAGE_UPLOADS_ENABLED).
+  // The client no longer surfaces the attach affordance, but we reject any image
+  // payload here at the trust boundary too so a stale/cached client — or a crafted
+  // request — can't reach the expensive vision path. The validation + cap logic
+  // below stays intact (and dead) so flipping the flag restores the feature whole.
+  if (userImage && !COACH_CAL_IMAGE_UPLOADS_ENABLED) {
+    return new Response(
+      sseChunk("error", { message: "Photo attachments aren't available in Coach Cal right now." }) +
+        sseChunk("done", { toolCalls: [], text: "" }),
       { status: 200, headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } },
     );
   }

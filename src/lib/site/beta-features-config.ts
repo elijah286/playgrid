@@ -24,10 +24,11 @@ const DEFAULTS: BetaFeatures = {
   play_comments: "off",
   version_history: "off",
   team_messaging: "off",
-  // Coach Cal photo/file upload. 2026-05-21: pulled back from
-  // general availability while the hand-drawn play-sheet vision
-  // pipeline is still unreliable. Default "off"; the admin sets
-  // scope="me" via the admin UI for site-admin-only testing.
+  // Coach Cal photo/file upload. 2026-06-11: hard-disabled in code via
+  // COACH_CAL_IMAGE_UPLOADS_ENABLED (unreliable vision pipeline + expensive
+  // per-image calls). This toggle is now INERT — both the client attach UI
+  // and the server image path are gated on that master switch, so flipping
+  // this scope has no effect until the switch is re-enabled.
   coach_ai_image_upload: "off",
   // Football Library — /learn/library and every concept/route page
   // under it. Public (un-gated 2026-05-26) so the catalog can be

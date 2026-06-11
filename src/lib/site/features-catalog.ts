@@ -1537,15 +1537,11 @@ export const FEATURES: FeatureEntry[] = [
     status: "ga",
     addedDate: "2026-05-19",
   },
-  {
-    id: "coach-cal-image-input",
-    name: "Coach Cal reads images (play sheets, wristcoaches, whiteboards)",
-    description:
-      "Coaches can attach a photo to a Coach Cal message — a wristcoach, a hand-drawn play sheet, a whiteboard, a chalkboard. Cal reads the image and walks through importing each drawn play into the playbook one at a time. Cal matches drawn shapes to catalog concepts (Snag, Mesh, Y-Cross, Verts, Levels, Stick, etc.) plus formation and strength, then asks for confirmation on each play before saving it under the coach's team-specific name (\"King\", \"Noah\", \"Money\"). Plays Cal can't confidently identify get a \"what concept is this?\" question rather than a wrong guess. Images are sent to Anthropic in-flight to extract content and never stored on our servers — Cal sees each image only on the turn it was attached. Hidden on Android pending the next Play Store data-safety form update; available on iOS and web. Capped at 10 image uploads per coach per calendar month.",
-    category: "Coach AI",
-    status: "ga",
-    addedDate: "2026-05-20",
-  },
+  // Coach Cal image input ("Cal reads play sheets / wristcoaches / whiteboards")
+  // was pulled 2026-06-11 — the hand-drawn vision pipeline was unreliable and the
+  // per-image vision calls were expensive. The capability is off end-to-end
+  // (see COACH_CAL_IMAGE_UPLOADS_ENABLED), so it's removed from the catalog
+  // rather than listed as GA. Restore this entry if the feature is re-enabled.
 ];
 
 /** Group features by category, preserving the order they appear in FEATURES. */

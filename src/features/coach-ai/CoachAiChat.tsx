@@ -33,6 +33,7 @@ import { createMessagePackCheckoutAction } from "@/app/actions/coach-cal-pack";
 import type { NoteProposal } from "@/lib/coach-ai/playbook-tools";
 import { readLivePlayDoc } from "@/lib/coach-ai/live-play-doc";
 import { useNativePlatform } from "@/lib/native/useIsNativeApp";
+import { COACH_CAL_IMAGE_UPLOADS_ENABLED } from "@/lib/coach-ai/image-upload";
 import { detectAutoAnchorTarget } from "./auto-anchor";
 
 type OutOfBudgetPayload = {
@@ -306,20 +307,18 @@ export function CoachAiChat({
     name: string;          // filename for the attachment indicator in chat history
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // TODO(re-enable image upload on Android): the paperclip button is hidden
-  // on Android because the Google Play submission disclosed a narrower set
-  // of data inputs than image upload introduces. Re-enable after the next
-  // Play resubmission updates the data-safety form. iOS + web remain on.
-  // See memory: feedback_image_upload_android_disabled.
-  //
-  // 2026-05-21: ALSO gated behind the `coach_ai_image_upload` beta flag
-  // because the hand-drawn play-sheet vision pipeline is currently
-  // unreliable (small pencil arrows, rounded routes, dashed motion are
-  // all hit-or-miss). Default scope is "off" site-wide; admin sets "me"
-  // for self-only testing in production. The two gates AND together:
-  // platform must allow it AND the flag must be on.
+  // Coach Cal photo attachments are DISABLED (2026-06-11): the hand-drawn
+  // play-sheet vision pipeline was unreliable (small pencil arrows, rounded
+  // routes, dashed motion all hit-or-miss) and per-image vision calls were
+  // expensive, so the feature was pulled. The leading `COACH_CAL_IMAGE_UPLOADS_ENABLED`
+  // hard-off keeps the paperclip and the paste-to-attach path from ever
+  // surfacing, regardless of the `coach_ai_image_upload` beta flag or platform;
+  // the server also rejects any image payload (api/coach-ai/stream) so a stale
+  // client can't reach the costly vision call. The original platform/flag
+  // conditions are kept so flipping the master switch restores prior behavior.
   const platform = useNativePlatform();
-  const imageInputEnabled = imageUploadAvailable && platform !== "android";
+  const imageInputEnabled =
+    COACH_CAL_IMAGE_UPLOADS_ENABLED && imageUploadAvailable && platform !== "android";
   const [streaming, setStreaming] = useState(false);
   const [statusText, setStatusText] = useState<string | null>(null);
   const [partialText, setPartialText] = useState("");
