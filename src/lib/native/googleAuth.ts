@@ -131,8 +131,25 @@ export async function signInWithGoogleNative(
   //     its token carries no nonce claim, so both-absent satisfies the gotrue
   //     check; supplying one risks a hash-direction mismatch.
   // Replay protection comes from the token's 1-hour expiry + HTTPS transport.
-  const rawNonce = nativePlatform() === "ios" ? randomNonce() : undefined;
+  const isIos = nativePlatform() === "ios";
+  const rawNonce = isIos ? randomNonce() : undefined;
   const hashedNonce = rawNonce ? await sha256Hex(rawNonce) : undefined;
+
+  // Force a fresh interactive sign-in on iOS. The @capgo iOS provider
+  // short-circuits to GIDSignIn.restorePreviousSignIn() once a session is
+  // cached (GoogleProvider.swift), returning a STALE id_token whose nonce was
+  // minted on an earlier attempt — so the nonce we generate now can never
+  // match it, a persistent "Nonces mismatch" even with the hash direction
+  // correct. Signing out first clears the cached session so login() performs a
+  // real sign-in that embeds the current nonce. Android (Credential Manager,
+  // already working) is left untouched.
+  if (isIos) {
+    try {
+      await SocialLogin.logout({ provider: "google" });
+    } catch {
+      // No active Google session to clear — expected on first sign-in.
+    }
+  }
 
   const login = await SocialLogin.login({
     provider: "google",

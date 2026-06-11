@@ -3,12 +3,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sha256Hex } from "./appleAuth";
 import { canUseNativeGoogleAuth, signInWithGoogleNative } from "./googleAuth";
 
-const { loginMock, initializeMock } = vi.hoisted(() => ({
+const { loginMock, initializeMock, logoutMock } = vi.hoisted(() => ({
   loginMock: vi.fn(),
   initializeMock: vi.fn(async () => {}),
+  logoutMock: vi.fn(async () => {}),
 }));
 vi.mock("@capgo/capacitor-social-login", () => ({
-  SocialLogin: { initialize: initializeMock, login: loginMock },
+  SocialLogin: {
+    initialize: initializeMock,
+    login: loginMock,
+    logout: logoutMock,
+  },
 }));
 
 /**
@@ -109,6 +114,8 @@ describe("signInWithGoogleNative nonce handling", () => {
       result: { responseType: "online", idToken: "fake-id-token" },
     });
     initializeMock.mockClear();
+    logoutMock.mockReset();
+    logoutMock.mockResolvedValue(undefined);
   });
 
   function makeSupabase() {
@@ -146,6 +153,20 @@ describe("signInWithGoogleNative nonce handling", () => {
     expect(pluginNonce).toBe(await sha256Hex(supabaseNonce as string));
   });
 
+  it("on iOS, signs out before login so the token isn't a stale cached session", async () => {
+    setCapacitor({ getPlatform: () => "ios", isPluginAvailable: () => true });
+    const { supabase } = makeSupabase();
+
+    await signInWithGoogleNative(supabase, WEB_CLIENT_ID, IOS_CLIENT_ID);
+
+    expect(logoutMock).toHaveBeenCalledWith({ provider: "google" });
+    // logout MUST precede login, or restorePreviousSignIn returns a stale
+    // token whose nonce can't match — the persistent "Nonces mismatch".
+    expect(logoutMock.mock.invocationCallOrder[0]).toBeLessThan(
+      loginMock.mock.invocationCallOrder[0],
+    );
+  });
+
   it("on Android, sends no nonce on either side", async () => {
     setCapacitor({ getPlatform: () => "android", isPluginAvailable: () => true });
     const { supabase, calls } = makeSupabase();
@@ -155,5 +176,7 @@ describe("signInWithGoogleNative nonce handling", () => {
     const loginArgs = loginMock.mock.calls[0][0] as { options: { nonce?: string } };
     expect(loginArgs.options.nonce).toBeUndefined();
     expect(calls[0].nonce).toBeUndefined();
+    // Android's working Credential Manager flow is left untouched.
+    expect(logoutMock).not.toHaveBeenCalled();
   });
 });
