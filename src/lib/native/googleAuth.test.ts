@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { sha256Hex } from "./appleAuth";
 import { canUseNativeGoogleAuth, signInWithGoogleNative } from "./googleAuth";
 
 const { loginMock, initializeMock } = vi.hoisted(() => ({
@@ -128,17 +129,21 @@ describe("signInWithGoogleNative nonce handling", () => {
     return { supabase, calls };
   }
 
-  it("on iOS, passes the same nonce to GIDSignIn and to signInWithIdToken", async () => {
+  it("on iOS, passes the HASHED nonce to GIDSignIn and the matching RAW nonce to Supabase", async () => {
     setCapacitor({ getPlatform: () => "ios", isPluginAvailable: () => true });
     const { supabase, calls } = makeSupabase();
 
     await signInWithGoogleNative(supabase, WEB_CLIENT_ID, IOS_CLIENT_ID);
 
     const loginArgs = loginMock.mock.calls[0][0] as { options: { nonce?: string } };
-    const sentNonce = loginArgs.options.nonce;
-    expect(sentNonce).toMatch(/^[0-9a-f]{32}$/);
-    // The exact same value must reach Supabase or gotrue rejects the token.
-    expect(calls[0].nonce).toBe(sentNonce);
+    const pluginNonce = loginArgs.options.nonce; // lands verbatim in the token
+    const supabaseNonce = calls[0].nonce; // raw — gotrue hashes it
+    expect(pluginNonce).toMatch(/^[0-9a-f]{64}$/); // SHA-256 hex
+    expect(supabaseNonce).toBeTruthy();
+    expect(supabaseNonce).not.toBe(pluginNonce);
+    // gotrue SHA-256s the raw nonce and compares to the token claim, so the
+    // token (plugin) nonce must equal sha256(rawNonce).
+    expect(pluginNonce).toBe(await sha256Hex(supabaseNonce as string));
   });
 
   it("on Android, sends no nonce on either side", async () => {
