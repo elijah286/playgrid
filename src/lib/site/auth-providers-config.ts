@@ -22,13 +22,27 @@ export type AuthProvidersConfig = {
 export async function getAuthProvidersConfig(): Promise<AuthProvidersConfig> {
   try {
     const admin = createServiceRoleClient();
-    const { data, error } = await admin
+    // Select the iOS client ID column too, but tolerate its absence: until the
+    // google_oauth_ios_client_id migration is applied in prod, that column
+    // doesn't exist and the select errors. Rather than let a deploy/migration
+    // ordering gap blank out every OAuth button on the live login page, fall
+    // back to the always-present columns and treat the iOS ID as unset.
+    let { data, error } = await admin
       .from("site_settings")
       .select(
         "apple_signin_enabled, google_signin_enabled, google_oauth_web_client_id, google_oauth_ios_client_id",
       )
       .eq("id", SITE_ROW_ID)
       .maybeSingle();
+    if (error) {
+      ({ data, error } = await admin
+        .from("site_settings")
+        .select(
+          "apple_signin_enabled, google_signin_enabled, google_oauth_web_client_id",
+        )
+        .eq("id", SITE_ROW_ID)
+        .maybeSingle());
+    }
     if (error || !data) {
       return {
         apple: false,
