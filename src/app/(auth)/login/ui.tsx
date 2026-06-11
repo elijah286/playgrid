@@ -8,10 +8,12 @@ export function LoginForm({
   appleEnabled,
   googleEnabled,
   googleOAuthWebClientId,
+  googleOAuthIosClientId,
 }: {
   appleEnabled: boolean;
   googleEnabled: boolean;
   googleOAuthWebClientId: string | null;
+  googleOAuthIosClientId: string | null;
 }) {
   const searchParams = useSearchParams();
   const nextParam = searchParams.get("next") ?? "";
@@ -85,6 +87,7 @@ export function LoginForm({
         appleEnabled={appleEnabled}
         googleEnabled={googleEnabled}
         googleOAuthWebClientId={googleOAuthWebClientId}
+        googleOAuthIosClientId={googleOAuthIosClientId}
       />
     </div>
   );

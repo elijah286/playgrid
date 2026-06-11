@@ -15,28 +15,32 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { nativePlatform } from "./isNativeApp";
 
-let initializedForClientId: string | null = null;
+let initializedForKey: string | null = null;
 let initPromise: Promise<unknown> | null = null;
 
-async function ensureInitialized(webClientId: string) {
-  // Re-initialize if the client ID changed (e.g., admin rotated it
+async function ensureInitialized(webClientId: string, iosClientId?: string | null) {
+  // Re-initialize if either client ID changed (e.g., admin rotated one
   // mid-session). The plugin's initialize() is safe to call multiple
   // times; later calls overwrite the prior config.
-  if (initializedForClientId === webClientId && initPromise) return initPromise;
+  const key = `${webClientId}|${iosClientId ?? ""}`;
+  if (initializedForKey === key && initPromise) return initPromise;
   initPromise = (async () => {
     const { SocialLogin } = await import("@capgo/capacitor-social-login");
     await SocialLogin.initialize({
       google: {
+        // Android reads webClientId. iOS reads iOSClientId (the system
+        // Google SDK's clientID, an iOS-type OAuth client) plus
+        // iOSServerClientId — the web client ID, per the plugin docs — so
+        // the minted ID token's audience is one Supabase already trusts.
         webClientId,
-        // iOSClientId left unset until the iOS OAuth client is created
-        // in Google Cloud (separate ClientID per platform). Wire it
-        // through site_settings the same way when iOS ships.
+        iOSClientId: iosClientId ?? undefined,
+        iOSServerClientId: iosClientId ? webClientId : undefined,
         mode: "online",
       },
     });
     return SocialLogin;
   })();
-  initializedForClientId = webClientId;
+  initializedForKey = key;
   return initPromise;
 }
 
@@ -50,25 +54,35 @@ async function ensureInitialized(webClientId: string) {
  * plugin was added will load the new JS but lacks the native bridge
  * code, so we hide the button rather than crash on click.
  *
- * The iOS exclusion matters because iOS native sign-in needs a separate
- * iOS OAuth client: `iOSClientId` plumbed through site_settings AND the
+ * iOS needs its own iOS-type OAuth client: `iosClientId` plumbed through
+ * site_settings (the @capgo plugin's iOS `initialize()` ignores
+ * `webClientId` and registers no provider without an `iOSClientId`, which
+ * produced the "No provider was initialized" red error) AND the
  * reversed-client-ID URL scheme baked into the iOS binary's Info.plist.
- * Neither exists yet — `ensureInitialized` only passes `webClientId`,
- * which the @capgo plugin's iOS `initialize()` ignores entirely, so it
- * registers no provider and rejects with "No provider was initialized"
- * (the red error coaches saw). Until the iOS client ships, hide the
- * button on iOS so those users fall back to email / Apple sign-in.
+ * When no iOS client ID is configured we hide the button on iOS so those
+ * users fall back to email / Apple sign-in.
  */
 export function canUseNativeGoogleAuth(
   webClientId: string | null | undefined,
+  iosClientId?: string | null | undefined,
 ): boolean {
-  if (!webClientId) return false;
   if (typeof window === "undefined") return false;
-  if (nativePlatform() !== "android") return false;
+  const platform = nativePlatform();
+  if (platform === "web") return false;
+  // Per-platform credential requirement: Android signs in with the web
+  // client ID; iOS needs its own iOS-type client ID (the web client ID
+  // rides along as the server client, but the SDK won't init without the
+  // iOS one). Require the right credential so we never show a button that
+  // can't complete the flow.
+  if (platform === "android" && !webClientId) return false;
+  if (platform === "ios" && !iosClientId) return false;
   const cap = (window as unknown as {
     Capacitor?: { isPluginAvailable?: (name: string) => boolean };
   }).Capacitor;
   try {
+    // Guards old builds: JS is fetched from the live site, but an installed
+    // binary that predates the SocialLogin plugin lacks the native bridge,
+    // so hide the button rather than crash on click.
     return cap?.isPluginAvailable?.("SocialLogin") ?? false;
   } catch {
     return false;
@@ -90,9 +104,10 @@ export type NativeGoogleSignInResult = {
 export async function signInWithGoogleNative(
   supabase: SupabaseClient,
   webClientId: string,
+  iosClientId?: string | null,
 ): Promise<NativeGoogleSignInResult> {
   const { SocialLogin } = await import("@capgo/capacitor-social-login");
-  await ensureInitialized(webClientId);
+  await ensureInitialized(webClientId, iosClientId);
 
   // Don't pass `scopes` here — the @capgo plugin rejects scope requests
   // unless MainActivity.java is modified to handle the auth-code callback

@@ -84,6 +84,10 @@ export type AuthFlowProps = {
    *  Google button is hidden inside the Capacitor wrapper. Web sign-in
    *  flow ignores this value (goes through Supabase-hosted OAuth). */
   googleOAuthWebClientId?: string | null;
+  /** Google OAuth **iOS** Client ID from site_settings. Required (on top of
+   *  the web client ID) for native Google sign-in on iOS — when null/empty
+   *  the Google button is hidden on iOS. Android ignores it. */
+  googleOAuthIosClientId?: string | null;
 };
 
 export type Step =
@@ -115,6 +119,7 @@ export function AuthFlow({
   appleEnabled = false,
   googleEnabled = false,
   googleOAuthWebClientId = null,
+  googleOAuthIosClientId = null,
 }: AuthFlowProps) {
   const { toast } = useToast();
 
@@ -124,7 +129,8 @@ export function AuthFlow({
   // Supabase-hosted OAuth flow.
   const native = useIsNativeApp();
   const hideGoogleOnNative =
-    native && !canUseNativeGoogleAuth(googleOAuthWebClientId);
+    native &&
+    !canUseNativeGoogleAuth(googleOAuthWebClientId, googleOAuthIosClientId);
 
   // Apple button visibility:
   //  - Web (and any non-native browser, incl. Windows/Android laptops):
@@ -231,6 +237,7 @@ export function AuthFlow({
       const { isFreshSignup } = await signInWithGoogleNative(
         supabase,
         googleOAuthWebClientId,
+        googleOAuthIosClientId,
       );
 
       if (inviteCode) {
