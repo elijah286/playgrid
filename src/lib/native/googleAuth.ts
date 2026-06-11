@@ -18,6 +18,19 @@ import { nativePlatform } from "./isNativeApp";
 let initializedForKey: string | null = null;
 let initPromise: Promise<unknown> | null = null;
 
+/**
+ * Cryptographically-random hex nonce for the iOS native Google flow. We pass
+ * the same value to GIDSignIn (which embeds it verbatim in the ID token's
+ * OIDC `nonce` claim) and to Supabase's `signInWithIdToken`, so the token's
+ * nonce and the passed nonce match. See the per-platform rationale in
+ * `signInWithGoogleNative`.
+ */
+function generateNonce(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 async function ensureInitialized(webClientId: string, iosClientId?: string | null) {
   // Re-initialize if either client ID changed (e.g., admin rotated one
   // mid-session). The plugin's initialize() is safe to call multiple
@@ -116,16 +129,25 @@ export async function signInWithGoogleNative(
   // automatically embeds the email + profile claims in the JWT via the
   // implicit `openid profile email` scopes — no explicit request needed.
   //
-  // No `nonce` either: Google's Credential Manager API may or may not
-  // SHA-256 hash the nonce before embedding it in the JWT claim depending
-  // on the SDK version, and Supabase compares the value verbatim for
-  // Google providers (it doesn't hash like it does for Apple). The
-  // resulting ambiguity produces "Nonces mismatch" rejection. Matches
-  // Supabase's own React Native example for Google sign-in. Replay
-  // protection comes from the token's 1-hour expiry + HTTPS transport.
+  // Nonce handling is per-platform:
+  //   • iOS: GoogleSignIn-iOS (GIDSignIn) ALWAYS stamps a `nonce` claim into
+  //     the ID token. If we don't supply one it generates a random nonce we
+  //     can't read back (the plugin's response omits it), so Supabase — which
+  //     requires the passed nonce and the token's nonce to BOTH exist or BOTH
+  //     be absent — rejects with "Passed nonce and nonce in id_token should
+  //     either both exist or not." So we supply our own: GIDSignIn forwards it
+  //     to Google as the OIDC nonce, Google echoes it verbatim into the token,
+  //     and Supabase compares it verbatim for Google. Raw value, both sides.
+  //   • Android (Credential Manager): left nonce-free. It may SHA-256 hash the
+  //     nonce before embedding while Supabase compares verbatim for Google
+  //     (a "Nonces mismatch"); with no nonce requested its token carries no
+  //     nonce claim, so both-absent satisfies the gotrue check.
+  // Replay protection comes from the token's 1-hour expiry + HTTPS transport.
+  const nonce = nativePlatform() === "ios" ? generateNonce() : undefined;
+
   const login = await SocialLogin.login({
     provider: "google",
-    options: {},
+    options: nonce ? { nonce } : {},
   });
 
   if (login.result.responseType !== "online" || !login.result.idToken) {
@@ -135,6 +157,8 @@ export async function signInWithGoogleNative(
   const { data, error } = await supabase.auth.signInWithIdToken({
     provider: "google",
     token: login.result.idToken,
+    // Matches the nonce GIDSignIn embedded; undefined on Android (no nonce).
+    nonce,
   });
   if (error) throw error;
 
