@@ -133,14 +133,18 @@ export function AuthFlow({
     !canUseNativeGoogleAuth(googleOAuthWebClientId, googleOAuthIosClientId);
 
   // Apple button visibility:
-  //  - Web (and any non-native browser, incl. Windows/Android laptops):
-  //    always show when enabled — uses Supabase-hosted Apple OAuth.
+  //  - Web (any non-native browser): TEMPORARILY HIDDEN. The Supabase-hosted
+  //    Apple OAuth is broken — its provider config sends Apple the bundle ID
+  //    (com.xogridmaker.app) as the web client_id instead of the Services ID
+  //    (com.xogridmaker.signin), so Apple rejects with "invalid_request —
+  //    Invalid client id or web redirect url". Re-enable by restoring `!native ||`
+  //    once the Supabase Apple provider Client IDs are fixed (2026-06-11).
   //  - iOS native: show only when the SocialLogin plugin is registered in
   //    the running build (older builds predate it), so we use the native
-  //    Sign in with Apple sheet instead of a broken web redirect.
+  //    Sign in with Apple sheet (which works — it uses the App ID directly).
   //  - Android native: hidden (those users have Google + email).
   const appleNativeUsable = canUseNativeAppleAuth();
-  const showAppleButton = appleEnabled && (!native || appleNativeUsable);
+  const showAppleButton = appleEnabled && appleNativeUsable;
 
   const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/home";
 
