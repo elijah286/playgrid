@@ -64,7 +64,7 @@
 			     SocialLogin plugin passes to GIDConfiguration at runtime). -->
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.716964848952-3s6rg7551v66dmr4j5lsaj83r41taghg</string>
+				<string>com.googleusercontent.apps.624839566857-8ik9pdt7mv9sojjqn86cik8oc97kpvn6</string>
 			</array>
 		</dict>
 	</array>
