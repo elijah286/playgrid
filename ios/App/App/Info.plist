@@ -55,5 +55,18 @@
 	<string>xogridmaker accesses your photo library so you can choose an image for your profile or team logo, or share a play sheet with Coach Cal.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<!-- Reversed iOS OAuth client ID, required by the Google Sign-In
+			     SDK so the auth redirect returns to the app. Must match the
+			     iOS client ID configured in Site Admin (which the @capgo
+			     SocialLogin plugin passes to GIDConfiguration at runtime). -->
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.716964848952-3s6rg7551v66dmr4j5lsaj83r41taghg</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
