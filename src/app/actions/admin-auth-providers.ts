@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import {
   setAppleSigninEnabled,
+  setGoogleOAuthIosClientId,
   setGoogleOAuthWebClientId,
   setGoogleSigninEnabled,
 } from "@/lib/site/auth-providers-config";
@@ -63,6 +64,27 @@ export async function setGoogleOauthWebClientIdAction(clientId: string) {
   }
   try {
     await setGoogleOAuthWebClientId(trimmed.length > 0 ? trimmed : null);
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : "Save failed." };
+  }
+  revalidatePath("/login");
+  return { ok: true as const, clientId: trimmed.length > 0 ? trimmed : null };
+}
+
+export async function setGoogleOauthIosClientIdAction(clientId: string) {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth;
+  const trimmed = clientId.trim();
+  // Same light shape check as the web client ID — real validation happens at
+  // sign-in time against Google's JWKS. Guards against obvious paste mistakes.
+  if (trimmed.length > 0 && !trimmed.endsWith(".apps.googleusercontent.com")) {
+    return {
+      ok: false as const,
+      error: "Client ID should end in .apps.googleusercontent.com",
+    };
+  }
+  try {
+    await setGoogleOAuthIosClientId(trimmed.length > 0 ? trimmed : null);
   } catch (e) {
     return { ok: false as const, error: e instanceof Error ? e.message : "Save failed." };
   }

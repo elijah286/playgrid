@@ -485,6 +485,7 @@ export function SettingsClient({
                 anthropicAdminKey,
                 openaiAdminKey,
                 googleOAuthWebClientId: initialGoogleOAuthWebClientId,
+                googleOAuthIosClientId: initialGoogleOAuthIosClientId,
               } = d;
               return (
                 <div className="space-y-4">
@@ -618,7 +619,10 @@ export function SettingsClient({
                   )}
 
                   <GoogleNativeSigninSettingsClient
-                    initial={{ clientId: initialGoogleOAuthWebClientId }}
+                    initial={{
+                      clientId: initialGoogleOAuthWebClientId,
+                      iosClientId: initialGoogleOAuthIosClientId,
+                    }}
                   />
                 </div>
               );

@@ -163,6 +163,7 @@ export async function loadIntegrationsTabData() {
         }
       : NO_ADMIN_KEY,
     googleOAuthWebClientId: authProviders.googleOAuthWebClientId,
+    googleOAuthIosClientId: authProviders.googleOAuthIosClientId,
   };
 }
 
