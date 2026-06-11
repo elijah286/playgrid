@@ -290,18 +290,30 @@ export function AuthFlow({
       hardNavigate(isFreshSignup ? withSignupMarkers(safeNext) : safeNext);
       return; // keep pending true through navigation
     } catch (e: unknown) {
-      // The plugin rejects when the user dismisses the Apple sheet. Don't
-      // surface an error for an intentional cancellation — just reset.
+      // The plugin rejects when the user dismisses the Apple sheet. A clean
+      // cancellation (code 1001 / USER_CANCELLED) just resets the button.
       const code = (e as { code?: string } | null)?.code;
       const msg = e instanceof Error ? e.message.toLowerCase() : "";
       const cancelled =
         code === "USER_CANCELLED" ||
         code === "1001" ||
+        msg.includes("error 1001") ||
         msg.includes("canceled") ||
         msg.includes("cancelled");
       if (!cancelled) {
+        // Other ASAuthorization failures — notably error 1000 ("unknown"),
+        // which fires when no iCloud account is signed in on the device —
+        // shouldn't dump a raw native error string at the coach. Show a
+        // friendly note that points at the likely cause and alternatives.
+        const isNativeAppleError =
+          msg.includes("authorizationerror") ||
+          msg.includes("authenticationservices");
         setFormError(
-          e instanceof Error ? e.message : "Could not start Apple sign-in.",
+          isNativeAppleError
+            ? "Apple sign-in couldn't be completed — make sure you're signed in to iCloud on this device, or continue with Google or email."
+            : e instanceof Error
+              ? e.message
+              : "Could not start Apple sign-in.",
         );
       }
       setPending(false);
