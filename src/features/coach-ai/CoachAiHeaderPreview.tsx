@@ -145,6 +145,7 @@ export function CoachAiHeaderPreview({
           another "window within the window". */}
       <div className="border-t border-border bg-surface-raised px-3 pb-3 pt-3">
         <button
+          data-web-only
           type="button"
           disabled={pending}
           onClick={handleCtaClick}

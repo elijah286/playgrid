@@ -145,6 +145,7 @@ export function MobileNavMenu({ authed, footballLibraryAvailable = false, feedba
                   <div className="my-1 h-px bg-border" />
                   <Link
                     href="/pricing"
+                    data-web-only
                     onClick={() => setOpen(false)}
                     className="block rounded-lg px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-inset"
                   >

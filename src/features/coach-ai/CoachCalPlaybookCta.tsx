@@ -186,6 +186,7 @@ export function CoachCalPlaybookCta({
               router.push("/checkout?tier=coach&interval=month");
             });
           }}
+          data-web-only
           className="mt-3 flex w-full items-center justify-center rounded-xl py-2 text-sm font-semibold text-white shadow transition hover:opacity-90 disabled:opacity-60"
           style={{ background: GRADIENT }}
         >
