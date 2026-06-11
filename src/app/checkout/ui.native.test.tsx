@@ -11,9 +11,9 @@ import { createRoot } from "react-dom/client";
 // that got build 1.0 (2) rejected (ungated "Upgrade to Team Coach" → /checkout).
 
 const createSession = vi.hoisted(() =>
-  vi.fn(async (_opts: { tier: string; interval: string }) => ({
+  vi.fn(async (opts: { tier: string; interval: string }) => ({
     ok: true as const,
-    clientSecret: "cs_test_123",
+    clientSecret: `cs_${opts.tier}_${opts.interval}`,
     publishableKey: "pk_test_123",
   })),
 );

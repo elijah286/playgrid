@@ -13,6 +13,7 @@ import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { canUseAiFeatures } from "@/lib/billing/features";
 import { getBetaFeatures, isBetaFeatureAvailable } from "@/lib/site/beta-features-config";
 import { OfflineAutoRefreshMount } from "@/components/offline/OfflineAutoRefreshMount";
+import { NativeWelcomeSpotlight } from "@/components/native/NativeWelcomeSpotlight";
 import { HomeBottomNav } from "./home/HomeBottomNav";
 
 // Auth is NOT enforced here. Anon visitors may reach example-playbook
@@ -94,6 +95,7 @@ export default async function DashboardLayout({
       {expirationNotice && <ExpirationBanner notice={expirationNotice} />}
       <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
       <NameCapturePrompt needed={nameCaptureNeeded} />
+      {user && <NativeWelcomeSpotlight />}
       <TimeOnSiteTracker />
       {feedbackSettings.enabled && (
         <FeedbackWidget

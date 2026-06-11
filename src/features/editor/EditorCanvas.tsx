@@ -6,6 +6,7 @@ import type { PlayCommand } from "@/domain/play/commands";
 import type { Player, Point2, Route, RouteNode, RouteSegment } from "@/domain/play/types";
 import type { UserRouteTemplatesHook } from "./useUserRouteTemplates";
 import { deriveLabelColor } from "@/domain/play/labelColor";
+import { hapticImpact, hapticSelection } from "@/lib/native/haptics";
 import {
   routeToRenderedSegments,
   simplifyPolyline,
@@ -1188,6 +1189,8 @@ function EditorCanvasImpl({
           };
           setInteraction(next);
           interactionRef.current = next;
+          // Tactile tick when a player is picked up (native only; no-op on web).
+          void hapticSelection();
           return;
         }
 
@@ -1407,6 +1410,8 @@ function EditorCanvasImpl({
               });
               if (activeStrokePattern === "motion") onActiveStrokePatternChange?.("solid");
               onSelectNode(newNode.id);
+              // Tactile tick when placing a route waypoint (native only).
+              void hapticImpact("light");
             } else if (selectedPlayerId) {
               const player = doc.layers.players.find((p) => p.id === selectedPlayerId);
               if (player) {

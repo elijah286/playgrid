@@ -42,6 +42,16 @@ export type FeatureEntry = {
 };
 
 export const FEATURES: FeatureEntry[] = [
+  // ── Calendar & scheduling ────────────────────────────────────────
+  {
+    id: "native-game-practice-reminders",
+    name: "Game & practice reminders (app)",
+    description:
+      "Set on-device reminders for upcoming games and practices from the installed app. Alerts are scheduled locally and fire even with no signal and when the app is closed, so a coach gets a heads-up before kickoff to pull up the right plays. App-only; the mobile-web build shows an install nudge instead.",
+    category: "Calendar & scheduling",
+    status: "ga",
+    addedDate: "2026-06-11",
+  },
   // ── Onboarding & help ────────────────────────────────────────────
   {
     id: "tutorial-play-authoring",

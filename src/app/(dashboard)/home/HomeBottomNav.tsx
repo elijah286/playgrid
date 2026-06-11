@@ -3,10 +3,11 @@
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { BookOpen, Calendar, CreditCard, GraduationCap, Inbox, Loader2, LogOut, MoreHorizontal, Shield, User } from "lucide-react";
+import { Bell, BookOpen, Calendar, CreditCard, GraduationCap, Inbox, Loader2, LogOut, MoreHorizontal, Shield, User } from "lucide-react";
 import { CalNavButton } from "@/features/coach-ai/CalNavButton";
 import { useInboxBadge } from "@/features/dashboard/InboxBadgeContext";
 import { signOutAction } from "@/app/actions/auth";
+import { useIsNativeApp } from "@/lib/native/useIsNativeApp";
 
 /**
  * Mobile-first bottom nav rendered at the dashboard layout level.
@@ -53,6 +54,7 @@ export function HomeBottomNav({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { count: inboxCount, urgent: inboxUrgent } = useInboxBadge();
+  const native = useIsNativeApp();
   const [moreOpen, setMoreOpen] = useState(false);
   useEffect(() => {
     if (!moreOpen) return;
@@ -141,6 +143,11 @@ export function HomeBottomNav({
           items={[
             { label: "Account", href: "/account", Icon: User },
             { label: "Learning Center", href: "/learn", Icon: GraduationCap },
+            // Native-only: on-device game/practice reminders (local
+            // notifications don't exist in the mobile-web build).
+            ...(native
+              ? [{ label: "Reminders", href: "/reminders", Icon: Bell }]
+              : []),
             ...(isAdmin
               ? [
                   { label: "Billing", href: "/account?tab=billing", Icon: CreditCard },
