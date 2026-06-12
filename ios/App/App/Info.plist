@@ -49,6 +49,12 @@
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>xogridmaker tags your game sessions with the field you played at so you can review them later. Sharing your location is optional.</string>
+	<!-- The @capacitor/geolocation plugin references the "Always" location
+	     authorization API, so Apple's static scan (ITMS-90683) requires this
+	     purpose string even though the app only ever requests "when in use"
+	     location. The string is honest about that. -->
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>xogridmaker only uses your location while you’re using the app, to tag a game session with the field you’re playing at. It is never used in the background, and sharing your location is optional.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>xogridmaker uses the camera so you can take a photo for your profile or team logo, or share a snapshot of a play sheet with Coach Cal.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
