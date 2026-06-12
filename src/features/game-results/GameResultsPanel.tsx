@@ -147,7 +147,18 @@ export function GameResultsPanel({
               Review every called play, win-rate, and tag from your games.
             </p>
           </div>
-          <div className="rounded-2xl border border-dashed border-border bg-surface-raised p-8 text-center">
+          {/* Native (App Store 3.1.1/3.1.3(b)): no in-app marketing of paid
+              tiers or upgrade CTAs — neutral note instead of the upsell. */}
+          <div
+            data-native-only
+            className="rounded-2xl border border-dashed border-border bg-surface-raised p-8 text-center text-sm text-muted"
+          >
+            Game results aren’t included in your current plan.
+          </div>
+          <div
+            data-web-only
+            className="rounded-2xl border border-dashed border-border bg-surface-raised p-8 text-center"
+          >
             <div className="mx-auto mb-3 inline-flex size-10 items-center justify-center rounded-lg bg-brand-green text-white">
               <Gamepad2 className="size-5" />
             </div>

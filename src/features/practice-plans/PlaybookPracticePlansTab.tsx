@@ -45,7 +45,18 @@ function PracticePlansUpgradePanel() {
           Reusable practice templates. Attach to a calendar event when you&apos;re ready.
         </p>
       </div>
-      <div className="rounded-2xl border border-dashed border-border bg-surface-raised p-8 text-center">
+      {/* Native (App Store 3.1.1/3.1.3(b)): no in-app marketing of paid tiers
+          or upgrade CTAs — show a neutral note instead of the upsell. */}
+      <div
+        data-native-only
+        className="rounded-2xl border border-dashed border-border bg-surface-raised p-8 text-center text-sm text-muted"
+      >
+        Practice plans aren’t included in your current plan.
+      </div>
+      <div
+        data-web-only
+        className="rounded-2xl border border-dashed border-border bg-surface-raised p-8 text-center"
+      >
         <div className="mx-auto mb-3 inline-flex size-10 items-center justify-center rounded-lg bg-brand-green text-white">
           <ClipboardList className="size-5" />
         </div>

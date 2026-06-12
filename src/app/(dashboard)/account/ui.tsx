@@ -33,6 +33,7 @@ import { resendCoachInviteAction } from "@/app/actions/invites";
 import { setAiFeedbackOptInAction } from "@/app/actions/coach-ai-feedback";
 import { removeCoachAccessAction } from "@/app/actions/playbook-roster";
 import { useTheme } from "@/components/theme/ThemeProvider";
+import { useIsNativeApp } from "@/lib/native/useIsNativeApp";
 import type { ColorSchemePreference } from "@/components/theme/colorModeStorage";
 import { cn } from "@/lib/utils";
 import { PASSWORD_RULES_LABEL, validatePassword } from "@/lib/auth/password";
@@ -862,17 +863,28 @@ function PlanCapabilityList({ tier }: { tier: "free" | "coach" | "coach_ai" }) {
   };
   const viewerRank = rank[tier];
 
+  // App Store 3.1.1 / 3.1.3(b): the native app must not display higher paid
+  // tiers or the features they unlock — that markets a subscription in-app,
+  // which is exactly what got the Account page flagged. On native, show ONLY
+  // the capabilities this account already includes; never the locked rows or
+  // their tier badges. Web is unchanged.
+  const native = useIsNativeApp();
+  const visibleRows = native
+    ? rows.filter((r) => rank[r.includedAt] <= viewerRank)
+    : rows;
+
   return (
     <div className="rounded-md border border-border bg-surface px-3 py-3">
       <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
         What you have on {TIER_LABEL[tier]}
       </p>
       <ul className="space-y-1.5 text-xs">
-        {rows.map((r) => {
+        {visibleRows.map((r) => {
           const included = rank[r.includedAt] <= viewerRank;
           return (
             <li
               key={r.label}
+              data-web-only={included ? undefined : ""}
               className={`flex items-center gap-2 ${
                 included ? "text-foreground" : "text-muted"
               }`}

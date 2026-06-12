@@ -3,6 +3,7 @@
 import { Lock } from "lucide-react";
 import { SegmentedControl } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { useIsNativeApp } from "@/lib/native/useIsNativeApp";
 import {
   defaultPlaybookPrintRunConfig,
   PLAYBOOK_COLUMN_OPTIONS,
@@ -185,6 +186,9 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all", ca
     onChange({ ...config, ...partial });
   }
 
+  // Native (App Store 3.1.1): don't name the paid tier in the UI. The Lock
+  // icon still marks the option as unavailable.
+  const native = useIsNativeApp();
   const showLayout = section === "all" || section === "layout";
   const showVisuals = section === "all" || section === "visuals";
   const showLabels = section === "all" || section === "text" || section === "labels";
@@ -206,7 +210,7 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all", ca
               { value: "playsheet" as const, label: "Playsheet" },
               {
                 value: "wristband" as const,
-                label: canUseWristbands ? "Wristband" : "Wristband (Team Coach)",
+                label: canUseWristbands || native ? "Wristband" : "Wristband (Team Coach)",
                 icon: canUseWristbands ? undefined : Lock,
               },
             ]}
