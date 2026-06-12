@@ -853,7 +853,9 @@ function PlanCapabilityList({ tier }: { tier: "free" | "coach" | "coach_ai" }) {
     { label: "Co-coaches and team sharing", includedAt: "coach" },
     { label: "Game Mode (sideline call sheet)", includedAt: "coach" },
     { label: "Wristband cards + watermark-free print", includedAt: "coach" },
-    { label: "Coach Cal AI assistant", includedAt: "coach_ai" },
+    // Coach Cal AI was folded into Team Coach on 2026-05-27 — it's no longer a
+    // separate "Coach Pro" tier, so it belongs in the single paid tier.
+    { label: "Coach Cal AI assistant", includedAt: "coach" },
   ];
 
   const rank: Record<"free" | "coach" | "coach_ai", number> = {
