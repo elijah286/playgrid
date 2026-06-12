@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button, Input, LogoPicker, useToast } from "@/components/ui";
 import { acceptExamplePlaybookAction } from "@/app/actions/example-claim";
 import { track } from "@/lib/analytics/track";
+import { isNativeApp } from "@/lib/native/isNativeApp";
 
 const PALETTE = [
   "#F26522", "#EF4444", "#EAB308", "#22C55E",
@@ -38,7 +39,9 @@ export function ClaimExampleForm({
   function claim() {
     if (blockedByQuota) {
       toast(
-        "You've already used your free playbook slot. Upgrade to Team Coach to claim this one alongside it.",
+        isNativeApp()
+          ? "You've already used your free playbook slot. Delete it first to claim this one."
+          : "You've already used your free playbook slot. Upgrade to Team Coach to claim this one alongside it.",
         "error",
       );
       return;

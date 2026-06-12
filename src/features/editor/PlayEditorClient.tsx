@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Archive as ArchiveIcon, ChevronDown, ChevronLeft, ChevronRight, FlaskConical, GraduationCap, RotateCcw } from "lucide-react";
 import { registerReloadGuard } from "@/lib/native/reloadGuard";
+import { isNativeApp } from "@/lib/native/isNativeApp";
 import type { EndDecoration, PlayDocument, Player, Point2, Route, SegmentShape, StrokePattern, VsPlaySnapshot } from "@/domain/play/types";
 import type { SavedFormation } from "@/app/actions/formations";
 import { saveFormationAction } from "@/app/actions/formations";
@@ -2793,8 +2794,12 @@ function PlayEditorClientInner({
               title: cap
                 ? `Free tier is capped at ${cap} plays per playbook`
                 : "You've hit the free-tier play cap",
-              message:
-                "Upgrade to Team Coach ($9/mo or $99/yr) to copy this play and add unlimited plays per playbook.",
+              // On native (iOS/Android) we must not surface price or an
+              // upgrade steer — Apple Guideline 3.1.1 forbids pointing users
+              // at an external purchase flow. Web keeps the full upsell.
+              message: isNativeApp()
+                ? "Copying plays isn’t available on your current plan."
+                : "Upgrade to Team Coach ($9/mo or $99/yr) to copy this play and add unlimited plays per playbook.",
             });
           }}
           onCopied={(result) => {

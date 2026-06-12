@@ -229,6 +229,7 @@ export function CoachCalCostMeter({ refreshTick }: { refreshTick: number }) {
           {showBuyMore && (
             <button
               type="button"
+              data-web-only
               onClick={() => void buyMore()}
               disabled={packPending}
               className={`mt-3 flex w-full items-center justify-between gap-1 rounded-lg px-3 py-2 text-[12px] font-medium transition-colors disabled:opacity-60 ${

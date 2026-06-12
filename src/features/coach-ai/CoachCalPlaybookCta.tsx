@@ -192,8 +192,13 @@ export function CoachCalPlaybookCta({
         >
           {pending ? "Opening checkout…" : ctaLabel}
         </button>
-        <p className="mt-1.5 text-center text-[10px] text-muted">
+        <p data-web-only className="mt-1.5 text-center text-[10px] text-muted">
           {ctaSubtitle}
+        </p>
+        {/* Native (iOS) shows no price or upgrade CTA — Apple 3.1.1. A
+            neutral line keeps the card from ending on the description alone. */}
+        <p data-native-only className="mt-3 text-center text-[12px] text-muted">
+          Coach Cal isn’t included in your current plan.
         </p>
         {err ? (
           <p className="mt-1 text-center text-[10px] text-red-700">{err}</p>

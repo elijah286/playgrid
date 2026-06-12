@@ -177,8 +177,11 @@ function LockedCard() {
         <div className="border-t border-border px-3 py-3">
           <p className="text-xs text-muted">
             See how often this play was called and how well it worked across
-            every game and scrimmage. Results are powered by Game Mode, which
-            requires a Team Coach plan.
+            every game and scrimmage. Results are powered by Game Mode, which{" "}
+            {/* On native (iOS/Android) the plan name + upgrade CTA are
+                hidden per Apple Guideline 3.1.1; show a neutral note. */}
+            <span data-web-only>requires a Team Coach plan.</span>
+            <span data-native-only>isn’t included in your current plan.</span>
           </p>
           <Link
             href="/pricing?upgrade=game-mode"

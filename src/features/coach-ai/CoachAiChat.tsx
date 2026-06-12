@@ -1337,12 +1337,15 @@ export function CoachAiChat({
               </p>
               <p className="mt-1 text-amber-800/90 dark:text-amber-100/90">
                 Resets {formatBudgetReset(outOfBudget.resetAt)}.
-                {outOfBudget.pack.priceConfigured
+                {/* Native (iOS) can't show a price or an in-app purchase CTA
+                    (Apple 3.1.1) — fall back to the neutral "get in touch"
+                    copy + link regardless of whether a pack price is set. */}
+                {outOfBudget.pack.priceConfigured && platform === "web"
                   ? ` Need more before then? Top up for ${formatPackPriceCents(outOfBudget.pack.priceUsdCents)}.`
                   : " Need more before then? Get in touch and we'll sort you out."}
               </p>
               <div className="mt-2 flex items-center gap-2">
-                {outOfBudget.pack.priceConfigured ? (
+                {outOfBudget.pack.priceConfigured && platform === "web" ? (
                   <Button
                     variant="primary"
                     size="sm"

@@ -584,7 +584,7 @@ function PlaybookDetailClientInner({
   const [pending, startTransition] = useTransition();
   const [copyTarget, setCopyTarget] = useState<CopyTarget | null>(null);
   const [moveTarget, setMoveTarget] = useState<MovePlayToGroupTarget | null>(null);
-  const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
+  const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: ReactNode } | null>(null);
   const [gameModeUpgradeOpen, setGameModeUpgradeOpen] = useState(false);
   // Game mode requires a live Supabase connection (auth, shared session,
   // realtime calls). Grey out the entry button on native when offline so
@@ -595,8 +595,21 @@ function PlaybookDetailClientInner({
   function showPlayCapUpgrade() {
     setUpgradeNotice({
       title: `Free tier is capped at ${freeMaxPlays} plays per playbook`,
-      message:
-        "Upgrade to Team Coach ($9/mo or $99/yr) for unlimited plays per playbook.",
+      // Upgrade/price phrasing wrapped in `<span data-web-only>` so the
+      // notice collapses to the neutral version on native shells
+      // (App Store 3.1.1 compliance).
+      message: (
+        <>
+          <span data-web-only>
+            Upgrade to Team Coach ($9/mo or $99/yr) for unlimited plays per
+            playbook.
+          </span>
+          <span data-native-only>
+            Unlimited plays per playbook aren&rsquo;t included in your current
+            plan.
+          </span>
+        </>
+      ),
     });
   }
   // Per-playbook persisted view prefs. Server preloads the row in page.tsx
@@ -5213,10 +5226,17 @@ function PlayCapBanner({ count, limit }: { count: number; limit: number }) {
     >
       <p className="min-w-0 flex-1 text-sm">
         {atCap
-          ? `You've hit the ${limit}-play limit on Solo Coach. Upgrade to Team Coach for unlimited plays.`
-          : `${count} of ${limit} plays used on Solo Coach — ${remaining} left. Upgrade to Team Coach for unlimited.`}
+          ? `You've hit the ${limit}-play limit on Solo Coach.`
+          : `${count} of ${limit} plays used on Solo Coach — ${remaining} left.`}
+        {/* Native (Apple 3.1.1): no upgrade steer — usage info only. */}
+        <span data-web-only>
+          {atCap
+            ? " Upgrade to Team Coach for unlimited plays."
+            : " Upgrade to Team Coach for unlimited."}
+        </span>
       </p>
       <Link
+        data-web-only
         href="/pricing?upgrade=play-cap"
         className="inline-flex shrink-0 items-center gap-1.5 self-end rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white hover:opacity-90 sm:self-auto"
       >

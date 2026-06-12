@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { isNativeApp } from "@/lib/native/isNativeApp";
 import {
   ArrowRight,
   Check,
@@ -831,7 +832,12 @@ export function PrintPlaybookClient({
       return;
     }
     if (wristbandLocked) {
-      toast("Wristbands are a Team Coach feature. See /pricing to upgrade.", "error");
+      toast(
+        isNativeApp()
+          ? "Wristbands aren’t available on your current plan."
+          : "Wristbands are a Team Coach feature. See /pricing to upgrade.",
+        "error",
+      );
       return;
     }
     startTransition(async () => {
@@ -870,7 +876,12 @@ export function PrintPlaybookClient({
       return;
     }
     if (wristbandLocked) {
-      toast("Wristbands are a Team Coach feature. See /pricing to upgrade.", "error");
+      toast(
+        isNativeApp()
+          ? "Wristbands aren’t available on your current plan."
+          : "Wristbands are a Team Coach feature. See /pricing to upgrade.",
+        "error",
+      );
       return;
     }
     startPrint(async () => {
@@ -1165,8 +1176,14 @@ export function PrintPlaybookClient({
                       <p className="text-sm font-semibold text-foreground">
                         Wristbands are a Team Coach feature
                       </p>
-                      <p className="text-xs text-muted">
+                      {/* Upgrade/price line wrapped in `data-web-only` so it
+                          disappears on iOS/Android (App Store 3.1.1). Native
+                          shows a neutral note instead, with no price or CTA. */}
+                      <p className="text-xs text-muted" data-web-only>
                         Upgrade to Team Coach ($9/mo or $99/yr) to print wrist coaches. Playsheets stay free.
+                      </p>
+                      <p className="text-xs text-muted" data-native-only>
+                        Printing wrist coaches isn&rsquo;t included in your current plan. Playsheets stay free.
                       </p>
                       <Link
                         href="/pricing"
@@ -2111,12 +2128,14 @@ function ExamplePrintGateModal({
           <p className="mt-2 text-sm leading-relaxed text-muted">
             {product === "wristband" ? (
               <>
-                Wrist coach exports come from your own playbook. Claiming this example is free;
-                printing wrist coaches is a Team Coach feature —{" "}
-                <Link href="/pricing" className="font-medium text-primary hover:underline">
-                  see pricing
-                </Link>
-                .
+                Wrist coach exports come from your own playbook. Claiming this example is free.
+                <span data-web-only>
+                  {" "}Printing wrist coaches is a Team Coach feature —{" "}
+                  <Link href="/pricing" className="font-medium text-primary hover:underline">
+                    see pricing
+                  </Link>
+                  .
+                </span>
               </>
             ) : (
               "You've configured the layout, visuals, and text exactly how you want them. Make this example yours and these settings come with it."

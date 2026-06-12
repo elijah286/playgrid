@@ -30,7 +30,13 @@ export const metadata: Metadata = {
   },
 };
 
-type Faq = { q: string; a: string };
+// `a` is the canonical (web) answer — it also feeds the FAQPage JSON-LD,
+// which is a web/crawler artifact, so it always carries the full copy.
+// `aNative` is an optional price-free / upgrade-free rewrite shown inside
+// the native iOS/Android app per Apple Guideline 3.1.1 (no external
+// purchase steering). When present, the web answer renders `data-web-only`
+// and the native answer renders `data-native-only`.
+type Faq = { q: string; a: string; aNative?: string };
 type Section = { id: string; title: string; intro?: string; faqs: Faq[] };
 
 function buildSections(
@@ -67,10 +73,12 @@ function buildSections(
         {
           q: "Is XO Gridmaker free?",
           a: `Yes, there's a free tier that gives you one playbook with up to ${freeMaxPlays} plays — enough to evaluate the editor. The Team Coach plan unlocks the full product: unlimited plays, team invites, wristbands, Game Mode, and Coach Cal — the AI coaching partner — included with a monthly message allowance. See the pricing page for current plan details.`,
+          aNative: `Yes, there's a free tier that gives you one playbook with up to ${freeMaxPlays} plays — enough to evaluate the editor. The Team Coach plan unlocks the full product: unlimited plays, team invites, wristbands, Game Mode, and Coach Cal — the AI coaching partner.`,
         },
         {
           q: "Can my whole staff use one Team Coach plan?",
           a: `Team Coach includes ${coachSeats} collaborator seat${coachSeats === 1 ? "" : "s"} — enough for a small staff. Beyond that, extra seats are $${SEAT_PRICE_USD_PER_MONTH}/seat/month, billed to the head coach. If an assistant already has their own Team Coach plan, they don't count against your seats — they ride on their own subscription.`,
+          aNative: `Team Coach includes ${coachSeats} collaborator seat${coachSeats === 1 ? "" : "s"} — enough for a small staff, and you can add more seats for a larger staff. If an assistant already has their own Team Coach plan, they don't count against your seats — they ride on their own subscription.`,
         },
         {
           q: "What's included with Team Coach?",
@@ -147,10 +155,12 @@ function buildSections(
         {
           q: "How much does Coach Cal cost?",
           a: `Coach Cal is included with the Team Coach plan at $9/month (or $99/year) — no separate AI subscription. The plan includes 50 Coach Cal messages per month.`,
+          aNative: `Coach Cal is included with the Team Coach plan — no separate AI subscription. The plan includes 50 Coach Cal messages per month.`,
         },
         {
           q: "What happens if I use up my 50 messages?",
           a: `Two options: wait for the next monthly cycle (the cap resets automatically), or add a message pack — ${MESSAGE_PACK_SIZE} additional messages for $${MESSAGE_PACK_PRICE_USD_PER_MONTH}/month. Packs stack on top of your monthly allowance, so heavy users can add multiple. You'll see a meter inside the chat showing where you are.`,
+          aNative: `Two options: wait for the next monthly cycle (the cap resets automatically), or add a message pack — ${MESSAGE_PACK_SIZE} additional messages. Packs stack on top of your monthly allowance, so heavy users can add multiple. You'll see a meter inside the chat showing where you are.`,
         },
         {
           q: "Can Coach Cal help me plan practice?",
@@ -177,6 +187,7 @@ function buildSections(
         {
           q: "How do I get started?",
           a: `Browse the example playbooks to see what's possible, then create a free account and start a playbook. Most coaches have their first play drawn within a couple of minutes. When you're ready for unlimited plays, team features, and Coach Cal, upgrade to Team Coach for $9/month.`,
+          aNative: `Browse the example playbooks to see what's possible, then create a free account and start a playbook. Most coaches have their first play drawn within a couple of minutes. The Team Coach plan adds unlimited plays, team features, and Coach Cal when you're ready.`,
         },
       ],
     },
@@ -267,11 +278,18 @@ export default async function FaqPage() {
               <p className="mt-2 text-base text-muted">{section.intro}</p>
             )}
             <dl className="mt-6 space-y-7">
-              {section.faqs.map(({ q, a }) => (
+              {section.faqs.map(({ q, a, aNative }) => (
                 <div key={q}>
                   <dt className="text-lg font-semibold text-foreground">{q}</dt>
                   <dd className="mt-2 text-base leading-relaxed text-muted">
-                    {a}
+                    {aNative ? (
+                      <>
+                        <span data-web-only>{a}</span>
+                        <span data-native-only>{aNative}</span>
+                      </>
+                    ) : (
+                      a
+                    )}
                   </dd>
                 </div>
               ))}

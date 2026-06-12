@@ -8,6 +8,7 @@ import { ENTRY_POINTS, previewCtaLabel, type CoachCalEntryPointId } from "./entr
 import { track } from "@/lib/analytics/track";
 import { CheckoutLoadingOverlay } from "@/features/billing/CheckoutLoadingOverlay";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
+import { useIsNativeApp } from "@/lib/native/useIsNativeApp";
 
 const GRADIENT = "linear-gradient(135deg, #dbeafe 0%, #ede9fe 100%)";
 // Bold trial-CTA gradient — the brand pastel + white text reads as faded;
@@ -40,6 +41,7 @@ export function CoachAiPreviewChat({
   onCtaClick?: () => void;
 }) {
   const router = useRouter();
+  const native = useIsNativeApp();
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const config = ENTRY_POINTS[entryPoint];
@@ -56,7 +58,12 @@ export function CoachAiPreviewChat({
   void previewCtaLabel;
   const ctaLabel = "Upgrade to Team Coach";
   const ctaSubtitle = "$9/month · cancel anytime";
-  const inputPlaceholder = "Upgrade to Team Coach to chat with Coach Cal";
+  // The textarea itself renders on native, so its placeholder can't steer
+  // to an upgrade path (Apple 3.1.1) — swap to neutral copy. The lock badge
+  // div is data-web-only (hidden on native), so its label stays web copy.
+  const inputPlaceholder = native
+    ? "Coach Cal isn’t included in your current plan"
+    : "Upgrade to Team Coach to chat with Coach Cal";
   const lockBadge = "Team Coach required";
   const footnote = "Coach Cal is included with Team Coach at $9/month — 50 messages/month, plus unlimited plays, Game Mode, and team features.";
   function handleCtaClick() {
@@ -140,8 +147,13 @@ export function CoachAiPreviewChat({
         >
           {pending ? "Opening checkout…" : ctaLabel}
         </button>
-        <p className="mt-1.5 text-center text-[10px] text-muted">
+        <p data-web-only className="mt-1.5 text-center text-[10px] text-muted">
           {ctaSubtitle}
+        </p>
+        {/* Native (iOS) shows no price or upgrade CTA — Apple 3.1.1. A
+            neutral line keeps the footer from looking broken. */}
+        <p data-native-only className="text-center text-[12px] text-muted">
+          Coach Cal isn’t included in your current plan.
         </p>
         {err ? (
           <p className="mt-1 text-center text-[10px] text-red-700">{err}</p>
@@ -154,11 +166,11 @@ export function CoachAiPreviewChat({
             placeholder={inputPlaceholder}
             className="w-full cursor-not-allowed resize-none rounded-xl bg-surface-inset px-3 py-2 pr-24 text-sm text-foreground/40 ring-1 ring-inset ring-black/5"
           />
-          <div className="pointer-events-none absolute right-2 top-2 inline-flex items-center gap-1 rounded-md bg-surface-raised/70 px-1.5 py-0.5 text-[10px] text-muted ring-1 ring-border">
+          <div data-web-only className="pointer-events-none absolute right-2 top-2 inline-flex items-center gap-1 rounded-md bg-surface-raised/70 px-1.5 py-0.5 text-[10px] text-muted ring-1 ring-border">
             <Lock className="size-3" /> {lockBadge}
           </div>
         </div>
-        <p className="mt-2 text-[11px] leading-snug text-muted">
+        <p data-web-only className="mt-2 text-[11px] leading-snug text-muted">
           {footnote}
         </p>
       </div>

@@ -230,15 +230,28 @@ function Hero({ evalDays }: { evalDays: number }) {
             <em>and</em> defense, generates plays and full playbooks, reviews
             last week&rsquo;s game, schedules your season, and writes the QB
             reads you don&rsquo;t have time to. Built for youth, flag, 7v7,
-            and tackle — included with the $9/mo Team Coach plan.
+            and tackle.
+            {/* Price clause hidden on native (Apple 3.1.1); web keeps it. */}
+            <span data-web-only> Included with the $9/mo Team Coach plan.</span>
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
+            {/* Web: price/upgrade CTA. Native: neutral free CTA, no price. */}
             <Link
+              data-web-only
               href="/login?mode=signup"
               className="inline-flex items-center gap-2 rounded-lg px-5 py-3 text-base font-bold text-white shadow-lg transition-transform hover:-translate-y-0.5"
               style={{ background: BRAND_BLUE }}
             >
               Start with Team Coach — $9/mo
+              <ArrowRight className="size-4" />
+            </Link>
+            <Link
+              data-native-only
+              href="/login?mode=signup"
+              className="inline-flex items-center gap-2 rounded-lg px-5 py-3 text-base font-bold text-white shadow-lg transition-transform hover:-translate-y-0.5"
+              style={{ background: BRAND_BLUE }}
+            >
+              Get started
               <ArrowRight className="size-4" />
             </Link>
             <Link
@@ -578,7 +591,11 @@ function Privacy() {
 
 function Pricing({ evalDays }: { evalDays: number }) {
   return (
-    <section className="bg-surface-inset py-20">
+    <>
+    {/* Web: full pricing card with $9/mo, $99/yr, pack price, and upgrade
+        CTAs. Hidden inside the native app (Apple 3.1.1 forbids marketing a
+        paid subscription / steering to external checkout in-app). */}
+    <section data-web-only className="bg-surface-inset py-20">
       <div className="mx-auto max-w-3xl px-6 text-center">
         <p
           className="text-xs font-semibold uppercase tracking-wider"
@@ -687,6 +704,56 @@ function Pricing({ evalDays }: { evalDays: number }) {
         </div>
       </div>
     </section>
+
+    {/* Native (iOS): same feature value, but NO price, NO tier price,
+        NO upgrade/checkout CTA. Keeps the page from ending abruptly where
+        the pricing card was removed. */}
+    <section data-native-only className="bg-surface-inset py-20">
+      <div className="mx-auto max-w-3xl px-6 text-center">
+        <p
+          className="text-xs font-semibold uppercase tracking-wider"
+          style={{ color: BRAND_BLUE }}
+        >
+          What you get
+        </p>
+        <h2 className="mt-2 text-3xl font-extrabold tracking-tight md:text-4xl">
+          Everything Coach Cal does.
+        </h2>
+        <div className="mt-8 rounded-2xl border-2 border-primary/40 bg-surface-raised p-7 text-left shadow-lg">
+          <ul className="space-y-2 text-sm text-foreground">
+            <li className="flex gap-2">
+              <Sparkles className="mt-0.5 size-4 shrink-0" style={{ color: BRAND_BLUE }} />
+              Coach Cal AI — ask anything, get instant answers
+            </li>
+            <li className="flex gap-2">
+              <Wand2 className="mt-0.5 size-4 shrink-0" style={{ color: BRAND_BLUE }} />
+              Generate plays and full playbooks
+            </li>
+            <li className="flex gap-2">
+              <Target className="mt-0.5 size-4 shrink-0" style={{ color: BRAND_BLUE }} />
+              Offensive <em>and</em> defensive game-planning vs. any scheme
+            </li>
+            <li className="flex gap-2">
+              <Search className="mt-0.5 size-4 shrink-0" style={{ color: BRAND_BLUE }} />
+              Post-game review and weekly playbook adjustments
+            </li>
+            <li className="flex gap-2">
+              <CalendarCheck className="mt-0.5 size-4 shrink-0" style={{ color: BRAND_BLUE }} />
+              Season scheduling — practices, games, RSVPs
+            </li>
+            <li className="flex gap-2">
+              <Layers className="mt-0.5 size-4 shrink-0" style={{ color: BRAND_BLUE }} />
+              Situational call sheets (red zone, 3rd-and-short, opening drive)
+            </li>
+            <li className="flex gap-2">
+              <BookOpen className="mt-0.5 size-4 shrink-0" style={{ color: BRAND_BLUE }} />
+              QB reads and per-position coaching notes written for you
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+    </>
   );
 }
 
@@ -728,13 +795,23 @@ function FinalCta({ evalDays: _evalDays }: { evalDays: number }) {
   return (
     <section className="py-20">
       <div className="mx-auto max-w-4xl px-6 text-center">
-        <h2 className="text-3xl font-extrabold tracking-tight md:text-4xl">
+        {/* Web heading names the paid tier; native uses a neutral heading
+            (Apple 3.1.1 — no in-app subscription marketing). */}
+        <h2 data-web-only className="text-3xl font-extrabold tracking-tight md:text-4xl">
           Coach Cal is included with Team Coach.
         </h2>
-        <p className="mx-auto mt-3 max-w-xl text-base text-muted">
+        <h2 data-native-only className="text-3xl font-extrabold tracking-tight md:text-4xl">
+          Meet your AI coaching partner.
+        </h2>
+        {/* Web copy mentions price + upgrade; native copy stays neutral. */}
+        <p data-web-only className="mx-auto mt-3 max-w-xl text-base text-muted">
           Start on the free plan, design a few plays, then upgrade to Team
           Coach for $9/month to unlock Coach Cal, unlimited plays, Game
           Mode, and the rest of the team toolkit.
+        </p>
+        <p data-native-only className="mx-auto mt-3 max-w-xl text-base text-muted">
+          Start on the free plan and design a few plays — Coach Cal helps you
+          generate plays, plan practices, and run your season.
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <Link
