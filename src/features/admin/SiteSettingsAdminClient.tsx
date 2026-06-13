@@ -19,19 +19,13 @@ import {
   setAppleSigninEnabledAction,
   setGoogleSigninEnabledAction,
 } from "@/app/actions/admin-auth-providers";
-import {
-  setIosInstallCtaEnabledAction,
-  setIosAppStoreIdAction,
-} from "@/app/actions/admin-ios-install-cta";
 import type { ReferralConfig } from "@/lib/site/referral-config";
-import type { IosInstallCtaConfig } from "@/lib/site/ios-install-cta-config";
 
 export function SiteSettingsAdminClient({
   initialHideLobbyAnimation,
   initialExamplesPageEnabled,
   initialFreeMaxPlays,
   initialMobileEditingEnabled,
-  initialIosInstallCta,
   initialHideOwnerInfoAbout,
   initialReferralConfig,
   initialAppleSigninEnabled,
@@ -44,7 +38,6 @@ export function SiteSettingsAdminClient({
   initialExamplesPageEnabled: boolean;
   initialFreeMaxPlays: number;
   initialMobileEditingEnabled: boolean;
-  initialIosInstallCta: IosInstallCtaConfig;
   initialHideOwnerInfoAbout: boolean;
   initialReferralConfig: ReferralConfig;
   initialAppleSigninEnabled: boolean;
@@ -63,18 +56,6 @@ export function SiteSettingsAdminClient({
 
   const [mobileEditingEnabled, setMobileEditingEnabled] = useState(initialMobileEditingEnabled);
   const [mobileEditingPending, startMobileEditingTransition] = useTransition();
-
-  // iOS App Store install banner — mirrors the always-on Android banner, but
-  // gated behind this toggle + a saved App Store ID until the app is live.
-  const [iosCtaEnabled, setIosCtaEnabled] = useState(initialIosInstallCta.enabled);
-  const [iosCtaPending, startIosCtaTransition] = useTransition();
-  const [savedIosAppStoreId, setSavedIosAppStoreId] = useState(
-    initialIosInstallCta.appStoreId ?? "",
-  );
-  const [iosAppStoreIdInput, setIosAppStoreIdInput] = useState(
-    initialIosInstallCta.appStoreId ?? "",
-  );
-  const [iosAppStoreIdPending, startIosAppStoreIdTransition] = useTransition();
 
   const [hideOwnerInfoAbout, setHideOwnerInfoAbout] = useState(initialHideOwnerInfoAbout);
   const [hideOwnerPending, startHideOwnerTransition] = useTransition();
@@ -310,51 +291,6 @@ export function SiteSettingsAdminClient({
     });
   }
 
-  function toggleIosCta(next: boolean) {
-    const prev = iosCtaEnabled;
-    setIosCtaEnabled(next);
-    startIosCtaTransition(async () => {
-      const res = await setIosInstallCtaEnabledAction(next);
-      if (!res.ok) {
-        setIosCtaEnabled(prev);
-        toast(res.error, "error");
-        return;
-      }
-      if (next && savedIosAppStoreId.trim() === "") {
-        toast(
-          "iOS banner on — but it stays hidden until you save an App Store ID below.",
-          "success",
-        );
-      } else {
-        toast(
-          next ? "iOS App Store banner is on." : "iOS App Store banner is off.",
-          "success",
-        );
-      }
-    });
-  }
-
-  function saveIosAppStoreId() {
-    const next = iosAppStoreIdInput.trim();
-    if (next === savedIosAppStoreId) return;
-    startIosAppStoreIdTransition(async () => {
-      const res = await setIosAppStoreIdAction(next);
-      if (!res.ok) {
-        toast(res.error, "error");
-        return;
-      }
-      const saved = res.appStoreId ?? "";
-      setSavedIosAppStoreId(saved);
-      setIosAppStoreIdInput(saved);
-      toast(
-        saved === ""
-          ? "App Store ID cleared — iOS banner hidden."
-          : `App Store ID saved (${saved}).`,
-        "success",
-      );
-    });
-  }
-
   function toggleHideOwnerInfoAbout(next: boolean) {
     const prev = hideOwnerInfoAbout;
     setHideOwnerInfoAbout(next);
@@ -404,7 +340,7 @@ export function SiteSettingsAdminClient({
             <strong>v1 (fallback):</strong> legacy pre-Phase-2 behavior — none of
             the above. Flip to v1 instantly if v2 misbehaves; catalog fixes
             (Snag-in-5v5, QB-carry route_kind, Seam drift, etc.) still apply in
-            both versions because they&rsquo;re bug fixes, not behavior changes.
+            both versions because they're bug fixes, not behavior changes.
           </p>
         </div>
         <div className="inline-flex items-center gap-1 rounded-lg bg-surface p-1 ring-1 ring-border">
@@ -610,72 +546,6 @@ export function SiteSettingsAdminClient({
           />
           <span>{mobileEditingEnabled ? "On" : "Off"}</span>
         </label>
-      </div>
-
-      <div className="space-y-3 rounded-2xl border border-border bg-surface-raised p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-foreground">
-              iOS App Store install banner
-            </p>
-            <p className="mt-0.5 text-xs text-muted">
-              Shows iPhone and iPad Safari / mobile-web visitors a dismissible
-              banner promoting the app on the App Store — the iOS twin of the
-              always-on Android Play Store banner.{" "}
-              <strong>
-                Keep this off until the app is actually live in the App Store.
-              </strong>{" "}
-              The banner only appears when this is On <em>and</em> a numeric App
-              Store ID is saved below. Never shows on desktop, Android, or inside
-              the native app.
-            </p>
-          </div>
-          <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 text-sm text-foreground">
-            <input
-              type="checkbox"
-              className="size-4 accent-primary"
-              checked={iosCtaEnabled}
-              disabled={iosCtaPending}
-              onChange={(e) => toggleIosCta(e.target.checked)}
-            />
-            <span>{iosCtaEnabled ? "On" : "Off"}</span>
-          </label>
-        </div>
-
-        <div className="flex flex-wrap items-end gap-3 border-t border-border pt-3">
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-muted">App Store ID</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              placeholder="6471234567"
-              className="w-44 rounded-md bg-surface px-3 py-1.5 text-sm ring-1 ring-border"
-              value={iosAppStoreIdInput}
-              disabled={iosAppStoreIdPending}
-              onChange={(e) => setIosAppStoreIdInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") saveIosAppStoreId();
-              }}
-            />
-          </label>
-          <Button
-            variant="secondary"
-            size="sm"
-            loading={iosAppStoreIdPending}
-            disabled={
-              iosAppStoreIdPending ||
-              iosAppStoreIdInput.trim() === savedIosAppStoreId
-            }
-            onClick={saveIosAppStoreId}
-          >
-            Save
-          </Button>
-          <p className="w-full text-xs text-muted">
-            Find this in App Store Connect under App Information (the Apple ID
-            field). Paste the number, an <code className="font-mono">id…</code>{" "}
-            token, or the full App Store URL — only the digits are kept.
-          </p>
-        </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">

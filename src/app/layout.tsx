@@ -17,8 +17,6 @@ import MetaPixel from "@/components/MetaPixel";
 import { NativeAppShell } from "@/components/native/NativeAppShell";
 import { PullToRefresh } from "@/components/native/PullToRefresh";
 import { AppInstallBanner } from "@/components/native/AppInstallBanner";
-import { getIosInstallCtaConfig } from "@/lib/site/ios-install-cta-config";
-import { withTimeout } from "@/lib/perf/with-timeout";
 import { OfflineStatusBanner } from "@/components/offline/OfflineStatusBanner";
 import { ConnectionRecovery } from "@/components/system/ConnectionRecovery";
 import { withFullContext } from "@/lib/seo/ld-json";
@@ -146,17 +144,6 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Kick off the iOS install-CTA read up front so it overlaps with the auth +
-  // inbox round-trips below instead of adding serial latency. Time-bound with a
-  // safe (disabled) default so a slow or missing settings read never blocks the
-  // shell. The CTA stays dark until the Site Admin flips it on post-launch.
-  const iosInstallCtaPromise = hasSupabaseEnv()
-    ? withTimeout(getIosInstallCtaConfig(), 4000, {
-        enabled: false,
-        appStoreId: null,
-      })
-    : Promise.resolve({ enabled: false, appStoreId: null as string | null });
-
   let isAuthed = false;
   let userId: string | null = null;
   if (hasSupabaseEnv()) {
@@ -203,8 +190,6 @@ export default async function RootLayout({
       /* best effort — badge starts at 0 and the poller catches up */
     }
   }
-
-  const iosInstallCta = await iosInstallCtaPromise;
 
   return (
     <html lang="en" className={`h-full antialiased ${inter.variable}`} suppressHydrationWarning>
@@ -263,7 +248,7 @@ export default async function RootLayout({
                 initialUrgent={inboxUrgent}
               >
                 <ConfigBanner />
-                <AppInstallBanner iosInstallCta={iosInstallCta} />
+                <AppInstallBanner />
                 <SiteHeader />
                 <div className="flex flex-1 flex-col">{children}</div>
                 <SiteFooter />

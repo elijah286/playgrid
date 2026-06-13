@@ -38,7 +38,6 @@ import { getHideLobbyAnimation } from "@/lib/site/lobby-config";
 import { getExamplesPageEnabled } from "@/lib/site/examples-config";
 import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
 import { getMobileEditingEnabled } from "@/lib/site/mobile-editing-config";
-import { getIosInstallCtaConfig } from "@/lib/site/ios-install-cta-config";
 import { getHideOwnerInfoAbout } from "@/lib/site/about-config";
 import { getReferralConfig } from "@/lib/site/referral-config";
 import { getCoachCalUpgradeBannerEnabled } from "@/lib/site/coach-cal-banner-config";
@@ -184,7 +183,6 @@ export async function loadSiteTabData() {
     coachCalUpgradeBannerEnabled,
     coachCalVersion,
     coachAiEvalDays,
-    iosInstallCta,
   ] = await Promise.all([
     getSeatDefaults(),
     listCoachBonusGrantsAction(),
@@ -199,7 +197,6 @@ export async function loadSiteTabData() {
     getCoachCalUpgradeBannerEnabled(),
     getCoachCalVersion(),
     getCoachAiEvalDays(),
-    getIosInstallCtaConfig(),
   ]);
 
   return {
@@ -217,7 +214,6 @@ export async function loadSiteTabData() {
     coachCalUpgradeBannerEnabled,
     coachCalVersion,
     coachAiEvalDays,
-    iosInstallCta,
   };
 }
 

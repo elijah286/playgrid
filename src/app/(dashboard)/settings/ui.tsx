@@ -682,7 +682,6 @@ export function SettingsClient({
                   initialExamplesPageEnabled={d.examplesPageEnabled}
                   initialFreeMaxPlays={d.freeMaxPlays}
                   initialMobileEditingEnabled={d.mobileEditingEnabled}
-                  initialIosInstallCta={d.iosInstallCta}
                   initialHideOwnerInfoAbout={d.hideOwnerInfoAbout}
                   initialReferralConfig={d.referralConfig}
                   initialAppleSigninEnabled={d.appleSigninEnabled}
