@@ -597,6 +597,21 @@ function PlanCard({
               {tier === "free" ? "See pricing" : "Change plan"}
             </Link>
           )}
+          {/* Native: in-app purchase UI is gated off, so we point coaches to
+              the web to view or change their plan. Opening the DEFAULT browser
+              (window.open _system → Safari, not the in-app webview) is the
+              US-storefront external-link allowance Apple cited in the rejection
+              (Guideline 3.1.3(b) / 3.1.1). No price shown in the app itself. */}
+          <button
+            type="button"
+            data-native-only
+            onClick={() =>
+              window.open("https://www.xogridmaker.com/account", "_system")
+            }
+            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface"
+          >
+            Manage your plan at xogridmaker.com →
+          </button>
         </div>
 
         {isComp ? (

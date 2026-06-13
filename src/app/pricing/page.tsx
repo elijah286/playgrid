@@ -111,21 +111,20 @@ export default async function PricingPage() {
         </p>
       </div>
       {/* In-app (Capacitor): show a neutral notice instead of the Stripe-driven
-          PricingClient. Apple Guideline 3.1.1 / 3.1.3(b) forbids both in-app
-          links to external digital-subscription purchases *and* communications
-          that "directly or indirectly target iOS users to use a purchasing
-          method other than in-app purchase". The previous copy violated the
-          second clause by naming xogridmaker.com as the place to subscribe —
-          this rewrite keeps the page reachable (so reviewers don't see a 404)
-          without naming any external purchase path, mentioning subscriptions,
-          or implying that paid functionality is available elsewhere. */}
+          PricingClient. The in-app purchase UI stays gated (Guideline 3.1.1 —
+          no price, no checkout in the app). We point coaches to Account
+          settings to view or change their plan; the Account page carries the
+          "manage on the web" link, which the US-storefront external-link
+          allowance permits (the same allowance Apple cited in the build-3
+          rejection). This page itself names no price and no external purchase
+          path, so it stays safe even off the US storefront. */}
       <div data-native-only>
         <div className="rounded-2xl border border-border bg-surface-raised p-6 text-sm text-foreground">
-          <p className="font-semibold">Solo Coach — Free</p>
+          <p className="font-semibold">Free plan</p>
           <p className="mt-2 text-muted">
-            The free plan includes all the play-design tools described in the
-            App Store listing. Plan management isn&rsquo;t available in this
-            version of the app.
+            All the play-design tools described in the App Store listing are
+            included. You can view or change your plan from your Account
+            settings.
           </p>
         </div>
       </div>
