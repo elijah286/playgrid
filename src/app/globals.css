@@ -740,6 +740,19 @@ body.native-app [data-web-only] {
   display: none !important;
 }
 
+/* Reserve clearance for the global mobile bottom nav so page content (and,
+ * on web, the site footer) isn't tucked behind it. HomeBottomNav toggles
+ * `has-bottom-nav` on <body> while the bar is visible; the bar is
+ * `sm:hidden`, so this only applies below the `sm` breakpoint. Padding on
+ * <body> covers both surfaces: on web it lifts the footer above the bar; in
+ * the native app (where the footer is display:none) it pads the page
+ * content. Matches the bar's own height + home-indicator inset. */
+@media (max-width: 639.98px) {
+  body.has-bottom-nav {
+    padding-bottom: calc(52px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 /* Inverse: content that should ONLY appear inside the native app shell
  * (e.g. "manage your plan on the web" copy that replaces a hidden Stripe
  * checkout button). Hidden on the web by default; revealed on native. */

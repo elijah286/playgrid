@@ -1643,7 +1643,7 @@ export function DashboardClient({
     teamCalendarAvailable || inboxCount > 0 || activityCount > 0;
 
   return (
-    <div className={`pb-20 sm:pb-0 ${pending ? "cursor-wait" : ""}`}>
+    <div className={pending ? "cursor-wait" : undefined}>
       {/* First-mount celebration for a freshly-upgraded Coach Pro user.
           Server validated `?welcome=coach_pro` against actual entitlement
           before passing showCoachProWelcome=true (anti-spoof). The

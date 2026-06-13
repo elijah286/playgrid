@@ -4,6 +4,7 @@ import "./globals.css";
 import { ConfigBanner } from "@/components/layout/ConfigBanner";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
+import { GlobalBottomNav } from "@/components/layout/GlobalBottomNav";
 import { FieldBackdrop } from "@/components/layout/FieldBackdrop";
 import { ToastProvider } from "@/components/ui/Toast";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
@@ -251,6 +252,13 @@ export default async function RootLayout({
                 <SiteHeader />
                 <div className="flex flex-1 flex-col">{children}</div>
                 <SiteFooter />
+                {/* Global mobile bottom nav for authed users, on every
+                    route. Self-gates on auth and bails on routes that own
+                    their own bottom bar (editor, playbook, viewer, Cal
+                    chat) — see GlobalBottomNav / isOwnBottomBarRoute. Lives
+                    here (not in the dashboard layout) so resource pages
+                    like /learn never strand a coach without primary nav. */}
+                <GlobalBottomNav />
                 <PageViewTracker />
                 <WebVitalsReporter />
                 <ConsentGate />

@@ -8,6 +8,7 @@ import { CalNavButton } from "@/features/coach-ai/CalNavButton";
 import { useInboxBadge } from "@/features/dashboard/InboxBadgeContext";
 import { signOutAction } from "@/app/actions/auth";
 import { useIsNativeApp } from "@/lib/native/useIsNativeApp";
+import { isOwnBottomBarRoute } from "./bottomNavRoutes";
 
 /**
  * Mobile-first bottom nav rendered at the dashboard layout level.
@@ -27,20 +28,12 @@ import { useIsNativeApp } from "@/lib/native/useIsNativeApp";
  * Active-state detection is URL-driven (pathname + ?tab=X), not state,
  * so the same component renders correctly whether you're on /home,
  * /account, /admin, etc. Hidden entirely when the route owns its own
- * bottom toolbar (playbook detail, play editor) — see HIDE_ON_RE.
+ * bottom toolbar (playbook detail, play editor) — see isOwnBottomBarRoute.
  *
  * Visible only on mobile (`<sm`); the top `HomeTabNav` takes over on
  * tablet/desktop.
  */
 export type HomeBottomNavTab = "playbooks" | "calendar" | "inbox";
-
-/** Routes that render their own bottom toolbar (PlaybookBottomNav,
- *  EditorBottomNav). Hide the global one there to avoid stacking. */
-const HIDE_ON_RE = /^\/(playbooks\/[^/]+|plays\/[^/]+\/edit)/;
-/** ...but the playbook print sub-route renders no bottom toolbar of its
- *  own, so hiding the global nav there strands the user with no way out
- *  (the in-app back button can sit under the iOS status bar). Keep it. */
-const PRINT_RE = /^\/playbooks\/[^/]+\/print(?:\/|$)/;
 
 export function HomeBottomNav({
   showCalendar,
@@ -65,8 +58,18 @@ export function HomeBottomNav({
     return () => document.removeEventListener("keydown", onKey);
   }, [moreOpen]);
 
-  // Bail when a context-specific toolbar owns the bottom of the screen.
-  if (HIDE_ON_RE.test(pathname) && !PRINT_RE.test(pathname)) return null;
+  // Bail when a context-specific toolbar owns the bottom of the screen
+  // (editor, playbook, viewer, full-screen Cal) — see isOwnBottomBarRoute.
+  const onOwnBar = isOwnBottomBarRoute(pathname);
+  // While the bar is visible, flag the body so the site footer reserves
+  // clearance for it (globals.css `body.has-bottom-nav`). Kept in sync per
+  // route so the spacing appears/disappears exactly with the bar.
+  useEffect(() => {
+    if (onOwnBar) return;
+    document.body.classList.add("has-bottom-nav");
+    return () => document.body.classList.remove("has-bottom-nav");
+  }, [onOwnBar]);
+  if (onOwnBar) return null;
 
   // Active-state derivation. On /home the active tab is whichever
   // ?tab= search param is set (defaulting to playbooks); on /account

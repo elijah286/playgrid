@@ -9,12 +9,8 @@ import { userHasCreatedPlayAction } from "@/app/actions/plays";
 import { getExpirationNotice } from "@/lib/billing/expiration-notice";
 import { ExpirationBanner } from "@/components/billing/ExpirationBanner";
 import { NameCapturePrompt } from "@/components/account/NameCapturePrompt";
-import { getCurrentEntitlement } from "@/lib/billing/entitlement";
-import { canUseAiFeatures } from "@/lib/billing/features";
-import { getBetaFeatures, isBetaFeatureAvailable } from "@/lib/site/beta-features-config";
 import { OfflineAutoRefreshMount } from "@/components/offline/OfflineAutoRefreshMount";
 import { NativeWelcomeSpotlight } from "@/components/native/NativeWelcomeSpotlight";
-import { HomeBottomNav } from "./home/HomeBottomNav";
 
 // Auth is NOT enforced here. Anon visitors may reach example-playbook
 // pages under this layout (e.g. /playbooks/[id] for a public example);
@@ -53,32 +49,12 @@ export default async function DashboardLayout({
     hasCreatedPlay,
     expirationNotice,
     nameCaptureNeeded,
-    selfRoleRow,
-    entitlement,
-    betaFeatures,
   ] = await Promise.all([
     getFeedbackWidgetSettings(),
     user ? userHasCreatedPlayAction() : Promise.resolve(false),
     user ? getExpirationNotice() : Promise.resolve(null),
     user ? checkNameCaptureNeeded(user.id, user.email ?? null) : Promise.resolve(false),
-    user
-      ? supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
-      : Promise.resolve({ data: null }),
-    user ? getCurrentEntitlement() : Promise.resolve(null),
-    getBetaFeatures(),
   ]);
-
-  const isAdmin = (selfRoleRow?.data?.role as string | null) === "admin";
-  const coachAiAvailable = isAdmin || canUseAiFeatures(entitlement);
-  // Logged-in user without Team Coach still gets the Cal slot in the
-  // toolbar — tapping opens the upgrade prompt instead of the chat.
-  // Matches the gate PlaybookBottomNav + EditorBottomNav use, so Cal
-  // appears in the same nav position on every mobile surface.
-  const showCoachCalPromo = user !== null && !coachAiAvailable;
-  const teamCalendarAvailable = isBetaFeatureAvailable(
-    betaFeatures.team_calendar,
-    { isAdmin, isEntitled: true },
-  );
 
   return (
     // No `overflow-x-hidden` anywhere in this subtree — that property
@@ -103,18 +79,9 @@ export default async function DashboardLayout({
           touchEnabled={feedbackSettings.touchEnabled}
         />
       )}
-      {/* Global mobile bottom nav. Persists across every dashboard
-          route so the toolbar never disappears between page navs.
-          The component itself bails (returns null) on routes that
-          have their own toolbar (playbook detail, play editor) so
-          we don't stack two bars on top of each other. */}
-      {user && (
-        <HomeBottomNav
-          showCalendar={teamCalendarAvailable}
-          showCoachCal={coachAiAvailable || showCoachCalPromo}
-          isAdmin={isAdmin}
-        />
-      )}
+      {/* The global mobile bottom nav is mounted once in the root layout
+          (GlobalBottomNav) so it persists across every route — including
+          resource pages like /learn that live outside this group. */}
       {user && <OfflineAutoRefreshMount />}
     </div>
   );
