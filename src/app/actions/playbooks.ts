@@ -590,17 +590,29 @@ export async function duplicatePlaybookAction(
   if (!tierAtLeast(entitlement, "coach")) {
     const { data: ownedRows } = await supabase
       .from("playbook_members")
-      .select("playbook_id, playbooks!inner(id, name, is_default, is_archived)")
+      .select("playbook_id, playbooks!inner(id, name, is_default, is_archived, created_at)")
       .eq("user_id", user.id)
       .eq("role", "owner")
       .eq("playbooks.is_default", false)
       .eq("playbooks.is_archived", false);
-    const owned = (ownedRows ?? []).map((r) => {
-      const pb = r.playbooks as unknown as { id: string; name: string };
-      return { id: pb.id, name: pb.name };
-    });
+    const owned = (ownedRows ?? [])
+      .map((r) => {
+        const pb = r.playbooks as unknown as {
+          id: string;
+          name: string;
+          created_at: string | null;
+        };
+        return { id: pb.id, name: pb.name, createdAt: pb.created_at ?? "" };
+      })
+      // "Oldest-first wins": the editable free playbook is the first one the
+      // coach created (same rule as computeDowngradeLocks). Sort here so the
+      // name we surface is the editable one, not whatever order the join
+      // happened to return.
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     if (owned.length >= FREE_MAX_PLAYBOOKS_OWNED) {
-      const existing = owned[0] ?? null;
+      const existing = owned[0]
+        ? { id: owned[0].id, name: owned[0].name }
+        : null;
       // See archive-action comment above for the error / errorWebSuffix
       // contract. The native shell gets only `error`; web gets both.
       return {

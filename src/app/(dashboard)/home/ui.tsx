@@ -41,6 +41,7 @@ import {
   setPlaybookPublicExampleAction,
 } from "@/app/actions/admin-examples";
 import type { DashboardPlaybookTile, DashboardSummary } from "@/app/actions/plays";
+import { pickEditableFreePlaybook } from "@/lib/billing/free-playbook";
 import type { Player, Route, SportVariant, Zone } from "@/domain/play/types";
 import {
   defaultSettingsForVariant,
@@ -1376,8 +1377,11 @@ export function DashboardClient({
           // If they already own a playbook, point them back to it instead
           // of leaving the upgrade modal as a dead-end. Free users get one
           // playbook — claimed examples and self-created ones share that
-          // slot, and the existing one is fully editable.
-          const existing = ownedAll[0] ?? null;
+          // slot, and the existing one is fully editable. Pick the *editable*
+          // one (the un-locked tile), not ownedAll[0]: tiles arrive sorted by
+          // updated_at desc, so the playbook they just touched floats to the
+          // front even when it's a locked extra beyond the free cap.
+          const existing = pickEditableFreePlaybook(ownedAll);
           // Upgrade phrasing wrapped in `<span data-web-only>` so the
           // sentence collapses to the blocker-only version on native shells
           // (App Store 3.1.3(b) compliance).
@@ -1901,7 +1905,7 @@ export function DashboardClient({
                   const existing =
                     ("existingOwnedPlaybook" in res &&
                       res.existingOwnedPlaybook) ||
-                    ownedAll[0] ||
+                    pickEditableFreePlaybook(ownedAll) ||
                     null;
                   setUpgradeNotice({
                     title: "Your free playbook slot is taken",
