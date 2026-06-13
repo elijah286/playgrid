@@ -147,7 +147,64 @@ function fetchWithTimeout(request, timeoutMs) {
   });
 }
 
-async function networkFirstWithCacheFallback(cacheName, request) {
+// Self-contained offline/retry page. Returned for any top-level navigation
+// that can't reach the network AND has no cached shell — the case that
+// previously returned Response.error() and showed a BLACK WebView (the bug
+// we're fixing). Everything is inline (monogram SVG + styles), so it renders
+// with zero network and zero cache dependency: it can never itself fail to
+// paint. Theme-aware via prefers-color-scheme so it matches the dark/light
+// WebView background instead of flashing.
+const OFFLINE_FALLBACK_HTML = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>xogridmaker</title>
+<style>
+  :root { color-scheme: light dark; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 1.5rem; text-align: center;
+    font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    background: #ffffff; color: #0f172a;
+    padding: max(env(safe-area-inset-top), 2rem) 2rem max(env(safe-area-inset-bottom), 2rem);
+  }
+  @media (prefers-color-scheme: dark) { body { background: #0b0b0c; color: #f4f4f5; } }
+  svg { width: 128px; height: auto; }
+  h1 { margin: 0; font-size: 1.15rem; font-weight: 800; letter-spacing: -0.01em; }
+  p { margin: 0; max-width: 21rem; font-size: 0.95rem; line-height: 1.5; opacity: 0.7; }
+  button {
+    margin-top: 0.25rem; border: 0; border-radius: 999px; cursor: pointer;
+    background: #f26522; color: #fff; font-weight: 700; font-size: 1rem;
+    padding: 0.85rem 2.25rem; -webkit-tap-highlight-color: transparent;
+  }
+  button:active { opacity: 0.85; }
+</style>
+</head>
+<body>
+  <svg viewBox="0 0 900 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="xogridmaker">
+    <line stroke="#1769FF" stroke-linecap="square" stroke-width="52" x1="250" x2="380" y1="100" y2="240" />
+    <line stroke="#1769FF" stroke-linecap="square" stroke-width="52" x1="380" x2="250" y1="100" y2="240" />
+    <rect fill="none" height="130" rx="42" ry="42" stroke="#95CC1F" stroke-width="38" width="170" x="480" y="105" />
+  </svg>
+  <h1>Can&rsquo;t reach xogridmaker</h1>
+  <p>You appear to be offline or on a weak connection. Any playbooks you&rsquo;ve downloaded are still available.</p>
+  <button onclick="location.replace('/home')">Try again</button>
+</body>
+</html>`;
+
+function offlineFallbackResponse() {
+  return new Response(OFFLINE_FALLBACK_HTML, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
+async function networkFirstWithCacheFallback(cacheName, request, htmlFallback = false) {
   const cache = await caches.open(cacheName);
   try {
     const res = await fetchWithTimeout(request, NAV_FETCH_TIMEOUT_MS);
@@ -161,7 +218,11 @@ async function networkFirstWithCacheFallback(cacheName, request) {
       const offlineFallback = await cache.match("/offline");
       if (offlineFallback) return Response.redirect("/offline", 302);
     }
-    return Response.error();
+    // A navigation must never end on a blank network error (black WebView):
+    // serve the self-contained inline retry page. Non-navigation callers
+    // (RSC payloads) still get Response.error() — HTML is the wrong content
+    // type for them, and the client handles a failed RSC fetch gracefully.
+    return htmlFallback ? offlineFallbackResponse() : Response.error();
   }
 }
 
@@ -174,7 +235,7 @@ async function handleNavigation(request) {
   // offline so coaches still land on the last-known shell with downloaded
   // tiles tappable.
   if (isShellNav(url)) {
-    return networkFirstWithCacheFallback(NAV_CACHE, request);
+    return networkFirstWithCacheFallback(NAV_CACHE, request, true);
   }
 
   // Everything else: network-first. If it fails (or stalls past the
@@ -191,7 +252,9 @@ async function handleNavigation(request) {
     if (homeFallback) return Response.redirect("/home", 302);
     const offlineFallback = await cache.match("/offline");
     if (offlineFallback) return Response.redirect("/offline", 302);
-    return Response.error();
+    // Last resort: the self-contained inline retry page, never a blank
+    // Response.error() — that rendered as the black WebView we're fixing.
+    return offlineFallbackResponse();
   }
 }
 
