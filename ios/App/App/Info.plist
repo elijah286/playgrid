@@ -45,6 +45,14 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- Force full screen on iPad: opt out of Split View / Slide Over / Stage
+	     Manager windowing. The app is a single-WebView wrapper that's designed
+	     phone-first; running it in a resizable iPad window adds no value and is
+	     a suspected cause of the intermittent black WebView on iPad (WKWebView
+	     can fail to composite when its window is resized). iPhone (always full
+	     screen) has not shown the black screen; iPad (windowed) has. -->
+	<key>UIRequiresFullScreen</key>
+	<true/>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
