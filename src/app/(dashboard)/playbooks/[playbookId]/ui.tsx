@@ -5226,8 +5226,8 @@ function PlayCapBanner({ count, limit }: { count: number; limit: number }) {
     >
       <p className="min-w-0 flex-1 text-sm">
         {atCap
-          ? `You've hit the ${limit}-play limit on Solo Coach.`
-          : `${count} of ${limit} plays used on Solo Coach — ${remaining} left.`}
+          ? `You've hit the ${limit}-play limit on the free plan.`
+          : `${count} of ${limit} plays used on the free plan — ${remaining} left.`}
         {/* Native (Apple 3.1.1): no upgrade steer — usage info only. */}
         <span data-web-only>
           {atCap

@@ -82,7 +82,7 @@ function buildSections(
         },
         {
           q: "What's included with Team Coach?",
-          a: `Everything in Solo Coach, plus unlimited plays, Game Mode, wristbands, team invites, practice plans, and Coach Cal — the AI coaching partner — with 50 messages per month. Heavy Cal users can add message packs.`,
+          a: `Everything in the free plan, plus unlimited plays, Game Mode, wristbands, team invites, practice plans, and Coach Cal — the AI coaching partner — with 50 messages per month. Heavy Cal users can add message packs.`,
         },
       ],
     },

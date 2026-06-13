@@ -225,7 +225,8 @@ describe("previewSubscriptionDowngrade", () => {
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.effectiveAt).toBe(new Date(NEXT_MONTH_UNIX * 1000).toISOString());
-      expect(res.currentName).toBe("Coach Pro");
+      // coach_ai (legacy "Coach Pro") now labels as Team Coach — folded 2026-05-27.
+      expect(res.currentName).toBe("Team Coach");
       expect(res.targetName).toBe("Team Coach");
     }
   });

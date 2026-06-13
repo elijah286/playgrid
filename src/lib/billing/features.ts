@@ -123,9 +123,11 @@ export function canUseAiFeatures(entitlement: Entitlement | null): boolean {
 }
 
 export const TIER_LABEL: Record<SubscriptionTier, string> = {
-  free: "Solo Coach",
+  free: "Free",
   coach: "Team Coach",
-  coach_ai: "Coach Pro",
+  // Coach Cal AI was folded into Team Coach (2026-05-27): there is no separate
+  // "Coach Pro" tier anymore. Legacy coach_ai holders display as Team Coach.
+  coach_ai: "Team Coach",
 };
 
 export const TIER_PRICE: Record<SubscriptionTier, { month: number | null; year: number | null }> = {

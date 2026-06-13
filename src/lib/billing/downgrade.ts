@@ -35,9 +35,10 @@ export type DowngradePreview = {
 };
 
 const TIER_DISPLAY: Record<SubscriptionTier, string> = {
-  free: "Solo Coach",
+  free: "Free",
   coach: "Team Coach",
-  coach_ai: "Coach Pro",
+  // Coach Pro folded into Team Coach (2026-05-27); legacy holders show as Team Coach.
+  coach_ai: "Team Coach",
 };
 
 /** When a downgrade would take effect (end of current billing period). */

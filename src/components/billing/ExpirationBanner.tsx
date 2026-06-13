@@ -4,8 +4,9 @@ import type { ExpirationNotice } from "@/lib/billing/expiration-notice";
 
 const TIER_LABELS: Record<"free" | "coach" | "coach_ai", string> = {
   free: "Free",
-  coach: "Coach",
-  coach_ai: "Coach Pro",
+  coach: "Team Coach",
+  // Coach Pro folded into Team Coach (2026-05-27); legacy holders show as Team Coach.
+  coach_ai: "Team Coach",
 };
 
 function formatDate(iso: string): string {

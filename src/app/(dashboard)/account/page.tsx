@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getCurrentEntitlement, type SubscriptionTier } from "@/lib/billing/entitlement";
-import { getFreePlayCapForOwner } from "@/lib/site/free-plays-config";
+import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
 import { tierAtLeast } from "@/lib/billing/features";
 import { getSeatUsage, getSeatCollaborators, getPendingCoachInvites, type SeatUsage, type SeatCollaborator, type PendingCoachInvite } from "@/lib/billing/seats";
 import { DEVICE_ID_COOKIE } from "@/lib/auth/sessions";
@@ -23,10 +23,10 @@ export default async function AccountPage() {
   if (!user) redirect("/login");
 
   const entitlement = await getCurrentEntitlement();
-  // Live, admin-configurable free-play cap for this owner (respects the
-  // site_settings value + any per-owner grandfathered cap) — never the
-  // hardcoded default. Drives the "N plays per playbook" line in the panel.
-  const freeMaxPlays = await getFreePlayCapForOwner(user.id);
+  // The admin-configured free-play cap (site_settings.free_max_plays_per_playbook)
+  // — the current Free-tier limit, never the hardcoded default. Drives the
+  // "N plays per playbook" line in the plan panel.
+  const freeMaxPlays = await getFreeMaxPlaysPerPlaybook();
   const isCoachPlus = tierAtLeast(entitlement, "coach");
   let displayName: string | null = null;
   let avatarUrl: string | null = null;
