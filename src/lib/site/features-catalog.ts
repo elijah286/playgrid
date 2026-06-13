@@ -1476,6 +1476,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-28",
   },
   {
+    id: "marketing-ios-app-banner",
+    name: "iOS app install banner (admin-gated)",
+    description:
+      "iPhone/iPad Safari and mobile-web visitors see a dismissible Smart App Banner at the top of the page promoting the XO Gridmaker app on the App Store, with an 'Open' button that deep-links to the App Store listing (tagged with a campaign token for App Analytics attribution). The iOS twin of the Android Play Store banner, served from the same render path. Gated behind a Site Admin toggle plus a saved numeric App Store ID so it stays dark until the app is live on the App Store; shown only on iOS browsers (never on desktop, Android, or inside the native app); dismissal sticks across sessions. Impressions, clicks, and dismissals are tracked for conversion measurement.",
+    category: "Marketing site",
+    status: "internal",
+    addedDate: "2026-06-13",
+  },
+  {
     id: "marketing-hero-playbook",
     name: "Hero playbook (admin-pickable, with A/B tracking)",
     description:
