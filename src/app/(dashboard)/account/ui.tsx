@@ -597,22 +597,26 @@ function PlanCard({
               {tier === "free" ? "See pricing" : "Change plan"}
             </Link>
           )}
-          {/* Native: in-app purchase UI is gated off, so we point coaches to
-              the web to view or change their plan. Opening the DEFAULT browser
-              (window.open _system → Safari, not the in-app webview) is the
-              US-storefront external-link allowance Apple cited in the rejection
-              (Guideline 3.1.3(b) / 3.1.1). No price shown in the app itself. */}
-          <button
-            type="button"
-            data-native-only
-            onClick={() =>
-              window.open("https://www.xogridmaker.com/account", "_system")
-            }
-            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface"
-          >
-            Manage your plan at xogridmaker.com →
-          </button>
         </div>
+
+        {/* Native: in-app purchase UI is gated off, so point coaches to the web
+            to view or change their plan. Opens the DEFAULT browser (window.open
+            _system → real Safari, not the in-app webview) — the US-storefront
+            external-link allowance Apple cited in the rejection (Guideline
+            3.1.3(b) / 3.1.1). No price shown in the app. On its own full-width
+            line so the long label isn't squeezed next to the tier name; the
+            arrow is bound to the text so it can't orphan onto a second line. */}
+        <button
+          type="button"
+          data-native-only
+          onClick={() =>
+            window.open("https://www.xogridmaker.com/account", "_system")
+          }
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2.5 text-sm font-medium hover:bg-surface"
+        >
+          Manage your plan at xogridmaker.com
+          <span aria-hidden>→</span>
+        </button>
 
         {isComp ? (
           <p className="rounded-md bg-surface px-3 py-2 text-xs text-muted ring-1 ring-border">
