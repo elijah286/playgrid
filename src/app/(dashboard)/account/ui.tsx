@@ -25,7 +25,6 @@ import { SEAT_PRICE_USD_PER_MONTH } from "@/lib/billing/seats-config";
 import type { Entitlement, SubscriptionTier } from "@/lib/billing/entitlement";
 import {
   FREE_MAX_PLAYBOOKS_OWNED,
-  FREE_MAX_PLAYS_PER_PLAYBOOK,
   TIER_LABEL,
 } from "@/lib/billing/features";
 import type { SeatUsage, SeatCollaborator, PendingCoachInvite } from "@/lib/billing/seats";
@@ -69,6 +68,7 @@ export function AccountClient({
   seatCollaborators,
   pendingCoachInvites,
   aiFeedbackStatus,
+  freeMaxPlays,
   pendingChange,
   pendingCancellation,
 }: {
@@ -81,6 +81,7 @@ export function AccountClient({
   seatCollaborators: SeatCollaborator[];
   pendingCoachInvites: PendingCoachInvite[];
   aiFeedbackStatus: "consenting" | "declined" | "unanswered";
+  freeMaxPlays: number;
   pendingChange: { targetTier: SubscriptionTier; effectiveAt: string } | null;
   pendingCancellation: { effectiveAt: string } | null;
 }) {
@@ -124,6 +125,7 @@ export function AccountClient({
         <div className="space-y-4">
           <PlanCard
             entitlement={entitlement}
+            freeMaxPlays={freeMaxPlays}
             pendingChange={pendingChange}
             pendingCancellation={pendingCancellation}
           />
@@ -428,10 +430,12 @@ function PasswordCard() {
 
 function PlanCard({
   entitlement,
+  freeMaxPlays,
   pendingChange,
   pendingCancellation,
 }: {
   entitlement: Entitlement | null;
+  freeMaxPlays: number;
   pendingChange: { targetTier: SubscriptionTier; effectiveAt: string } | null;
   pendingCancellation: { effectiveAt: string } | null;
 }) {
@@ -602,7 +606,7 @@ function PlanCard({
           </p>
         ) : null}
 
-        <PlanCapabilityList tier={tier} />
+        <PlanCapabilityList tier={tier} freeMaxPlays={freeMaxPlays} />
 
         {err ? <p className="text-xs text-red-700">{err}</p> : null}
       </div>
@@ -838,14 +842,20 @@ function CancelSubscriptionDialog({
  * Source of truth is `lib/billing/features.ts` — keep this list aligned
  * with the gates used elsewhere in the app.
  */
-function PlanCapabilityList({ tier }: { tier: "free" | "coach" | "coach_ai" }) {
+function PlanCapabilityList({
+  tier,
+  freeMaxPlays,
+}: {
+  tier: "free" | "coach" | "coach_ai";
+  freeMaxPlays: number;
+}) {
   // Each row: label + which tier(s) include it. The list is the same
   // for every viewer; we mark each row as included or locked based on
   // the viewer's tier so a free user sees what they have AND what they
   // unlock by upgrading, without leaving the account page.
   const rows: Array<{ label: string; includedAt: "free" | "coach" | "coach_ai" }> = [
     { label: `Up to ${FREE_MAX_PLAYBOOKS_OWNED} playbook`, includedAt: "free" },
-    { label: `${FREE_MAX_PLAYS_PER_PLAYBOOK} plays per playbook`, includedAt: "free" },
+    { label: `${freeMaxPlays} plays per playbook`, includedAt: "free" },
     { label: "Mobile, tablet, and desktop editor", includedAt: "free" },
     { label: "Print playsheets (with watermark)", includedAt: "free" },
     { label: "View shared plays without an account", includedAt: "free" },
