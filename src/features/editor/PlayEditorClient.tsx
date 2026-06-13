@@ -2074,7 +2074,17 @@ function PlayEditorClientInner({
       // `--field-aspect` lives here so the CSS calc sees the runtime
       // ratio; the field-viewport child still publishes its own copy
       // for the existing `.field-viewport` @media rules.
-      className="play-editor-content relative flex min-h-0 min-w-0 flex-1 flex-col gap-2 pb-20 sm:pb-0"
+      //
+      // `pb-20` on mobile reserves room under the editor stack for the
+      // global fixed bottom nav (dropped at `sm:` where the nav isn't
+      // fixed). Library mode embeds the editor inside a bordered card
+      // mid-page — it has none of the editor chrome that hangs below the
+      // field, and the page (not this component) owns bottom-nav
+      // clearance — so that 80px becomes dead white space below the
+      // field SVG. Skip it in library mode so the card hugs the field.
+      className={`play-editor-content relative flex min-h-0 min-w-0 flex-1 flex-col gap-2 ${
+        libraryMode ? "" : "pb-20 sm:pb-0"
+      }`}
       style={{ ["--field-aspect" as string]: String(fieldAspect) }}
     >
       {/* Mobile-only slim playbook banner. Replaces the SiteHeader
