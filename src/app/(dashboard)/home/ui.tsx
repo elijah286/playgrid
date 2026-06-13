@@ -263,7 +263,11 @@ function PlaybookTile({
           </h3>
           <div className="flex flex-wrap items-center gap-1">
             {tile.is_example && <Badge variant="primary">Example</Badge>}
-            {tile.role !== "owner" && <Badge variant="default">Shared</Badge>}
+            {tile.role !== "owner" && (
+              <Badge variant={tile.role === "editor" ? "primary" : "default"}>
+                {tile.role === "editor" ? "Coach" : "Player"}
+              </Badge>
+            )}
             {native && isDownloaded && <DownloadedChip />}
           </div>
         </div>
@@ -641,7 +645,7 @@ function PlaybookBookTile({
                   {tile.is_example && <Badge variant="primary">Example</Badge>}
                   {tile.role !== "owner" && (
                     <Badge variant={tile.role === "editor" ? "primary" : "default"}>
-                      {tile.role === "editor" ? "Editor" : "Viewer"}
+                      {tile.role === "editor" ? "Coach" : "Player"}
                     </Badge>
                   )}
                   {native && isDownloaded && <DownloadedChip />}
