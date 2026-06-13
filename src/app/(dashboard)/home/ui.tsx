@@ -42,6 +42,7 @@ import {
 } from "@/app/actions/admin-examples";
 import type { DashboardPlaybookTile, DashboardSummary } from "@/app/actions/plays";
 import { pickEditableFreePlaybook } from "@/lib/billing/free-playbook";
+import { ArchiveLockedDialog } from "@/components/billing/ArchiveLockedDialog";
 import type { Player, Route, SportVariant, Zone } from "@/domain/play/types";
 import {
   defaultSettingsForVariant,
@@ -1208,6 +1209,11 @@ export function DashboardClient({
     secondaryLabel?: string;
     secondaryHref?: string;
   } | null>(null);
+  // The playbook a free coach just tried to archive. Archiving is a Team
+  // Coach feature, so instead of failing we offer delete-or-keep.
+  const [archiveGate, setArchiveGate] = useState<DashboardPlaybookTile | null>(
+    null,
+  );
   useEffect(() => {
     if (searchParams.get("create") === "1") {
       setShowCreate(true);
@@ -1572,7 +1578,13 @@ export function DashboardClient({
         : {
             label: "Archive",
             icon: Archive,
-            onSelect: () => handle(() => archivePlaybookAction(tile.id, true)),
+            // Archiving is a Team Coach feature. Free coaches get the
+            // delete-or-keep dialog (an archived book still eats their one
+            // free slot); the server enforces the same gate as a backstop.
+            onSelect: () =>
+              canUseTeamFeatures
+                ? handle(() => archivePlaybookAction(tile.id, true))
+                : setArchiveGate(tile),
           },
       {
         label: "Delete",
@@ -1991,6 +2003,16 @@ export function DashboardClient({
         message={upgradeNotice?.message ?? ""}
         secondaryLabel={upgradeNotice?.secondaryLabel}
         secondaryHref={upgradeNotice?.secondaryHref}
+      />
+      <ArchiveLockedDialog
+        open={archiveGate !== null}
+        playbookName={archiveGate?.name ?? ""}
+        onClose={() => setArchiveGate(null)}
+        onDelete={() => {
+          const tile = archiveGate;
+          setArchiveGate(null);
+          if (tile) deletePlaybookOptimistic(tile);
+        }}
       />
       </div>
 

@@ -16,6 +16,7 @@ import {
   useToast,
 } from "@/components/ui";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
+import { ArchiveLockedDialog } from "@/components/billing/ArchiveLockedDialog";
 import { TeamCoachUpgradeDialog } from "@/features/upgrade/TeamCoachUpgradeDialog";
 import {
   archivePlaybookAction,
@@ -207,6 +208,9 @@ export function PlaybookHeader({
   // Mirrors the Calendar / Practice Plans paywall look — replaces the
   // older bare-lock UpgradeModal that didn't match the rest of the app.
   const [sendCopyUpgradeOpen, setSendCopyUpgradeOpen] = useState(false);
+  // Free coaches can't archive — an archived book still consumes their one
+  // free slot. Show the delete-or-keep dialog instead of failing.
+  const [archiveLockedOpen, setArchiveLockedOpen] = useState(false);
   // Owner-only modal for editing player_invite_policy. Three radio
   // options: disabled / approval / open. Survey-style UI lives below
   // in <PlayerInvitePolicyDialog>.
@@ -412,6 +416,12 @@ export function PlaybookHeader({
   }
 
   function handleArchive() {
+    // Archiving is a Team Coach feature; free coaches get the delete-or-keep
+    // dialog. The server enforces the same gate as a backstop.
+    if (!viewerIsCoach) {
+      setArchiveLockedOpen(true);
+      return;
+    }
     run(() => archivePlaybookAction(playbookId, true), () => router.push("/home"));
   }
 
@@ -773,6 +783,20 @@ export function PlaybookHeader({
         message={upgradeNotice?.message ?? ""}
         secondaryLabel={upgradeNotice?.secondaryLabel}
         secondaryHref={upgradeNotice?.secondaryHref}
+      />
+      <ArchiveLockedDialog
+        open={archiveLockedOpen}
+        playbookName={name}
+        onClose={() => setArchiveLockedOpen(false)}
+        onDelete={() => {
+          setArchiveLockedOpen(false);
+          // The dialog is the confirmation step, so delete straight away
+          // (no second window.confirm) and route home like a normal delete.
+          run(
+            () => deletePlaybookAction(playbookId),
+            () => router.push("/home"),
+          );
+        }}
       />
       <TeamCoachUpgradeDialog
         open={sendCopyUpgradeOpen}
