@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { Bell, CloudOff, Timer, X } from "lucide-react";
 import { isNativeApp } from "@/lib/native/isNativeApp";
 import { track } from "@/lib/analytics/track";
@@ -107,21 +106,14 @@ export function NativeWelcomeSpotlight() {
             </li>
           ))}
         </ul>
-        <div className="mt-5 grid gap-2">
-          <Link
-            href="/home"
+        <div className="mt-5">
+          <button
+            type="button"
             onClick={dismiss}
             className="flex w-full items-center justify-center rounded-xl bg-primary py-2.5 text-sm font-bold text-white transition hover:opacity-90"
           >
-            Go to my playbooks
-          </Link>
-          <Link
-            href="/reminders"
-            onClick={dismiss}
-            className="flex w-full items-center justify-center rounded-xl border border-border py-2.5 text-sm font-semibold text-foreground transition hover:bg-surface-inset"
-          >
-            Set a game reminder
-          </Link>
+            Got it
+          </button>
         </div>
       </div>
     </div>
