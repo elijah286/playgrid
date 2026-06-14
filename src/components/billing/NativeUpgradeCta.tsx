@@ -21,10 +21,15 @@ export function NativeUpgradeCta({
   label = "Upgrade to Coach",
   variant = "link",
   fallback = null,
+  className,
 }: {
   label?: string;
   variant?: "link" | "button";
   fallback?: ReactNode;
+  /** Full class override for the enabled tap target — lets callers match the
+   *  exact web CTA they sit next to (inline banner pill, compact button, etc.).
+   *  When provided it wins over `variant`. */
+  className?: string;
 }) {
   const [state, setState] = useState<"loading" | "enabled" | "disabled" | "web">("loading");
 
@@ -48,6 +53,13 @@ export function NativeUpgradeCta({
   }, []);
 
   if (state === "enabled") {
+    if (className) {
+      return (
+        <Link href="/pricing" className={className}>
+          {label}
+        </Link>
+      );
+    }
     if (variant === "button") {
       return (
         <Link

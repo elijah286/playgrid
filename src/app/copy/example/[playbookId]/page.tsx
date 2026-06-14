@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { NativeUpgradeCta } from "@/components/billing/NativeUpgradeCta";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
@@ -200,6 +201,10 @@ function QuotaDisclosure({ quota }: { quota: QuotaState }) {
       >
         See pricing →
       </Link>
+      <NativeUpgradeCta
+        label="Upgrade to Coach →"
+        className="mt-1.5 inline-block font-medium underline-offset-2 hover:underline"
+      />
     </div>
   );
 }

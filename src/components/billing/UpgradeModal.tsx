@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { Lock, X } from "lucide-react";
+import { NativeUpgradeCta } from "@/components/billing/NativeUpgradeCta";
 
 type Props = {
   open: boolean;
@@ -76,6 +77,11 @@ export function UpgradeModal({
         >
           {ctaLabel}
         </Link>
+        {/* Native (iOS) path to the in-app purchase — renders only on iOS when
+            IAP is enabled; null on web (where the data-web-only CTA above shows). */}
+        <div className="w-full" data-native-only>
+          <NativeUpgradeCta variant="button" label={ctaLabel} />
+        </div>
       </div>
       </div>
     </div>

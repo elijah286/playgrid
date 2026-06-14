@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { NativeUpgradeCta } from "@/components/billing/NativeUpgradeCta";
 import { acceptCopyLinkAction } from "@/app/actions/copy-links";
 import { Button, useToast } from "@/components/ui";
 
@@ -76,12 +77,17 @@ export function ClaimCopyButton({
         >
           Upgrade to claim
         </Link>
-        <p
-          data-native-only
-          className="rounded-lg border border-border px-4 py-2 text-center text-sm text-muted"
-        >
-          You&apos;ve reached the free playbook limit.
-        </p>
+        <div data-native-only>
+          <NativeUpgradeCta
+            label="Upgrade to claim"
+            className="block w-full rounded-lg bg-primary px-4 py-2 text-center text-sm font-semibold text-white hover:bg-primary/90"
+            fallback={
+              <p className="rounded-lg border border-border px-4 py-2 text-center text-sm text-muted">
+                You&apos;ve reached the free playbook limit.
+              </p>
+            }
+          />
+        </div>
       </>
     );
   }

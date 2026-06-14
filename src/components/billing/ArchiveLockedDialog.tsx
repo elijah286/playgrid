@@ -1,6 +1,7 @@
 "use client";
 
 import { Archive, X } from "lucide-react";
+import { NativeUpgradeCta } from "@/components/billing/NativeUpgradeCta";
 
 type Props = {
   open: boolean;
@@ -75,6 +76,10 @@ export function ArchiveLockedDialog({
             </span>
           </p>
           <div className="mt-1 flex w-full flex-col gap-2">
+            {/* On iOS with IAP live, archiving becomes reachable by upgrading —
+                gives native coaches the path web users get, without losing data.
+                Renders nothing on web or when IAP is off. */}
+            <NativeUpgradeCta variant="button" label="Upgrade to Coach" />
             <button
               type="button"
               onClick={onDelete}

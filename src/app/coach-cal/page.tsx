@@ -16,6 +16,7 @@ import {
   Wand2,
 } from "lucide-react";
 import { CoachAiIcon } from "@/features/coach-ai/CoachAiIcon";
+import { NativeUpgradeCta } from "@/components/billing/NativeUpgradeCta";
 import {
   MESSAGE_PACK_PRICE_USD_PER_MONTH,
   MESSAGE_PACK_SIZE,
@@ -750,6 +751,11 @@ function Pricing({ evalDays }: { evalDays: number }) {
               QB reads and per-position coaching notes written for you
             </li>
           </ul>
+          {/* Native (iOS): the only purchase door on this marketing page —
+              renders the IAP CTA when enabled, nothing otherwise. */}
+          <div className="mt-6">
+            <NativeUpgradeCta variant="button" label="Subscribe to Coach" />
+          </div>
         </div>
       </div>
     </section>

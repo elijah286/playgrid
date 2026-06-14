@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { isNativeApp } from "@/lib/native/isNativeApp";
+import { NativeUpgradeCta } from "@/components/billing/NativeUpgradeCta";
 import {
   ArrowRight,
   Check,
@@ -1192,6 +1193,10 @@ export function PrintPlaybookClient({
                       >
                         Upgrade
                       </Link>
+                      <NativeUpgradeCta
+                        label="Upgrade to Coach"
+                        className="inline-flex items-center rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-hover"
+                      />
                     </div>
                   </div>
                 ) : null}
@@ -1909,6 +1914,10 @@ function CustomizePanel({
             >
               <Lock className="size-3.5" /> Upgrade to remove watermark
             </Link>
+            <NativeUpgradeCta
+              label="Upgrade to remove watermark"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-hover"
+            />
           </div>
         ) : (
           <div className="space-y-2">

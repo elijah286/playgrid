@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronRight, Lock } from "lucide-react";
+import { NativeUpgradeCta } from "@/components/billing/NativeUpgradeCta";
 import {
   listGameResultsForPlayAction,
   type PlayGameResultRow,
@@ -190,6 +191,10 @@ function LockedCard() {
           >
             Upgrade to Team Coach
           </Link>
+          <NativeUpgradeCta
+            label="Upgrade to Team Coach"
+            className="mt-3 inline-flex h-8 items-center justify-center rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+          />
         </div>
       )}
     </div>

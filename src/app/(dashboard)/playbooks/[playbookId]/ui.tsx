@@ -175,6 +175,7 @@ import {
 } from "@/components/ui";
 import { PlaybookHeader, type PlaybookHeaderPlayActions } from "./PlaybookHeader";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
+import { NativeUpgradeCta } from "@/components/billing/NativeUpgradeCta";
 import { PlaybookAnchorPublisher } from "@/features/coach-ai/PlaybookAnchorPublisher";
 import { CoachCalCTA } from "@/features/coach-ai/CoachCalCTA";
 import { openCoachCal } from "@/features/coach-ai/openCoachCal";
@@ -5242,6 +5243,10 @@ function PlayCapBanner({ count, limit }: { count: number; limit: number }) {
       >
         See Team Coach
       </Link>
+      <NativeUpgradeCta
+        label="Upgrade for unlimited plays"
+        className="inline-flex shrink-0 items-center gap-1.5 self-end rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white hover:opacity-90 sm:self-auto"
+      />
     </div>
   );
 }
