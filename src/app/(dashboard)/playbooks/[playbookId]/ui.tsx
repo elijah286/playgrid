@@ -2244,10 +2244,24 @@ function PlaybookDetailClientInner({
                         )}
                         {isLocked && (
                           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
-                            <div className="flex items-center gap-1.5 rounded-full bg-foreground/85 px-3 py-1.5 text-xs font-semibold text-white shadow-elevated">
+                            <Link
+                              href="/pricing"
+                              data-web-only
+                              className="pointer-events-auto flex items-center gap-1.5 rounded-full bg-foreground/85 px-3 py-1.5 text-xs font-semibold text-white shadow-elevated hover:bg-foreground"
+                            >
                               <Lock className="size-3.5" />
                               Upgrade to unlock
-                            </div>
+                            </Link>
+                            <NativeUpgradeCta
+                              label="Upgrade to unlock"
+                              className="pointer-events-auto flex items-center gap-1.5 rounded-full bg-foreground/85 px-3 py-1.5 text-xs font-semibold text-white shadow-elevated hover:bg-foreground"
+                              fallback={
+                                <div className="flex items-center gap-1.5 rounded-full bg-foreground/85 px-3 py-1.5 text-xs font-semibold text-white shadow-elevated">
+                                  <Lock className="size-3.5" />
+                                  Upgrade to unlock
+                                </div>
+                              }
+                            />
                           </div>
                         )}
                         <PlayTileLink
