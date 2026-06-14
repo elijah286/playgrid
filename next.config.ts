@@ -40,6 +40,10 @@ const nextConfig: NextConfig = {
       // /learn-more was the deep-dive tour page before the tour content
       // was lifted into its own route. Preserve external links and SEO.
       { source: "/learn-more", destination: "/tour", permanent: true },
+      // Ad landing redirect — set your ad destination URL to /go so you can
+      // change where ads land without touching the campaign in Meta/Reddit/etc.
+      // Currently routes to the homepage; swap destination here when needed.
+      { source: "/go", destination: "/", permanent: false },
       // Canonicalize on the www host. metadataBase and NEXT_PUBLIC_SITE_URL
       // both point at https://www.xogridmaker.com — a user landing on the
       // apex would otherwise generate RSC prefetches and canonical links
