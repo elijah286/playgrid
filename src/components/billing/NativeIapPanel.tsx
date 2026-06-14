@@ -4,7 +4,6 @@ import { type ReactNode, useEffect, useState } from "react";
 import { nativePlatform } from "@/lib/native/isNativeApp";
 import { getIapClientConfig } from "@/app/actions/iap";
 import {
-  configureIap,
   getCoachOffers,
   purchaseCoach,
   restoreCoach,
@@ -16,7 +15,7 @@ type Phase = "loading" | "unavailable" | "ready" | "success";
 /**
  * iOS in-app purchase panel for the Coach plan. Renders the StoreKit-priced
  * offers + a Subscribe / Restore flow when IAP is enabled (server flag +
- * RevenueCat configured), and otherwise renders `fallback` — so on web, on
+ * StoreKit ready), and otherwise renders `fallback` — so on web, on
  * Android, and on iOS-before-launch it shows exactly what was there before.
  * Prices come straight from StoreKit (offer.priceString); never hardcode them.
  */
@@ -35,11 +34,10 @@ export function NativeIapPanel({ fallback }: { fallback: ReactNode }) {
       }
       try {
         const cfg = await getIapClientConfig();
-        if (!cfg.enabled || !cfg.iosSdkKey) {
+        if (!cfg.enabled) {
           if (!cancelled) setPhase("unavailable");
           return;
         }
-        await configureIap(cfg.iosSdkKey);
         const list = await getCoachOffers();
         if (cancelled) return;
         if (!list.length) {
@@ -58,9 +56,9 @@ export function NativeIapPanel({ fallback }: { fallback: ReactNode }) {
   }, []);
 
   async function buy(offer: CoachOffer) {
-    setBusy(offer.packageId);
+    setBusy(offer.productId);
     setError(null);
-    const res = await purchaseCoach(offer.packageId);
+    const res = await purchaseCoach(offer.productId);
     setBusy(null);
     if (res.cancelled) return;
     if (res.ok && res.entitled) {
@@ -121,7 +119,7 @@ export function NativeIapPanel({ fallback }: { fallback: ReactNode }) {
       <div className="mt-4 flex flex-col gap-2">
         {offers.map((offer) => (
           <button
-            key={offer.packageId}
+            key={offer.productId}
             type="button"
             disabled={busy !== null}
             onClick={() => buy(offer)}
@@ -129,7 +127,7 @@ export function NativeIapPanel({ fallback }: { fallback: ReactNode }) {
           >
             <span>{offer.interval === "year" ? "Annual" : "Monthly"}</span>
             <span>
-              {busy === offer.packageId
+              {busy === offer.productId
                 ? "…"
                 : `${offer.priceString}/${offer.interval === "year" ? "yr" : "mo"}`}
             </span>

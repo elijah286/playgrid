@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getRevenueCatConfig } from "@/lib/site/revenuecat-config";
+import { getAppleIapConfig } from "@/lib/site/apple-iap-config";
 
 export const metadata: Metadata = {
   title: "Privacy Policy · XO Gridmaker",
@@ -7,13 +7,13 @@ export const metadata: Metadata = {
 };
 
 export default async function PrivacyPage() {
-  // Disclose the Apple / RevenueCat sub-processors only once iOS in-app
+  // Disclose the Apple App Store sub-processor only once iOS in-app
   // purchases are actually enabled (the same admin toggle that turns on the
   // purchase UI), so the policy describes processors we're really using rather
   // than ones still behind a flag. Off → this page is byte-identical to before.
   let iapEnabled = false;
   try {
-    iapEnabled = (await getRevenueCatConfig()).iapEnabled;
+    iapEnabled = (await getAppleIapConfig()).enabled;
   } catch {
     iapEnabled = false;
   }
@@ -88,8 +88,8 @@ export default async function PrivacyPage() {
               {iapEnabled ? (
                 <>
                   {" "}If you subscribe inside the iOS app, Apple processes the
-                  payment instead and shares your subscription status with us
-                  through RevenueCat (again, we never see your card number).
+                  payment and shares your subscription status with us (again, we
+                  never see your card number).
                 </>
               ) : null}
             </li>
@@ -251,12 +251,6 @@ export default async function PrivacyPage() {
                   on iPhone/iPad. When you subscribe inside the iOS app, Apple
                   handles the payment and shares your purchase and renewal status
                   with us; we never see your card details.
-                </li>
-                <li>
-                  RevenueCat — validates App Store subscription receipts and
-                  notifies our server when an in-app subscription is purchased,
-                  renewed, or cancelled. We send RevenueCat your account id so the
-                  subscription can be matched to your account.
                 </li>
               </>
             ) : null}

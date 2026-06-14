@@ -120,7 +120,7 @@ export default async function PricingPage() {
           rejection). This page itself names no price and no external purchase
           path, so it stays safe even off the US storefront. */}
       <div data-native-only>
-        {/* When IAP is enabled (server flag + RevenueCat configured) this shows
+        {/* When IAP is enabled (server flag) this shows
             the StoreKit purchase UI; otherwise it renders the neutral
             App-Store-safe notice below — identical to the pre-IAP behavior. */}
         <NativeIapPanel

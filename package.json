@@ -23,6 +23,7 @@
     "store:screenshots": "node scripts/capture-store-screenshots.mjs"
   },
   "dependencies": {
+    "@apple/app-store-server-library": "^3.1.0",
     "@capacitor-community/keep-awake": "^8.0.1",
     "@capacitor/android": "^8.3.1",
     "@capacitor/app": "^8.1.0",
@@ -36,11 +37,11 @@
     "@capacitor/splash-screen": "^8.0.1",
     "@capacitor/status-bar": "^8.0.2",
     "@capgo/capacitor-social-login": "^8.3.22",
+    "@capgo/native-purchases": "^8.4.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@maxmind/geoip2-node": "^6.3.4",
-    "@revenuecat/purchases-capacitor": "^13.1.7",
     "@sentry/nextjs": "^10.49.0",
     "@stripe/react-stripe-js": "^6.4.0",
     "@stripe/stripe-js": "^9.6.0",

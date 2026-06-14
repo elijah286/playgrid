@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 
 export type SubscriptionTier = "free" | "coach" | "coach_ai";
-// "apple" = an App Store / RevenueCat subscription (see iap_subscriptions).
+// "apple" = an App Store (StoreKit) subscription (see iap_subscriptions).
 // Managed in Apple's UI, not the Stripe billing portal — the "manage plan"
 // surface branches on this.
 export type EntitlementSource = "comp" | "stripe" | "apple" | "free";

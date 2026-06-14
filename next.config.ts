@@ -20,6 +20,9 @@ const nextConfig: NextConfig = {
   // Self-contained server bundle for container deploys (Cloud Run / Fly / etc.).
   // Emits .next/standalone with a minimal node_modules tree.
   output: "standalone",
+  // Apple's App Store Server library is server-only (cert-chain / JWS
+  // verification); keep it external so Next doesn't bundle it into a route chunk.
+  serverExternalPackages: ["@apple/app-store-server-library"],
   images: {
     remotePatterns: [
       {
