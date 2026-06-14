@@ -19,7 +19,12 @@ export function PhoneFrame({
       style={{ aspectRatio: "9 / 19.5" }}
     >
       <div className="absolute left-1/2 top-2 z-10 h-4 w-20 -translate-x-1/2 rounded-full bg-black sm:top-3 sm:h-5 sm:w-24" />
-      <div className="relative h-full w-full overflow-hidden rounded-[26px] bg-white sm:rounded-[28px] md:rounded-[32px]">
+      {/* translateZ(0) + backface-visibility give this clip its own
+          compositing layer. Without it, Safari stops honouring the
+          rounded `overflow-hidden` clip when an ancestor has a 3D
+          transform (the hero's tilt) — the screen's square bottom
+          corners poke past the bezel as a hard line. */}
+      <div className="relative h-full w-full overflow-hidden rounded-[26px] bg-white [backface-visibility:hidden] [transform:translateZ(0)] sm:rounded-[28px] md:rounded-[32px]">
         {children}
       </div>
     </div>

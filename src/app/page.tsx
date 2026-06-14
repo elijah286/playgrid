@@ -143,7 +143,7 @@ export default async function HomePage() {
                     src="/marketing/screens/phone-playbook-2col.png"
                     alt="A 7v7 playbook in XO Gridmaker — a two-column grid of play cards with route diagrams"
                     width={824}
-                    height={1785}
+                    height={1945}
                     priority
                     className="h-full w-full object-cover object-top"
                   />
