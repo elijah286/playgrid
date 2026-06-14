@@ -629,7 +629,8 @@ export function RealPlaybooks({
   examples: Awaited<ReturnType<typeof loadExamplePlaybooks>>;
 }) {
   return (
-    <section className="relative py-12 md:py-24">
+    // id="examples" is the scroll target for the hero phone (tap to jump here).
+    <section id="examples" className="relative scroll-mt-24 py-12 md:py-24">
       <div className="mx-auto max-w-6xl px-6">
         <Reveal>
           <div className="max-w-2xl">

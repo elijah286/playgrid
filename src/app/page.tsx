@@ -129,8 +129,13 @@ export default async function HomePage() {
             {/* Primary visual: the real playbook grid on a phone, tilted
                 in 3D. Shows the whole product at a glance — play cards,
                 route diagrams, the tabbed shell — not just one play. A
-                static, committed screenshot (no auth / live render). */}
-            <div className="[perspective:1400px]">
+                static, committed screenshot (no auth / live render).
+                Clicking it jumps down to the live example playbooks. */}
+            <a
+              href="#examples"
+              aria-label="See real example playbooks below"
+              className="block cursor-pointer [perspective:1400px]"
+            >
               <div className="transition-transform duration-500 ease-out [transform:rotateY(-14deg)_rotateX(4deg)_rotate(-1deg)] hover:[transform:rotateY(-7deg)_rotateX(2deg)]">
                 <PhoneFrame className="w-[190px] sm:w-[205px] md:w-[225px] drop-shadow-[0_35px_60px_rgba(15,30,61,0.28)]">
                   <Image
@@ -143,7 +148,7 @@ export default async function HomePage() {
                   />
                 </PhoneFrame>
               </div>
-            </div>
+            </a>
           </div>
         </div>
 

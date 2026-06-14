@@ -192,7 +192,7 @@ export default async function RootLayout({
   }
 
   return (
-    <html lang="en" className={`h-full antialiased ${inter.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`h-full scroll-smooth antialiased ${inter.variable}`} suppressHydrationWarning>
       <head>
         {/* Apply color scheme before hydration to avoid flash. Only honor a
             dark preference for logged-in users; visitors always see light. */}
