@@ -27,6 +27,7 @@ import {
 } from "@/lib/site/example-playbooks";
 import { HeroPlaybookCta } from "@/features/marketing/HeroPlaybookCta";
 import { PhoneFrame } from "@/features/marketing/DeviceFrames";
+import { ScrollToLink } from "@/features/marketing/ScrollToLink";
 import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
 import {
   BuiltByACoach,
@@ -131,9 +132,9 @@ export default async function HomePage() {
                 route diagrams, the tabbed shell — not just one play. A
                 static, committed screenshot (no auth / live render).
                 Clicking it jumps down to the live example playbooks. */}
-            <a
-              href="#examples"
-              aria-label="See real example playbooks below"
+            <ScrollToLink
+              targetId="examples"
+              ariaLabel="See real example playbooks below"
               className="block cursor-pointer [perspective:1400px]"
             >
               <div className="transition-transform duration-500 ease-out [transform:rotateY(-14deg)_rotateX(4deg)_rotate(-1deg)] hover:[transform:rotateY(-7deg)_rotateX(2deg)]">
@@ -148,7 +149,7 @@ export default async function HomePage() {
                   />
                 </PhoneFrame>
               </div>
-            </a>
+            </ScrollToLink>
           </div>
         </div>
 
