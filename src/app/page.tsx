@@ -37,6 +37,7 @@ import {
   FreeForSolo,
   PrintoutsAndWristbands,
   RealPlaybooks,
+  RunTheTeam,
 } from "@/features/marketing/HomeSections";
 import { isFootballLibraryAvailable } from "@/lib/learn/access";
 
@@ -94,9 +95,9 @@ export default async function HomePage() {
               className="mt-5 max-w-xl text-base leading-relaxed sm:mt-8 sm:text-lg"
               style={{ color: "#475569" }}
             >
-              Create custom playbooks and share them with your team. Quickly
-              generate game-ready wristbands and play sheets. Designed for flag,
-              7v7, and tackle football coaches.
+              Design plays, schedule the season, and keep players and parents
+              in the loop — all in one place. Print game-ready wristbands and
+              call sheets. Built for flag, 7v7, and tackle football coaches.
             </p>
 
             <div className="mt-6 flex flex-wrap gap-3 sm:mt-10">
@@ -167,6 +168,7 @@ export default async function HomePage() {
           free pitch is cost reassurance, then proof (print, examples, story),
           then a final CTA. */}
       <EveryScreen />
+      <RunTheTeam />
       <CoachCalTeaser />
       {libraryAvailable ? <FootballLibraryTeaser /> : null}
       <FreeForSolo freeMaxPlays={freeMaxPlays} />
