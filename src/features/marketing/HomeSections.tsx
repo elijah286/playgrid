@@ -349,14 +349,14 @@ export function FreeForSolo({ freeMaxPlays }: { freeMaxPlays: number }) {
                   Free, forever
                 </p>
                 <h2 className="mt-2 text-3xl font-extrabold tracking-tight md:text-4xl">
-                  Solo coach? You pay <span style={{ color: BRAND_GREEN }}>$0</span>.
+                  Your first team is <span style={{ color: BRAND_GREEN }}>free</span>.
                 </h2>
                 <p className="mt-3 max-w-xl text-muted">
                   One playbook with up to {freeMaxPlays} plays is free, forever.
                   Call sheets print free. The team calendar, player invites,
                   and roster are all yours
                   <span data-web-only>
-                    {" "}— upgrade to Team Coach when you want wristbands,
+                    {" "}— upgrade to Coach when you want wristbands,
                     bigger playbooks, and assistant-coach collaboration
                   </span>
                   .
