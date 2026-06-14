@@ -25,8 +25,9 @@ import {
   loadExamplePlaybooks,
   loadHeroMarketingExample,
 } from "@/lib/site/example-playbooks";
-import { ExampleBookTile } from "@/features/dashboard/ExampleBookTile";
 import { HeroPlaybookCta } from "@/features/marketing/HeroPlaybookCta";
+import { PhoneFrame } from "@/features/marketing/DeviceFrames";
+import { ScrollToLink } from "@/features/marketing/ScrollToLink";
 import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
 import {
   BuiltByACoach,
@@ -35,8 +36,8 @@ import {
   FinalCta,
   FootballLibraryTeaser,
   FreeForSolo,
-  PrintoutsAndWristbands,
   RealPlaybooks,
+  RunTheTeam,
 } from "@/features/marketing/HomeSections";
 import { isFootballLibraryAvailable } from "@/lib/learn/access";
 
@@ -77,8 +78,8 @@ export default async function HomePage() {
             section's top edge crest the fold is the single most reliable
             "scroll for more" cue — a 100vh hero teaches visitors there's
             nothing below. */}
-        <div className="relative mx-auto flex max-w-6xl flex-col items-center gap-6 px-5 py-10 sm:gap-10 sm:px-6 sm:py-16 md:flex-row md:items-center md:gap-12 md:py-20 lg:gap-16">
-          <div className="flex-1">
+        <div className="relative mx-auto flex max-w-6xl flex-col items-center gap-6 px-5 py-10 sm:gap-10 sm:px-6 sm:py-16 md:flex-row md:items-center md:justify-center md:gap-10 md:py-20 lg:gap-14">
+          <div className="md:max-w-xl">
             <h1
               className="text-4xl font-extrabold leading-[1.02] tracking-tight sm:text-5xl md:text-6xl lg:text-7xl"
               style={{ color: BRAND_NAVY }}
@@ -94,9 +95,9 @@ export default async function HomePage() {
               className="mt-5 max-w-xl text-base leading-relaxed sm:mt-8 sm:text-lg"
               style={{ color: "#475569" }}
             >
-              Create custom playbooks and share them with your team. Quickly
-              generate game-ready wristbands and play sheets. Designed for flag,
-              7v7, and tackle football coaches.
+              Design plays, schedule the season, and keep players and parents
+              in the loop — all in one place. Print game-ready wristbands and
+              call sheets. Built for flag, 7v7, and tackle football coaches.
             </p>
 
             <div className="mt-6 flex flex-wrap gap-3 sm:mt-10">
@@ -117,37 +118,39 @@ export default async function HomePage() {
               </Link>
             </div>
 
-            <p className="mt-4 text-sm text-muted">
-              Free for solo coaches · Build your first play in minutes
-            </p>
+            {/* Secondary CTA sits directly under the primary buttons. */}
+            {heroExample ? (
+              <div className="mt-4">
+                <HeroPlaybookCta playbookId={heroExample.id} />
+              </div>
+            ) : null}
           </div>
 
-          {heroExample ? (
-            // Same column dimensions as the logo branch so the tile sits
-            // in the same X location regardless of which one renders.
-            <div className="flex w-full shrink-0 flex-col items-center gap-5 md:w-[420px] lg:w-[460px]">
-              {/* Tile matches the size of example tiles in the strip below
-                  so the hero reads "here's a real playbook, click in"
-                  instead of "look at this giant splash." centerOnOpen is
-                  intentionally OFF — the book opens in place on hover
-                  instead of sliding to viewport center. */}
-              <div className="w-44 sm:w-52 lg:w-60">
-                <ExampleBookTile tile={heroExample} />
+          <div className="flex w-full shrink-0 flex-col items-center md:w-[300px] lg:w-[320px]">
+            {/* Primary visual: the real playbook grid on a phone, tilted
+                in 3D. Shows the whole product at a glance — play cards,
+                route diagrams, the tabbed shell — not just one play. A
+                static, committed screenshot (no auth / live render).
+                Clicking it jumps down to the live example playbooks. */}
+            <ScrollToLink
+              targetId="examples"
+              ariaLabel="See real example playbooks below"
+              className="block cursor-pointer [perspective:1400px]"
+            >
+              <div className="transition-transform duration-500 ease-out [transform:rotateY(-14deg)_rotateX(4deg)_rotate(-1deg)] hover:[transform:rotateY(-7deg)_rotateX(2deg)]">
+                <PhoneFrame className="w-[190px] sm:w-[205px] md:w-[225px] drop-shadow-[0_35px_60px_rgba(15,30,61,0.28)]">
+                  <Image
+                    src="/marketing/screens/phone-playbook-2col.png"
+                    alt="A 7v7 playbook in XO Gridmaker — a two-column grid of play cards with route diagrams"
+                    width={824}
+                    height={1785}
+                    priority
+                    className="h-full w-full object-cover object-top"
+                  />
+                </PhoneFrame>
               </div>
-              <HeroPlaybookCta playbookId={heroExample.id} />
-            </div>
-          ) : (
-            <div className="flex w-full shrink-0 items-center justify-center md:w-[420px] lg:w-[460px]">
-              <Image
-                src="/brand/xogridmaker_icon.svg"
-                alt="xogridmaker"
-                width={850}
-                height={620}
-                priority
-                className="h-auto w-full max-w-[220px] sm:max-w-[280px] md:max-w-none drop-shadow-[0_20px_45px_rgba(23,105,255,0.18)]"
-              />
-            </div>
-          )}
+            </ScrollToLink>
+          </div>
         </div>
 
         {/* Scroll affordance — bouncing chevron only on md+ viewports
@@ -167,10 +170,10 @@ export default async function HomePage() {
           free pitch is cost reassurance, then proof (print, examples, story),
           then a final CTA. */}
       <EveryScreen />
+      <RunTheTeam />
       <CoachCalTeaser />
       {libraryAvailable ? <FootballLibraryTeaser /> : null}
       <FreeForSolo freeMaxPlays={freeMaxPlays} />
-      <PrintoutsAndWristbands />
       <RealPlaybooks examples={examples} />
       <BuiltByACoach />
       <FinalCta />

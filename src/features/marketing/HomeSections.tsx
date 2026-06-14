@@ -2,17 +2,28 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
+  Bell,
   BookOpen,
+  Calendar as CalendarIcon,
   Check,
+  ClipboardList,
   LayoutGrid,
+  MapPin,
   Printer,
   Sparkles,
+  UserPlus,
   Users,
 } from "lucide-react";
 import { PhoneFrame, TabletFrame, WristBand } from "./DeviceFrames";
 import { Reveal } from "./Reveal";
 import { ExampleBookTile } from "@/features/dashboard/ExampleBookTile";
 import { CoachAiIcon } from "@/features/coach-ai/CoachAiIcon";
+import { PlayThumbnail, type PlayThumbnailInput } from "@/features/editor/PlayThumbnail";
+import {
+  playConceptThumbnail,
+  formationThumbnail,
+  defenseThumbnail,
+} from "./featuredThumbnails";
 import type { loadExamplePlaybooks } from "@/lib/site/example-playbooks";
 
 const BRAND_BLUE = "#1769FF";
@@ -209,14 +220,114 @@ function ChatBubble({ role, text }: { role: "user" | "cal"; text: string }) {
 }
 
 /* ---------- Free for solo coaches ---------- */
+/* ---------- Run your whole season — free team operations ---------- */
+// Sits between the product tour and Coach Cal. The pitch: this isn't
+// just a play designer — it's everything you need to run a team, and
+// the team-operations side (calendar, roster, player + parent invites)
+// is free for every coach. Three feature cards mirror the actual
+// in-product surfaces (Calendar, Roster, Share dialog).
+export function RunTheTeam() {
+  const features = [
+    {
+      Icon: CalendarIcon,
+      title: "Schedule the season",
+      body:
+        "Practices, games, scrimmages — with arrival times, locations, and one-tap directions. RSVPs roll up so you know who's coming before you load the cooler.",
+      bullets: [
+        { Icon: Bell, text: "Reminders go out automatically" },
+        { Icon: MapPin, text: "Embedded maps + Apple/Google Calendar feed" },
+      ],
+    },
+    {
+      Icon: Users,
+      title: "Roster, in one place",
+      body:
+        "Names, jersey numbers, and positions — kept current without spreadsheets. Coaches and players see the same source of truth.",
+      bullets: [
+        { Icon: ClipboardList, text: "Free for every coach, no per-seat fees" },
+      ],
+    },
+    {
+      Icon: UserPlus,
+      title: "Players and parents in the loop",
+      body:
+        "Invite unlimited players and parents to view the playbook and schedule from any phone. They see what's coming next without texts and screenshots.",
+      bullets: [
+        { Icon: Check, text: "Owner-controlled — disable, approve, or open" },
+      ],
+    },
+  ];
+  return (
+    <section className="relative py-12 md:py-20">
+      <div className="mx-auto max-w-6xl px-6">
+        <Reveal>
+          <div className="max-w-3xl">
+            <p
+              className="text-xs font-semibold uppercase tracking-wider"
+              style={{ color: BRAND_BLUE }}
+            >
+              Free team operations · No coach left behind
+            </p>
+            <h2 className="mt-3 text-3xl font-extrabold leading-[1.1] tracking-tight md:text-4xl lg:text-5xl">
+              Run your whole season — not just the playbook.
+            </h2>
+            <p className="mt-4 text-base text-muted md:text-lg">
+              The schedule, the roster, and team comms are bundled in.
+              You don&rsquo;t pay for any of it. The paywall is for things
+              like assistant-coach collaboration and bigger playbooks —
+              not for showing your team when practice is.
+            </p>
+          </div>
+        </Reveal>
+
+        <div className="mt-10 grid gap-5 md:grid-cols-3">
+          {features.map((f) => (
+            <Reveal key={f.title}>
+              <article className="flex h-full flex-col rounded-2xl border border-border bg-surface-raised p-6 shadow-[var(--shadow-elevated)]">
+                <div
+                  className="mb-4 inline-flex size-10 shrink-0 items-center justify-center rounded-lg"
+                  style={{
+                    background: "rgba(23, 105, 255, 0.10)",
+                    color: BRAND_BLUE,
+                  }}
+                >
+                  <f.Icon className="size-5" />
+                </div>
+                <h3 className="text-lg font-bold tracking-tight text-foreground">
+                  {f.title}
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted">
+                  {f.body}
+                </p>
+                <ul className="mt-4 space-y-2 text-sm">
+                  {f.bullets.map((b) => (
+                    <li key={b.text} className="flex items-start gap-2">
+                      <b.Icon
+                        className="mt-0.5 size-4 shrink-0"
+                        style={{ color: BRAND_GREEN }}
+                      />
+                      <span className="text-foreground">{b.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              </article>
+            </Reveal>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ---------- Free for solo coaches ---------- */
 export function FreeForSolo({ freeMaxPlays }: { freeMaxPlays: number }) {
   const perks = [
     `Up to ${freeMaxPlays} plays in your own playbook`,
     "Full editor — routes, formations, tags",
     "Team calendar — practices, games, scrimmages with player RSVPs",
-    "Invite players to the schedule and roster — no cap",
+    "Invite unlimited players + parents — playbook and schedule on every phone",
     "Mobile & tablet views included",
-    "Print call sheets to PDF (wristbands on Coach)",
+    "Print call sheets to PDF",
   ];
   return (
     <section
@@ -279,16 +390,20 @@ export function FreeForSolo({ freeMaxPlays }: { freeMaxPlays: number }) {
 }
 
 /* ---------- Football Library teaser ---------- */
-// Discovery surface for /learn/library. Featured concepts link to the
-// library landing page where coaches see the full category grid; the
-// individual concept pages land in Phase 1c, at which point each tile
-// becomes a direct deep-link.
+// Discovery surface for /learn/library. Each featured tile renders a
+// REAL diagram (not a faded word on a gradient) using the same render
+// path as the library detail pages and the in-app editor — Rule 14,
+// one render path. The geometry is resolved server-side from the
+// catalog (concept skeleton / formation synth / route template /
+// defensive alignment) and handed to the static <PlayThumbnail> SVG.
+// Tiles whose geometry fails to resolve fall back to a gradient header.
 const FEATURED_CONCEPTS: Array<{
   name: string;
   variant: string;
   blurb: string;
   accent: string;
   href: string;
+  thumbnail: PlayThumbnailInput | null;
 }> = [
   {
     name: "Mesh",
@@ -296,6 +411,7 @@ const FEATURED_CONCEPTS: Array<{
     blurb: "Crossing in-routes that pick man coverage at 6 yards.",
     accent: BRAND_BLUE,
     href: "/learn/library/plays/mesh/flag-5v5",
+    thumbnail: playConceptThumbnail("Mesh", "flag_5v5"),
   },
   {
     name: "Smash",
@@ -303,6 +419,7 @@ const FEATURED_CONCEPTS: Array<{
     blurb: "Classic high-low on the corner — flag football's most reliable concept.",
     accent: BRAND_GREEN,
     href: "/learn/library/plays/smash/flag-7v7",
+    thumbnail: playConceptThumbnail("Smash", "flag_7v7"),
   },
   {
     name: "Four Verticals",
@@ -310,6 +427,7 @@ const FEATURED_CONCEPTS: Array<{
     blurb: "Stretch the field vertically. Hits the seam when the safety bites.",
     accent: BRAND_ORANGE,
     href: "/learn/library/plays/four-verticals/tackle-11",
+    thumbnail: playConceptThumbnail("Four Verticals", "tackle_11"),
   },
   {
     name: "Trips",
@@ -317,13 +435,15 @@ const FEATURED_CONCEPTS: Array<{
     blurb: "Three receivers stacked to one side. Forces the defense to declare.",
     accent: BRAND_GREEN,
     href: "/learn/library/formations/trips",
+    thumbnail: formationThumbnail("Trips", ["flag_7v7", "tackle_11", "flag_6v6", "flag_5v5"]),
   },
   {
-    name: "Slant",
-    variant: "Route · all variants",
-    blurb: "Quick inside cut at the LOS. The press-man killer.",
+    name: "Flood",
+    variant: "Play · 7v7 Flag",
+    blurb: "Three receivers, three levels, one side. Stresses the flat defender.",
     accent: BRAND_BLUE,
-    href: "/learn/library/routes/slant",
+    href: "/learn/library/plays/flood/flag-7v7",
+    thumbnail: playConceptThumbnail("Flood", "flag_7v7"),
   },
   {
     name: "Defenses",
@@ -331,6 +451,7 @@ const FEATURED_CONCEPTS: Array<{
     blurb: "Every front + coverage in the library — from man-press to deep zone.",
     accent: BRAND_ORANGE,
     href: "/learn/library/defense",
+    thumbnail: defenseThumbnail(["flag_7v7", "tackle_11", "flag_6v6", "flag_5v5"]),
   },
 ];
 
@@ -383,17 +504,23 @@ export function FootballLibraryTeaser() {
                 >
                   <div
                     aria-hidden
-                    className="relative flex h-28 items-center justify-center overflow-hidden"
+                    className="border-b border-border p-3"
                     style={{
-                      background: `linear-gradient(135deg, ${c.accent}22 0%, ${c.accent}05 100%)`,
+                      background: `linear-gradient(135deg, ${c.accent}12 0%, ${c.accent}05 100%)`,
                     }}
                   >
-                    <div
-                      className="text-4xl font-extrabold tracking-tight opacity-30"
-                      style={{ color: c.accent }}
-                    >
-                      {c.name.split(" ")[0]}
-                    </div>
+                    {c.thumbnail ? (
+                      <div className="overflow-hidden rounded-lg shadow-sm transition-transform duration-300 group-hover:scale-[1.02]">
+                        <PlayThumbnail preview={c.thumbnail} light />
+                      </div>
+                    ) : (
+                      <div
+                        className="flex aspect-[16/10] items-center justify-center rounded-lg border border-slate-200 bg-white text-4xl font-extrabold tracking-tight opacity-30"
+                        style={{ color: c.accent }}
+                      >
+                        {c.name.split(" ")[0]}
+                      </div>
+                    )}
                   </div>
                   <div className="p-4">
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">
@@ -502,7 +629,8 @@ export function RealPlaybooks({
   examples: Awaited<ReturnType<typeof loadExamplePlaybooks>>;
 }) {
   return (
-    <section className="relative py-12 md:py-24">
+    // id="examples" is the scroll target for the hero phone (tap to jump here).
+    <section id="examples" className="relative scroll-mt-24 py-12 md:py-24">
       <div className="mx-auto max-w-6xl px-6">
         <Reveal>
           <div className="max-w-2xl">
