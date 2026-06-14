@@ -49,6 +49,7 @@ const PUBLIC_PREFIXES = [
   "/api/contact",
   "/api/health",
   "/api/stripe/webhook", // Stripe → server. Must accept POSTs without a session.
+  "/api/revenuecat/webhook", // RevenueCat → server. POSTs without a session; auth via Authorization header.
   "/api/calendar/", // Cron + ICS feed: auth via bearer secret / signed token.
   "/api/digest/", // Cron: auth via bearer CRON_SECRET.
   "/api/reengagement/", // Cron: auth via bearer CRON_SECRET.
@@ -178,6 +179,7 @@ function shouldTouchSession(request: NextRequest, pathname: string): boolean {
   // Stripe webhook style API routes that are POST-only.
   if (pathname.startsWith("/_next/")) return false;
   if (pathname.startsWith("/api/stripe/webhook")) return false;
+  if (pathname.startsWith("/api/revenuecat/webhook")) return false;
   if (pathname.startsWith("/monitoring")) return false;
   const last = request.cookies.get(SESSION_TOUCH_COOKIE)?.value;
   if (!last) return true;
