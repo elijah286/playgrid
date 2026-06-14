@@ -327,7 +327,7 @@ export function FreeForSolo({ freeMaxPlays }: { freeMaxPlays: number }) {
     "Team calendar — practices, games, scrimmages with player RSVPs",
     "Invite unlimited players + parents — playbook and schedule on every phone",
     "Mobile & tablet views included",
-    "Print call sheets to PDF (wristbands on Coach)",
+    "Print call sheets to PDF",
   ];
   return (
     <section

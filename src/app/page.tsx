@@ -35,7 +35,6 @@ import {
   FinalCta,
   FootballLibraryTeaser,
   FreeForSolo,
-  PrintoutsAndWristbands,
   RealPlaybooks,
   RunTheTeam,
 } from "@/features/marketing/HomeSections";
@@ -78,8 +77,8 @@ export default async function HomePage() {
             section's top edge crest the fold is the single most reliable
             "scroll for more" cue — a 100vh hero teaches visitors there's
             nothing below. */}
-        <div className="relative mx-auto flex max-w-6xl flex-col items-center gap-6 px-5 py-10 sm:gap-10 sm:px-6 sm:py-16 md:flex-row md:items-center md:gap-12 md:py-20 lg:gap-16">
-          <div className="flex-1">
+        <div className="relative mx-auto flex max-w-6xl flex-col items-center gap-6 px-5 py-10 sm:gap-10 sm:px-6 sm:py-16 md:flex-row md:items-center md:justify-center md:gap-10 md:py-20 lg:gap-14">
+          <div className="md:max-w-xl">
             <h1
               className="text-4xl font-extrabold leading-[1.02] tracking-tight sm:text-5xl md:text-6xl lg:text-7xl"
               style={{ color: BRAND_NAVY }}
@@ -118,35 +117,33 @@ export default async function HomePage() {
               </Link>
             </div>
 
-            <p className="mt-4 text-sm text-muted">
-              Free for solo coaches · Build your first play in minutes
-            </p>
+            {/* Secondary CTA sits directly under the primary buttons. */}
+            {heroExample ? (
+              <div className="mt-4">
+                <HeroPlaybookCta playbookId={heroExample.id} />
+              </div>
+            ) : null}
           </div>
 
-          <div className="flex w-full shrink-0 flex-col items-center gap-5 md:w-[420px] lg:w-[460px]">
+          <div className="flex w-full shrink-0 flex-col items-center md:w-[300px] lg:w-[320px]">
             {/* Primary visual: the real playbook grid on a phone, tilted
                 in 3D. Shows the whole product at a glance — play cards,
                 route diagrams, the tabbed shell — not just one play. A
                 static, committed screenshot (no auth / live render). */}
             <div className="[perspective:1400px]">
               <div className="transition-transform duration-500 ease-out [transform:rotateY(-14deg)_rotateX(4deg)_rotate(-1deg)] hover:[transform:rotateY(-7deg)_rotateX(2deg)]">
-                <PhoneFrame className="w-[230px] sm:w-[250px] md:w-[280px] drop-shadow-[0_35px_60px_rgba(15,30,61,0.28)]">
+                <PhoneFrame className="w-[190px] sm:w-[205px] md:w-[225px] drop-shadow-[0_35px_60px_rgba(15,30,61,0.28)]">
                   <Image
-                    src="/marketing/screens/phone-playbook.png"
-                    alt="A 7v7 playbook in XO Gridmaker — play cards with route diagrams, formations, and roster tabs"
-                    width={780}
-                    height={1688}
+                    src="/marketing/screens/phone-playbook-2col.png"
+                    alt="A 7v7 playbook in XO Gridmaker — a two-column grid of play cards with route diagrams"
+                    width={824}
+                    height={1785}
                     priority
                     className="h-full w-full object-cover object-top"
                   />
                 </PhoneFrame>
               </div>
             </div>
-
-            {/* Secondary: route into the full example gallery. */}
-            {heroExample ? (
-              <HeroPlaybookCta playbookId={heroExample.id} />
-            ) : null}
           </div>
         </div>
 
@@ -171,7 +168,6 @@ export default async function HomePage() {
       <CoachCalTeaser />
       {libraryAvailable ? <FootballLibraryTeaser /> : null}
       <FreeForSolo freeMaxPlays={freeMaxPlays} />
-      <PrintoutsAndWristbands />
       <RealPlaybooks examples={examples} />
       <BuiltByACoach />
       <FinalCta />
