@@ -25,10 +25,8 @@ import {
   loadExamplePlaybooks,
   loadHeroMarketingExample,
 } from "@/lib/site/example-playbooks";
-import { ExampleBookTile } from "@/features/dashboard/ExampleBookTile";
 import { HeroPlaybookCta } from "@/features/marketing/HeroPlaybookCta";
-import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
-import { playConceptThumbnail } from "@/features/marketing/featuredThumbnails";
+import { PhoneFrame } from "@/features/marketing/DeviceFrames";
 import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
 import {
   BuiltByACoach,
@@ -68,12 +66,6 @@ export default async function HomePage() {
     getFreeMaxPlaysPerPlaybook(),
     isFootballLibraryAvailable(),
   ]);
-
-  // A real, catalog-rendered play diagram for the hero — "here's exactly
-  // what you make" above the fold, using the same render path as the
-  // library tiles and the in-app editor. Resolved server-side; null falls
-  // back to the example tile / logo alone.
-  const heroPlay = playConceptThumbnail("Mesh", "flag_5v5");
 
   return (
     <div className="overflow-x-hidden bg-surface text-foreground">
@@ -131,57 +123,31 @@ export default async function HomePage() {
             </p>
           </div>
 
-          {heroPlay || heroExample ? (
-            // Same column dimensions as the logo branch so the visual sits
-            // in the same X location regardless of which one renders.
-            <div className="flex w-full shrink-0 flex-col items-center gap-4 md:w-[420px] lg:w-[460px]">
-              {/* Primary visual: a real, catalog-rendered play diagram —
-                  the single fastest way to show a cold visitor "this is
-                  what you make." Same render path as the library tiles
-                  and the in-app editor. */}
-              {heroPlay ? (
-                <div className="w-full overflow-hidden rounded-2xl border border-border bg-white shadow-[0_20px_45px_rgba(23,105,255,0.18)]">
-                  <div className="flex items-center justify-between border-b border-border bg-gradient-to-br from-[rgba(23,105,255,0.08)] to-transparent px-4 py-2.5">
-                    <span
-                      className="text-[11px] font-bold uppercase tracking-wider"
-                      style={{ color: BRAND_BLUE }}
-                    >
-                      Mesh · 5v5 Flag
-                    </span>
-                    <span className="text-[11px] font-medium text-muted">
-                      Build this in minutes
-                    </span>
-                  </div>
-                  <div className="p-3">
-                    <PlayThumbnail preview={heroPlay} light />
-                  </div>
-                </div>
-              ) : null}
+          <div className="flex w-full shrink-0 flex-col items-center gap-5 md:w-[420px] lg:w-[460px]">
+            {/* Primary visual: the real playbook grid on a phone, tilted
+                in 3D. Shows the whole product at a glance — play cards,
+                route diagrams, the tabbed shell — not just one play. A
+                static, committed screenshot (no auth / live render). */}
+            <div className="[perspective:1400px]">
+              <div className="transition-transform duration-500 ease-out [transform:rotateY(-14deg)_rotateX(4deg)_rotate(-1deg)] hover:[transform:rotateY(-7deg)_rotateX(2deg)]">
+                <PhoneFrame className="w-[230px] sm:w-[250px] md:w-[280px] drop-shadow-[0_35px_60px_rgba(15,30,61,0.28)]">
+                  <Image
+                    src="/marketing/screens/phone-playbook.png"
+                    alt="A 7v7 playbook in XO Gridmaker — play cards with route diagrams, formations, and roster tabs"
+                    width={780}
+                    height={1688}
+                    priority
+                    className="h-full w-full object-cover object-top"
+                  />
+                </PhoneFrame>
+              </div>
+            </div>
 
-              {/* Secondary: a real example playbook to open + browse. The
-                  book tile opens in place on hover; the CTA routes to the
-                  full examples gallery. */}
-              {heroExample ? (
-                <div className="flex items-center gap-3">
-                  <div className="w-16 shrink-0 sm:w-20">
-                    <ExampleBookTile tile={heroExample} />
-                  </div>
-                  <HeroPlaybookCta playbookId={heroExample.id} />
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <div className="flex w-full shrink-0 items-center justify-center md:w-[420px] lg:w-[460px]">
-              <Image
-                src="/brand/xogridmaker_icon.svg"
-                alt="xogridmaker"
-                width={850}
-                height={620}
-                priority
-                className="h-auto w-full max-w-[220px] sm:max-w-[280px] md:max-w-none drop-shadow-[0_20px_45px_rgba(23,105,255,0.18)]"
-              />
-            </div>
-          )}
+            {/* Secondary: route into the full example gallery. */}
+            {heroExample ? (
+              <HeroPlaybookCta playbookId={heroExample.id} />
+            ) : null}
+          </div>
         </div>
 
         {/* Scroll affordance — bouncing chevron only on md+ viewports
