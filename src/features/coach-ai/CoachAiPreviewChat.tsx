@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Lock } from "lucide-react";
 import { CoachAiIcon } from "./CoachAiIcon";
+import { NativeUpgradeCta } from "@/components/billing/NativeUpgradeCta";
 import { ENTRY_POINTS, previewCtaLabel, type CoachCalEntryPointId } from "./entry-points";
 import { track } from "@/lib/analytics/track";
 import { CheckoutLoadingOverlay } from "@/features/billing/CheckoutLoadingOverlay";
@@ -150,11 +151,19 @@ export function CoachAiPreviewChat({
         <p data-web-only className="mt-1.5 text-center text-[10px] text-muted">
           {ctaSubtitle}
         </p>
-        {/* Native (iOS) shows no price or upgrade CTA — Apple 3.1.1. A
-            neutral line keeps the footer from looking broken. */}
-        <p data-native-only className="text-center text-[12px] text-muted">
-          Coach Cal isn’t included in your current plan.
-        </p>
+        {/* Native (iOS): with IAP live, drive the upgrade in-app (→ /pricing);
+            falls back to the neutral line only when IAP is toggled off. */}
+        <div data-native-only>
+          <NativeUpgradeCta
+            variant="button"
+            label="Upgrade to Coach"
+            fallback={
+              <p className="text-center text-[12px] text-muted">
+                Coach Cal isn’t included in your current plan.
+              </p>
+            }
+          />
+        </div>
         {err ? (
           <p className="mt-1 text-center text-[10px] text-red-700">{err}</p>
         ) : null}
