@@ -26,6 +26,7 @@ import {
   loadHeroMarketingExample,
 } from "@/lib/site/example-playbooks";
 import { HeroPlaybookCta } from "@/features/marketing/HeroPlaybookCta";
+import { PhoneFrame } from "@/features/marketing/DeviceFrames";
 import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
 import {
   BuiltByACoach,
@@ -120,28 +121,32 @@ export default async function HomePage() {
             <p className="mt-4 text-sm text-muted">
               Free for solo coaches · Build your first play in minutes
             </p>
-
-            {/* Secondary CTA under the primary buttons — route into the
-                full example gallery. */}
-            {heroExample ? (
-              <div className="mt-5">
-                <HeroPlaybookCta playbookId={heroExample.id} />
-              </div>
-            ) : null}
           </div>
 
-          {/* Primary visual: the real playbook grid shown on a phone (a
-              pre-framed, tilted device mockup). Shows the whole product at
-              a glance — play cards, route diagrams, the tabbed shell. */}
-          <div className="flex w-full shrink-0 items-center justify-center md:w-[420px] lg:w-[460px]">
-            <Image
-              src="/marketing/screens/hero-phone-grid.png"
-              alt="A 7v7 playbook in XO Gridmaker shown on a phone — a two-column grid of play cards with route diagrams"
-              width={667}
-              height={1260}
-              priority
-              className="h-auto w-full max-w-[220px] sm:max-w-[250px] md:max-w-[280px] drop-shadow-[0_25px_50px_rgba(15,30,61,0.18)]"
-            />
+          <div className="flex w-full shrink-0 flex-col items-center gap-5 md:w-[420px] lg:w-[460px]">
+            {/* Primary visual: the real playbook grid on a phone, tilted
+                in 3D. Shows the whole product at a glance — play cards,
+                route diagrams, the tabbed shell — not just one play. A
+                static, committed screenshot (no auth / live render). */}
+            <div className="[perspective:1400px]">
+              <div className="transition-transform duration-500 ease-out [transform:rotateY(-14deg)_rotateX(4deg)_rotate(-1deg)] hover:[transform:rotateY(-7deg)_rotateX(2deg)]">
+                <PhoneFrame className="w-[230px] sm:w-[250px] md:w-[280px] drop-shadow-[0_35px_60px_rgba(15,30,61,0.28)]">
+                  <Image
+                    src="/marketing/screens/phone-playbook.png"
+                    alt="A 7v7 playbook in XO Gridmaker — play cards with route diagrams, formations, and roster tabs"
+                    width={780}
+                    height={1688}
+                    priority
+                    className="h-full w-full object-cover object-top"
+                  />
+                </PhoneFrame>
+              </div>
+            </div>
+
+            {/* Secondary: route into the full example gallery. */}
+            {heroExample ? (
+              <HeroPlaybookCta playbookId={heroExample.id} />
+            ) : null}
           </div>
         </div>
 
