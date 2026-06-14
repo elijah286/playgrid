@@ -7,6 +7,7 @@ import {
   getCoachOffers,
   purchaseCoach,
   restoreCoach,
+  withTimeout,
   type CoachOffer,
 } from "@/lib/native/iap";
 
@@ -33,8 +34,18 @@ export function NativeIapPanel({ fallback }: { fallback: ReactNode }) {
       return;
     }
     try {
-      const cfg = await getIapClientConfig();
-      if (!cfg.enabled) {
+      // The enabled-flag check is a server action; if it hangs or fails on a
+      // flaky WebView connection, don't spin forever — assume enabled and let
+      // the StoreKit fetch (which has its own timeout) decide. A genuine
+      // `false` still shows the neutral fallback.
+      let enabled = true;
+      try {
+        const cfg = await withTimeout(getIapClientConfig(), 6000, "iap config");
+        enabled = cfg.enabled;
+      } catch {
+        enabled = true;
+      }
+      if (!enabled) {
         // IAP is off (pre-launch / web / Android) → show the neutral fallback.
         setPhase("unavailable");
         return;

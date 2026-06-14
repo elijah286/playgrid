@@ -33,7 +33,12 @@ vi.mock("@/lib/native/isNativeApp", () => ({
   nativePlatform,
 }));
 vi.mock("@/app/actions/iap", () => ({ getIapClientConfig }));
-vi.mock("@/lib/native/iap", () => ({ getCoachOffers, restoreCoach, purchaseCoach }));
+vi.mock("@/lib/native/iap", () => ({
+  getCoachOffers,
+  restoreCoach,
+  purchaseCoach,
+  withTimeout: (p: Promise<unknown>) => p,
+}));
 
 import { NativeIapPanel } from "./NativeIapPanel";
 
@@ -112,6 +117,19 @@ describe("NativeIapPanel", () => {
 
     expect(container.textContent).toContain("not available in this app");
     expect(container.textContent).not.toContain("Try again");
+
+    await cleanup();
+  });
+
+  it("still loads offers when the enabled-check fails (optimistic — never hangs)", async () => {
+    getIapClientConfig.mockRejectedValue(new Error("config timeout"));
+    getCoachOffers.mockResolvedValue([
+      { interval: "month", productId: "com.xogridmaker.app.coach.monthly", priceString: "$9.99" },
+    ]);
+    const { container, cleanup } = await renderPanel(<NativeIapPanel fallback={FALLBACK} />);
+
+    expect(container.textContent).toContain("$9.99/mo");
+    expect(container.textContent).not.toContain("Loading plans");
 
     await cleanup();
   });

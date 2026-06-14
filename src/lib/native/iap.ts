@@ -37,7 +37,7 @@ export type CoachOffer = {
  */
 const PRODUCTS_TIMEOUT_MS = 12_000;
 
-function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+export function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
     p,
     new Promise<T>((_, reject) =>
@@ -49,15 +49,25 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 /** Coach monthly/annual offers from StoreKit (monthly first). Throws if the
  *  StoreKit fetch fails or times out, so the panel can show a retry state
  *  rather than an infinite spinner. */
+async function fetchCoachProducts() {
+  const NativePurchases = await plugin();
+  const { products } = await NativePurchases.getProducts({
+    productIdentifiers: COACH_PRODUCT_IDS,
+  });
+  return products;
+}
+
 export async function getCoachOffers(): Promise<CoachOffer[]> {
   if (!iosOnly()) return [];
-  const NativePurchases = await plugin();
-  const { products } = await withTimeout(
-    NativePurchases.getProducts({ productIdentifiers: COACH_PRODUCT_IDS }),
+  // Time out the WHOLE fetch — the dynamic plugin import AND the StoreKit call —
+  // since either can hang on a flaky native bridge, and an un-timed await would
+  // leave the panel spinning on "Loading plans…" forever.
+  const products = await withTimeout(
+    fetchCoachProducts(),
     PRODUCTS_TIMEOUT_MS,
     "StoreKit getProducts",
   ).catch((e: unknown) => {
-    console.warn("[iap] getCoachOffers: StoreKit getProducts failed", {
+    console.warn("[iap] getCoachOffers: StoreKit getProducts failed/timed out", {
       productIds: COACH_PRODUCT_IDS,
       error: e instanceof Error ? e.message : String(e),
     });
