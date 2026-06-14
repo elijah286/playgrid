@@ -5,6 +5,16 @@ import Link from "next/link";
 import { nativePlatform } from "@/lib/native/isNativeApp";
 import { getIapClientConfig } from "@/app/actions/iap";
 
+/** Race the enabled-check against a timeout. The check is a server action that
+ *  can hang on a flaky WebView connection; without this, an upgrade CTA stuck
+ *  in "loading" renders nothing and the whole gate looks like a dead end. */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error("timeout")), ms)),
+  ]);
+}
+
 /**
  * Native (iOS) "Upgrade to Coach" entry point — the DOOR to the IAP purchase UI.
  * Renders a tap target that navigates to /pricing (where NativeIapPanel runs the
@@ -41,10 +51,13 @@ export function NativeUpgradeCta({
         return;
       }
       try {
-        const cfg = await getIapClientConfig();
+        const cfg = await withTimeout(getIapClientConfig(), 6000);
         if (!cancelled) setState(cfg.enabled ? "enabled" : "disabled");
       } catch {
-        if (!cancelled) setState("disabled");
+        // The enabled-check hung / failed (flaky server action in the WebView).
+        // Don't hide the upgrade path because of it — assume enabled so the CTA
+        // stays actionable. A genuine `enabled:false` still hits the line above.
+        if (!cancelled) setState("enabled");
       }
     })();
     return () => {
@@ -96,12 +109,13 @@ export function useUpgradeHref(): string | null {
       setHref("/pricing");
       return;
     }
-    getIapClientConfig()
+    withTimeout(getIapClientConfig(), 6000)
       .then((c) => {
         if (!cancelled) setHref(c.enabled ? "/pricing" : null);
       })
       .catch(() => {
-        if (!cancelled) setHref(null);
+        // Hung / failed — keep the locked tile actionable rather than inert.
+        if (!cancelled) setHref("/pricing");
       });
     return () => {
       cancelled = true;

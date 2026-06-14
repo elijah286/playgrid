@@ -114,6 +114,16 @@ describe("NativeUpgradeCta", () => {
     await cleanup();
   });
 
+  it("shows the CTA on iOS when the config check fails (optimistic — never a dead end)", async () => {
+    nativePlatform.mockReturnValue("ios");
+    getIapClientConfig.mockRejectedValue(new Error("config failed"));
+    const { container, cleanup } = await renderCta(<NativeUpgradeCta label="Up" />);
+
+    expect(container.querySelector("a")?.getAttribute("href")).toBe("/pricing");
+
+    await cleanup();
+  });
+
   it("applies a className override to the enabled link", async () => {
     nativePlatform.mockReturnValue("ios");
     getIapClientConfig.mockResolvedValue({ enabled: true });
@@ -156,6 +166,14 @@ describe("useUpgradeHref", () => {
     getIapClientConfig.mockResolvedValue({ enabled: false });
     const { container, cleanup } = await renderCta(<HrefProbe />);
     expect(container.textContent).toBe("null");
+    await cleanup();
+  });
+
+  it("returns /pricing on iOS when the config check fails (optimistic)", async () => {
+    nativePlatform.mockReturnValue("ios");
+    getIapClientConfig.mockRejectedValue(new Error("config failed"));
+    const { container, cleanup } = await renderCta(<HrefProbe />);
+    expect(container.textContent).toBe("/pricing");
     await cleanup();
   });
 });
