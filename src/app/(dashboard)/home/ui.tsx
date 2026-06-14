@@ -24,6 +24,7 @@ import {
   WifiOff,
   X,
 } from "lucide-react";
+import { NativeUpgradeCta } from "@/components/billing/NativeUpgradeCta";
 import {
   archivePlaybookAction,
   createPlaybookAction,
@@ -1312,7 +1313,7 @@ export function DashboardClient({
                       </>
                     ) : null}{" "}
                     <span data-native-only>
-                      Plan changes aren&rsquo;t available in this app.
+                      <NativeUpgradeCta label="Upgrade to Team Coach" fallback="Plan changes aren't available in this app." />
                     </span>
                   </>
                 ),
@@ -1407,7 +1408,7 @@ export function DashboardClient({
                 </span>
                 .{" "}
                 <span data-native-only>
-                  Plan changes aren&rsquo;t available in this app.
+                  <NativeUpgradeCta label="Upgrade to Team Coach" fallback="Plan changes aren't available in this app." />
                 </span>
               </>
             ) : (
@@ -1419,7 +1420,7 @@ export function DashboardClient({
                   playbooks. Your existing content stays where it is.
                 </span>{" "}
                 <span data-native-only>
-                  Plan changes aren&rsquo;t available in this app.
+                  <NativeUpgradeCta label="Upgrade to Team Coach" fallback="Plan changes aren't available in this app." />
                 </span>
               </>
             ),
@@ -1935,7 +1936,7 @@ export function DashboardClient({
                         </span>
                         .{" "}
                         <span data-native-only>
-                          Plan changes aren&rsquo;t available in this app.
+                          <NativeUpgradeCta label="Upgrade to Team Coach" fallback="Plan changes aren't available in this app." />
                         </span>
                       </>
                     ) : (
@@ -1947,7 +1948,7 @@ export function DashboardClient({
                           playbooks.
                         </span>{" "}
                         <span data-native-only>
-                          Plan changes aren&rsquo;t available in this app.
+                          <NativeUpgradeCta label="Upgrade to Team Coach" fallback="Plan changes aren't available in this app." />
                         </span>
                       </>
                     ),

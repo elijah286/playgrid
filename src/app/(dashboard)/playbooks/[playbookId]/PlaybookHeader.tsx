@@ -16,6 +16,7 @@ import {
   useToast,
 } from "@/components/ui";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
+import { NativeUpgradeCta } from "@/components/billing/NativeUpgradeCta";
 import { ArchiveLockedDialog } from "@/components/billing/ArchiveLockedDialog";
 import { TeamCoachUpgradeDialog } from "@/features/upgrade/TeamCoachUpgradeDialog";
 import {
@@ -310,7 +311,7 @@ export function PlaybookHeader({
                   </>
                 ) : null}{" "}
                 <span data-native-only>
-                  Plan changes aren&rsquo;t available in this app.
+                  <NativeUpgradeCta label="Upgrade to Team Coach" fallback="Plan changes aren't available in this app." />
                 </span>
               </>
             ),
@@ -361,7 +362,7 @@ export function PlaybookHeader({
                 </span>
                 .{" "}
                 <span data-native-only>
-                  Plan changes aren&rsquo;t available in this app.
+                  <NativeUpgradeCta label="Upgrade to Team Coach" fallback="Plan changes aren't available in this app." />
                 </span>
               </>
             ) : (
@@ -372,7 +373,7 @@ export function PlaybookHeader({
                   Upgrade to Team Coach ($9/mo or $99/yr) to duplicate playbooks.
                 </span>{" "}
                 <span data-native-only>
-                  Plan changes aren&rsquo;t available in this app.
+                  <NativeUpgradeCta label="Upgrade to Team Coach" fallback="Plan changes aren't available in this app." />
                 </span>
               </>
             ),

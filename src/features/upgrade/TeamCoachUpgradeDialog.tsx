@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
+import { NativeUpgradeCta } from "@/components/billing/NativeUpgradeCta";
 
 /**
  * Generic Team Coach paywall dialog. Used by feature tabs (Calendar, Practice
@@ -68,6 +69,7 @@ export function TeamCoachUpgradeDialog({
           >
             See Team Coach plan
           </Link>
+          <NativeUpgradeCta variant="button" label="Subscribe to Coach" />
           <button
             type="button"
             onClick={onClose}

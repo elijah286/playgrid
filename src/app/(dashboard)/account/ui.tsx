@@ -24,6 +24,7 @@ import { Modal } from "@/components/ui";
 import { SEAT_PRICE_USD_PER_MONTH } from "@/lib/billing/seats-config";
 import type { Entitlement, SubscriptionTier } from "@/lib/billing/entitlement";
 import { openManageAppleSubscription } from "@/lib/native/iap";
+import { NativeUpgradeCta } from "@/components/billing/NativeUpgradeCta";
 import {
   FREE_MAX_PLAYBOOKS_OWNED,
   TIER_LABEL,
@@ -630,7 +631,12 @@ function PlanCard({
           <p data-native-only className="text-center text-xs text-muted">
             This subscription is managed on the web.
           </p>
-        ) : null}
+        ) : (
+          // Free user on native → the door to the in-app purchase (/pricing).
+          <div data-native-only>
+            <NativeUpgradeCta variant="button" label="Subscribe to Coach" />
+          </div>
+        )}
 
         {isComp ? (
           <p className="rounded-md bg-surface px-3 py-2 text-xs text-muted ring-1 ring-border">

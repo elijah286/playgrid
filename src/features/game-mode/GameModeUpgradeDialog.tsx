@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Gamepad2, LineChart, ThumbsUp, Maximize } from "lucide-react";
+import { NativeUpgradeCta } from "@/components/billing/NativeUpgradeCta";
 
 /**
  * Shown when a free coach taps the Game Mode button. Sells the Team Coach
@@ -75,6 +76,7 @@ export function GameModeUpgradeDialog({
           >
             See Team Coach plan
           </Link>
+          <NativeUpgradeCta variant="button" label="Subscribe to Coach" />
           <button
             type="button"
             onClick={onClose}
