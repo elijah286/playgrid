@@ -80,3 +80,32 @@ export function NativeUpgradeCta({
   if (state === "disabled") return <>{fallback}</>;
   return null; // web or still loading
 }
+
+/**
+ * Upgrade destination for a whole-element tap target (e.g. a locked tile): the
+ * caller wires the returned href onto a wrapping <Link>. "/pricing" on web
+ * (always) and on iOS when IAP is enabled; null on iOS before launch — so the
+ * surrounding element stays inert and shows no upgrade affordance (App Store
+ * 3.1.1) — and while the config is still loading.
+ */
+export function useUpgradeHref(): string | null {
+  const [href, setHref] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (nativePlatform() !== "ios") {
+      setHref("/pricing");
+      return;
+    }
+    getIapClientConfig()
+      .then((c) => {
+        if (!cancelled) setHref(c.enabled ? "/pricing" : null);
+      })
+      .catch(() => {
+        if (!cancelled) setHref(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return href;
+}

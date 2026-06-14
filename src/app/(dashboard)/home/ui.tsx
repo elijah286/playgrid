@@ -24,7 +24,7 @@ import {
   WifiOff,
   X,
 } from "lucide-react";
-import { NativeUpgradeCta } from "@/components/billing/NativeUpgradeCta";
+import { NativeUpgradeCta, useUpgradeHref } from "@/components/billing/NativeUpgradeCta";
 import {
   archivePlaybookAction,
   createPlaybookAction,
@@ -337,25 +337,48 @@ function OfflineUnavailableOverlay() {
   );
 }
 
-function LockedOverlay() {
-  return (
-    <div className="pointer-events-auto absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black/50 text-white backdrop-blur-[1px]">
-      <Lock className="size-7" />
+/**
+ * Locked-tile overlay where the WHOLE overlay is the upgrade tap target —
+ * tapping anywhere on a locked tile opens /pricing (web always; iOS only when
+ * IAP is live, otherwise the overlay is inert and shows no upgrade affordance,
+ * per App Store 3.1.1). Shared by the card and book tile styles.
+ */
+function LockedUpgradeOverlay({
+  className,
+  lockSize,
+}: {
+  className: string;
+  lockSize: string;
+}) {
+  const upgradeHref = useUpgradeHref();
+  const body = (
+    <>
+      <Lock className={lockSize} />
       <p className="px-3 text-center text-xs font-semibold">
         Locked — plan downgraded
       </p>
-      <Link
-        href="/pricing"
-        data-web-only
-        className="rounded-lg bg-white px-3 py-1 text-xs font-semibold text-black hover:bg-neutral-100"
-      >
-        Upgrade to unlock
-      </Link>
-      <NativeUpgradeCta
-        label="Upgrade to unlock"
-        className="rounded-lg bg-white px-3 py-1 text-xs font-semibold text-black hover:bg-neutral-100"
-      />
-    </div>
+      {upgradeHref && (
+        <span className="rounded-lg bg-white px-3 py-1 text-xs font-semibold text-black">
+          Upgrade to unlock
+        </span>
+      )}
+    </>
+  );
+  return upgradeHref ? (
+    <Link href={upgradeHref} className={className}>
+      {body}
+    </Link>
+  ) : (
+    <div className={className}>{body}</div>
+  );
+}
+
+function LockedOverlay() {
+  return (
+    <LockedUpgradeOverlay
+      className="pointer-events-auto absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black/50 text-white backdrop-blur-[1px] transition-colors hover:bg-black/45"
+      lockSize="size-7"
+    />
   );
 }
 
@@ -840,23 +863,10 @@ function LockedBookTile({ tile }: { tile: DashboardPlaybookTile }) {
           </div>
         </div>
       </div>
-      <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-xl bg-black/55 text-white">
-        <Lock className="size-8" />
-        <p className="px-3 text-center text-xs font-semibold">
-          Locked — plan downgraded
-        </p>
-        <Link
-          href="/pricing"
-          data-web-only
-          className="rounded-lg bg-white px-3 py-1 text-xs font-semibold text-black hover:bg-neutral-100"
-        >
-          Upgrade to unlock
-        </Link>
-        <NativeUpgradeCta
-          label="Upgrade to unlock"
-          className="rounded-lg bg-white px-3 py-1 text-xs font-semibold text-black hover:bg-neutral-100"
-        />
-      </div>
+      <LockedUpgradeOverlay
+        className="pointer-events-auto absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-xl bg-black/55 text-white transition-colors hover:bg-black/50"
+        lockSize="size-8"
+      />
     </div>
   );
 }

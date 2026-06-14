@@ -41,7 +41,7 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-import { NativeUpgradeCta } from "./NativeUpgradeCta";
+import { NativeUpgradeCta, useUpgradeHref } from "./NativeUpgradeCta";
 
 async function renderCta(node: ReactElement) {
   const container = document.createElement("div");
@@ -123,6 +123,39 @@ describe("NativeUpgradeCta", () => {
 
     expect(container.querySelector("a")?.className).toContain("custom-cta-class");
 
+    await cleanup();
+  });
+});
+
+// The whole-tile tap target (locked playbooks/plays) wires this href onto a
+// wrapping Link: linkable on web + iOS-when-enabled; inert (null) on iOS before
+// launch so no upgrade affordance shows.
+function HrefProbe() {
+  const href = useUpgradeHref();
+  return <span>{href ?? "null"}</span>;
+}
+
+describe("useUpgradeHref", () => {
+  it("returns /pricing on web", async () => {
+    nativePlatform.mockReturnValue(null);
+    const { container, cleanup } = await renderCta(<HrefProbe />);
+    expect(container.textContent).toBe("/pricing");
+    await cleanup();
+  });
+
+  it("returns /pricing on iOS when IAP is enabled", async () => {
+    nativePlatform.mockReturnValue("ios");
+    getIapClientConfig.mockResolvedValue({ enabled: true });
+    const { container, cleanup } = await renderCta(<HrefProbe />);
+    expect(container.textContent).toBe("/pricing");
+    await cleanup();
+  });
+
+  it("returns null on iOS when IAP is disabled (pre-launch)", async () => {
+    nativePlatform.mockReturnValue("ios");
+    getIapClientConfig.mockResolvedValue({ enabled: false });
+    const { container, cleanup } = await renderCta(<HrefProbe />);
+    expect(container.textContent).toBe("null");
     await cleanup();
   });
 });
