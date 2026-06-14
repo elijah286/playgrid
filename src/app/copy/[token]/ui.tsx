@@ -68,12 +68,21 @@ export function ClaimCopyButton({
 
   if (blockedByQuota) {
     return (
-      <Link
-        href="/pricing"
-        className="block w-full rounded-lg bg-primary px-4 py-2 text-center text-sm font-semibold text-white hover:bg-primary/90"
-      >
-        Upgrade to claim
-      </Link>
+      <>
+        <Link
+          href="/pricing"
+          data-web-only
+          className="block w-full rounded-lg bg-primary px-4 py-2 text-center text-sm font-semibold text-white hover:bg-primary/90"
+        >
+          Upgrade to claim
+        </Link>
+        <p
+          data-native-only
+          className="rounded-lg border border-border px-4 py-2 text-center text-sm text-muted"
+        >
+          You&apos;ve reached the free playbook limit.
+        </p>
+      </>
     );
   }
 

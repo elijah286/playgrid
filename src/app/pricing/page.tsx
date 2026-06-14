@@ -10,6 +10,7 @@ import { getSeatDefaults } from "@/lib/site/seat-defaults-config";
 import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
 import type { Entitlement } from "@/lib/billing/entitlement";
 import { PricingClient } from "./ui";
+import { NativeIapPanel } from "@/components/billing/NativeIapPanel";
 import { withFullContext } from "@/lib/seo/ld-json";
 
 export const metadata: Metadata = {
@@ -119,14 +120,21 @@ export default async function PricingPage() {
           rejection). This page itself names no price and no external purchase
           path, so it stays safe even off the US storefront. */}
       <div data-native-only>
-        <div className="rounded-2xl border border-border bg-surface-raised p-6 text-sm text-foreground">
-          <p className="font-semibold">Free plan</p>
-          <p className="mt-2 text-muted">
-            All the play-design tools described in the App Store listing are
-            included. You can view or change your plan from your Account
-            settings.
-          </p>
-        </div>
+        {/* When IAP is enabled (server flag + RevenueCat configured) this shows
+            the StoreKit purchase UI; otherwise it renders the neutral
+            App-Store-safe notice below — identical to the pre-IAP behavior. */}
+        <NativeIapPanel
+          fallback={
+            <div className="rounded-2xl border border-border bg-surface-raised p-6 text-sm text-foreground">
+              <p className="font-semibold">Free plan</p>
+              <p className="mt-2 text-muted">
+                All the play-design tools described in the App Store listing are
+                included. You can view or change your plan from your Account
+                settings.
+              </p>
+            </div>
+          }
+        />
       </div>
       <div data-web-only>
         <PricingClient

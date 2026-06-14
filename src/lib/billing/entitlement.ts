@@ -2,7 +2,10 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 
 export type SubscriptionTier = "free" | "coach" | "coach_ai";
-export type EntitlementSource = "comp" | "stripe" | "free";
+// "apple" = an App Store / RevenueCat subscription (see iap_subscriptions).
+// Managed in Apple's UI, not the Stripe billing portal — the "manage plan"
+// surface branches on this.
+export type EntitlementSource = "comp" | "stripe" | "apple" | "free";
 
 export type Entitlement = {
   userId: string;
@@ -11,6 +14,7 @@ export type Entitlement = {
   expiresAt: string | null;
   compGrantId: string | null;
   subscriptionId: string | null;
+  iapSubscriptionId: string | null;
 };
 
 const FREE: Omit<Entitlement, "userId"> = {
@@ -19,6 +23,7 @@ const FREE: Omit<Entitlement, "userId"> = {
   expiresAt: null,
   compGrantId: null,
   subscriptionId: null,
+  iapSubscriptionId: null,
 };
 
 function fromRow(userId: string, row: Record<string, unknown> | null): Entitlement {
@@ -30,6 +35,7 @@ function fromRow(userId: string, row: Record<string, unknown> | null): Entitleme
     expiresAt: (row.expires_at as string | null) ?? null,
     compGrantId: (row.comp_grant_id as string | null) ?? null,
     subscriptionId: (row.subscription_id as string | null) ?? null,
+    iapSubscriptionId: (row.iap_subscription_id as string | null) ?? null,
   };
 }
 
@@ -40,7 +46,7 @@ export async function getCurrentEntitlement(): Promise<Entitlement | null> {
   if (!auth?.user) return null;
   const { data } = await supabase
     .from("user_entitlements")
-    .select("tier, source, expires_at, comp_grant_id, subscription_id")
+    .select("tier, source, expires_at, comp_grant_id, subscription_id, iap_subscription_id")
     .eq("user_id", auth.user.id)
     .maybeSingle();
   return fromRow(auth.user.id, data);
@@ -51,7 +57,7 @@ export async function getUserEntitlement(userId: string): Promise<Entitlement> {
   const supabase = createServiceRoleClient();
   const { data } = await supabase
     .from("user_entitlements")
-    .select("tier, source, expires_at, comp_grant_id, subscription_id")
+    .select("tier, source, expires_at, comp_grant_id, subscription_id, iap_subscription_id")
     .eq("user_id", userId)
     .maybeSingle();
   return fromRow(userId, data);

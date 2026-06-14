@@ -7,6 +7,8 @@ import { registerPush, unregisterPush } from "@/lib/native/registerPush";
 import { registerAppOpen } from "@/lib/native/registerAppOpen";
 import { isReloadBlocked, triggerAppReload } from "@/lib/native/reloadGuard";
 import { createClient } from "@/lib/supabase/client";
+import { getIapClientConfig } from "@/app/actions/iap";
+import { configureIap, identifyIapUser, logOutIap } from "@/lib/native/iap";
 
 // How long the app must have been backgrounded before a return-to-foreground
 // triggers a reload. The WebView points at the live site, so reloading picks
@@ -120,6 +122,31 @@ export function NativeAppShell() {
         else teardownPush = fn;
       });
     };
+    // RevenueCat (iOS IAP): configure once with the server-provided public key,
+    // then identify the signed-in user so purchase webhooks attribute to their
+    // account. Server-gated (revenuecat_iap_enabled) so it's inert until launch.
+    let iapReady: Promise<boolean> | null = null;
+    const ensureIapConfigured = () => {
+      if (iapReady) return iapReady;
+      iapReady = (async () => {
+        if (nativePlatform() !== "ios") return false;
+        try {
+          const cfg = await getIapClientConfig();
+          if (!cfg.enabled || !cfg.iosSdkKey) return false;
+          await configureIap(cfg.iosSdkKey);
+          return true;
+        } catch {
+          return false;
+        }
+      })();
+      return iapReady;
+    };
+    const identifyIap = (userId: string) => {
+      void ensureIapConfigured().then((ok) => {
+        if (ok && !cancelled) void identifyIapUser(userId);
+      });
+    };
+
     const { data: authSub } = supabase.auth.onAuthStateChange((event, session) => {
       if (cancelled) return;
       if (
@@ -129,11 +156,13 @@ export function NativeAppShell() {
           event === "TOKEN_REFRESHED")
       ) {
         doRegister();
+        identifyIap(session.user.id);
       } else if (event === "SIGNED_OUT") {
         registered = false;
         teardownPush?.();
         teardownPush = undefined;
         void unregisterPush();
+        void logOutIap();
       }
     });
 

@@ -9,6 +9,7 @@ import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { hasUsedCoachProTrial, type SubscriptionTier } from "@/lib/billing/entitlement";
 import { getStripeClient, priceIdFor, seatPriceIdFor, isSeatPriceId, type BillingInterval } from "@/lib/billing/stripe";
 import { getSeatUsage, ensureOwnerSeatGrantRow } from "@/lib/billing/seats";
+import { getBillingStatus } from "@/lib/billing/billing-status";
 import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
 import { getStoredResendConfig } from "@/lib/site/resend-config";
 import {
@@ -71,6 +72,21 @@ export async function createCheckoutSessionAction(input: {
       return {
         ok: false,
         error: "You already have an active subscription. Use the upgrade flow from the pricing page.",
+      };
+    }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Subscription lookup failed." };
+  }
+
+  // Also refuse if the user already subscribes through the App Store (Apple IAP).
+  // Those are billed and managed by Apple; a parallel web checkout would double-bill.
+  try {
+    const { hasActiveApple } = await getBillingStatus(user.id);
+    if (hasActiveApple) {
+      return {
+        ok: false,
+        error:
+          "You already subscribe through the App Store. Manage your plan in iPhone Settings → Subscriptions.",
       };
     }
   } catch (e) {
@@ -181,6 +197,21 @@ export async function createEmbeddedCheckoutSessionAction(input: {
         ok: false,
         error:
           "You already have an active subscription. Use the upgrade flow from the pricing page.",
+      };
+    }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Subscription lookup failed." };
+  }
+
+  // Same cross-store guard as the redirect path — block web checkout when an
+  // active App Store subscription exists so Apple and Stripe can't both bill.
+  try {
+    const { hasActiveApple } = await getBillingStatus(user.id);
+    if (hasActiveApple) {
+      return {
+        ok: false,
+        error:
+          "You already subscribe through the App Store. Manage your plan in iPhone Settings → Subscriptions.",
       };
     }
   } catch (e) {

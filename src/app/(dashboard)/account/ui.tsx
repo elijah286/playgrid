@@ -23,6 +23,7 @@ import {
 import { Modal } from "@/components/ui";
 import { SEAT_PRICE_USD_PER_MONTH } from "@/lib/billing/seats-config";
 import type { Entitlement, SubscriptionTier } from "@/lib/billing/entitlement";
+import { openManageAppleSubscription } from "@/lib/native/iap";
 import {
   FREE_MAX_PLAYBOOKS_OWNED,
   TIER_LABEL,
@@ -447,6 +448,7 @@ function PlanCard({
   const tier = entitlement?.tier ?? "free";
   const source = entitlement?.source ?? "free";
   const isPaid = source === "stripe";
+  const isApple = source === "apple";
   const isComp = source === "comp";
   const isCanceling = isPaid && !!pendingCancellation;
 
@@ -552,6 +554,7 @@ function PlanCard({
               {isComp ? " · complimentary" : null}
               {isPaid && isCanceling ? " · canceling" : null}
               {isPaid && !isCanceling ? " · paid" : null}
+              {isApple ? " · paid" : null}
             </p>
             {entitlement?.expiresAt ? (
               <p className="mt-1 text-xs text-muted">
@@ -588,6 +591,13 @@ function PlanCard({
                 </button>
               ) : null}
             </div>
+          ) : isApple ? (
+            // App Store subscriptions can't be managed from the web — Apple owns
+            // billing. Point them to the iPhone app (which deep-links to Settings).
+            <p data-web-only className="max-w-[12rem] text-right text-xs text-muted">
+              Managed through the App Store — change or cancel in the XO Gridmaker
+              app on your iPhone.
+            </p>
           ) : (
             <Link
               href="/pricing"
@@ -599,24 +609,28 @@ function PlanCard({
           )}
         </div>
 
-        {/* Native: in-app purchase UI is gated off, so point coaches to the web
-            to view or change their plan. Opens the DEFAULT browser (window.open
-            _system → real Safari, not the in-app webview) — the US-storefront
-            external-link allowance Apple cited in the rejection (Guideline
-            3.1.3(b) / 3.1.1). No price shown in the app. On its own full-width
-            line so the long label isn't squeezed next to the tier name; the
-            arrow is bound to the text so it can't orphan onto a second line. */}
-        <button
-          type="button"
-          data-native-only
-          onClick={() =>
-            window.open("https://www.xogridmaker.com/account", "_system")
-          }
-          className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2.5 text-sm font-medium hover:bg-surface"
-        >
-          Manage your plan at xogridmaker.com
-          <span aria-hidden>→</span>
-        </button>
+        {/* Native (iOS): deliberately NO external link to web billing. That
+            link-out (window.open _system → Safari → web pricing/checkout) is the
+            3.1.1 leak Apple keeps rejecting. Apple-billed subs manage in iOS
+            Settings; web/Stripe subscribers get plain, non-tappable text (no
+            link, no price); free users get nothing here — they subscribe through
+            the in-app purchase flow once IAP is enabled. */}
+        {isApple ? (
+          // Apple-billed: deep-link straight to iOS Settings → Subscriptions.
+          <button
+            type="button"
+            data-native-only
+            onClick={() => openManageAppleSubscription()}
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2.5 text-sm font-medium hover:bg-surface"
+          >
+            Manage subscription
+            <span aria-hidden>→</span>
+          </button>
+        ) : isPaid ? (
+          <p data-native-only className="text-center text-xs text-muted">
+            This subscription is managed on the web.
+          </p>
+        ) : null}
 
         {isComp ? (
           <p className="rounded-md bg-surface px-3 py-2 text-xs text-muted ring-1 ring-border">

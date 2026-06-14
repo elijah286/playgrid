@@ -42,6 +42,16 @@ export type FeatureEntry = {
 };
 
 export const FEATURES: FeatureEntry[] = [
+  // ── Billing & accounts ───────────────────────────────────────────
+  {
+    id: "ios-in-app-purchase",
+    name: "Subscribe on iPhone (App Store)",
+    description:
+      "Coaches can buy the Team Coach plan directly inside the iOS app via Apple in-app purchase, billed and managed through their Apple account. A subscription unlocks the same account whether it was bought on the web or on iPhone, and App Store purchasers are sent to iPhone Settings to manage or cancel. Web purchases continue through Stripe.",
+    category: "Billing & accounts",
+    status: "beta",
+    addedDate: "2026-06-13",
+  },
   // ── Calendar & scheduling ────────────────────────────────────────
   {
     id: "native-game-practice-reminders",
