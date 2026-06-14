@@ -73,7 +73,11 @@ export default async function HomePage() {
           Above-the-fold: server-rendered HTML, no client JS required to paint.
           The illustration owns LCP via `priority` — every other image on the
           page is `loading="lazy"` so the browser doesn't fight for bandwidth. */}
-      <section className="relative overflow-hidden">
+      {/* overflow-x-clip (not overflow-hidden): contains the tilted phone
+          horizontally without clipping the Y axis. overflow-hidden would
+          cut the phone's drop-shadow flat at the section's bottom edge,
+          rendering as a hard full-width line under the phone. */}
+      <section className="relative overflow-x-clip">
         {/* Hero is content-sized, not viewport-locked. Letting the next
             section's top edge crest the fold is the single most reliable
             "scroll for more" cue — a 100vh hero teaches visitors there's
