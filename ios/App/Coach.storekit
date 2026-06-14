@@ -1,0 +1,76 @@
+{
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : [
+      {
+        "locale" : "en_US",
+        "policyText" : "",
+        "policyURL" : ""
+      }
+    ]
+  },
+  "identifier" : "XOGM01",
+  "nonRenewingSubscriptions" : [],
+  "products" : [],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storeKitErrors" : [],
+    "_storefront" : "USA"
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "21678901",
+      "localizations" : [],
+      "name" : "Coach",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "9.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "10000001",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Unlimited playbooks and plays, Coach Cal AI, Game Mode, wristbands, and team sharing.",
+              "displayName" : "Team Coach — Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.xogridmaker.app.coach.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Team Coach Monthly",
+          "subscriptionGroupID" : "21678901",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "99.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "10000002",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Unlimited playbooks and plays, Coach Cal AI, Game Mode, wristbands, and team sharing. Best value — two months free.",
+              "displayName" : "Team Coach — Annual",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.xogridmaker.app.coach.annual",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Team Coach Annual",
+          "subscriptionGroupID" : "21678901",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

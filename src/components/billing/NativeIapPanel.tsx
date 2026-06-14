@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { nativePlatform } from "@/lib/native/isNativeApp";
 import { getIapClientConfig } from "@/app/actions/iap";
 import {
@@ -10,7 +10,7 @@ import {
   type CoachOffer,
 } from "@/lib/native/iap";
 
-type Phase = "loading" | "unavailable" | "ready" | "success";
+type Phase = "loading" | "unavailable" | "error" | "ready" | "success";
 
 /**
  * iOS in-app purchase panel for the Coach plan. Renders the StoreKit-priced
@@ -25,35 +25,38 @@ export function NativeIapPanel({ fallback }: { fallback: ReactNode }) {
   const [busy, setBusy] = useState<string | null>(null); // packageId or "restore"
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (nativePlatform() !== "ios") {
-        if (!cancelled) setPhase("unavailable");
+  const load = useCallback(async () => {
+    setPhase("loading");
+    setError(null);
+    if (nativePlatform() !== "ios") {
+      setPhase("unavailable");
+      return;
+    }
+    try {
+      const cfg = await getIapClientConfig();
+      if (!cfg.enabled) {
+        // IAP is off (pre-launch / web / Android) → show the neutral fallback.
+        setPhase("unavailable");
         return;
       }
-      try {
-        const cfg = await getIapClientConfig();
-        if (!cfg.enabled) {
-          if (!cancelled) setPhase("unavailable");
-          return;
-        }
-        const list = await getCoachOffers();
-        if (cancelled) return;
-        if (!list.length) {
-          setPhase("unavailable");
-          return;
-        }
-        setOffers(list);
-        setPhase("ready");
-      } catch {
-        if (!cancelled) setPhase("unavailable");
+      const list = await getCoachOffers();
+      if (!list.length) {
+        // IAP is ON but StoreKit returned nothing (bad ids, products not yet
+        // "Ready to Submit", or no StoreKit config) — that's a load failure the
+        // coach can retry, NOT "purchases unavailable".
+        setPhase("error");
+        return;
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
+      setOffers(list);
+      setPhase("ready");
+    } catch {
+      setPhase("error");
+    }
   }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   async function buy(offer: CoachOffer) {
     setBusy(offer.productId);
@@ -89,6 +92,37 @@ export function NativeIapPanel({ fallback }: { fallback: ReactNode }) {
   }
 
   if (phase === "unavailable") return <>{fallback}</>;
+
+  if (phase === "error") {
+    return (
+      <div className="rounded-2xl border border-border bg-surface-raised p-6">
+        <p className="text-base font-semibold text-foreground">Team Coach</p>
+        <p className="mt-1 text-sm text-muted">
+          We couldn’t load plans from the App Store just now. Check your
+          connection and try again.
+        </p>
+        <div className="mt-4 flex flex-col gap-2">
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={() => void load()}
+            className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white hover:bg-primary-hover disabled:opacity-60"
+          >
+            Try again
+          </button>
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={restore}
+            className="text-xs font-medium text-muted hover:text-foreground disabled:opacity-60"
+          >
+            {busy === "restore" ? "Restoring…" : "Already subscribed? Restore"}
+          </button>
+        </div>
+        {error ? <p className="mt-2 text-xs text-red-700">{error}</p> : null}
+      </div>
+    );
+  }
 
   if (phase === "success") {
     return (

@@ -27,11 +27,48 @@ export type CoachOffer = {
   priceString: string;
 };
 
-/** Coach monthly/annual offers from StoreKit (monthly first). */
+/**
+ * StoreKit's product fetch can hang indefinitely when there is no StoreKit
+ * configuration (a simulator with no .storekit file and no Sandbox account
+ * signed in) or on a flaky network — which would leave the purchase panel
+ * spinning on "Loading plans…" forever, a state a coach OR an App Store
+ * reviewer could get stuck on. Cap it so the panel degrades to a
+ * "couldn't load — try again" state instead.
+ */
+const PRODUCTS_TIMEOUT_MS = 12_000;
+
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms),
+    ),
+  ]);
+}
+
+/** Coach monthly/annual offers from StoreKit (monthly first). Throws if the
+ *  StoreKit fetch fails or times out, so the panel can show a retry state
+ *  rather than an infinite spinner. */
 export async function getCoachOffers(): Promise<CoachOffer[]> {
   if (!iosOnly()) return [];
   const NativePurchases = await plugin();
-  const { products } = await NativePurchases.getProducts({ productIdentifiers: COACH_PRODUCT_IDS });
+  const { products } = await withTimeout(
+    NativePurchases.getProducts({ productIdentifiers: COACH_PRODUCT_IDS }),
+    PRODUCTS_TIMEOUT_MS,
+    "StoreKit getProducts",
+  ).catch((e: unknown) => {
+    console.warn("[iap] getCoachOffers: StoreKit getProducts failed", {
+      productIds: COACH_PRODUCT_IDS,
+      error: e instanceof Error ? e.message : String(e),
+    });
+    throw e;
+  });
+  if (!products.length) {
+    console.warn(
+      "[iap] getCoachOffers: 0 products returned — verify the ids match App Store Connect and are 'Ready to Submit'",
+      { productIds: COACH_PRODUCT_IDS },
+    );
+  }
   const offers: CoachOffer[] = [];
   for (const p of products) {
     const interval: BillingInterval | null =
