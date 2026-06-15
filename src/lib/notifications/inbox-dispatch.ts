@@ -138,8 +138,43 @@ export async function projectSystemNoticesToAdmins(opts: {
     .gte("created_at", sinceIso)
     .select("id, kind, body, user_display_name, user_email, href");
 
-  const notices = (claimed ?? []) as ClaimedNotice[];
-  if (notices.length === 0) return { pushed: 0 };
+  return { pushed: await fanNoticesToAdmins(admin, (claimed ?? []) as ClaimedNotice[]) };
+}
+
+/**
+ * Path-independent safety net: claim and push EVERY recent unpushed admin
+ * notice, regardless of which signup/purchase flow created it.
+ *
+ * The per-touchpoint hooks (auth callback, Stripe webhook) only fire for
+ * signups/changes that traverse those exact routes — native social sign-in,
+ * implicit-flow OAuth, and delayed email confirmations bypass them, so their
+ * notices were written by the DB trigger but never pushed. This sweep, driven
+ * by a frequent cron, reads the canonical system_notices feed directly and
+ * guarantees coverage. Idempotent via the same pushed_at claim, and
+ * recency-bounded so it never floods on an old backlog.
+ */
+export async function sweepUnpushedAdminNotices(opts: {
+  admin: Admin;
+  /** How far back an unpushed notice may be and still push. Default 30 min. */
+  maxAgeMs?: number;
+}): Promise<{ pushed: number }> {
+  const { admin } = opts;
+  const sinceIso = new Date(Date.now() - (opts.maxAgeMs ?? 30 * 60 * 1000)).toISOString();
+
+  const { data: claimed } = await admin
+    .from("system_notices")
+    .update({ pushed_at: new Date().toISOString() })
+    .is("pushed_at", null)
+    .in("kind", ADMIN_PUSH_NOTICE_KINDS as unknown as string[])
+    .gte("created_at", sinceIso)
+    .select("id, kind, body, user_display_name, user_email, href");
+
+  return { pushed: await fanNoticesToAdmins(admin, (claimed ?? []) as ClaimedNotice[]) };
+}
+
+/** Fan a set of already-claimed notices out to every site admin's devices. */
+async function fanNoticesToAdmins(admin: Admin, notices: ClaimedNotice[]): Promise<number> {
+  if (notices.length === 0) return 0;
 
   const { data: admins } = await admin
     .from("profiles")
@@ -148,7 +183,7 @@ export async function projectSystemNoticesToAdmins(opts: {
   const adminIds = (admins ?? [])
     .map((a) => a.id as string | null)
     .filter((id): id is string => Boolean(id));
-  if (adminIds.length === 0) return { pushed: 0 };
+  if (adminIds.length === 0) return 0;
 
   for (const n of notices) {
     await sendPushToUsers({
@@ -158,5 +193,5 @@ export async function projectSystemNoticesToAdmins(opts: {
       message: adminPushMessage(n),
     });
   }
-  return { pushed: notices.length };
+  return notices.length;
 }

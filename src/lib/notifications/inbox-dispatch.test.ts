@@ -23,6 +23,7 @@ import {
   notifyPlaybookOwners,
   notifyUser,
   projectSystemNoticesToAdmins,
+  sweepUnpushedAdminNotices,
 } from "./inbox-dispatch";
 
 type TableData = Record<string, unknown[]>;
@@ -176,6 +177,32 @@ describe("projectSystemNoticesToAdmins", () => {
   it("no-ops (no push) when nothing was claimed", async () => {
     const admin = makeAdmin({ "system_notices:update": [], "profiles:select": [{ id: "admin1" }] });
     const res = await projectSystemNoticesToAdmins({ admin, userId: "u" });
+    expect(res.pushed).toBe(0);
+    expect(sendPushToUsers).not.toHaveBeenCalled();
+  });
+});
+
+describe("sweepUnpushedAdminNotices", () => {
+  it("claims unpushed notices regardless of source path and fans to admins", async () => {
+    const admin = makeAdmin({
+      "system_notices:update": [
+        { id: "n3", kind: "user_signup", body: "Nathan North signed up", user_display_name: "Nathan North", user_email: null, href: "/admin/users" },
+      ],
+      "profiles:select": [{ id: "admin1" }],
+    });
+    const res = await sweepUnpushedAdminNotices({ admin });
+    expect(res.pushed).toBe(1);
+    // Path-independent: claims on the unpushed marker, with no user_id filter.
+    expect(admin.__isCalls).toContainEqual({ table: "system_notices", col: "pushed_at", val: null });
+    const arg = sendPushToUsers.mock.calls[0][0] as { userIds: string[]; category: string; message: { body: string } };
+    expect(arg.category).toBe("admin_ops");
+    expect(arg.userIds).toEqual(["admin1"]);
+    expect(arg.message.body).toBe("Nathan North signed up");
+  });
+
+  it("no-ops when nothing is unpushed", async () => {
+    const admin = makeAdmin({ "system_notices:update": [], "profiles:select": [{ id: "admin1" }] });
+    const res = await sweepUnpushedAdminNotices({ admin });
     expect(res.pushed).toBe(0);
     expect(sendPushToUsers).not.toHaveBeenCalled();
   });
