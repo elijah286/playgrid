@@ -29,6 +29,10 @@ const METADATA_TOKEN_URL =
 const METADATA_PROJECT_URL =
   "http://metadata.google.internal/computeMetadata/v1/project/project-id";
 
+// Upper bound on a single FCM send. FCM normally responds in well under a
+// second; this just guarantees a hung connection can't stall the fan-out.
+const FCM_SEND_TIMEOUT_MS = 10_000;
+
 export type { PushCategory };
 
 export type PushMessage = {
@@ -221,6 +225,11 @@ async function sendOne(opts: {
   const data: Record<string, string> = { ...(opts.message.data ?? {}) };
   if (opts.message.link) data.link = opts.message.link;
 
+  // Hard timeout: a stalled FCM call must never hang the request. Without
+  // this, a single slow send could block the whole push fan-out (and, when
+  // FCM ran before APNs, silently starve the iOS send).
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FCM_SEND_TIMEOUT_MS);
   let res: Response;
   try {
     res = await fetch(
@@ -245,10 +254,13 @@ async function sendOne(opts: {
             },
           },
         }),
+        signal: controller.signal,
       },
     );
   } catch {
     return { ok: false, dead: false };
+  } finally {
+    clearTimeout(timer);
   }
   if (res.ok) return { ok: true };
   let code = "";
@@ -297,39 +309,46 @@ export async function sendPushToUsers(opts: {
   const iosTokens = tokens.filter((t) => t.platform === "ios");
   const fcmTokens = tokens.filter((t) => t.platform !== "ios");
 
-  let delivered = 0;
   const deadFcmIds: string[] = [];
   const deadApnsIds: string[] = [];
 
-  // --- FCM (Android) ---
-  if (fcmReady && fcmTokens.length > 0) {
+  // Run the two transports CONCURRENTLY. They are independent (different
+  // devices, different providers), so a slow or stalled FCM call must not
+  // delay — or, as in the old sequential FCM→APNs order, entirely starve —
+  // the iOS send. Each task is self-contained and best-effort.
+  const fcmTask = async (): Promise<number> => {
+    if (!fcmReady || fcmTokens.length === 0) return 0;
     const auth = await getAuth();
-    if (auth) {
-      await Promise.all(
-        fcmTokens.map(async (t) => {
-          const r = await sendOne({
-            projectId: auth.projectId,
-            accessToken: auth.accessToken,
-            token: t.token,
-            message: opts.message,
-          });
-          if (r.ok) delivered += 1;
-          else if (r.dead) deadFcmIds.push(t.id);
-        }),
-      );
-    }
-  }
+    if (!auth) return 0;
+    let n = 0;
+    await Promise.all(
+      fcmTokens.map(async (t) => {
+        const r = await sendOne({
+          projectId: auth.projectId,
+          accessToken: auth.accessToken,
+          token: t.token,
+          message: opts.message,
+        });
+        if (r.ok) n += 1;
+        else if (r.dead) deadFcmIds.push(t.id);
+      }),
+    );
+    return n;
+  };
 
-  // --- APNs (iOS) ---
-  if (apnsCfg && iosTokens.length > 0) {
+  const apnsTask = async (): Promise<number> => {
+    if (!apnsCfg || iosTokens.length === 0) return 0;
     const r = await sendApnsToTokens(
       apnsCfg,
       iosTokens.map((t) => ({ id: t.id, token: t.token })),
       opts.message,
     );
-    delivered += r.delivered;
     deadApnsIds.push(...r.deadTokenIds);
-  }
+    return r.delivered;
+  };
+
+  const [fcmDelivered, apnsDelivered] = await Promise.all([fcmTask(), apnsTask()]);
+  const delivered = fcmDelivered + apnsDelivered;
 
   if (deadFcmIds.length > 0) {
     await opts.admin

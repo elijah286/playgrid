@@ -48,7 +48,6 @@ const PUBLIC_PREFIXES = [
   "/auth/", // OAuth/PKCE callback — runs before a session exists
   "/api/contact",
   "/api/health",
-  "/api/pushdiag", // TEMP push diagnostic — secret-gated in the route. Remove with the route.
   "/api/stripe/webhook", // Stripe → server. Must accept POSTs without a session.
   "/api/iap/apple/notifications", // Apple App Store Server Notifications → server. POSTs without a session; Apple signs the payload.
   "/api/calendar/", // Cron + ICS feed: auth via bearer secret / signed token.

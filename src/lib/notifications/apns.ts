@@ -29,6 +29,10 @@ import http2 from "node:http2";
 export const PROD_HOST = "api.push.apple.com";
 export const SANDBOX_HOST = "api.development.push.apple.com";
 
+// Upper bound on a single APNs HTTP/2 request so a hung connection can't
+// stall the push fan-out.
+const APNS_REQUEST_TIMEOUT_MS = 10_000;
+
 export type ApnsMessage = {
   title: string;
   body: string;
@@ -131,9 +135,11 @@ function postToApns(
 ): Promise<{ status: number; reason: string } | null> {
   return new Promise((resolve) => {
     let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const done = (v: { status: number; reason: string } | null) => {
       if (settled) return;
       settled = true;
+      if (timer) clearTimeout(timer);
       resolve(v);
     };
     let client: http2.ClientHttp2Session;
@@ -143,6 +149,15 @@ function postToApns(
       done(null);
       return;
     }
+    // Guard against a hung connection so the push fan-out can't stall.
+    timer = setTimeout(() => {
+      done(null);
+      try {
+        client.close();
+      } catch {
+        /* noop */
+      }
+    }, APNS_REQUEST_TIMEOUT_MS);
     client.on("error", () => {
       done(null);
       try {
