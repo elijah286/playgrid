@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   BarChart3,
+  Bell,
   Brain,
   CreditCard,
   DollarSign,
@@ -49,6 +50,7 @@ import { SiteSettingsAdminClient } from "@/features/admin/SiteSettingsAdminClien
 import { CoachSeatsAdminClient } from "@/features/admin/CoachSeatsAdminClient";
 import { PlaybookSeedsAdminClient } from "@/features/admin/PlaybookSeedsAdminClient";
 import { BetaFeaturesAdminClient } from "@/features/admin/BetaFeaturesAdminClient";
+import { NotificationHealthAdminClient } from "@/features/admin/NotificationHealthAdminClient";
 import { OpexAdminClient } from "@/features/admin/OpexAdminClient";
 import type { FeedbackRow } from "@/app/actions/feedback";
 import type { CoachInvitationRow } from "@/app/actions/coach-invitations";
@@ -100,6 +102,7 @@ type Tab =
   | "seeds"
   | "site"
   | "integrations"
+  | "notif_health"
   | "beta";
 
 const STORAGE_KEY = "site-admin-active-tab";
@@ -120,6 +123,7 @@ function isTab(value: string | null | undefined): value is Tab {
     value === "seeds" ||
     value === "site" ||
     value === "integrations" ||
+    value === "notif_health" ||
     value === "beta"
   );
 }
@@ -309,6 +313,7 @@ export function SettingsClient({
       items: [
         { value: "site", label: "Site", icon: SettingsIcon },
         { value: "integrations", label: "Integrations", icon: KeyRound },
+        { value: "notif_health", label: "Notifications", icon: Bell },
         { value: "beta", label: "Beta features", icon: FlaskConical },
       ],
     },
@@ -654,6 +659,8 @@ export function SettingsClient({
             {(d) => <BetaFeaturesAdminClient initialFeatures={d} />}
           </LazyContent>
         )}
+
+        {tab === "notif_health" && <NotificationHealthAdminClient />}
 
         {tab === "opex" && (
           <LazyContent state={opexData}>

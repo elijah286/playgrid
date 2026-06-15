@@ -48,6 +48,7 @@ const PUBLIC_PREFIXES = [
   "/auth/", // OAuth/PKCE callback — runs before a session exists
   "/api/contact",
   "/api/health",
+  "/api/push/refresh", // Dormant-device token refresh. Auth via per-device secret, not a session.
   "/api/stripe/webhook", // Stripe → server. Must accept POSTs without a session.
   "/api/iap/apple/notifications", // Apple App Store Server Notifications → server. POSTs without a session; Apple signs the payload.
   "/api/calendar/", // Cron + ICS feed: auth via bearer secret / signed token.

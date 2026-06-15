@@ -20,6 +20,18 @@
             </intent-filter>
         </activity>
 
+        <!-- Forwards FCM token rotations to the server even when the app is
+             killed (extends the Capacitor push plugin's service). Overrides the
+             plugin's MESSAGING_EVENT service registration; super-calls preserve
+             normal push handling. -->
+        <service
+            android:name=".PushTokenService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

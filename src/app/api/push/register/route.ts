@@ -12,6 +12,7 @@
  * table access to service_role (RLS self-policies exist but are inert without
  * an `authenticated` grant — see the migration header).
  */
+import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
@@ -67,7 +68,37 @@ export async function POST(req: Request): Promise<Response> {
   if (error) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
-  return NextResponse.json({ ok: true });
+
+  // Issue (once) a per-device refresh secret so the native layer can update a
+  // rotated token later without a session (see /api/push/refresh). Preserve an
+  // existing secret across re-registers so already-stored native copies stay
+  // valid; only mint one when the row doesn't have one yet.
+  const { data: existing } = await admin
+    .from("device_tokens")
+    .select("refresh_secret")
+    .eq("user_id", user.id)
+    .eq("token", token)
+    .maybeSingle();
+  let refreshSecret = (existing?.refresh_secret as string | null) ?? null;
+  if (!refreshSecret) {
+    const candidate = randomBytes(32).toString("base64url");
+    await admin
+      .from("device_tokens")
+      .update({ refresh_secret: candidate })
+      .eq("user_id", user.id)
+      .eq("token", token)
+      .is("refresh_secret", null);
+    // Re-read in case of a concurrent register that won the race.
+    const { data: after } = await admin
+      .from("device_tokens")
+      .select("refresh_secret")
+      .eq("user_id", user.id)
+      .eq("token", token)
+      .maybeSingle();
+    refreshSecret = (after?.refresh_secret as string | null) ?? candidate;
+  }
+
+  return NextResponse.json({ ok: true, refreshSecret });
 }
 
 export async function DELETE(req: Request): Promise<Response> {

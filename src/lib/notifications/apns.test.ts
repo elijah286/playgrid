@@ -90,6 +90,21 @@ describe("buildApnsPayload", () => {
     expect(payload.link).toBe("/playbooks/123?tab=calendar");
     expect(payload.eventId).toBe("e1");
   });
+
+  it("builds a silent refresh payload: content-available, no alert", () => {
+    const payload = JSON.parse(
+      buildApnsPayload({
+        title: "",
+        body: "",
+        contentAvailable: true,
+        data: { kind: "token_refresh" },
+      }),
+    );
+    expect(payload.aps["content-available"]).toBe(1);
+    expect(payload.aps.alert).toBeUndefined();
+    expect(payload.aps.sound).toBeUndefined();
+    expect(payload.kind).toBe("token_refresh");
+  });
 });
 
 describe("classifyApnsResponse", () => {

@@ -55,6 +55,13 @@
 	<true/>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<!-- Lets a silent (content-available) push wake the app in the background
+	     so a dormant/never-reopened install can refresh a rotated APNs token
+	     via /api/push/refresh (see AppDelegate didReceiveRemoteNotification). -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>xogridmaker tags your game sessions with the field you played at so you can review them later. Sharing your location is optional.</string>
 	<!-- The @capacitor/geolocation plugin references the "Always" location

@@ -55,10 +55,59 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     // what the backend stores for the APNs send path.
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         NotificationCenter.default.post(name: .capacitorDidRegisterForRemoteNotifications, object: deviceToken)
+        // Cache the token (same lowercase-hex format the plugin sends to JS) so
+        // the silent-push handler can report it later without a fresh register.
+        let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
+        UserDefaults.standard.set(hex, forKey: "pushApnsToken")
     }
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
         NotificationCenter.default.post(name: .capacitorDidFailToRegisterForRemoteNotifications, object: error)
+    }
+
+    // MARK: - Silent-push token refresh
+    // A `content-available` background push (sent by the server cron to stale
+    // iOS tokens) wakes the app here even when it's been killed — the only way
+    // a never-reopened install can refresh a rotated/at-risk token. We report
+    // the cached APNs token to /api/push/refresh, authenticated by the
+    // per-device secret the WebView stored via @capacitor/preferences. Requires
+    // UIBackgroundModes "remote-notification" (see Info.plist).
+    func application(_ application: UIApplication,
+                     didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        guard let token = UserDefaults.standard.string(forKey: "pushApnsToken"),
+              let secret = pushRefreshSecret() else {
+            completionHandler(.noData)
+            return
+        }
+        postPushRefresh(secret: secret, token: token) { ok in
+            completionHandler(ok ? .newData : .noData)
+        }
+    }
+
+    /// Read the per-device refresh secret written by @capacitor/preferences.
+    /// The plugin's exact iOS storage layout varies by version, so probe the
+    /// common forms; confirm against the installed plugin during native testing.
+    private func pushRefreshSecret() -> String? {
+        let key = "pushRefreshSecret"
+        if let v = UserDefaults(suiteName: "CapacitorStorage")?.string(forKey: key) { return v }
+        if let v = UserDefaults.standard.string(forKey: key) { return v }
+        if let v = UserDefaults.standard.string(forKey: "CapacitorStorage.\(key)") { return v }
+        return nil
+    }
+
+    private func postPushRefresh(secret: String, token: String, done: @escaping (Bool) -> Void) {
+        guard let url = URL(string: "https://www.xogridmaker.com/api/push/refresh") else { done(false); return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.timeoutInterval = 15
+        let body: [String: Any] = ["secret": secret, "token": token, "platform": "ios"]
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        URLSession.shared.dataTask(with: req) { _, response, _ in
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            done(code >= 200 && code < 300)
+        }.resume()
     }
 
 }

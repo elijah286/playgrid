@@ -1,5 +1,22 @@
 import { isNativeApp, nativePlatform } from "@/lib/native/isNativeApp";
 
+// Key under which the per-device refresh secret is stored via
+// @capacitor/preferences. The native layer (Android FirebaseMessagingService,
+// iOS silent-push handler) reads the SAME key from the platform's Capacitor
+// preferences store to authenticate /api/push/refresh when a token rotates
+// while the app is killed. Must stay in lockstep with the native readers.
+export const PUSH_REFRESH_SECRET_KEY = "pushRefreshSecret";
+
+async function storeRefreshSecret(secret: string): Promise<void> {
+  try {
+    const { Preferences } = await import("@capacitor/preferences");
+    await Preferences.set({ key: PUSH_REFRESH_SECRET_KEY, value: secret });
+  } catch {
+    // Preferences plugin missing or write failed — refresh just falls back to
+    // the next app-open re-register. Best-effort.
+  }
+}
+
 /**
  * Register this native device for push and persist its FCM token server-side.
  *
@@ -34,18 +51,28 @@ export async function registerPush(): Promise<(() => void) | void> {
     const regHandle = await PushNotifications.addListener(
       "registration",
       (tokenData) => {
-        void fetch("/api/push/register", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            token: tokenData.value,
-            platform,
-            appVersion,
-          }),
-        }).catch(() => {
-          /* best-effort; will retry on next app start */
-        });
+        void (async () => {
+          try {
+            const res = await fetch("/api/push/register", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({
+                token: tokenData.value,
+                platform,
+                appVersion,
+              }),
+            });
+            // Persist the per-device refresh secret so native code can update a
+            // rotated token later without a session (see /api/push/refresh).
+            const data = (await res.json().catch(() => null)) as
+              | { refreshSecret?: string }
+              | null;
+            if (data?.refreshSecret) await storeRefreshSecret(data.refreshSecret);
+          } catch {
+            /* best-effort; will retry on next app start */
+          }
+        })();
       },
     );
 

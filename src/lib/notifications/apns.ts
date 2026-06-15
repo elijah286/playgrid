@@ -40,6 +40,13 @@ export type ApnsMessage = {
   link?: string;
   /** Extra string key/values delivered alongside `aps`. */
   data?: Record<string, string>;
+  /**
+   * Silent push: sets aps.content-available and sends as an
+   * `apns-push-type: background` at priority 5. With no title/body this wakes
+   * the app to do background work (e.g. token refresh) without showing a
+   * banner. Apple throttles these and won't wake a force-quit app on demand.
+   */
+  contentAvailable?: boolean;
 };
 
 export type ApnsConfig = {
@@ -88,12 +95,15 @@ export function mintApnsJwt(
 
 /** Build the APNs JSON payload from a platform-neutral message. */
 export function buildApnsPayload(message: ApnsMessage): string {
-  const payload: Record<string, unknown> = {
-    aps: {
-      alert: { title: message.title, body: message.body },
-      sound: "default",
-    },
-  };
+  const aps: Record<string, unknown> = {};
+  if (message.contentAvailable) aps["content-available"] = 1;
+  // Only attach a visible alert when there's something to show; a pure silent
+  // refresh push has neither title nor body.
+  if (message.title || message.body) {
+    aps.alert = { title: message.title, body: message.body };
+    aps.sound = "default";
+  }
+  const payload: Record<string, unknown> = { aps };
   for (const [k, v] of Object.entries(message.data ?? {})) payload[k] = v;
   if (message.link) payload.link = message.link;
   return JSON.stringify(payload);
@@ -132,6 +142,7 @@ function postToApns(
   token: string,
   body: string,
   nowSeconds: number,
+  pushType: "alert" | "background",
 ): Promise<{ status: number; reason: string } | null> {
   return new Promise((resolve) => {
     let settled = false;
@@ -171,8 +182,10 @@ function postToApns(
       ":path": `/3/device/${token}`,
       authorization: `bearer ${jwt}`,
       "apns-topic": cfg.bundleId,
-      "apns-push-type": "alert",
-      "apns-priority": "10",
+      // Silent refresh pushes must be type "background" at priority 5 or Apple
+      // rejects / throttles them; visible alerts are "alert" at priority 10.
+      "apns-push-type": pushType,
+      "apns-priority": pushType === "background" ? "5" : "10",
       // Allow APNs to retry delivery for a day (good for reminders).
       "apns-expiration": String(nowSeconds + 24 * 60 * 60),
       "content-type": "application/json",
@@ -220,11 +233,12 @@ async function sendOneApns(
   token: string,
   body: string,
   nowSeconds: number,
+  pushType: "alert" | "background",
 ): Promise<ApnsSendResult> {
   const otherHost =
     cfg.primaryHost === PROD_HOST ? SANDBOX_HOST : PROD_HOST;
 
-  const first = await postToApns(cfg.primaryHost, cfg, jwt, token, body, nowSeconds);
+  const first = await postToApns(cfg.primaryHost, cfg, jwt, token, body, nowSeconds, pushType);
   if (!first) return { ok: false, dead: false, retrySandbox: false };
 
   const verdict = classifyApnsResponse(
@@ -233,7 +247,7 @@ async function sendOneApns(
     cfg.primaryHost === SANDBOX_HOST,
   );
   if (!verdict.ok && verdict.retrySandbox) {
-    const second = await postToApns(otherHost, cfg, jwt, token, body, nowSeconds);
+    const second = await postToApns(otherHost, cfg, jwt, token, body, nowSeconds, pushType);
     if (!second) return { ok: false, dead: false, retrySandbox: false };
     return classifyApnsResponse(second.status, second.reason, true);
   }
@@ -255,12 +269,13 @@ export async function sendApnsToTokens(
   const nowSeconds = Math.floor(Date.now() / 1000);
   const jwt = mintApnsJwt(cfg, nowSeconds);
   const body = buildApnsPayload(message);
+  const pushType: "alert" | "background" = message.contentAvailable ? "background" : "alert";
 
   const deadTokenIds: string[] = [];
   let delivered = 0;
   await Promise.all(
     tokens.map(async (t) => {
-      const r = await sendOneApns(cfg, jwt, t.token, body, nowSeconds);
+      const r = await sendOneApns(cfg, jwt, t.token, body, nowSeconds, pushType);
       if (r.ok) delivered += 1;
       else if (r.dead) deadTokenIds.push(t.id);
     }),

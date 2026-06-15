@@ -620,6 +620,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-04-28",
   },
   {
+    id: "push-dormant-token-reliability",
+    name: "Reliable push for dormant users",
+    description:
+      "Notifications keep reaching parents and players who log in once and rarely reopen the app. The native apps now re-report a rotated push token even when killed — Android forwards FCM token refreshes from a background service, and iOS refreshes via a silent background push — authenticated by a per-device secret so no app session is needed. Site Admin → Notifications shows token-health metrics (reachable users, platform split, freshness buckets, dead-token reasons) so coverage gaps are visible before they bite.",
+    category: "Admin tools",
+    status: "internal",
+    addedDate: "2026-06-15",
+  },
+  {
     id: "site-admin-operational-push-alerts",
     name: "Site admin · Operational push alerts",
     description:
