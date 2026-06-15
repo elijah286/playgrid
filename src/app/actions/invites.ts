@@ -12,9 +12,45 @@ import { canInviteCoachCollaborators, tierAtLeast } from "@/lib/billing/features
 import { ensureSeatsAvailable } from "@/lib/billing/seats";
 import { sanitizeSharedPrefs, type PlaybookViewPrefs } from "@/domain/playbook/view-prefs";
 import { tagShareUrl } from "@/lib/share/tag-url";
+import { notifyPlaybookOwners } from "@/lib/notifications/inbox-dispatch";
 
 const DEFAULT_FROM_EMAIL = "XO Gridmaker <onboarding@resend.dev>";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Best-effort native push to a playbook's owners when a coach surfaces an
+ * inbox-worthy request (a pending join, or a coach-access request). Mirrors the
+ * derived "membership" / "coach_upgrade" inbox alerts so the device matches the
+ * in-app feed. Swallows everything — the inbox row is the source of truth.
+ */
+async function pushOwnersOfAccessRequest(opts: {
+  playbookId: string;
+  requesterId: string;
+  kind: "membership" | "coach_upgrade";
+}): Promise<void> {
+  try {
+    const admin = createServiceRoleClient();
+    const [{ data: prof }, { data: pb }] = await Promise.all([
+      admin.from("profiles").select("display_name").eq("id", opts.requesterId).maybeSingle(),
+      admin.from("playbooks").select("name").eq("id", opts.playbookId).maybeSingle(),
+    ]);
+    const who = (prof?.display_name as string | null)?.trim() || "Someone";
+    const playbookName = (pb?.name as string | null)?.trim() || "your playbook";
+    const message =
+      opts.kind === "coach_upgrade"
+        ? { title: "Coach-access request", body: `${who} requested coach access to ${playbookName}.` }
+        : { title: "New join request", body: `${who} asked to join ${playbookName}.` };
+    await notifyPlaybookOwners({
+      admin,
+      playbookId: opts.playbookId,
+      excludeUserId: opts.requesterId,
+      category: "roster_access",
+      message: { ...message, link: `/playbooks/${opts.playbookId}?tab=roster` },
+    });
+  } catch {
+    // best-effort
+  }
+}
 
 export type PlaybookInvite = {
   id: string;
@@ -739,14 +775,27 @@ export async function requestCoachAccessAction(
   | { ok: true; playbookId: string; status: "active" | "pending" }
   | { ok: false; error: string }
 > {
-  const accepted = await acceptInviteAction(token);
+  // Suppress acceptInvite's own owner push — this flow's meaningful signal is
+  // the coach-access request below, not the (possibly-pending) membership.
+  const accepted = await acceptInviteAction(token, { suppressOwnerPush: true });
   if (!accepted.ok) return accepted;
 
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const { error } = await supabase.rpc("request_coach_upgrade", {
     p_playbook_id: accepted.playbookId,
   });
   if (error) return { ok: false, error: error.message };
+
+  if (user) {
+    await pushOwnersOfAccessRequest({
+      playbookId: accepted.playbookId,
+      requesterId: user.id,
+      kind: "coach_upgrade",
+    });
+  }
 
   revalidatePath(`/playbooks/${accepted.playbookId}`);
   return { ok: true, playbookId: accepted.playbookId, status: accepted.status };
@@ -754,6 +803,7 @@ export async function requestCoachAccessAction(
 
 export async function acceptInviteAction(
   token: string,
+  opts?: { suppressOwnerPush?: boolean },
 ): Promise<
   | { ok: true; playbookId: string; status: "active" | "pending" }
   | { ok: false; error: string }
@@ -843,6 +893,16 @@ export async function acceptInviteAction(
     .eq("user_id", user.id)
     .maybeSingle();
   const status: "active" | "pending" = member?.status === "active" ? "active" : "pending";
+
+  // A pending member is a join request the owner must approve — mirror the
+  // derived "membership" inbox alert with a device push.
+  if (status === "pending" && !opts?.suppressOwnerPush) {
+    await pushOwnersOfAccessRequest({
+      playbookId,
+      requesterId: user.id,
+      kind: "membership",
+    });
+  }
 
   return { ok: true, playbookId, status };
 }

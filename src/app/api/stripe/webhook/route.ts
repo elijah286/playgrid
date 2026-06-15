@@ -6,11 +6,12 @@ import { getStripeConfig } from "@/lib/site/stripe-config";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
 import { COACH_CAL_PACK_BUDGET_MICROS } from "@/lib/billing/coach-cal-cost-cap";
 import { sendCancellationFeedbackEmail } from "@/lib/notifications/cancellation-feedback-email";
+import { projectSystemNoticesToAdmins } from "@/lib/notifications/inbox-dispatch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-async function upsertSubscriptionFromStripe(sub: Stripe.Subscription): Promise<void> {
+async function upsertSubscriptionFromStripe(sub: Stripe.Subscription): Promise<string> {
   const admin = createServiceRoleClient();
   const config = await getStripeConfig();
 
@@ -124,6 +125,21 @@ async function upsertSubscriptionFromStripe(sub: Stripe.Subscription): Promise<v
         { onConflict: "owner_id" },
       );
     if (seatErr) throw new Error(`owner_seat_grants upsert failed: ${seatErr.message}`);
+  }
+
+  return userId;
+}
+
+/**
+ * Fan the subscription_purchased / subscription_canceled system_notice the DB
+ * triggers just wrote (in the same transaction as the upsert above) out to site
+ * admins' devices. Best-effort and idempotent — never fails the webhook.
+ */
+async function pushAdminSubscriptionNotice(userId: string): Promise<void> {
+  try {
+    await projectSystemNoticesToAdmins({ admin: createServiceRoleClient(), userId });
+  } catch (e) {
+    console.error("[stripe webhook] admin push failed", e);
   }
 }
 
@@ -355,7 +371,8 @@ export async function POST(req: Request): Promise<NextResponse> {
           const subId =
             typeof session.subscription === "string" ? session.subscription : session.subscription.id;
           const sub = await stripe.subscriptions.retrieve(subId);
-          await upsertSubscriptionFromStripe(sub);
+          const uid = await upsertSubscriptionFromStripe(sub);
+          await pushAdminSubscriptionNotice(uid);
         } else if (
           session.mode === "payment" &&
           session.metadata?.pack_kind === "coach_cal_messages"
@@ -367,7 +384,8 @@ export async function POST(req: Request): Promise<NextResponse> {
       case "customer.subscription.created":
       case "customer.subscription.updated":
       case "customer.subscription.deleted": {
-        await upsertSubscriptionFromStripe(event.data.object);
+        const uid = await upsertSubscriptionFromStripe(event.data.object);
+        await pushAdminSubscriptionNotice(uid);
         await maybeFireCancellationFeedback(event.data.object.id);
         break;
       }

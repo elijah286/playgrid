@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { snapshotFirstTouchToProfile } from "@/lib/attribution/snapshot";
+import { projectSystemNoticesToAdmins } from "@/lib/notifications/inbox-dispatch";
 
 // OAuth + PKCE callback. Supabase redirects here with `?code=...` after the
 // provider (Apple, Google, etc.) authenticates the user. We exchange the code
@@ -50,6 +52,21 @@ export async function GET(request: NextRequest) {
         Number.isFinite(createdMs) && Date.now() - createdMs < 5 * 60 * 1000;
     }
     await snapshotFirstTouchToProfile(data.user.id, data.user.created_at);
+
+    // Brand-new user → the handle_new_user + system_notice triggers have
+    // already written the 'user_signup' notice in this same transaction. Fan
+    // it out to site admins' devices. Claimed idempotently, so a repeated
+    // callback within the grace window can't double-notify.
+    if (isFreshSignup) {
+      try {
+        await projectSystemNoticesToAdmins({
+          admin: createServiceRoleClient(),
+          userId: data.user.id,
+        });
+      } catch {
+        // best-effort — the admin inbox row is the source of truth.
+      }
+    }
   }
 
   const dest = new URL(`${origin}${safeNext}`);

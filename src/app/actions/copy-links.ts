@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { Resend } from "resend";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
+import { notifyUser } from "@/lib/notifications/inbox-dispatch";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getUserEntitlement } from "@/lib/billing/entitlement";
 import {
@@ -508,6 +509,25 @@ export async function sendCopyByEmailAction(input: {
         reason: sendErr.message,
       });
       continue;
+    }
+
+    // 2b) Native push when the recipient is an existing user — mirrors the
+    // derived "share" inbox alert so the device matches the in-app feed.
+    if (matchedUserId) {
+      try {
+        await notifyUser({
+          admin,
+          userId: matchedUserId,
+          category: "shares_mentions",
+          message: {
+            title: `${senderName} shared a playbook`,
+            body: `${senderName} shared "${playbookName}" with you.`,
+            link: `/copy/${token}`,
+          },
+        });
+      } catch {
+        // best-effort
+      }
     }
 
     // 3) Send the email.

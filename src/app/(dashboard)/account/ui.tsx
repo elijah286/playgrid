@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { track } from "@/lib/analytics/track";
-import { AlertTriangle, Check, CreditCard, IdCard, KeyRound, Lock, LogOut, MessageSquareQuote, Monitor, Moon, Smartphone, Sun, Users, UserCircle } from "lucide-react";
+import { AlertTriangle, Bell, Check, CreditCard, IdCard, KeyRound, Lock, LogOut, MessageSquareQuote, Monitor, Moon, Smartphone, Sun, Users, UserCircle } from "lucide-react";
 import {
   changePasswordAction,
   deleteOwnAccountAction,
@@ -32,6 +32,16 @@ import {
 import type { SeatUsage, SeatCollaborator, PendingCoachInvite } from "@/lib/billing/seats";
 import { resendCoachInviteAction } from "@/app/actions/invites";
 import { setAiFeedbackOptInAction } from "@/app/actions/coach-ai-feedback";
+import {
+  getNotificationPrefsAction,
+  setNotificationPrefAction,
+  type NotificationPrefsState,
+} from "@/app/actions/notification-prefs";
+import {
+  PUSH_CATEGORIES,
+  PUSH_CATEGORY_META,
+  type PushCategory,
+} from "@/lib/notifications/categories";
 import { removeCoachAccessAction } from "@/app/actions/playbook-roster";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { useIsNativeApp } from "@/lib/native/useIsNativeApp";
@@ -155,6 +165,13 @@ export function AccountClient({
 
       <Section title="Preferences" description="Customize how XO Gridmaker looks.">
         <AppearanceCard />
+      </Section>
+
+      <Section
+        title="Notifications"
+        description="Choose which push notifications you get on the XO Gridmaker mobile app."
+      >
+        <NotificationPreferencesCard />
       </Section>
 
       <Section
@@ -1362,6 +1379,127 @@ function CoachAiFeedbackCard({
           {err}
         </p>
       )}
+    </Card>
+  );
+}
+
+function NotificationPreferencesCard() {
+  const [state, setState] = useState<NotificationPrefsState | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [pendingCat, setPendingCat] = useState<PushCategory | null>(null);
+  const [, startTransition] = useTransition();
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    getNotificationPrefsAction().then((res) => {
+      if (!active) return;
+      if (res.ok) setState(res.state);
+      else setLoadError(res.error);
+      setLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  function toggle(category: PushCategory, next: boolean) {
+    if (!state || pendingCat) return;
+    setErr(null);
+    setPendingCat(category);
+    setState({ ...state, categories: { ...state.categories, [category]: next } });
+    startTransition(async () => {
+      const res = await setNotificationPrefAction({ category, enabled: next });
+      setPendingCat(null);
+      if (!res.ok) {
+        setErr(res.error);
+        setState((prev) =>
+          prev
+            ? { ...prev, categories: { ...prev.categories, [category]: !next } }
+            : prev,
+        );
+      }
+    });
+  }
+
+  const visible = state
+    ? PUSH_CATEGORIES.filter((c) => {
+        const m = PUSH_CATEGORY_META[c];
+        return m.audience === "all" || (m.audience === "admin" && state.isAdmin);
+      })
+    : [];
+
+  return (
+    <Card
+      icon={Bell}
+      title="Push notifications"
+      description="Delivered to the XO Gridmaker app on your phone. Everything is on by default — turn off anything you don't want."
+    >
+      {loading ? (
+        <p className="text-xs text-muted">Loading…</p>
+      ) : loadError ? (
+        <p className="rounded-md bg-danger-light px-3 py-2 text-xs text-danger ring-1 ring-danger/30">
+          {loadError}
+        </p>
+      ) : state ? (
+        <div>
+          {!state.deviceRegistered && (
+            <p className="mb-3 rounded-md bg-surface-inset px-3 py-2 text-xs text-muted">
+              Install the XO Gridmaker app and allow notifications to start
+              receiving these. Your choices here are saved either way.
+            </p>
+          )}
+          <ul className="divide-y divide-border">
+            {visible.map((c) => {
+              const m = PUSH_CATEGORY_META[c];
+              const isOn = state.categories[c];
+              const locked = !!m.lockedOn;
+              return (
+                <li key={c} className="flex items-center justify-between gap-4 py-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground">
+                      {m.label}
+                      {locked && (
+                        <span className="ml-2 rounded-full bg-surface-inset px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                          Always on
+                        </span>
+                      )}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted">{m.description}</p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={isOn}
+                    aria-label={m.label}
+                    disabled={locked || pendingCat === c}
+                    onClick={() => toggle(c, !isOn)}
+                    className={cn(
+                      "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
+                      isOn ? "bg-primary" : "bg-surface-inset",
+                      (locked || pendingCat === c) && "opacity-60",
+                      locked && "cursor-not-allowed",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "inline-block size-5 rounded-full bg-white shadow transition-transform",
+                        isOn ? "translate-x-5" : "translate-x-0.5",
+                      )}
+                    />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          {err && (
+            <p className="mt-3 rounded-md bg-danger-light px-3 py-2 text-xs text-danger ring-1 ring-danger/30">
+              {err}
+            </p>
+          )}
+        </div>
+      ) : null}
     </Card>
   );
 }

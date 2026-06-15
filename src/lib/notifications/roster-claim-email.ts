@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { getStoredResendConfig } from "@/lib/site/resend-config";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
+import { sendPushToUsers } from "@/lib/notifications/push";
 
 const DEFAULT_FROM_EMAIL = "XO Gridmaker <onboarding@resend.dev>";
 const SITE_URL =
@@ -16,13 +17,14 @@ export async function sendRosterClaimNotification(input: {
   claimingUserId: string;
   rosterLabel: string | null;
 }): Promise<void> {
+  // Resend may be unconfigured — that's fine, push still fires below. Only a
+  // hard throw (config lookup blew up) aborts the whole notification.
   let cfg: Awaited<ReturnType<typeof getStoredResendConfig>>;
   try {
     cfg = await getStoredResendConfig();
   } catch {
     return;
   }
-  if (!cfg.apiKey) return;
   const fromEmail = cfg.fromEmail ?? DEFAULT_FROM_EMAIL;
 
   const admin = createServiceRoleClient();
@@ -53,6 +55,24 @@ export async function sendRosterClaimNotification(input: {
   const claimerName =
     (claimingProfile?.display_name as string | null) ?? "A player";
   const slot = input.rosterLabel?.trim() || "an unclaimed roster spot";
+
+  // Native push to the owners' devices — independent of email, best-effort.
+  try {
+    await sendPushToUsers({
+      admin,
+      userIds: ownerIds,
+      category: "roster_access",
+      message: {
+        title: `Roster claim on ${playbookName}`,
+        body: `${claimerName} asked to claim ${slot}.`,
+        link: `/playbooks/${input.playbookId}?tab=roster`,
+      },
+    });
+  } catch {
+    // best-effort
+  }
+
+  if (!cfg.apiKey) return;
 
   const inboxUrl = `${SITE_URL}/home?tab=inbox`;
   const playbookUrl = `${SITE_URL}/playbooks/${input.playbookId}?tab=roster`;

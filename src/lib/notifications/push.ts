@@ -2,6 +2,7 @@ import { createSign } from "node:crypto";
 import type { createServiceRoleClient } from "@/lib/supabase/admin";
 import { sendApnsToTokens } from "@/lib/notifications/apns";
 import { loadApnsConfig } from "@/lib/site/apns-config";
+import type { PushCategory } from "@/lib/notifications/categories";
 
 type Admin = ReturnType<typeof createServiceRoleClient>;
 
@@ -28,7 +29,7 @@ const METADATA_TOKEN_URL =
 const METADATA_PROJECT_URL =
   "http://metadata.google.internal/computeMetadata/v1/project/project-id";
 
-export type PushCategory = "calendar" | "team";
+export type { PushCategory };
 
 export type PushMessage = {
   title: string;

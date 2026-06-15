@@ -351,7 +351,7 @@ export const FEATURES: FeatureEntry[] = [
     id: "push-notifications",
     name: "Mobile push notifications",
     description:
-      "Coaches and players with the iOS / Android app installed get push notifications for the things that matter on the day: practice and game reminders (and when an event is added, changed, or cancelled), play updates a coach broadcasts to the team, and new team messages. Tapping a notification deep-links straight to the relevant calendar, play, or chat. Notifications respect the device's OS permission and can be muted per category; the device token is dropped on sign-out.",
+      "Coaches and players with the iOS / Android app installed get push notifications for everything that lands in their inbox: practice and game reminders (and when an event is added, changed, or cancelled), play updates a coach broadcasts, new team messages, join and coach-access requests and roster claims on playbooks they own, and playbooks shared with them. Tapping a notification deep-links straight to the relevant screen. Everything is on by default; coaches control it with grouped on/off switches in Account → Notifications (Team activity, Schedule & RSVPs, Requests & approvals, Shares & mentions), while critical account & security alerts stay always-on. Respects the device's OS permission; the device token is dropped on sign-out.",
     category: "Calendar & scheduling",
     status: "beta",
     addedDate: "2026-05-28",
@@ -618,6 +618,15 @@ export const FEATURES: FeatureEntry[] = [
     category: "Roster & sharing",
     status: "ga",
     addedDate: "2026-04-28",
+  },
+  {
+    id: "site-admin-operational-push-alerts",
+    name: "Site admin · Operational push alerts",
+    description:
+      "Site admins with the app installed get a device push the moment something operationally meaningful happens: a new user signs up, a paid subscription is purchased, or a subscription is cancelled. These mirror the existing admin \"system notices\" inbox feed but reach the phone in real time, so the admin doesn't have to refresh a dashboard to know a sale just landed. Delivered to every admin account, deduplicated so retries/repeat callbacks never double-notify, and toggleable under Account → Notifications → Site operations.",
+    category: "Admin tools",
+    status: "internal",
+    addedDate: "2026-06-14",
   },
   {
     id: "site-admin-coach-ai-feedback-clusters",
