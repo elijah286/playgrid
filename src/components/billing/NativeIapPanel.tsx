@@ -1,6 +1,7 @@
 "use client";
 
 import { type ReactNode, useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { nativePlatform } from "@/lib/native/isNativeApp";
 import { getIapClientConfig } from "@/app/actions/iap";
 import {
@@ -188,8 +189,22 @@ export function NativeIapPanel({ fallback }: { fallback: ReactNode }) {
         {busy === "restore" ? "Restoring…" : "Restore purchase"}
       </button>
       {error ? <p className="mt-2 text-xs text-red-700">{error}</p> : null}
+      {/* Apple Guideline 3.1.2(c): auto-renew disclosure + functional EULA &
+          privacy links must live in the purchase flow itself. Title, length,
+          and price are shown in the offer buttons above. */}
       <p className="mt-3 text-[11px] leading-relaxed text-muted">
-        Billed through your Apple account. Cancel anytime in Settings → your name → Subscriptions.
+        Team Coach is an auto-renewing subscription billed to your Apple Account. It renews
+        automatically unless canceled at least 24 hours before the end of the current period; manage
+        or cancel anytime in Settings → your name → Subscriptions.
+      </p>
+      <p className="mt-2 text-[11px] leading-relaxed text-muted">
+        <Link href="/terms" className="underline underline-offset-2 hover:text-foreground">
+          Terms of Use (EULA)
+        </Link>
+        {" · "}
+        <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">
+          Privacy Policy
+        </Link>
       </p>
     </div>
   );
