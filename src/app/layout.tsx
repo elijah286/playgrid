@@ -20,6 +20,7 @@ import { AppInstallBanner } from "@/components/native/AppInstallBanner";
 import { OfflineStatusBanner } from "@/components/offline/OfflineStatusBanner";
 import { ConnectionRecovery } from "@/components/system/ConnectionRecovery";
 import { withFullContext } from "@/lib/seo/ld-json";
+import { NATIVE_APP_UA_MARKER } from "@/lib/native/nativeRequest";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getUserWithTimeout } from "@/lib/supabase/get-user-with-timeout";
@@ -209,13 +210,18 @@ export default async function RootLayout({
             }}
           />
         )}
-        {/* Tag the document as a Capacitor shell before paint so the
-            loading overlay's CSS can reveal it without waiting for React.
-            window.Capacitor is injected by the runtime before the page
-            loads, so the check is reliable on native and false on web. */}
+        {/* Tag the document as a Capacitor shell before paint so the loading
+            overlay AND the billing gate (html.native-shell rules in globals.css)
+            are correct from the first frame, without waiting for React.
+            window.Capacitor is injected by the runtime before the page loads, so
+            the primary check is reliable on native and false on web; the
+            User-Agent marker (appendUserAgent in capacitor.config.ts) is a
+            belt-and-suspenders fallback that's present from the first byte even
+            if the bridge object isn't ready yet. Either signal flips the gate;
+            neither can be true in a plain web browser. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform()){document.documentElement.classList.add('native-shell');}}catch(e){}`,
+            __html: `(function(){try{var c=window.Capacitor;var bridge=!!(c&&c.isNativePlatform&&c.isNativePlatform());var ua=(navigator.userAgent||'').indexOf(${JSON.stringify(NATIVE_APP_UA_MARKER)})!==-1;if(bridge||ua){document.documentElement.classList.add('native-shell');}}catch(e){}})();`,
           }}
         />
         <script

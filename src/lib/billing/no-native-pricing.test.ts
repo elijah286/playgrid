@@ -44,6 +44,13 @@ const WINDOW = 20;
 //    the price strings — verified section-level gating, beyond any window)
 //  - admin tooling (not reachable by a reviewer / non-admin)
 //  - tests
+//
+// The windowed scan can't verify the two public marketing pages (the gating
+// wrapper is too far from the price), so they're allowlisted HERE but covered
+// by a dedicated section-level assertion below ("prices on public pricing
+// pages live inside a data-web-only region"). That replaces the blind path
+// skip with a real gate, so a future ungated price added to /coach-cal or the
+// /pricing page is still caught.
 const ALLOW_PATH = [
   join("app", "pricing"),
   join("app", "coach-cal"),
@@ -96,5 +103,82 @@ describe("native app exposes no price or upgrade CTA (App Store 3.1.1)", () => {
       leaks,
       `Ungated price/upgrade strings reachable on native (add data-web-only / a native check, or neutralize the copy):\n${leaks.join("\n")}`,
     ).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Section-level gate for the public pricing/marketing pages.
+//
+// The windowed scan above allowlists /pricing and /coach-cal because their
+// data-web-only wrapper can sit 90+ lines above the price string. A blind path
+// skip means a future ungated price added to those pages wouldn't be caught.
+// This walks the file top-to-bottom tracking the active data-web-only /
+// data-native-only region and asserts every price string renders while the most
+// recent gate is data-web-only — i.e. it's inside a web-only section, never a
+// native-only one (or ungated entirely). Block comments are stripped first so a
+// price mentioned in a "// hidden on native" comment doesn't false-positive.
+
+// Blank out block comments (including JSX comment wrappers), preserving
+// newlines so reported line numbers stay accurate. Keeps a price mentioned in a
+// "hidden on native" comment from counting as a rendered price.
+function stripBlockComments(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "));
+}
+
+// 1-based line numbers of price strings NOT inside an open data-web-only region.
+function priceLeaksOutsideWebOnly(content: string): number[] {
+  const lines = stripBlockComments(content).split("\n");
+  const leaks: number[] = [];
+  let region: "web" | "native" | null = null;
+  lines.forEach((line, i) => {
+    // The LAST gate marker on a line wins, so a marker + price on the same line
+    // (e.g. `<span data-web-only>…$9/mo</span>`) counts as gated.
+    const webIdx = line.lastIndexOf("data-web-only");
+    const nativeIdx = line.lastIndexOf("data-native-only");
+    if (webIdx !== -1 || nativeIdx !== -1) {
+      region = webIdx > nativeIdx ? "web" : "native";
+    }
+    if (isExempt(line)) return;
+    if (!DANGER.some((re) => re.test(line))) return;
+    if (region !== "web") leaks.push(i + 1);
+  });
+  return leaks;
+}
+
+const SECTION_GATED_PAGES = [
+  join("app", "coach-cal", "page.tsx"),
+  join("app", "pricing", "page.tsx"),
+];
+
+describe("public pricing pages: prices live inside a data-web-only region", () => {
+  it.each(SECTION_GATED_PAGES)("%s gates every price for web only", (rel) => {
+    const content = readFileSync(join(SRC, rel), "utf8");
+    const leaks = priceLeaksOutsideWebOnly(content);
+    expect(
+      leaks,
+      `${rel}: price string(s) not inside a data-web-only section (wrap the price or its enclosing <section> in data-web-only) at line(s): ${leaks.join(", ")}`,
+    ).toEqual([]);
+  });
+
+  it("flags a price added outside a data-web-only region", () => {
+    const ungated = [
+      `<section data-native-only>`,
+      `  <p>Get started free</p>`,
+      `</section>`,
+      `<div>`,
+      `  <span>$9/mo</span>`, // ungated — most recent gate is native-only
+      `</div>`,
+    ].join("\n");
+    expect(priceLeaksOutsideWebOnly(ungated)).toEqual([5]);
+  });
+
+  it("accepts a price wrapped in a far-away data-web-only section", () => {
+    const gated = [
+      `<section data-web-only>`,
+      ...Array(40).fill(`  <p>feature line</p>`),
+      `  <span>$9/mo</span>`, // gated — section opener is 40+ lines up
+      `</section>`,
+    ].join("\n");
+    expect(priceLeaksOutsideWebOnly(gated)).toEqual([]);
   });
 });

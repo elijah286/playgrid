@@ -763,6 +763,32 @@ body.native-app [data-native-only] {
   display: revert !important;
 }
 
+/* Pre-paint billing/native gate (App Store Guideline 3.1.1).
+ *
+ * The `body.native-app` rules above only take effect once NativeAppShell adds
+ * that class — and it does so in a useEffect, i.e. AFTER React hydration. Until
+ * then `[data-web-only]` is visible and `[data-native-only]` is hidden, so
+ * there's a window where the WebView shows web Stripe prices/CTAs and hides the
+ * IAP panel. On cold launch the full-screen #native-loading-overlay masks it,
+ * but a hard reload or a deep-link straight onto /pricing or /checkout (after
+ * the overlay is gone) has no mask — web pricing can flash before hydration.
+ *
+ * `html.native-shell` is set by the inline <head> script (layout.tsx) BEFORE
+ * first paint, off the same pre-paint native signal the overlay uses. Mirroring
+ * the gate onto it makes the native/web split correct from the very first frame
+ * instead of from hydration. Same display values, !important, and specificity
+ * ((0,2,1)) as the body.native-app rules, so the two never disagree once both
+ * apply. */
+html.native-shell [data-site-footer],
+html.native-shell [data-marketing-only],
+html.native-shell [data-pwa-install],
+html.native-shell [data-web-only] {
+  display: none !important;
+}
+html.native-shell [data-native-only] {
+  display: revert !important;
+}
+
 /* Game-mode landscape: let the field fit the full available area while
  * keeping its aspect ratio (letterbox as needed). Overrides the small-
  * screen cap above. Scoped via .game-mode-field so only game mode uses it. */
