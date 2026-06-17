@@ -13,9 +13,20 @@ function iosOnly(): boolean {
   return isNativeApp() && nativePlatform() === "ios";
 }
 
+/**
+ * Load the native-purchases plugin. CRITICAL: never return the plugin object
+ * bare from an async function. `mod.NativePurchases` is a Capacitor Proxy that
+ * forwards EVERY property access — including `.then` — to a native method call.
+ * An async fn that returns it does `Promise.resolve(proxy)`, which sees a
+ * truthy `.then`, treats the proxy as a thenable, and calls `NativePurchases
+ * .then(resolve, reject)` natively → "NativePurchases.then() is not implemented
+ * on ios", rejecting before getProducts/purchase ever runs (the IAP-load bug).
+ * Nesting the proxy under a key keeps the resolved value a plain (non-thenable)
+ * object, so it's passed through untouched.
+ */
 async function plugin() {
   const mod = await import("@capgo/native-purchases");
-  return mod.NativePurchases;
+  return { NativePurchases: mod.NativePurchases };
 }
 
 const COACH_PRODUCT_IDS = [IAP_COACH_MONTHLY, IAP_COACH_ANNUAL];
@@ -50,7 +61,7 @@ export function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promis
  *  StoreKit fetch fails or times out, so the panel can show a retry state
  *  rather than an infinite spinner. */
 async function fetchCoachProducts() {
-  const NativePurchases = await plugin();
+  const { NativePurchases } = await plugin();
   const { products } = await NativePurchases.getProducts({
     productIdentifiers: COACH_PRODUCT_IDS,
   });
@@ -86,7 +97,9 @@ export async function getCoachOffers(): Promise<CoachOffer[]> {
     if (!interval) continue;
     offers.push({ interval, productId: p.identifier, priceString: p.priceString });
   }
-  offers.sort((a) => (a.interval === "month" ? -1 : 1));
+  offers.sort(
+    (a, b) => (a.interval === "month" ? 0 : 1) - (b.interval === "month" ? 0 : 1),
+  );
   return offers;
 }
 
@@ -129,7 +142,7 @@ export type PurchaseResult = {
 
 export async function purchaseCoach(productId: string): Promise<PurchaseResult> {
   if (!iosOnly()) return { ok: false, entitled: false, error: "IAP unavailable" };
-  const NativePurchases = await plugin();
+  const { NativePurchases } = await plugin();
   const userId = await currentUserId(); // Supabase user id is a UUID → StoreKit appAccountToken
   try {
     const tx = await NativePurchases.purchaseProduct({
@@ -150,7 +163,7 @@ export async function purchaseCoach(productId: string): Promise<PurchaseResult> 
 
 export async function restoreCoach(): Promise<{ entitled: boolean }> {
   if (!iosOnly()) return { entitled: false };
-  const NativePurchases = await plugin();
+  const { NativePurchases } = await plugin();
   try {
     await NativePurchases.restorePurchases();
     const { purchases } = await NativePurchases.getPurchases({ onlyCurrentEntitlements: true });
@@ -172,7 +185,7 @@ export async function restoreCoach(): Promise<{ entitled: boolean }> {
 /** Instant client read of whether Coach is active via StoreKit (server stays truth). */
 export async function isCoachEntitledViaIap(): Promise<boolean> {
   if (!iosOnly()) return false;
-  const NativePurchases = await plugin();
+  const { NativePurchases } = await plugin();
   try {
     const { purchases } = await NativePurchases.getPurchases({ onlyCurrentEntitlements: true });
     return purchases.some(
@@ -194,7 +207,7 @@ export async function openManageAppleSubscription(): Promise<void> {
     return;
   }
   try {
-    const NativePurchases = await plugin();
+    const { NativePurchases } = await plugin();
     await NativePurchases.manageSubscriptions();
   } catch {
     try {
