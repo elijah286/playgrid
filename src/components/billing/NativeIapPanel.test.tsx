@@ -111,6 +111,34 @@ describe("NativeIapPanel", () => {
     await cleanup();
   });
 
+  // Apple 3.1.2(c): the Terms of Use (EULA) + Privacy links must stay reachable
+  // throughout the purchase flow — including when products fail to load. A
+  // reviewer who hits the StoreKit load failure (the 2.1(b) rejection) lands on
+  // the error card, and that card must still carry both legal links.
+  it("keeps Terms of Use (EULA) + Privacy links in the error state (Apple 3.1.2(c))", async () => {
+    getCoachOffers.mockResolvedValue([]); // 0 products → error phase
+    const { container, cleanup } = await renderPanel(<NativeIapPanel fallback={FALLBACK} />);
+
+    expect(container.textContent).toContain("Try again");
+    expect(container.textContent).toContain("Terms of Use (EULA)");
+    expect(container.textContent).toContain("Privacy Policy");
+
+    await cleanup();
+  });
+
+  it("shows Terms of Use (EULA) + Privacy links alongside loaded offers", async () => {
+    getCoachOffers.mockResolvedValue([
+      { interval: "month", productId: "com.xogridmaker.app.coach.monthly", priceString: "$9.99" },
+    ]);
+    const { container, cleanup } = await renderPanel(<NativeIapPanel fallback={FALLBACK} />);
+
+    expect(container.textContent).toContain("$9.99/mo");
+    expect(container.textContent).toContain("Terms of Use (EULA)");
+    expect(container.textContent).toContain("Privacy Policy");
+
+    await cleanup();
+  });
+
   it("shows the neutral fallback when IAP is disabled (pre-launch)", async () => {
     getIapClientConfig.mockResolvedValue({ enabled: false });
     const { container, cleanup } = await renderPanel(<NativeIapPanel fallback={FALLBACK} />);

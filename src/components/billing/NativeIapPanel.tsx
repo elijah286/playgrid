@@ -15,6 +15,29 @@ import {
 type Phase = "loading" | "unavailable" | "error" | "ready" | "success";
 
 /**
+ * Apple Guideline 3.1.2(c): the purchase flow must surface functional
+ * Terms of Use (EULA) + Privacy Policy links. These render in EVERY phase where
+ * IAP is active — loading, error, AND ready — not just the ready state. A
+ * reviewer who hits a transient StoreKit load failure (the 2.1(b) rejection)
+ * lands on the `error` card; if the links only lived in `ready`, that card
+ * would have no legal links and re-trip 3.1.2(c). Keeping them here makes the
+ * two rejections independent: the links are present even when 0 products load.
+ */
+function LegalLinks() {
+  return (
+    <p className="mt-3 text-[11px] leading-relaxed text-muted">
+      <Link href="/terms" className="underline underline-offset-2 hover:text-foreground">
+        Terms of Use (EULA)
+      </Link>
+      {" · "}
+      <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">
+        Privacy Policy
+      </Link>
+    </p>
+  );
+}
+
+/**
  * iOS in-app purchase panel for the Coach plan. Renders the StoreKit-priced
  * offers + a Subscribe / Restore flow when IAP is enabled (server flag +
  * StoreKit ready), and otherwise renders `fallback` — so on web, on
@@ -99,6 +122,7 @@ export function NativeIapPanel({ fallback }: { fallback: ReactNode }) {
     return (
       <div className="rounded-2xl border border-border bg-surface-raised p-6 text-sm text-muted">
         Loading plans…
+        <LegalLinks />
       </div>
     );
   }
@@ -132,6 +156,7 @@ export function NativeIapPanel({ fallback }: { fallback: ReactNode }) {
           </button>
         </div>
         {error ? <p className="mt-2 text-xs text-red-700">{error}</p> : null}
+        <LegalLinks />
       </div>
     );
   }
@@ -197,15 +222,7 @@ export function NativeIapPanel({ fallback }: { fallback: ReactNode }) {
         automatically unless canceled at least 24 hours before the end of the current period; manage
         or cancel anytime in Settings → your name → Subscriptions.
       </p>
-      <p className="mt-2 text-[11px] leading-relaxed text-muted">
-        <Link href="/terms" className="underline underline-offset-2 hover:text-foreground">
-          Terms of Use (EULA)
-        </Link>
-        {" · "}
-        <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">
-          Privacy Policy
-        </Link>
-      </p>
+      <LegalLinks />
     </div>
   );
 }
