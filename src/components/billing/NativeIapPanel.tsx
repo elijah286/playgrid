@@ -3,12 +3,10 @@
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { nativePlatform } from "@/lib/native/isNativeApp";
-import { getIapClientConfig } from "@/app/actions/iap";
 import {
   getCoachOffers,
   purchaseCoach,
   restoreCoach,
-  withTimeout,
   type CoachOffer,
 } from "@/lib/native/iap";
 
@@ -53,32 +51,18 @@ export function NativeIapPanel({ fallback }: { fallback: ReactNode }) {
   const load = useCallback(async () => {
     setPhase("loading");
     setError(null);
+    // IAP is on for every iOS build (the old enabled kill-switch was removed).
+    // Non-iOS (Android / web-in-native) shows the neutral fallback.
     if (nativePlatform() !== "ios") {
       setPhase("unavailable");
       return;
     }
     try {
-      // The enabled-flag check is a server action; if it hangs or fails on a
-      // flaky WebView connection, don't spin forever — assume enabled and let
-      // the StoreKit fetch (which has its own timeout) decide. A genuine
-      // `false` still shows the neutral fallback.
-      let enabled = true;
-      try {
-        const cfg = await withTimeout(getIapClientConfig(), 6000, "iap config");
-        enabled = cfg.enabled;
-      } catch {
-        enabled = true;
-      }
-      if (!enabled) {
-        // IAP is off (pre-launch / web / Android) → show the neutral fallback.
-        setPhase("unavailable");
-        return;
-      }
       const list = await getCoachOffers();
       if (!list.length) {
-        // IAP is ON but StoreKit returned nothing (bad ids, products not yet
-        // "Ready to Submit", or no StoreKit config) — that's a load failure the
-        // coach can retry, NOT "purchases unavailable".
+        // StoreKit returned nothing (bad ids, products not yet "Ready to
+        // Submit", or no StoreKit config) — a load failure the coach can retry,
+        // NOT "purchases unavailable".
         setPhase("error");
         return;
       }

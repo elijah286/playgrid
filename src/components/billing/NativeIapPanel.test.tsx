@@ -3,17 +3,15 @@ import { act } from "react";
 import type { ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 
-// Regression guard for the "stuck on Loading plans…" bug. When IAP is enabled
-// but StoreKit can't produce offers — it hung (→ timeout), errored, or returned
-// zero products — the panel MUST land on a retryable error state, never spin on
-// the loading view forever (a coach OR an App Store reviewer could get trapped).
-// And when IAP is off it must show the neutral fallback unchanged.
+// Regression guard for the "stuck on Loading plans…" bug. On iOS, when StoreKit
+// can't produce offers — it hung (→ timeout), errored, or returned zero products
+// — the panel MUST land on a retryable error state, never spin on the loading
+// view forever (a coach OR an App Store reviewer could get trapped). On non-iOS
+// it shows the neutral fallback. IAP is always on now (the old enabled
+// kill-switch was removed), so there is no "IAP disabled" branch to test.
 
 const nativePlatform = vi.hoisted(() =>
   vi.fn((): "ios" | "android" | null => "ios"),
-);
-const getIapClientConfig = vi.hoisted(() =>
-  vi.fn((): Promise<{ enabled: boolean }> => Promise.resolve({ enabled: true })),
 );
 type Offer = { interval: "month" | "year"; productId: string; priceString: string };
 const getCoachOffers = vi.hoisted(() =>
@@ -32,12 +30,10 @@ vi.mock("@/lib/native/isNativeApp", () => ({
   isNativeApp: () => nativePlatform() != null,
   nativePlatform,
 }));
-vi.mock("@/app/actions/iap", () => ({ getIapClientConfig }));
 vi.mock("@/lib/native/iap", () => ({
   getCoachOffers,
   restoreCoach,
   purchaseCoach,
-  withTimeout: (p: Promise<unknown>) => p,
 }));
 
 import { NativeIapPanel } from "./NativeIapPanel";
@@ -51,7 +47,7 @@ async function renderPanel(node: ReactElement) {
   await act(async () => {
     root.render(node);
   });
-  // Flush the async load() chain (getIapClientConfig → getCoachOffers → setState).
+  // Flush the async load() chain (getCoachOffers → setState).
   await act(async () => {
     for (let i = 0; i < 5; i++) await Promise.resolve();
   });
@@ -68,7 +64,6 @@ async function renderPanel(node: ReactElement) {
 
 beforeEach(() => {
   nativePlatform.mockReturnValue("ios");
-  getIapClientConfig.mockResolvedValue({ enabled: true });
   getCoachOffers.mockResolvedValue([]);
 });
 afterEach(() => {
@@ -139,25 +134,13 @@ describe("NativeIapPanel", () => {
     await cleanup();
   });
 
-  it("shows the neutral fallback when IAP is disabled (pre-launch)", async () => {
-    getIapClientConfig.mockResolvedValue({ enabled: false });
+  it("shows the neutral fallback on non-iOS (Android) — never probes StoreKit", async () => {
+    nativePlatform.mockReturnValue("android");
     const { container, cleanup } = await renderPanel(<NativeIapPanel fallback={FALLBACK} />);
 
     expect(container.textContent).toContain("not available in this app");
     expect(container.textContent).not.toContain("Try again");
-
-    await cleanup();
-  });
-
-  it("still loads offers when the enabled-check fails (optimistic — never hangs)", async () => {
-    getIapClientConfig.mockRejectedValue(new Error("config timeout"));
-    getCoachOffers.mockResolvedValue([
-      { interval: "month", productId: "com.xogridmaker.app.coach.monthly", priceString: "$9.99" },
-    ]);
-    const { container, cleanup } = await renderPanel(<NativeIapPanel fallback={FALLBACK} />);
-
-    expect(container.textContent).toContain("$9.99/mo");
-    expect(container.textContent).not.toContain("Loading plans");
+    expect(getCoachOffers).not.toHaveBeenCalled();
 
     await cleanup();
   });

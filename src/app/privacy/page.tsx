@@ -1,26 +1,19 @@
 import type { Metadata } from "next";
-import { getAppleIapConfig } from "@/lib/site/apple-iap-config";
 
 export const metadata: Metadata = {
   title: "Privacy Policy · XO Gridmaker",
   description: "How XO Gridmaker handles your data.",
 };
 
-export default async function PrivacyPage() {
-  // Disclose the Apple App Store sub-processor only once iOS in-app
-  // purchases are actually enabled (the same admin toggle that turns on the
-  // purchase UI), so the policy describes processors we're really using rather
-  // than ones still behind a flag. Off → this page is byte-identical to before.
-  let iapEnabled = false;
-  try {
-    iapEnabled = (await getAppleIapConfig()).enabled;
-  } catch {
-    iapEnabled = false;
-  }
+export default function PrivacyPage() {
+  // iOS in-app purchases are permanently enabled, so the Apple App Store is
+  // always an active payment sub-processor — disclose it unconditionally.
+  // (Was gated on the old IAP kill-switch, now removed.)
+  const iapEnabled = true;
   return (
     <article className="mx-auto max-w-2xl px-6 py-16 text-foreground">
       <h1 className="text-3xl font-extrabold tracking-tight">Privacy Policy</h1>
-      <p className="mt-2 text-sm text-muted">Last updated: June 9, 2026</p>
+      <p className="mt-2 text-sm text-muted">Last updated: June 17, 2026</p>
 
       {/* The "Your rights" section below already covers deletion — keep that
           and the new dedicated section consistent if either is edited. */}

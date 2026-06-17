@@ -3,26 +3,22 @@ import { act } from "react";
 import type { ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 
-// NativeUpgradeCta is the ONLY door to the in-app purchase screen on iOS, so its
-// three-state contract is load-bearing for both monetization and App Store
-// compliance:
-//   (a) web            → render nothing (web keeps its own data-web-only CTAs),
-//   (b) iOS + IAP on   → link to /pricing (the StoreKit purchase panel),
-//   (c) iOS + IAP off  → render the neutral fallback (unchanged pre-launch UX).
-// (a) also must NOT probe IAP config — that work belongs only inside the app.
+// NativeUpgradeCta is the ONLY door to the in-app purchase screen on iOS. IAP is
+// always on now (the enabled kill-switch was removed), so the contract is two
+// states:
+//   (a) web → render nothing (web keeps its own data-web-only CTAs),
+//   (b) iOS → link to /pricing (the StoreKit purchase panel).
+// The legacy `fallback` prop (shown pre-launch when IAP was off) is retained for
+// call-site compatibility but must never render.
 
 const nativePlatform = vi.hoisted(() =>
   vi.fn((): "ios" | "android" | null => null),
-);
-const getIapClientConfig = vi.hoisted(() =>
-  vi.fn((): Promise<{ enabled: boolean }> => Promise.resolve({ enabled: false })),
 );
 
 vi.mock("@/lib/native/isNativeApp", () => ({
   isNativeApp: () => nativePlatform() != null,
   nativePlatform,
 }));
-vi.mock("@/app/actions/iap", () => ({ getIapClientConfig }));
 // Render Link as a plain anchor so the test exercises our gating, not Next's
 // router runtime (which isn't present under vitest/jsdom).
 vi.mock("next/link", () => ({
@@ -50,7 +46,7 @@ async function renderCta(node: ReactElement) {
   await act(async () => {
     root.render(node);
   });
-  // Flush the async getIapClientConfig() effect and the setState it triggers.
+  // Flush the platform-resolving effect and the setState it triggers.
   await act(async () => {
     await Promise.resolve();
     await Promise.resolve();
@@ -68,27 +64,24 @@ async function renderCta(node: ReactElement) {
 
 beforeEach(() => {
   nativePlatform.mockReturnValue(null);
-  getIapClientConfig.mockResolvedValue({ enabled: false });
 });
 afterEach(() => {
   vi.clearAllMocks();
 });
 
 describe("NativeUpgradeCta", () => {
-  it("renders nothing on web — and never probes IAP config", async () => {
+  it("renders nothing on web", async () => {
     nativePlatform.mockReturnValue(null);
     const { container, cleanup } = await renderCta(<NativeUpgradeCta />);
 
     expect(container.querySelector("a")).toBeNull();
     expect(container.textContent).toBe("");
-    expect(getIapClientConfig).not.toHaveBeenCalled();
 
     await cleanup();
   });
 
-  it("links to /pricing on iOS when IAP is enabled", async () => {
+  it("links to /pricing on iOS", async () => {
     nativePlatform.mockReturnValue("ios");
-    getIapClientConfig.mockResolvedValue({ enabled: true });
     const { container, cleanup } = await renderCta(
       <NativeUpgradeCta label="Subscribe to Coach" />,
     );
@@ -101,32 +94,20 @@ describe("NativeUpgradeCta", () => {
     await cleanup();
   });
 
-  it("shows the fallback on iOS when IAP is disabled (pre-launch)", async () => {
+  it("never renders the (deprecated) fallback on iOS — always the live door", async () => {
     nativePlatform.mockReturnValue("ios");
-    getIapClientConfig.mockResolvedValue({ enabled: false });
     const { container, cleanup } = await renderCta(
       <NativeUpgradeCta fallback={<span>not available in this app</span>} />,
     );
 
-    expect(container.querySelector("a")).toBeNull();
-    expect(container.textContent).toMatch(/not available in this app/i);
-
-    await cleanup();
-  });
-
-  it("shows the CTA on iOS when the config check fails (optimistic — never a dead end)", async () => {
-    nativePlatform.mockReturnValue("ios");
-    getIapClientConfig.mockRejectedValue(new Error("config failed"));
-    const { container, cleanup } = await renderCta(<NativeUpgradeCta label="Up" />);
-
     expect(container.querySelector("a")?.getAttribute("href")).toBe("/pricing");
+    expect(container.textContent).not.toMatch(/not available in this app/i);
 
     await cleanup();
   });
 
-  it("applies a className override to the enabled link", async () => {
+  it("applies a className override to the link", async () => {
     nativePlatform.mockReturnValue("ios");
-    getIapClientConfig.mockResolvedValue({ enabled: true });
     const { container, cleanup } = await renderCta(
       <NativeUpgradeCta label="Up" className="custom-cta-class" />,
     );
@@ -138,8 +119,7 @@ describe("NativeUpgradeCta", () => {
 });
 
 // The whole-tile tap target (locked playbooks/plays) wires this href onto a
-// wrapping Link: linkable on web + iOS-when-enabled; inert (null) on iOS before
-// launch so no upgrade affordance shows.
+// wrapping Link: linkable on web + iOS (IAP is always on).
 function HrefProbe() {
   const href = useUpgradeHref();
   return <span>{href ?? "null"}</span>;
@@ -153,25 +133,8 @@ describe("useUpgradeHref", () => {
     await cleanup();
   });
 
-  it("returns /pricing on iOS when IAP is enabled", async () => {
+  it("returns /pricing on iOS", async () => {
     nativePlatform.mockReturnValue("ios");
-    getIapClientConfig.mockResolvedValue({ enabled: true });
-    const { container, cleanup } = await renderCta(<HrefProbe />);
-    expect(container.textContent).toBe("/pricing");
-    await cleanup();
-  });
-
-  it("returns null on iOS when IAP is disabled (pre-launch)", async () => {
-    nativePlatform.mockReturnValue("ios");
-    getIapClientConfig.mockResolvedValue({ enabled: false });
-    const { container, cleanup } = await renderCta(<HrefProbe />);
-    expect(container.textContent).toBe("null");
-    await cleanup();
-  });
-
-  it("returns /pricing on iOS when the config check fails (optimistic)", async () => {
-    nativePlatform.mockReturnValue("ios");
-    getIapClientConfig.mockRejectedValue(new Error("config failed"));
     const { container, cleanup } = await renderCta(<HrefProbe />);
     expect(container.textContent).toBe("/pricing");
     await cleanup();
