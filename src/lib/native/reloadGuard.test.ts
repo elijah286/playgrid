@@ -4,12 +4,38 @@ import {
   isReloadBlocked,
   registerReloadGuard,
   triggerAppReload,
+  triggerAppReloadIfNewBuild,
 } from "./reloadGuard";
+import { isNewDeployAvailable } from "./deployVersion";
+
+vi.mock("./deployVersion", () => ({
+  isNewDeployAvailable: vi.fn(),
+}));
 
 afterEach(() => {
   __resetReloadGuardsForTest();
   document.documentElement.className = "";
+  vi.mocked(isNewDeployAvailable).mockReset();
 });
+
+async function withMockedReload(
+  run: (reload: ReturnType<typeof vi.fn>) => void | Promise<void>,
+) {
+  const reload = vi.fn();
+  const original = window.location;
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    value: { ...original, reload },
+  });
+  try {
+    await run(reload);
+  } finally {
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: original,
+    });
+  }
+}
 
 describe("isReloadBlocked", () => {
   it("is false with no guards registered", () => {
@@ -88,5 +114,46 @@ describe("triggerAppReload", () => {
         value: original,
       });
     }
+  });
+});
+
+describe("triggerAppReloadIfNewBuild", () => {
+  it("reloads when a new deploy is live and nothing blocks", async () => {
+    vi.mocked(isNewDeployAvailable).mockResolvedValue(true);
+    await withMockedReload(async (reload) => {
+      await triggerAppReloadIfNewBuild();
+      expect(reload).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("does not reload when the live deploy is unchanged", async () => {
+    vi.mocked(isNewDeployAvailable).mockResolvedValue(false);
+    await withMockedReload(async (reload) => {
+      await triggerAppReloadIfNewBuild();
+      expect(reload).not.toHaveBeenCalled();
+    });
+  });
+
+  it("does not probe the version when a guard already blocks", async () => {
+    registerReloadGuard(() => true);
+    await withMockedReload(async (reload) => {
+      await triggerAppReloadIfNewBuild();
+      expect(isNewDeployAvailable).not.toHaveBeenCalled();
+      expect(reload).not.toHaveBeenCalled();
+    });
+  });
+
+  it("does not reload if a guard goes up during the version probe", async () => {
+    let unregister: (() => void) | undefined;
+    vi.mocked(isNewDeployAvailable).mockImplementation(async () => {
+      // A coach starts an edit while the request is in flight.
+      unregister = registerReloadGuard(() => true);
+      return true;
+    });
+    await withMockedReload(async (reload) => {
+      await triggerAppReloadIfNewBuild();
+      expect(reload).not.toHaveBeenCalled();
+    });
+    unregister?.();
   });
 });

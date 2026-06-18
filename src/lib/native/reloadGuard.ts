@@ -12,6 +12,8 @@
  * future surface (a half-composed Cal message, a multi-step form) can opt in.
  */
 
+import { isNewDeployAvailable } from "./deployVersion";
+
 type ReloadGuard = () => boolean;
 
 const guards = new Set<ReloadGuard>();
@@ -57,6 +59,22 @@ export function isReloadBlocked(): boolean {
  */
 export function triggerAppReload(): void {
   if (typeof window === "undefined") return;
+  if (isReloadBlocked()) return;
+  window.location.reload();
+}
+
+/**
+ * Like {@link triggerAppReload}, but only reloads when the live deploy differs
+ * from the loaded bundle (see {@link isNewDeployAvailable}). Used by
+ * reload-on-resume so returning to an *unchanged* deploy resumes instantly
+ * instead of paying a full network reload. Re-checks the guard after the async
+ * version probe — a coach may have started an edit while the request was in
+ * flight.
+ */
+export async function triggerAppReloadIfNewBuild(): Promise<void> {
+  if (typeof window === "undefined") return;
+  if (isReloadBlocked()) return;
+  if (!(await isNewDeployAvailable())) return;
   if (isReloadBlocked()) return;
   window.location.reload();
 }

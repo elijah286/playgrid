@@ -5,7 +5,10 @@ import { isNativeApp, nativePlatform } from "@/lib/native/isNativeApp";
 import { registerOfflineServiceWorker } from "@/lib/native/registerServiceWorker";
 import { registerPush, unregisterPush } from "@/lib/native/registerPush";
 import { registerAppOpen } from "@/lib/native/registerAppOpen";
-import { isReloadBlocked, triggerAppReload } from "@/lib/native/reloadGuard";
+import {
+  isReloadBlocked,
+  triggerAppReloadIfNewBuild,
+} from "@/lib/native/reloadGuard";
 import { createClient } from "@/lib/supabase/client";
 
 // How long the app must have been backgrounded before a return-to-foreground
@@ -76,7 +79,10 @@ export function NativeAppShell() {
           const away = Date.now() - lastHiddenAt;
           lastHiddenAt = 0;
           if (away >= RESUME_RELOAD_AFTER_MS && !isReloadBlocked()) {
-            triggerAppReload();
+            // Only reload if a newer deploy is actually live — otherwise the
+            // resume re-fetches the bundle for nothing. The probe re-checks
+            // the guard before reloading (deployVersion.ts / reloadGuard.ts).
+            void triggerAppReloadIfNewBuild();
           }
         });
         if (cancelled) handle.remove();
@@ -86,15 +92,28 @@ export function NativeAppShell() {
       }
     })();
 
+    // Dismiss the loading overlay as soon as the shell has hydrated and
+    // painted — NOT on window 'load', which waits for every image and font and
+    // can leave the overlay up for seconds on a slow warm load (resume / iOS
+    // webview relaunch). This effect runs after React hydration, so a double
+    // rAF guarantees the first paint has landed before we fade the overlay out;
+    // remaining images stream in behind it, same as any web page.
     const markReady = () => {
       document.documentElement.classList.add("native-ready");
     };
-    if (document.readyState === "complete") {
-      markReady();
+    const revealAfterPaint = () => {
+      requestAnimationFrame(() => requestAnimationFrame(markReady));
+    };
+    if (document.readyState === "loading") {
+      // Pre-hydration (rare for this effect): wait for the DOM to parse, not
+      // for all subresources to finish downloading.
+      document.addEventListener("DOMContentLoaded", revealAfterPaint, {
+        once: true,
+      });
+      // Safety net so a hung parse never traps the user behind the overlay.
+      hideTimer = setTimeout(markReady, 5000);
     } else {
-      window.addEventListener("load", markReady, { once: true });
-      // Fallback so a hung resource never traps the user behind the overlay.
-      hideTimer = setTimeout(markReady, 8000);
+      revealAfterPaint();
     }
 
     // Register for push once authenticated. We drive this off
@@ -140,7 +159,7 @@ export function NativeAppShell() {
     return () => {
       cancelled = true;
       if (hideTimer) clearTimeout(hideTimer);
-      window.removeEventListener("load", markReady);
+      document.removeEventListener("DOMContentLoaded", revealAfterPaint);
       appStateHandle?.remove();
       teardownPush?.();
       authSub.subscription.unsubscribe();

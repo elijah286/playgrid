@@ -234,7 +234,8 @@ export default async function RootLayout({
             <html> has .native-shell). Bridges the gap between the native
             splash hiding and the dashboard hydrating so coaches don't see
             a black/blank flash on cold launch. NativeAppShell adds
-            .native-ready to <html> on window 'load' to fade it out. */}
+            .native-ready to <html> on the first paint after hydration to
+            fade it out. */}
         <div id="native-loading-overlay" aria-hidden="true">
           <img
             src="/brand/xogridmaker_monogram.svg"

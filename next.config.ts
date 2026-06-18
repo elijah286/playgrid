@@ -20,6 +20,16 @@ const nextConfig: NextConfig = {
   // Self-contained server bundle for container deploys (Cloud Run / Fly / etc.).
   // Emits .next/standalone with a minimal node_modules tree.
   output: "standalone",
+  // Per-deploy build id, inlined into both client and server bundles. The
+  // native app compares the id baked into the loaded bundle against the live
+  // /api/version response to decide whether a resume-reload is worth the
+  // network round-trip (src/lib/native/deployVersion.ts). CI passes the commit
+  // SHA via the NEXT_PUBLIC_BUILD_ID build arg (deploy.yml / Dockerfile);
+  // falls back to "dev" locally, which disables the reload check (we never
+  // reload against an unidentifiable build).
+  env: {
+    NEXT_PUBLIC_BUILD_ID: process.env.NEXT_PUBLIC_BUILD_ID || "dev",
+  },
   // Apple's App Store Server library is server-only (cert-chain / JWS
   // verification); keep it external so Next doesn't bundle it into a route chunk.
   serverExternalPackages: ["@apple/app-store-server-library"],
