@@ -2404,7 +2404,13 @@ function PlayEditorClientInner({
                 // absolute anchor). The field scrolls with the page —
                 // matching the playbook list's behavior, where only the
                 // header is sticky and content flows beneath it.
-                `field-viewport relative mx-auto w-full overflow-hidden rounded-xl bg-surface-inset ${
+                // `field-viewport-bleed` makes the field span the full
+                // viewport width on phones (escaping the page's px-6
+                // gutter) so the play is the hero element — see the
+                // `.field-viewport-bleed` rule in globals.css. Library
+                // mode embeds the editor inside a bordered card, so it
+                // must stay within the card and opts out of the bleed.
+                `field-viewport ${libraryMode ? "" : "field-viewport-bleed"} relative mx-auto w-full overflow-hidden rounded-xl bg-surface-inset ${
                   !canEdit || (isTouchDevice && mode === "view")
                     ? "pointer-events-none select-none"
                     : ""

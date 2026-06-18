@@ -275,7 +275,12 @@ function MorePopover({
         aria-label="More options"
         className="fixed right-2 z-40 w-56 animate-in slide-in-from-bottom-2 fade-in rounded-xl border border-black/10 bg-surface-raised p-1 shadow-elevated duration-150 sm:hidden"
         style={{
-          bottom: "calc(env(safe-area-inset-bottom, 0px) + 52px)",
+          // Clear the full height of the nav row (48px) PLUS the Cal
+          // button's bubble, which pokes ~12px above the row via its
+          // `-mt-3` lift. At the old 52px the popover's bottom-left
+          // corner overlapped the centered Cal mark on iOS; 68px seats
+          // it just above the bubble with a small gap.
+          bottom: "calc(env(safe-area-inset-bottom, 0px) + 68px)",
         }}
       >
         {items.map((it) => (

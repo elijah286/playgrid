@@ -308,7 +308,10 @@ function MoreSheet({
         aria-label="More playbook sections"
         className="fixed right-2 z-40 w-56 animate-in slide-in-from-bottom-2 fade-in rounded-xl border border-black/10 bg-surface-raised p-1 shadow-elevated duration-150 sm:hidden"
         style={{
-          bottom: "calc(env(safe-area-inset-bottom, 0px) + 52px)",
+          // Seat the popover above the nav row (48px) AND the Cal
+          // button's bubble (~12px lift via `-mt-3`). The old 52px let
+          // the menu overlap the centered Cal mark on iOS.
+          bottom: "calc(env(safe-area-inset-bottom, 0px) + 68px)",
         }}
       >
         {tabs.map((t) => {

@@ -405,6 +405,9 @@ html.coach-docked .coach-dock-aware {
   input[type="tel"],
   input[type="number"],
   input[type="password"],
+  input[type="datetime-local"],
+  input[type="date"],
+  input[type="time"],
   input:not([type]),
   textarea,
   select {
@@ -470,6 +473,24 @@ html.coach-docked .coach-dock-aware {
   .field-viewport {
     max-height: min(42dvh, 320px);
     max-width: calc(min(42dvh, 320px) * var(--field-aspect, 2));
+  }
+  /* Full-bleed the in-app play field on phones so it spans the entire
+   * viewport width, escaping the page's px-6 (24px) gutter. The field
+   * is the editor's hero element — coaches want it as large as the
+   * screen allows. The `margin-left: 50% / translateX(-50%)` pair
+   * recenters a `100vw`-wide box on the viewport regardless of the
+   * parent's padding, and overrides the width cap above (which only
+   * existed to keep the aspect ratio paired with the height cap; at
+   * full width the derived height stays under the 320px cap for every
+   * supported field aspect). Square corners read cleaner edge-to-edge.
+   * Library mode opts out (`field-viewport-bleed` is omitted there) so
+   * the embedded editor stays inside its card. */
+  .field-viewport-bleed {
+    width: 100vw;
+    max-width: 100vw;
+    margin-left: 50%;
+    transform: translateX(-50%);
+    border-radius: 0;
   }
   body.editor-hide-site-header [data-site-header],
   body.editor-hide-site-header [data-site-footer] {

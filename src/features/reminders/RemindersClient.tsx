@@ -145,7 +145,7 @@ export function RemindersClient() {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Game vs. Hawks — pull up the playbook"
-            className="mt-1 w-full rounded-lg border border-border bg-surface-inset px-3 py-2 text-sm"
+            className="mt-1 block box-border w-full min-w-0 max-w-full rounded-lg border border-border bg-surface-inset px-3 py-2 text-sm"
           />
         </div>
         <div>
@@ -160,7 +160,7 @@ export function RemindersClient() {
             type="datetime-local"
             value={when}
             onChange={(e) => setWhen(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-border bg-surface-inset px-3 py-2 text-sm"
+            className="mt-1 block box-border w-full min-w-0 max-w-full rounded-lg border border-border bg-surface-inset px-3 py-2 text-sm"
           />
         </div>
         {error && <p className="text-xs text-danger">{error}</p>}
