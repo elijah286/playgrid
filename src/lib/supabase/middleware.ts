@@ -155,10 +155,12 @@ export async function updateSession(request: NextRequest) {
   // navigations (not background asset fetches). The touch is throttled by a
   // cookie stamp so middleware stays cheap on hot paths.
   if (user && shouldTouchSession(request, pathname)) {
+    const authSessionId = await currentAuthSessionId(supabase);
     const result = await maybeTouchSession({
       request,
       response: supabaseResponse,
       userId: user.id,
+      authSessionId,
     });
     if (result === "revoked") {
       return signOutAndRedirect(request);
@@ -202,6 +204,7 @@ async function maybeTouchSession(input: {
   request: NextRequest;
   response: NextResponse;
   userId: string;
+  authSessionId: string | null;
 }): Promise<"ok" | "revoked"> {
   const deviceId = ensureDeviceId(input.request, input.response);
   const ip = clientIp(input.request);
@@ -214,6 +217,7 @@ async function maybeTouchSession(input: {
         deviceId,
         ip,
         userAgent,
+        authSessionId: input.authSessionId,
       }).then((r) => ({ kind: "result" as const, result: r })),
       new Promise<TouchOutcome>((resolve) => {
         timer = setTimeout(
@@ -246,6 +250,47 @@ async function maybeTouchSession(input: {
 type TouchOutcome =
   | { kind: "result"; result: Awaited<ReturnType<typeof touchUserSession>> }
   | { kind: "timeout" };
+
+/**
+ * Read the Supabase `session_id` claim from the request's current access
+ * token. It's stable across token refreshes within a single sign-in and
+ * fresh on every new sign-in, so touchUserSession uses it to tell a genuine
+ * re-auth (reclaim the device's slot) apart from a kicked session that's
+ * still navigating (stay signed out). Best-effort: returns null if the
+ * session or token can't be read — getUser() already validated the caller,
+ * so this only decodes the (already-trusted) token to pull one claim.
+ */
+async function currentAuthSessionId(
+  supabase: ReturnType<typeof createServerClient>,
+): Promise<string | null> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return null;
+    const claims = decodeJwtPayload(token);
+    const sid = claims?.["session_id"];
+    return typeof sid === "string" && sid.length > 0 ? sid : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Decode a JWT's payload segment without verifying its signature (the token
+ *  was already validated by getUser). Edge-runtime safe — uses atob +
+ *  TextDecoder rather than Buffer. */
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const part = token.split(".")[1];
+  if (!part) return null;
+  try {
+    const b64 = part.replace(/-/g, "+").replace(/_/g, "/");
+    const pad = b64.length % 4 ? "=".repeat(4 - (b64.length % 4)) : "";
+    const bin = atob(b64 + pad);
+    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+    return JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
 
 // Emit a HOST-ONLY cookie deletion as a raw Set-Cookie header.
 //

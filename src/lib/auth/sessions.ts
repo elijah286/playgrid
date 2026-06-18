@@ -27,30 +27,78 @@ export type TouchResult =
  * Idempotent per-request session touch. Inserts a row on first sight of a
  * (user, device) pair (and enforces the bucket-scoped concurrent-session
  * cap by revoking the LRU active row in the same device class when over).
- * Updates last_seen_at on subsequent requests. Returns `revoked` if the row
- * has been revoked elsewhere — the caller should sign the user out.
+ * Updates last_seen_at on subsequent requests.
+ *
+ * Returns `revoked` only when the row was revoked AND the request is still
+ * the SAME sign-in that got kicked. A NEW sign-in on a revoked device
+ * reclaims the slot instead (latest-sign-in-wins): it clears revoked_at and
+ * re-runs the cap, which evicts the real LRU peer rather than the device the
+ * user just signed in on. The discriminator is the Supabase `session_id`
+ * claim — stable across token refreshes within one sign-in, fresh on every
+ * new sign-in — passed in as `authSessionId`.
  */
 export async function touchUserSession(input: {
   userId: string;
   deviceId: string;
   ip: string | null;
   userAgent: string | null;
+  /** Supabase auth `session_id` of the request's current sign-in, or null
+   *  when it couldn't be decoded. */
+  authSessionId: string | null;
 }): Promise<TouchResult> {
   const admin = createServiceRoleClient();
   const { data: existing } = await admin
     .from("user_sessions")
-    .select("id, revoked_at, revoked_reason, last_seen_at")
+    .select("id, revoked_at, revoked_reason, auth_session_id, device_class")
     .eq("user_id", input.userId)
     .eq("device_id", input.deviceId)
     .maybeSingle();
 
   if (existing) {
     if (existing.revoked_at) {
-      return { kind: "revoked", reason: existing.revoked_reason ?? null };
+      // Is this the same kicked session merely navigating, or a fresh
+      // sign-in on this device? Keep it revoked ONLY when we can positively
+      // confirm it's the same session (both ids present and equal). Any other
+      // case — a new session id, or an id we couldn't read — biases toward
+      // letting the sign-in through: a false lock-out (the user can't get
+      // back in on their own device) is far worse than a bucket briefly over
+      // cap. This is the "revoked_at is cleared on re-auth" behavior the
+      // schema has always documented (see 0090_user_sessions.sql).
+      const sameSession =
+        !!input.authSessionId &&
+        !!existing.auth_session_id &&
+        input.authSessionId === existing.auth_session_id;
+      if (sameSession) {
+        return { kind: "revoked", reason: existing.revoked_reason ?? null };
+      }
+      const deviceClass =
+        (existing.device_class as DeviceClass | null) ??
+        deviceClassForUserAgent(input.userAgent);
+      await admin
+        .from("user_sessions")
+        .update({
+          revoked_at: null,
+          revoked_reason: null,
+          auth_session_id: input.authSessionId,
+          last_seen_at: new Date().toISOString(),
+          ip: input.ip,
+          user_agent: input.userAgent,
+        })
+        .eq("id", existing.id);
+      // The just-reclaimed row now has the most recent last_seen_at, so the
+      // cap evicts the LRU *other* peer in this bucket — never this device.
+      await enforceSessionCap(input.userId, deviceClass);
+      return { kind: "ok" };
     }
+    // Active row: move last_seen_at forward and keep the stored session id
+    // current so a future cap-kick + re-auth comparison stays accurate. Don't
+    // clobber a known id with null on a transient decode miss.
     await admin
       .from("user_sessions")
-      .update({ last_seen_at: new Date().toISOString() })
+      .update({
+        last_seen_at: new Date().toISOString(),
+        auth_session_id: input.authSessionId ?? existing.auth_session_id,
+      })
       .eq("id", existing.id);
     return { kind: "ok" };
   }
@@ -65,6 +113,7 @@ export async function touchUserSession(input: {
     user_agent: input.userAgent,
     device_label: label,
     device_class: deviceClass,
+    auth_session_id: input.authSessionId,
   });
   await enforceSessionCap(input.userId, deviceClass);
   return { kind: "ok" };

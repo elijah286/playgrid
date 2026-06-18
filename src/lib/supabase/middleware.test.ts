@@ -146,6 +146,22 @@ describe("updateSession device-id cookie", () => {
     expect(hostOnlyEviction).toBeDefined();
   });
 
+  it("passes an authSessionId through to touchUserSession (re-auth reclaim wiring)", async () => {
+    // The reclaim discriminator lives in touchUserSession; middleware's job is
+    // to feed it the request's current session id. We can't mint a valid token
+    // here, so it resolves to null — but the key must be present, or the
+    // latest-sign-in-wins reclaim can never fire in prod.
+    vi.mocked(touchUserSession).mockResolvedValue({ kind: "ok" });
+    await updateSession(makeRequest("www.xogridmaker.com"));
+
+    expect(touchUserSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "user-1",
+        authSessionId: null,
+      }),
+    );
+  });
+
   it("does NOT emit a host-only eviction on localhost / native shell", async () => {
     vi.mocked(touchUserSession).mockResolvedValue({ kind: "ok" });
     const req = makeRequest("localhost:3000");
