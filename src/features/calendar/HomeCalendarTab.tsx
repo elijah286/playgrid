@@ -426,10 +426,10 @@ function PlaybookPickerModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-t-2xl bg-surface-raised p-4 shadow-xl ring-1 ring-border sm:rounded-2xl"
+        className="flex max-h-[92vh] w-full max-w-md flex-col rounded-t-2xl bg-surface-raised shadow-xl ring-1 ring-border sm:max-h-[85vh] sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-3 flex items-center justify-between">
+        <div className="flex shrink-0 items-center justify-between px-4 pb-3 pt-4">
           <h2 className="text-sm font-semibold text-foreground">
             Pick a team
           </h2>
@@ -442,37 +442,39 @@ function PlaybookPickerModal({
             <X className="size-4" />
           </button>
         </div>
-        {playbooks === null && (
-          <p className="py-6 text-center text-sm text-muted">Loading…</p>
-        )}
-        {playbooks !== null && playbooks.length === 0 && (
-          <p className="py-6 text-center text-sm text-muted">
-            You aren&rsquo;t a coach in any playbook yet.
-          </p>
-        )}
-        {playbooks !== null && playbooks.length > 0 && (
-          <ul className="space-y-1.5">
-            {playbooks.map((p) => (
-              <li key={p.id}>
-                <button
-                  type="button"
-                  onClick={() => onPick(p)}
-                  className="flex w-full items-center gap-3 rounded-lg p-2.5 text-left ring-1 ring-border transition-colors hover:bg-surface-hover"
-                >
-                  <span
-                    className="size-5 shrink-0 rounded"
-                    style={{
-                      backgroundColor: p.color ?? FALLBACK_PLAYBOOK_COLOR,
-                    }}
-                  />
-                  <span className="flex-1 truncate text-sm font-medium text-foreground">
-                    {p.name}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+        <div className="flex-1 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          {playbooks === null && (
+            <p className="py-6 text-center text-sm text-muted">Loading…</p>
+          )}
+          {playbooks !== null && playbooks.length === 0 && (
+            <p className="py-6 text-center text-sm text-muted">
+              You aren&rsquo;t a coach in any playbook yet.
+            </p>
+          )}
+          {playbooks !== null && playbooks.length > 0 && (
+            <ul className="space-y-1.5">
+              {playbooks.map((p) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    onClick={() => onPick(p)}
+                    className="flex w-full items-center gap-3 rounded-lg p-2.5 text-left ring-1 ring-border transition-colors hover:bg-surface-hover"
+                  >
+                    <span
+                      className="size-5 shrink-0 rounded"
+                      style={{
+                        backgroundColor: p.color ?? FALLBACK_PLAYBOOK_COLOR,
+                      }}
+                    />
+                    <span className="flex-1 truncate text-sm font-medium text-foreground">
+                      {p.name}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
   );
