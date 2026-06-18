@@ -1,6 +1,10 @@
 import { ImageResponse } from "next/og";
 
-export const runtime = "edge";
+// nodejs (not edge): this site deploys as a standalone Node container, where
+// the edge runtime's image sandbox 503s. The other og routes (about, pricing,
+// examples, faq) already use nodejs — keep them uniform so link-preview
+// crawlers (iMessage, Slack, Facebook) get a real PNG instead of a 503.
+export const runtime = "nodejs";
 export const alt = "XO Gridmaker — Football play designer for coaches";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";

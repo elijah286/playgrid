@@ -66,8 +66,23 @@ const PUBLIC_PREFIXES = [
   "/formations/new",
 ];
 
+// Next.js file-based metadata routes are emitted at EVERY route segment
+// (e.g. /opengraph-image, /about/opengraph-image, /pricing/opengraph-image,
+// /apple-icon). Link-preview crawlers (iMessage, Slack, Facebook) and the
+// browser's icon fetch hit these without a session — gating them on auth
+// redirects the crawler to /login, which it renders as HTML instead of the
+// image. The result is a broken preview (or, for iMessage, a fallback page
+// screenshot). Match by suffix so nested segments are covered too.
+const METADATA_IMAGE_SUFFIXES = [
+  "/opengraph-image",
+  "/twitter-image",
+  "/icon",
+  "/apple-icon",
+];
+
 function isPublicPath(pathname: string): boolean {
   if (PUBLIC_EXACT.has(pathname)) return true;
+  if (METADATA_IMAGE_SUFFIXES.some((s) => pathname.endsWith(s))) return true;
   return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p));
 }
 

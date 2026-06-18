@@ -1,6 +1,7 @@
 import { ImageResponse } from "next/og";
 
-export const runtime = "edge";
+// nodejs (not edge): standalone Node deploy 503s on the edge image sandbox.
+export const runtime = "nodejs";
 export const size = { width: 180, height: 180 };
 export const contentType = "image/png";
 

@@ -95,6 +95,51 @@ describe("updateSession eviction (signed_out_elsewhere)", () => {
   });
 });
 
+describe("updateSession public paths — metadata image routes", () => {
+  // Regression: link-preview crawlers (iMessage, Slack, Facebook) fetch the
+  // file-based metadata image routes with no session. These routes exist at
+  // every segment depth, so an exact allowlist misses the nested ones — the
+  // crawler gets redirected to /login and renders HTML instead of a PNG,
+  // producing a broken/garbage link preview.
+  beforeEach(() => {
+    // Anonymous caller: no user. A gated route would 307 to /login.
+    vi.mocked(getUserWithTimeout).mockResolvedValue({
+      kind: "ok",
+      user: null,
+    });
+  });
+
+  const imageRoutes = [
+    "/opengraph-image",
+    "/about/opengraph-image",
+    "/pricing/opengraph-image",
+    "/examples/opengraph-image",
+    "/apple-icon",
+    "/icon",
+    "/learn/library/plays/mesh/twitter-image",
+  ];
+
+  it.each(imageRoutes)(
+    "lets an anonymous crawler reach %s without a login redirect",
+    async (path) => {
+      const req = new NextRequest(`https://www.xogridmaker.com${path}`, {
+        headers: { host: "www.xogridmaker.com" },
+      });
+      const res = await updateSession(req);
+      // Not a redirect to /login → the image route gets to render.
+      expect(res.headers.get("location")).toBeNull();
+    },
+  );
+
+  it("still gates a genuinely private route for anonymous callers", async () => {
+    const req = new NextRequest("https://www.xogridmaker.com/home", {
+      headers: { host: "www.xogridmaker.com" },
+    });
+    const res = await updateSession(req);
+    expect(res.headers.get("location")).toContain("/login");
+  });
+});
+
 describe("updateSession device-id cookie", () => {
   it("scopes a freshly-minted device id to .xogridmaker.com so apex and www share it", async () => {
     // Not revoked this time — just a normal authed navigation that mints
