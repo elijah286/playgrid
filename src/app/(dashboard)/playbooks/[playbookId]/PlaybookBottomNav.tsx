@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, useTransition } from "react";
 import {
   Calendar,
   ClipboardList,
   GraduationCap,
   Layers,
   ListChecks,
+  Loader2,
   LogOut,
   MessageCircle,
   MoreHorizontal,
@@ -226,10 +228,7 @@ export function PlaybookBottomNav({
           active={active}
           isAdmin={isAdmin}
           onClose={() => setMoreOpen(false)}
-          onPick={(k) => {
-            onChange(k);
-            setMoreOpen(false);
-          }}
+          onPick={(k) => onChange(k)}
         />
       )}
     </>
@@ -276,6 +275,42 @@ function NavButton({
   );
 }
 
+/** A navigation row in the More sheet: shows a spinner in place of its
+ *  icon while its route is loading (see MoreSheet's `navigate`). */
+function NavRow({
+  label,
+  Icon,
+  pending,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  Icon: React.ElementType;
+  pending: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      disabled={disabled}
+      onClick={onClick}
+      className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-surface-inset disabled:cursor-default"
+    >
+      {pending ? (
+        <Loader2
+          className="size-4 shrink-0 animate-spin text-primary"
+          aria-hidden
+        />
+      ) : (
+        <Icon className="size-4 shrink-0" aria-hidden />
+      )}
+      <span className="flex-1 text-left">{label}</span>
+    </button>
+  );
+}
+
 function MoreSheet({
   tabs,
   active,
@@ -295,6 +330,42 @@ function MoreSheet({
   // are open. An invisible click-area behind it catches taps outside
   // to dismiss. Standard mobile convention for kebab-style overflow
   // menus (Twitter, Instagram, Discord).
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  // `pendingId` flags which row is in-flight: `tab:<key>` for a tab
+  // switch, `href:<url>` for a navigation. We keep the sheet open with a
+  // spinner on that row until the work commits, then dismiss it — a tap
+  // reads as "working…" instead of the sheet vanishing into a blank
+  // ~1s wait. `sawPending` ensures we only close AFTER the transition
+  // has run (the urgent setPendingId can land a render before isPending
+  // flips true; without the guard that render would close prematurely).
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const sawPending = useRef(false);
+  useEffect(() => {
+    if (isPending) {
+      sawPending.current = true;
+    } else if (sawPending.current) {
+      sawPending.current = false;
+      onClose();
+    }
+  }, [isPending, onClose]);
+
+  function pickTab(k: PlaybookBottomNavTab) {
+    // Re-picking the active tab is a no-op switch (React bails the
+    // state update, so no transition fires) — just close.
+    if (active === k) {
+      onClose();
+      return;
+    }
+    setPendingId(`tab:${k}`);
+    startTransition(() => onPick(k));
+  }
+
+  function navigate(href: string) {
+    setPendingId(`href:${href}`);
+    startTransition(() => router.push(href));
+  }
+
   return (
     <>
       <button
@@ -316,20 +387,29 @@ function MoreSheet({
       >
         {tabs.map((t) => {
           const isActive = active === t.key;
+          const pending = pendingId === `tab:${t.key}`;
           return (
             <button
               key={t.key}
               type="button"
               role="menuitem"
-              onClick={() => onPick(t.key)}
+              disabled={isPending}
+              onClick={() => pickTab(t.key)}
               aria-current={isActive ? "page" : undefined}
-              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors disabled:cursor-default ${
                 isActive
                   ? "bg-primary/10 text-primary"
                   : "text-foreground hover:bg-surface-inset"
               }`}
             >
-              <t.Icon className="size-4 shrink-0" aria-hidden />
+              {pending ? (
+                <Loader2
+                  className="size-4 shrink-0 animate-spin text-primary"
+                  aria-hidden
+                />
+              ) : (
+                <t.Icon className="size-4 shrink-0" aria-hidden />
+              )}
               <span className="flex-1 text-left">{t.label}</span>
               {typeof t.count === "number" && t.count > 0 && (
                 <span
@@ -348,35 +428,44 @@ function MoreSheet({
             bottom toolbar owns "user pile" navigation across every
             surface. */}
         {(tabs.length > 0) && <div className="my-1 border-t border-border" />}
-        <Link
-          href="/account"
-          role="menuitem"
-          onClick={onClose}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-surface-inset"
-        >
-          <User className="size-4 shrink-0" aria-hidden />
-          <span className="flex-1 text-left">Account</span>
-        </Link>
-        <Link
-          href="/learn"
-          role="menuitem"
-          onClick={onClose}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-surface-inset"
-        >
-          <GraduationCap className="size-4 shrink-0" aria-hidden />
-          <span className="flex-1 text-left">Learning Center</span>
-        </Link>
+        <NavRow
+          label="Account"
+          Icon={User}
+          pending={pendingId === "href:/account"}
+          disabled={isPending}
+          onClick={() => navigate("/account")}
+        />
+        <NavRow
+          label="Learning Center"
+          Icon={GraduationCap}
+          pending={pendingId === "href:/learn"}
+          disabled={isPending}
+          onClick={() => navigate("/learn")}
+        />
         {isAdmin && (
-          <Link
-            href="/settings"
-            role="menuitem"
-            onClick={onClose}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-surface-inset"
-          >
-            <Shield className="size-4 shrink-0" aria-hidden />
-            <span className="flex-1 text-left">Site Admin</span>
-          </Link>
+          <NavRow
+            label="Site Admin"
+            Icon={Shield}
+            pending={pendingId === "href:/settings"}
+            disabled={isPending}
+            onClick={() => navigate("/settings")}
+          />
         )}
+        {/* Hidden, zero-size prefetch Links warm these routes while the
+            sheet is open so the tapped router.push resolves fast. */}
+        <span className="sr-only" aria-hidden>
+          <Link href="/account" prefetch tabIndex={-1}>
+            Account
+          </Link>
+          <Link href="/learn" prefetch tabIndex={-1}>
+            Learning Center
+          </Link>
+          {isAdmin && (
+            <Link href="/settings" prefetch tabIndex={-1}>
+              Site Admin
+            </Link>
+          )}
+        </span>
         <form action={signOutAction}>
           <button
             type="submit"

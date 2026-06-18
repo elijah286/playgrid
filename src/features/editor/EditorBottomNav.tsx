@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -211,6 +211,23 @@ function MoreSheet({
   isAdmin: boolean;
   onClose: () => void;
 }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+  // Keep the sheet open with a spinner on the tapped row until the
+  // navigation commits, then dismiss it — so the tap reads as "working…"
+  // rather than the sheet vanishing into a blank ~1s wait. `sawPending`
+  // guards against closing before the transition has actually started.
+  const sawPending = useRef(false);
+  useEffect(() => {
+    if (isPending) {
+      sawPending.current = true;
+    } else if (sawPending.current) {
+      sawPending.current = false;
+      onClose();
+    }
+  }, [isPending, onClose]);
+
   const items: { label: string; href: string; Icon: React.ElementType }[] = [];
   if (available.calendar) {
     items.push({
@@ -274,18 +291,41 @@ function MoreSheet({
           bottom: "calc(env(safe-area-inset-bottom, 0px) + 68px)",
         }}
       >
-        {items.map((it) => (
-          <Link
-            key={it.href}
-            href={it.href}
-            role="menuitem"
-            onClick={onClose}
-            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-surface-inset"
-          >
-            <it.Icon className="size-4 shrink-0" aria-hidden />
-            <span className="flex-1 text-left">{it.label}</span>
-          </Link>
-        ))}
+        {items.map((it) => {
+          const pending = pendingHref === it.href;
+          return (
+            <button
+              key={it.href}
+              type="button"
+              role="menuitem"
+              disabled={isPending}
+              onClick={() => {
+                setPendingHref(it.href);
+                startTransition(() => router.push(it.href));
+              }}
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-surface-inset disabled:cursor-default"
+            >
+              {pending ? (
+                <Loader2
+                  className="size-4 shrink-0 animate-spin text-primary"
+                  aria-hidden
+                />
+              ) : (
+                <it.Icon className="size-4 shrink-0" aria-hidden />
+              )}
+              <span className="flex-1 text-left">{it.label}</span>
+            </button>
+          );
+        })}
+        {/* Hidden, zero-size prefetch Links warm each route while the sheet
+            is open so the tapped router.push resolves fast. */}
+        <span className="sr-only" aria-hidden>
+          {items.map((it) => (
+            <Link key={it.href} href={it.href} prefetch tabIndex={-1}>
+              {it.label}
+            </Link>
+          ))}
+        </span>
         <form action={signOutAction}>
           <button
             type="submit"

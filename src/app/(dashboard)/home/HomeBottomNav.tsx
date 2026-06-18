@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Bell, BookOpen, Calendar, CreditCard, GraduationCap, Inbox, Loader2, LogOut, MoreHorizontal, Shield, User } from "lucide-react";
@@ -262,6 +262,25 @@ function MorePopover({
   items: { label: string; href: string; Icon: React.ElementType }[];
   onClose: () => void;
 }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+  // Keep the menu open with a spinner on the tapped row until the
+  // navigation actually commits, then dismiss it — so a tap reads as
+  // "working…" instead of the menu vanishing into a blank ~1s wait.
+  // `sawPending` ensures we only close AFTER a transition has run (the
+  // urgent setPendingHref can land a render before isPending flips
+  // true; without the guard that first render would close prematurely).
+  const sawPending = useRef(false);
+  useEffect(() => {
+    if (isPending) {
+      sawPending.current = true;
+    } else if (sawPending.current) {
+      sawPending.current = false;
+      onClose();
+    }
+  }, [isPending, onClose]);
+
   return (
     <>
       <button
@@ -283,18 +302,42 @@ function MorePopover({
           bottom: "calc(env(safe-area-inset-bottom, 0px) + 68px)",
         }}
       >
-        {items.map((it) => (
-          <Link
-            key={it.href}
-            href={it.href}
-            role="menuitem"
-            onClick={onClose}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-surface-inset"
-          >
-            <it.Icon className="size-4 shrink-0" aria-hidden />
-            <span className="flex-1 text-left">{it.label}</span>
-          </Link>
-        ))}
+        {items.map((it) => {
+          const pending = pendingHref === it.href;
+          return (
+            <button
+              key={it.href}
+              type="button"
+              role="menuitem"
+              disabled={isPending}
+              onClick={() => {
+                setPendingHref(it.href);
+                startTransition(() => router.push(it.href));
+              }}
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-surface-inset disabled:cursor-default"
+            >
+              {pending ? (
+                <Loader2
+                  className="size-4 shrink-0 animate-spin text-primary"
+                  aria-hidden
+                />
+              ) : (
+                <it.Icon className="size-4 shrink-0" aria-hidden />
+              )}
+              <span className="flex-1 text-left">{it.label}</span>
+            </button>
+          );
+        })}
+        {/* Hidden, zero-size prefetch Links warm each route's cache while
+            the menu is open so the tapped router.push resolves fast —
+            same trick NavLink uses for the tab buttons. */}
+        <span className="sr-only" aria-hidden>
+          {items.map((it) => (
+            <Link key={it.href} href={it.href} prefetch tabIndex={-1}>
+              {it.label}
+            </Link>
+          ))}
+        </span>
         <form action={signOutAction}>
           <button
             type="submit"
