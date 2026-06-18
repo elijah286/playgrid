@@ -46,14 +46,18 @@ export default async function OpengraphImage() {
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           <div
             style={{
+              // Explicit display required: Satori (next/og) rejects a multi-child
+              // <div> without one during build-time prerender. Stack the two
+              // lines as flex-column spans instead of a <br/>.
+              display: "flex",
+              flexDirection: "column",
               fontSize: 92,
               fontWeight: 800,
               lineHeight: 1.05,
               letterSpacing: "-0.035em",
             }}
           >
-            Design plays.
-            <br />
+            <span>Design plays.</span>
             <span style={{ color: "#95CC1F" }}>Win games.</span>
           </div>
           <div
