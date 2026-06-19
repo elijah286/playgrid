@@ -6,6 +6,7 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { validatePassword } from "@/lib/auth/password";
 import { snapshotFirstTouchToProfile } from "@/lib/attribution/snapshot";
+import { objectionableNameError } from "@/lib/moderation/objectionable-text";
 
 const AVATAR_BUCKET = "avatars";
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
@@ -94,6 +95,10 @@ export async function updateDisplayNameAction(input: { displayName: string }) {
   if (!user) return { ok: false as const, error: "Not signed in." };
 
   const trimmed = (input.displayName ?? "").trim().slice(0, MAX_DISPLAY_NAME_LEN);
+  // Display names render to other users (rosters, chat, shared plays), so they
+  // pass the objectionable-content filter (Guideline 1.2).
+  const nameErr = trimmed ? objectionableNameError(trimmed) : null;
+  if (nameErr) return { ok: false as const, error: nameErr };
   const value = trimmed.length > 0 ? trimmed : null;
 
   const admin = createServiceRoleClient();

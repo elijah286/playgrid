@@ -12,6 +12,7 @@ import { ensureSeatsAvailable } from "@/lib/billing/seats";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { getUserEntitlement } from "@/lib/billing/entitlement";
 import { tierAtLeast } from "@/lib/billing/features";
+import { objectionableNameError } from "@/lib/moderation/objectionable-text";
 
 export type PlaybookRosterMember = {
   id: string;
@@ -710,6 +711,8 @@ export async function addRosterEntryAction(input: {
   if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
   const label = (input.label ?? "").trim();
   if (!label) return { ok: false, error: "Name is required." };
+  const labelErr = objectionableNameError(label);
+  if (labelErr) return { ok: false, error: labelErr };
 
   const supabase = await createClient();
   const cleanedPositions = Array.from(
@@ -749,6 +752,10 @@ export async function bulkAddRosterEntriesAction(input: {
     .filter((l) => l.length > 0)
     .slice(0, 30);
   if (cleaned.length === 0) return { ok: false, error: "No names provided." };
+  const flagged = cleaned.find((l) => objectionableNameError(l));
+  if (flagged) {
+    return { ok: false, error: `"${flagged}" contains language we don't allow. Remove it and try again.` };
+  }
 
   const supabase = await createClient();
   let added = 0;
@@ -789,6 +796,8 @@ export async function updateRosterEntryAction(input: {
   const patch: Record<string, unknown> = {};
   if (input.label !== undefined) {
     const cleaned = (input.label ?? "").trim();
+    const labelErr = cleaned ? objectionableNameError(cleaned) : null;
+    if (labelErr) return { ok: false, error: labelErr };
     patch.label = cleaned.length > 0 ? cleaned : null;
   }
   if (input.jerseyNumber !== undefined) {
