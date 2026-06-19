@@ -1,5 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { randomNonce, sha256Hex } from "./appleAuth";
+import { appleDisplayName, randomNonce, sha256Hex } from "./appleAuth";
+
+describe("appleDisplayName", () => {
+  it("joins given and family name", () => {
+    expect(appleDisplayName({ givenName: "Coach", familyName: "Smith" })).toBe(
+      "Coach Smith",
+    );
+  });
+
+  it("handles a single name component", () => {
+    expect(appleDisplayName({ givenName: "Coach", familyName: null })).toBe("Coach");
+    expect(appleDisplayName({ givenName: null, familyName: "Smith" })).toBe("Smith");
+  });
+
+  it("trims whitespace around components", () => {
+    expect(appleDisplayName({ givenName: "  Coach ", familyName: " Smith " })).toBe(
+      "Coach Smith",
+    );
+  });
+
+  it("returns null when nothing usable is present", () => {
+    expect(appleDisplayName(null)).toBeNull();
+    expect(appleDisplayName(undefined)).toBeNull();
+    expect(appleDisplayName({ givenName: null, familyName: null })).toBeNull();
+    expect(appleDisplayName({ givenName: "  ", familyName: "" })).toBeNull();
+  });
+});
 
 describe("sha256Hex", () => {
   it("matches the known SHA-256 vector for the empty string", async () => {

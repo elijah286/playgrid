@@ -282,7 +282,16 @@ export function AuthFlow({
     track({ event: "auth_oauth_started", target: "apple" });
     try {
       const supabase = createClient();
-      const { isFreshSignup } = await signInWithAppleNative(supabase);
+      const { isFreshSignup, displayName } = await signInWithAppleNative(supabase);
+
+      // Persist the name Apple gave us (first sign-in only). Using it here is
+      // what lets us skip the name-capture prompt for Apple users entirely —
+      // App Store Guideline 4.8 forbids re-requesting data Apple already
+      // provided. Fire-and-forget: a failure just means the (suppressed)
+      // prompt logic falls back to the email default, never a re-prompt.
+      if (isFreshSignup && displayName) {
+        await updateDisplayNameAction({ displayName }).catch(() => {});
+      }
 
       if (inviteCode) {
         await afterSignupSyncRoleAction();

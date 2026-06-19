@@ -11,6 +11,7 @@ import { ExpirationBanner } from "@/components/billing/ExpirationBanner";
 import { NameCapturePrompt } from "@/components/account/NameCapturePrompt";
 import { OfflineAutoRefreshMount } from "@/components/offline/OfflineAutoRefreshMount";
 import { NativeWelcomeSpotlight } from "@/components/native/NativeWelcomeSpotlight";
+import { userSignedInWithApple } from "@/lib/auth/provider";
 
 // Auth is NOT enforced here. Anon visitors may reach example-playbook
 // pages under this layout (e.g. /playbooks/[id] for a public example);
@@ -53,7 +54,7 @@ export default async function DashboardLayout({
     getFeedbackWidgetSettings(),
     user ? userHasCreatedPlayAction() : Promise.resolve(false),
     user ? getExpirationNotice() : Promise.resolve(null),
-    user ? checkNameCaptureNeeded(user.id, user.email ?? null) : Promise.resolve(false),
+    user ? checkNameCaptureNeeded(user) : Promise.resolve(false),
   ]);
 
   return (
@@ -91,19 +92,25 @@ export default async function DashboardLayout({
  *  i.e. profiles.display_name is null OR equals their auth email. The
  *  email-as-display-name case is the legacy default produced by the
  *  pre-fix handle_new_user trigger; treating it as "not set" lets the
- *  one-time prompt rescue those accounts. */
-async function checkNameCaptureNeeded(
-  userId: string,
-  email: string | null,
-): Promise<boolean> {
+ *  one-time prompt rescue those accounts.
+ *
+ *  Apple sign-in is excluded unconditionally: App Store Guideline 4.8
+ *  forbids re-requesting the name Apple's Authentication Services already
+ *  provides. We capture that name at sign-in (appleAuth.ts → AuthFlow), and
+ *  even when the user declines to share it we must never re-prompt — so Apple
+ *  users never see the name-capture modal regardless of their stored name. */
+async function checkNameCaptureNeeded(user: User): Promise<boolean> {
+  if (userSignedInWithApple(user)) return false;
+
   const supabase = await createClient();
   const { data } = await supabase
     .from("profiles")
     .select("display_name")
-    .eq("id", userId)
+    .eq("id", user.id)
     .maybeSingle();
   const name = (data?.display_name ?? "").trim();
   if (!name) return true;
+  const email = user.email ?? null;
   if (email && name.toLowerCase() === email.toLowerCase()) return true;
   return false;
 }

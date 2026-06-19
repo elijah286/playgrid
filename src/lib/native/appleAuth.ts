@@ -106,7 +106,30 @@ export type NativeAppleSignInResult = {
    *  signup pixel + first-touch attribution snapshot, matching what the web
    *  OAuth callback does server-side. */
   isFreshSignup: boolean;
+  /** The display name Apple supplied (given + family), or null when the user
+   *  declined to share it or is a returning user (Apple only sends the name on
+   *  the very first authorization). App Store Guideline 4.8 requires us to USE
+   *  this rather than re-prompt — AuthFlow writes it to profiles.display_name. */
+  displayName: string | null;
 };
+
+/**
+ * Join Apple's name components into a single display name, or null when neither
+ * is present. Pure + exported for unit testing. Apple only returns these on the
+ * first sign-in for a given Apple ID, so a null result is the common case for
+ * returning users.
+ */
+export function appleDisplayName(
+  profile: { givenName?: string | null; familyName?: string | null } | null | undefined,
+): string | null {
+  if (!profile) return null;
+  const name = [profile.givenName, profile.familyName]
+    .map((part) => (part ?? "").trim())
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  return name.length > 0 ? name : null;
+}
 
 /**
  * Runs the full native Sign in with Apple flow and hands the resulting
@@ -130,11 +153,22 @@ export async function signInWithAppleNative(
     },
   });
 
-  const result = login.result as { idToken?: string | null } | null;
+  const result = login.result as
+    | {
+        idToken?: string | null;
+        profile?: { givenName?: string | null; familyName?: string | null } | null;
+      }
+    | null;
   const idToken = result?.idToken;
   if (!idToken) {
     throw new Error("Apple sign-in did not return an identity token.");
   }
+
+  // Apple hands us the user's name in the login response — but ONLY on the
+  // first authorization for this Apple ID. Capture it here so the caller can
+  // persist it; this is the data App Store Guideline 4.8 says we must use
+  // instead of re-prompting via the name-capture modal.
+  const displayName = appleDisplayName(result?.profile);
 
   const { data, error } = await supabase.auth.signInWithIdToken({
     provider: "apple",
@@ -149,5 +183,5 @@ export async function signInWithAppleNative(
   const isFreshSignup =
     Number.isFinite(createdAt) && Date.now() - createdAt < 5 * 60_000;
 
-  return { isFreshSignup };
+  return { isFreshSignup, displayName };
 }
