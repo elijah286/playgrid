@@ -24,6 +24,7 @@ import {
   canUseNativeAppleAuth,
   signInWithAppleNative,
 } from "@/lib/native/appleAuth";
+import { computeSocialButtonVisibility } from "./socialButtonVisibility";
 
 function GoogleGlyph({ className }: { className?: string }) {
   return (
@@ -116,35 +117,34 @@ export function AuthFlow({
   subheading,
   inviteCode,
   onStepChange,
-  appleEnabled = false,
+  // `appleEnabled` (AuthFlowProps) is intentionally NOT destructured/consulted:
+  // it gated only the broken Supabase *web* Apple provider, and native — the
+  // only place we currently show Apple — bypasses that provider entirely. Kept
+  // on the props type for callers and for when the web path is restored.
   googleEnabled = false,
   googleOAuthWebClientId = null,
   googleOAuthIosClientId = null,
 }: AuthFlowProps) {
   const { toast } = useToast();
 
-  // Hide the Google button on native when the plugin isn't usable
-  // (no client ID configured in Site Admin, or the installed APK
-  // predates the plugin). On web the button always falls back to the
-  // Supabase-hosted OAuth flow.
+  // Which social buttons render is a pure decision over the runtime signals
+  // below — extracted to `computeSocialButtonVisibility` so the App Store
+  // Guideline 4.8 invariant (on iOS, Google never renders without Apple) is
+  // enforced by an exhaustive test instead of inline JSX that a refactor could
+  // drift. The native Apple sheet uses the App ID via signInWithIdToken and
+  // never 400s, so it isn't gated behind the admin toggle. Web Apple stays
+  // hidden until the web provider's Client ID is fixed (2026-06-11); restore a
+  // web path in the helper once it is.
   const native = useIsNativeApp();
-  const hideGoogleOnNative =
-    native &&
-    !canUseNativeGoogleAuth(googleOAuthWebClientId, googleOAuthIosClientId);
-
-  // Apple button visibility:
-  //  - Web (any non-native browser): TEMPORARILY HIDDEN. The Supabase-hosted
-  //    Apple OAuth is broken — its provider config sends Apple the bundle ID
-  //    (com.xogridmaker.app) as the web client_id instead of the Services ID
-  //    (com.xogridmaker.signin), so Apple rejects with "invalid_request —
-  //    Invalid client id or web redirect url". Re-enable by restoring `!native ||`
-  //    once the Supabase Apple provider Client IDs are fixed (2026-06-11).
-  //  - iOS native: show only when the SocialLogin plugin is registered in
-  //    the running build (older builds predate it), so we use the native
-  //    Sign in with Apple sheet (which works — it uses the App ID directly).
-  //  - Android native: hidden (those users have Google + email).
-  const appleNativeUsable = canUseNativeAppleAuth();
-  const showAppleButton = appleEnabled && appleNativeUsable;
+  const { showAppleButton, showGoogleButton } = computeSocialButtonVisibility({
+    native,
+    appleNativeUsable: canUseNativeAppleAuth(),
+    googleNativeUsable: canUseNativeGoogleAuth(
+      googleOAuthWebClientId,
+      googleOAuthIosClientId,
+    ),
+    googleEnabled,
+  });
 
   const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/home";
 
@@ -691,14 +691,14 @@ export function AuthFlow({
         />
       ) : (
         <form onSubmit={handleSubmit} className="space-y-3" noValidate>
-          {/* Social sign-in. Each provider is controlled by a Site Admin
-              toggle (site_settings.{apple,google}_signin_enabled) so we
-              never surface a button that 400s when the provider isn't
-              configured in Supabase. Apple is required by App Store Review
-              Guideline 4.8 once the iOS app ships, so flip it back on then. */}
-          {step === "email" && (showAppleButton || googleEnabled) && (
+          {/* Social sign-in. Visibility comes from computeSocialButtonVisibility,
+              which guarantees Apple renders alongside Google on iOS (Guideline
+              4.8) and hides any provider that would 400. Render the block only
+              when a button will actually appear, so we never show a lone "or"
+              divider. */}
+          {step === "email" && (showAppleButton || showGoogleButton) && (
             <>
-              {googleEnabled && !hideGoogleOnNative && (
+              {showGoogleButton && (
                 <Button
                   type="button"
                   variant="secondary"
