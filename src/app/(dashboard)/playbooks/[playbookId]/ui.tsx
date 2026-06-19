@@ -57,6 +57,7 @@ import {
   ChevronDown,
   ClipboardCopy,
   Copy,
+  Ban,
   Crown,
   FileText,
   FolderInput,
@@ -150,6 +151,7 @@ import {
   denyMemberAction,
   rejectRosterClaimAction,
   removeStaffMemberAction,
+  removeMemberAndBanAction,
   setCoachTitleAction,
   setHeadCoachAction,
   setMemberRoleAction,
@@ -3276,6 +3278,21 @@ function RosterPanel({
     else router.refresh();
   }
 
+  async function removeAndBanStaff(userId: string, name: string) {
+    if (
+      !window.confirm(
+        `Remove and ban ${name}? They'll lose access and won't be able to rejoin this playbook through an invite link.`,
+      )
+    )
+      return;
+    const res = await removeMemberAndBanAction(playbookId, userId);
+    if (!res.ok) toast(`Couldn't ban: ${res.error}`, "error");
+    else {
+      toast(`${name} removed and banned.`, "success");
+      router.refresh();
+    }
+  }
+
   // Group pending claims by the roster entry they target so collisions
   // (two users claiming the same player) show up as a single decision.
   const claimsByMember = new Map<string, PendingRosterClaim[]>();
@@ -3675,6 +3692,17 @@ function RosterPanel({
                             icon: X,
                             onSelect: () => unlinkUser(m.id, name),
                           },
+                          ...(m.role !== "owner" && m.user_id
+                            ? [
+                                {
+                                  label: "Remove & ban",
+                                  icon: Ban,
+                                  danger: true,
+                                  onSelect: () =>
+                                    removeAndBanStaff(m.user_id as string, name),
+                                },
+                              ]
+                            : []),
                         ]),
                   ];
                   const canEditRole = viewerIsCoach && !unclaimed && m.role !== "owner";

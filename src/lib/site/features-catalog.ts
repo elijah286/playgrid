@@ -52,6 +52,15 @@ export const FEATURES: FeatureEntry[] = [
     status: "ga",
     addedDate: "2026-06-18",
   },
+  {
+    id: "remove-and-ban-member",
+    name: "Remove & ban a member",
+    description:
+      "Playbook owners and coaches can remove a member and ban them, so they can't rejoin through an invite link. Keeps team chat and shared playbooks clear of abusive users; bans can be lifted later.",
+    category: "Roster & sharing",
+    status: "ga",
+    addedDate: "2026-06-18",
+  },
   // ── Billing & accounts ───────────────────────────────────────────
   {
     id: "ios-in-app-purchase",

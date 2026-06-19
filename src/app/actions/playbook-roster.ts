@@ -1077,3 +1077,71 @@ export async function removeStaffMemberAction(
   revalidatePath(`/playbooks/${playbookId}`);
   return { ok: true };
 }
+
+/**
+ * Remove a member AND ban them from rejoining via any invite link
+ * (App Store Guideline 1.2 — block abusive users). Authorization, the
+ * no-self / no-owner guards, and the ban write all happen in the
+ * `remove_and_ban_member` security-definer RPC.
+ */
+export async function removeMemberAndBanAction(
+  playbookId: string,
+  userId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("remove_and_ban_member", {
+    p_playbook_id: playbookId,
+    p_user_id: userId,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/playbooks/${playbookId}`);
+  return { ok: true };
+}
+
+export type PlaybookBanRow = {
+  userId: string;
+  bannedAt: string;
+  displayName: string | null;
+};
+
+/** List the users banned from a playbook (editor-gated by RLS). */
+export async function listPlaybookBansAction(
+  playbookId: string,
+): Promise<{ ok: true; bans: PlaybookBanRow[] } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("playbook_bans")
+    .select("user_id, banned_at, profiles:user_id(display_name)")
+    .eq("playbook_id", playbookId)
+    .order("banned_at", { ascending: false });
+  if (error) return { ok: false, error: error.message };
+  const bans: PlaybookBanRow[] = (data ?? []).map((row) => {
+    const r = row as {
+      user_id: string;
+      banned_at: string;
+      profiles: { display_name: string | null } | { display_name: string | null }[] | null;
+    };
+    const prof = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles;
+    return { userId: r.user_id, bannedAt: r.banned_at, displayName: prof?.display_name ?? null };
+  });
+  return { ok: true, bans };
+}
+
+/** Lift a ban so the user can be re-invited (editor-gated by RLS). */
+export async function unbanMemberAction(
+  playbookId: string,
+  userId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("playbook_bans")
+    .delete()
+    .eq("playbook_id", playbookId)
+    .eq("user_id", userId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/playbooks/${playbookId}`);
+  return { ok: true };
+}
