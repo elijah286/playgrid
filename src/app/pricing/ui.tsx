@@ -16,6 +16,8 @@ import type { SeatDefaults } from "@/lib/site/seat-defaults-config";
 import type { Entitlement, SubscriptionTier } from "@/lib/billing/entitlement";
 import { Modal, SegmentedControl } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { isNativeApp } from "@/lib/native/isNativeApp";
+import { useIsNativeApp } from "@/lib/native/useIsNativeApp";
 
 const TIER_RANK: Record<SubscriptionTier, number> = {
   free: 0,
@@ -169,6 +171,13 @@ export function PricingClient({
   const tiers = showCoachAi ? allTiers : allTiers.filter((t) => t.id !== "coach_ai");
   const [interval, setInterval] = useState<Interval>("month");
   const [pending, startTransition] = useTransition();
+  // App Store Guideline 3.1.1 backstop. This Stripe-driven pricing UI is also
+  // wrapped in `data-web-only` by the page, but that's a CSS gate; this is the
+  // JS one. `native` (post-mount) blanks the render so no price/checkout DOM
+  // survives on iOS even if the CSS regresses, and the synchronous
+  // `isNativeApp()` check in the auto-open effect below stops a Stripe preview
+  // call from firing before the hook flips. Mirrors the /checkout hardening.
+  const native = useIsNativeApp();
   const [err, setErr] = useState<string | null>(null);
   const [upgradeModal, setUpgradeModal] = useState<UpgradeModalState | null>(null);
   const [downgradeModal, setDowngradeModal] = useState<DowngradeModalState | null>(null);
@@ -187,6 +196,10 @@ export function PricingClient({
   // the URL param is a one-shot intent signal.
   useEffect(() => {
     if (typeof window === "undefined") return;
+    // Never auto-open the upgrade modal (which fires a Stripe preview call) on
+    // native — Guideline 3.1.1. Read synchronously, not via `native`, which
+    // only flips after this mount effect has already run.
+    if (isNativeApp()) return;
     if (!isAuthed || !isPaid) return;
     const params = new URLSearchParams(window.location.search);
     const target = params.get("upgrade");
@@ -368,6 +381,11 @@ export function PricingClient({
     });
     router.push(`/checkout?tier=${t.id}&interval=${interval}`);
   }
+
+  // On native, render nothing: the page mounts a `data-native-only`
+  // NativeIapPanel (StoreKit IAP / neutral notice) alongside this component, so
+  // blanking here leaves the App-Store-safe surface and no Stripe price/CTA.
+  if (native) return null;
 
   return (
     <div className="space-y-6">
