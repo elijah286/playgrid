@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Braces, Copy, ThumbsUp, ThumbsDown } from "lucide-react";
+import { Braces, Copy, Flag, ThumbsUp, ThumbsDown } from "lucide-react";
 import { AssistantMessage } from "./AssistantMessage";
 import { rewritePlayFencesForCopy } from "@/lib/coach-ai/copy-rewrite";
+import { ReportDialog } from "@/components/moderation/ReportDialog";
 
 const LONG_PRESS_MS = 500;
 
@@ -22,6 +23,7 @@ export function AssistantMessageWithFeedback({
   const [thumbsUp, setThumbsUp] = useState(false);
   const [thumbsDown, setThumbsDown] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Set when the long-press / right-click branch fires the menu, so the
@@ -238,7 +240,23 @@ export function AssistantMessageWithFeedback({
             </div>
           )}
         </div>
+        <div className="h-1 w-1 rounded-full bg-border" />
+        <button
+          type="button"
+          onClick={() => setReportOpen(true)}
+          title="Report this response"
+          className="inline-flex items-center rounded p-1 text-muted transition-colors hover:bg-surface hover:text-foreground"
+        >
+          <Flag className="size-4" />
+        </button>
       </div>
+      <ReportDialog
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        contentType="cal_response"
+        reportedText={text}
+        label="Report this response"
+      />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Flag, Pencil, Trash2 } from "lucide-react";
 import {
   AUTHOR_EDIT_WINDOW_MS,
   MAX_MESSAGE_LENGTH,
@@ -10,6 +10,7 @@ import {
 import { MessageAvatar } from "./Avatar";
 import { MessageMarkdown } from "./MessageMarkdown";
 import { formatAbsoluteTime, formatRelativeTime } from "./format";
+import { ReportDialog } from "@/components/moderation/ReportDialog";
 
 export type MessageBubbleProps = {
   message: PlaybookMessageRow;
@@ -49,9 +50,13 @@ export function MessageBubble({
   const [draft, setDraft] = useState(message.body);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
 
   const canEdit = !isDeleted && isSelf && withinAuthorWindow;
   const canDelete = !isDeleted && (canEdit || viewerCanModerate);
+  // You can report someone else's message (not your own, not an already-deleted
+  // tombstone) — Guideline 1.2.
+  const canReport = !isDeleted && !isSelf;
 
   // Re-tick relative timestamp once a minute so "1m ago" → "2m ago" without
   // a full re-render of the parent stream.
@@ -178,7 +183,7 @@ export function MessageBubble({
             } ${pending ? "opacity-60" : ""}`}
           >
             <MessageMarkdown body={message.body} />
-            {(canEdit || canDelete) && !pending && (
+            {(canEdit || canDelete || canReport) && !pending && (
               <BubbleMenu
                 isSelf={isSelf}
                 onEdit={canEdit ? () => setEditing(true) : null}
@@ -190,6 +195,18 @@ export function MessageBubble({
                       }
                     : null
                 }
+                onReport={canReport ? () => setReportOpen(true) : null}
+              />
+            )}
+            {canReport && (
+              <ReportDialog
+                open={reportOpen}
+                onClose={() => setReportOpen(false)}
+                contentType="playbook_message"
+                contentRef={message.id}
+                playbookId={message.playbookId}
+                reportedText={message.body}
+                label="Report message"
               />
             )}
           </div>
@@ -242,10 +259,12 @@ function BubbleMenu({
   isSelf,
   onEdit,
   onDelete,
+  onReport,
 }: {
   isSelf: boolean;
   onEdit: (() => void) | null;
   onDelete: (() => void) | null;
+  onReport: (() => void) | null;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -307,6 +326,20 @@ function BubbleMenu({
             >
               <Trash2 className="size-3.5" />
               Delete
+            </button>
+          )}
+          {onReport && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onReport();
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-foreground hover:bg-surface-inset"
+            >
+              <Flag className="size-3.5" />
+              Report
             </button>
           )}
         </div>

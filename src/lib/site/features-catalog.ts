@@ -42,6 +42,16 @@ export type FeatureEntry = {
 };
 
 export const FEATURES: FeatureEntry[] = [
+  // ── Roster & sharing ─────────────────────────────────────────────
+  {
+    id: "content-reporting",
+    name: "Report objectionable content",
+    description:
+      "Coaches and players can report objectionable content or abusive behavior — on team messages, shared plays, and Coach Cal responses — right from where they see it. Reports land in a review queue, and we act on violations, including removing content and suspending accounts. Objectionable display names and roster labels are also filtered automatically.",
+    category: "Roster & sharing",
+    status: "ga",
+    addedDate: "2026-06-18",
+  },
   // ── Billing & accounts ───────────────────────────────────────────
   {
     id: "ios-in-app-purchase",

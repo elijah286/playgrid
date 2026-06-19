@@ -3,6 +3,7 @@ import { getSharedPlayByTokenAction } from "@/app/actions/share";
 import { pathGeometryToSvgD, routeToPathGeometry } from "@/domain/play/geometry";
 import { resolveRouteStroke } from "@/domain/play/factory";
 import { Badge } from "@/components/ui";
+import { ReportSharedPlayButton } from "./ReportSharedPlayButton";
 
 type Props = { params: Promise<{ token: string }> };
 
@@ -113,6 +114,7 @@ export default async function SharedPlayPage({ params }: Props) {
           ))}
         </svg>
       </div>
+      <ReportSharedPlayButton token={token} coachName={doc.metadata.coachName} />
     </div>
   );
 }

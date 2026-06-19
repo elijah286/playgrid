@@ -8,6 +8,7 @@ import {
   Brain,
   CreditCard,
   DollarSign,
+  Flag,
   FlaskConical,
   Gauge,
   Globe,
@@ -36,6 +37,7 @@ import { MetaPixelSettingsClient } from "@/features/admin/MetaPixelSettingsClien
 import { GoogleNativeSigninSettingsClient } from "@/features/admin/GoogleNativeSigninSettingsClient";
 import { RevenueAdminClient } from "@/features/admin/RevenueAdminClient";
 import { FeedbackAdminClient } from "@/features/admin/FeedbackAdminClient";
+import { ReportsAdminClient } from "@/features/admin/ReportsAdminClient";
 import { CoachAiFeedbackTabs } from "@/features/admin/CoachAiFeedbackTabs";
 import { CoachAiTokenUsageClient } from "@/features/admin/CoachAiTokenUsageClient";
 import type { KbMissRow } from "@/app/actions/coach-ai-feedback";
@@ -98,6 +100,7 @@ type Tab =
   | "payments"
   | "feedback"
   | "ai_feedback"
+  | "reports"
   | "ai_usage"
   | "seeds"
   | "site"
@@ -119,6 +122,7 @@ function isTab(value: string | null | undefined): value is Tab {
     value === "payments" ||
     value === "feedback" ||
     value === "ai_feedback" ||
+    value === "reports" ||
     value === "ai_usage" ||
     value === "seeds" ||
     value === "site" ||
@@ -304,6 +308,7 @@ export function SettingsClient({
           icon: Brain,
           badge: overviewProps.unreviewedKbMisses,
         },
+        { value: "reports", label: "Reports", icon: Flag },
         { value: "ai_usage", label: "Cal usage", icon: DollarSign },
         { value: "seeds", label: "Playbook seeds", icon: Sparkles },
       ],
@@ -641,6 +646,8 @@ export function SettingsClient({
             initialError={coachAiKbMissesError}
           />
         )}
+
+        {tab === "reports" && <ReportsAdminClient />}
 
         {tab === "ai_usage" && (
           <LazyContent state={tokenUsageData}>

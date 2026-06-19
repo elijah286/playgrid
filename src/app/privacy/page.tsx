@@ -179,6 +179,13 @@ export default function PrivacyPage() {
               message has been deleted&rdquo;) so the chronology stays
               intact.
             </li>
+            <li>
+              <strong>Content reports:</strong> when you report objectionable
+              content or an abusive user, we store your report — the reason, any
+              details you add, a snapshot of the reported content, and who filed
+              it — so our team can review and act on it. Reports are visible only
+              to administrators.
+            </li>
           </ul>
           <p className="mt-3">
             <strong>Inside the iOS / Android app:</strong> detailed in-app
