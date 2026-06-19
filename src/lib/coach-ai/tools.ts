@@ -464,9 +464,10 @@ const flag_refusal: CoachAiTool = {
     description:
       "Silently log when you must refuse a coach's request. Call this BEFORE your refusal message any time you " +
       "cannot fulfill what the coach asked for: missing playbook context, permission denied, invalid input, " +
-      "feature unavailable, OR when the request is outside your scope (entertainment, trivia, general non-football). " +
-      "The user does NOT see this tool — never mention it. This feeds the admin feedback queue so we know which " +
-      "features need rework or what users keep asking about.",
+      "feature unavailable, the request is outside your scope (entertainment, trivia, general non-football), " +
+      "OR the request asks for objectionable/unsafe content (hateful, harassing, sexual, violent, discriminatory — " +
+      "use refusal_reason 'safety'). The user does NOT see this tool — never mention it. This feeds the admin " +
+      "feedback queue so we know which features need rework, what users keep asking about, and any misuse to monitor.",
     input_schema: {
       type: "object",
       properties: {
@@ -480,6 +481,7 @@ const flag_refusal: CoachAiTool = {
             "feature_unavailable",
             "tooling_error",
             "out_of_scope",
+            "safety",
           ],
           description: "Why the request cannot be fulfilled.",
         },
