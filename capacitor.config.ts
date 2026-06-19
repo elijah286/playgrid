@@ -32,12 +32,13 @@ const config: CapacitorConfig = {
     // header, which doesn't happen on Android because the StatusBar plugin
     // defaults to overlay=true there.
     contentInset: "never",
-    // Enable Safari Web Inspector for development builds. Lets us attach
-    // from Safari → Develop → Simulator/Device → App and inspect the live
-    // DOM. Apple's enterprise notarization process doesn't apply to local
-    // dev/TestFlight builds, so this is safe to leave on for now and can
-    // be flipped to `false` for production releases if desired.
-    webContentsDebuggingEnabled: true,
+    // Safari Web Inspector. OFF by default so production App Store builds
+    // ship non-inspectable: Apple flags debug-enabled web wrappers, and an
+    // attachable WKWebView exposes the live authenticated session (DOM,
+    // cookies, in-flight requests) to anyone who can plug in the device.
+    // Opt in for local debugging with `CAP_DEBUG_WEBVIEW=true npx cap sync`
+    // — fail-safe: a release build that never sets the var stays locked down.
+    webContentsDebuggingEnabled: process.env.CAP_DEBUG_WEBVIEW === "true",
     // No `backgroundColor` here — Capacitor falls back to
     // `UIColor.systemBackground`, which is dynamic and tracks light/dark
     // mode. The previous `#ffffff` was forcing the webview's exterior to

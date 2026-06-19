@@ -520,7 +520,13 @@ export function AuthFlow({
   // fire their conversion events (SignUp / CompleteRegistration) on the next
   // page load. Mirrors the markers the /auth/callback route adds after OAuth.
   // Each pixel reads + strips its own distinct marker, so they're independent.
+  //
+  // Native: skip entirely. Both pixels already early-return inside the
+  // Capacitor shell (App Store Guideline 5.1.2 — no ad tracking in the app),
+  // so the markers fire nothing here; all they'd do is surface `?rdt_signup=1`
+  // in the in-app URL, which reads like ad attribution to an App Review proxy.
   function withSignupMarkers(to: string): string {
+    if (isNativeApp()) return to;
     try {
       const u = new URL(to, window.location.origin);
       u.searchParams.set("rdt_signup", "1");

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { snapshotFirstTouchToProfile } from "@/lib/attribution/snapshot";
 import { projectSystemNoticesToAdmins } from "@/lib/notifications/inbox-dispatch";
+import { isNativeUserAgent } from "@/lib/native/nativeRequest";
 
 // OAuth + PKCE callback. Supabase redirects here with `?code=...` after the
 // provider (Apple, Google, etc.) authenticates the user. We exchange the code
@@ -70,7 +71,13 @@ export async function GET(request: NextRequest) {
   }
 
   const dest = new URL(`${origin}${safeNext}`);
-  if (isFreshSignup) {
+  // Native shells normally complete OAuth via the in-app sheet
+  // (signInWithIdToken), not this redirect — but the web-OAuth fallback can
+  // route through here inside the WebView. Suppress the markers for native
+  // requests: the pixels don't fire in the app (Guideline 5.1.2) and a
+  // visible `?rdt_signup=1` reads like ad attribution to an App Review proxy.
+  const isNative = isNativeUserAgent(request.headers.get("user-agent"));
+  if (isFreshSignup && !isNative) {
     // Fire both ad-pixel signup conversions on the next page load. Each pixel
     // reads + strips its own distinct marker (RedditPixel: rdt_signup,
     // MetaPixel: fbq_signup) so they stay fully independent.
