@@ -67,6 +67,29 @@ export async function runSignupAttributionAction() {
   return { ok: true as const };
 }
 
+/** Record that the signed-in user affirmatively accepted the Terms/EULA
+ *  (App Store Guideline 1.2). Idempotent — safe to call from the email-signup
+ *  checkbox path and the OAuth accept-modal alike. The dashboard layout reads
+ *  profiles.terms_accepted_at to decide whether to show the blocking gate. */
+export async function acceptTermsAction() {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const admin = createServiceRoleClient();
+  const { error } = await admin
+    .from("profiles")
+    .update({ terms_accepted_at: new Date().toISOString() })
+    .eq("id", user.id);
+  if (error) return { ok: false as const, error: error.message };
+
+  revalidatePath("/", "layout");
+  return { ok: true as const };
+}
+
 export async function changePasswordAction(input: { password: string }) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
   const pwError = validatePassword(input.password ?? "");

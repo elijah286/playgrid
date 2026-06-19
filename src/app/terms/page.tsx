@@ -9,7 +9,7 @@ export default function TermsPage() {
   return (
     <article className="mx-auto max-w-2xl px-6 py-16 text-foreground">
       <h1 className="text-3xl font-extrabold tracking-tight">Terms of Service</h1>
-      <p className="mt-2 text-sm text-muted">Last updated: April 20, 2026</p>
+      <p className="mt-2 text-sm text-muted">Last updated: June 18, 2026</p>
 
       <div className="mt-8 space-y-6 text-sm leading-relaxed text-muted">
         <section>
@@ -52,7 +52,32 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-base font-semibold text-foreground">5. Service availability</h2>
+          <h2 className="text-base font-semibold text-foreground">
+            5. Objectionable content and community conduct
+          </h2>
+          <p className="mt-2">
+            We have <strong className="text-foreground">zero tolerance</strong> for
+            objectionable content and abusive behavior. You agree not to post,
+            share, upload, or transmit content that is hateful, harassing,
+            threatening, defamatory, obscene, sexually explicit, discriminatory,
+            or that bullies or demeans any person. This applies everywhere on the
+            Service — including playbook names, roster and player names, team
+            messages, shared plays, profile names, and your interactions with our
+            AI assistant. XO Gridmaker is used by youth coaches and athletes, and
+            we take this seriously.
+          </p>
+          <p className="mt-2">
+            You can report objectionable content or abusive users from within the
+            app. We review reports and act on violations — including removing
+            content and suspending or terminating accounts — typically within 24
+            hours. Playbook owners may also remove and ban abusive members from
+            their playbooks. By using the Service, you agree to this conduct
+            standard and to our enforcement of it.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-base font-semibold text-foreground">6. Service availability</h2>
           <p className="mt-2">
             The Service is provided &quot;as is&quot; and &quot;as available.&quot; We do not
             guarantee uninterrupted operation, and we may change, suspend, or
@@ -61,7 +86,7 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-base font-semibold text-foreground">6. Disclaimer and limitation of liability</h2>
+          <h2 className="text-base font-semibold text-foreground">7. Disclaimer and limitation of liability</h2>
           <p className="mt-2">
             To the maximum extent permitted by law, XO Gridmaker disclaims all
             warranties, express or implied. XO Gridmaker&apos;s total liability for any
@@ -71,7 +96,7 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-base font-semibold text-foreground">7. Termination</h2>
+          <h2 className="text-base font-semibold text-foreground">8. Termination</h2>
           <p className="mt-2">
             You may stop using the Service at any time. We may suspend or
             terminate your access if you violate these Terms. On termination,
@@ -80,7 +105,7 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-base font-semibold text-foreground">8. Governing law</h2>
+          <h2 className="text-base font-semibold text-foreground">9. Governing law</h2>
           <p className="mt-2">
             These Terms are governed by the laws of the State of Texas, without
             regard to its conflict of law rules. Any dispute will be resolved
@@ -89,7 +114,7 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-base font-semibold text-foreground">9. Changes</h2>
+          <h2 className="text-base font-semibold text-foreground">10. Changes</h2>
           <p className="mt-2">
             We may update these Terms from time to time. Material changes will
             be announced in-product or via email. Continued use after changes
@@ -98,7 +123,7 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-base font-semibold text-foreground">10. Contact</h2>
+          <h2 className="text-base font-semibold text-foreground">11. Contact</h2>
           <p className="mt-2">
             Questions about these Terms? Reach out via the{" "}
             <a href="/contact" className="text-primary hover:underline">

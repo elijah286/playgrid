@@ -9,6 +9,8 @@ import { userHasCreatedPlayAction } from "@/app/actions/plays";
 import { getExpirationNotice } from "@/lib/billing/expiration-notice";
 import { ExpirationBanner } from "@/components/billing/ExpirationBanner";
 import { NameCapturePrompt } from "@/components/account/NameCapturePrompt";
+import { TermsAcceptancePrompt } from "@/components/account/TermsAcceptancePrompt";
+import { termsAcceptanceNeeded } from "@/lib/auth/terms";
 import { OfflineAutoRefreshMount } from "@/components/offline/OfflineAutoRefreshMount";
 import { NativeWelcomeSpotlight } from "@/components/native/NativeWelcomeSpotlight";
 import { userSignedInWithApple } from "@/lib/auth/provider";
@@ -50,11 +52,13 @@ export default async function DashboardLayout({
     hasCreatedPlay,
     expirationNotice,
     nameCaptureNeeded,
+    termsNeeded,
   ] = await Promise.all([
     getFeedbackWidgetSettings(),
     user ? userHasCreatedPlayAction() : Promise.resolve(false),
     user ? getExpirationNotice() : Promise.resolve(null),
     user ? checkNameCaptureNeeded(user) : Promise.resolve(false),
+    user ? checkTermsAcceptanceNeeded(user) : Promise.resolve(false),
   ]);
 
   return (
@@ -71,7 +75,10 @@ export default async function DashboardLayout({
     <div className="min-h-full">
       {expirationNotice && <ExpirationBanner notice={expirationNotice} />}
       <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
-      <NameCapturePrompt needed={nameCaptureNeeded} />
+      <TermsAcceptancePrompt needed={termsNeeded} />
+      {/* Defer the (dismissible) name prompt until the (blocking) terms gate is
+          cleared, so a new user never sees both modals stacked. */}
+      <NameCapturePrompt needed={nameCaptureNeeded && !termsNeeded} />
       {user && <NativeWelcomeSpotlight />}
       <TimeOnSiteTracker />
       {feedbackSettings.enabled && (
@@ -113,4 +120,21 @@ async function checkNameCaptureNeeded(user: User): Promise<boolean> {
   const email = user.email ?? null;
   if (email && name.toLowerCase() === email.toLowerCase()) return true;
   return false;
+}
+
+/** Returns true when this user still owes an affirmative Terms/EULA acceptance
+ *  (App Store Guideline 1.2) — i.e. profiles.terms_accepted_at is NULL. Email
+ *  signups set it via the AuthFlow checkbox; OAuth signups (which skip that
+ *  form) are caught by the blocking TermsAcceptancePrompt. Existing users were
+ *  grandfathered at migration time, so only new signups read as needing it. */
+async function checkTermsAcceptanceNeeded(user: User): Promise<boolean> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("profiles")
+    .select("terms_accepted_at")
+    .eq("id", user.id)
+    .maybeSingle();
+  return termsAcceptanceNeeded(
+    data?.terms_accepted_at as string | null | undefined,
+  );
 }

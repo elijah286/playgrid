@@ -7,6 +7,7 @@ import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { emailHasAccountAction } from "@/app/actions/auth-lookup";
 import { afterSignupSyncRoleAction } from "@/app/actions/coach-invitations";
 import {
+  acceptTermsAction,
   runSignupAttributionAction,
   updateDisplayNameAction,
 } from "@/app/actions/account";
@@ -155,6 +156,9 @@ export function AuthFlow({
   const [name, setName] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
+  // Affirmative Terms/EULA acceptance for new email signups (Guideline 1.2).
+  // OAuth signups accept via the blocking gate in the dashboard layout instead.
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   const [pending, setPending] = useState(false);
   // Synchronous guard against concurrent submits. React state updates are
@@ -554,6 +558,10 @@ export function AuthFlow({
       setFormError("Passwords do not match.");
       return;
     }
+    if (!agreedToTerms) {
+      setFormError("Please agree to the Terms and Privacy Policy to continue.");
+      return;
+    }
     submittingRef.current = true;
     setPending(true);
     clearErrors();
@@ -572,6 +580,10 @@ export function AuthFlow({
         // Non-fatal: auth signup already succeeded. Worst case the
         // user appears by email until they edit their account.
       });
+      // Record the affirmative Terms acceptance so this email user skips the
+      // dashboard accept-gate (Guideline 1.2). Non-fatal if it fails — the
+      // gate will simply catch them on next load.
+      await acceptTermsAction().catch(() => {});
       toast("Welcome to XO Gridmaker!", "success");
       track({ event: "auth_signup_completed", metadata: { method: "email_otp" } });
       // Fresh signup — append the marker so RedditPixel fires SignUp on
@@ -851,6 +863,28 @@ export function AuthFlow({
                   clearErrors();
                 }}
               />
+              <label className="flex items-start gap-2 text-xs text-muted">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-4 shrink-0 rounded border-border accent-primary"
+                  checked={agreedToTerms}
+                  onChange={(e) => {
+                    setAgreedToTerms(e.target.checked);
+                    clearErrors();
+                  }}
+                />
+                <span>
+                  I agree to the{" "}
+                  <a href="/terms" target="_blank" className="font-medium text-primary hover:text-primary-hover">
+                    Terms
+                  </a>{" "}
+                  and{" "}
+                  <a href="/privacy" target="_blank" className="font-medium text-primary hover:text-primary-hover">
+                    Privacy Policy
+                  </a>
+                  , including the zero-tolerance policy for objectionable content.
+                </span>
+              </label>
             </>
           )}
 
