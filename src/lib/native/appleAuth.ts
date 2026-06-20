@@ -24,6 +24,7 @@
  *   nonce verbatim, which is why googleAuth.ts passes no nonce at all.)
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { syncNativeSessionToServer } from "./serverSession";
 
 let initialized = false;
 let initPromise: Promise<unknown> | null = null;
@@ -176,6 +177,12 @@ export async function signInWithAppleNative(
     nonce: rawNonce,
   });
   if (error) throw error;
+
+  // Establish the session server-side before the caller navigates. In iOS
+  // WKWebView the client-side cookie write from signInWithIdToken flushes
+  // asynchronously, so an immediate navigation can race ahead without the
+  // auth cookies and bounce to /login. See serverSession.ts.
+  await syncNativeSessionToServer(data.session);
 
   const createdAt = data.user?.created_at
     ? new Date(data.user.created_at).getTime()

@@ -15,6 +15,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { randomNonce, sha256Hex } from "./appleAuth";
 import { nativePlatform } from "./isNativeApp";
+import { syncNativeSessionToServer } from "./serverSession";
 
 let initializedForKey: string | null = null;
 let initPromise: Promise<unknown> | null = null;
@@ -168,6 +169,10 @@ export async function signInWithGoogleNative(
     nonce: rawNonce,
   });
   if (error) throw error;
+
+  // Establish the session server-side before the caller navigates — same
+  // WKWebView cookie-flush race the Apple flow hits. See serverSession.ts.
+  await syncNativeSessionToServer(data.session);
 
   const createdAt = data.user?.created_at
     ? new Date(data.user.created_at).getTime()
