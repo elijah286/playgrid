@@ -1,6 +1,6 @@
 # XO Gridmaker → League Operations Platform — Implementation Plan
 
-**Status:** Wave 0 built on branch `league/wave-0-foundation` (uncommitted, not merged, not applied to prod) — see [WAVE-0.md](WAVE-0.md). Tracks A–D not started.
+**Status:** On branch `league/wave-0-foundation` (committed, not merged, not applied to prod). Done: Wave 0 foundation ([WAVE-0.md](WAVE-0.md)), Track A registration core ([TRACK-A.md](TRACK-A.md)), Track B console shell ([TRACK-B.md](TRACK-B.md)). Pending: Track A parent-intake UI + Stripe Connect; Track B CRUD/roster; Tracks C/D.
 **Pilot:** Waco-area youth football, spring 2027 · **Driver:** replace operator's ~$30k/yr registration tool
 **Author:** grounded in a 10-subsystem codebase investigation (auth, schema, payments, Cal, comms, playbook domain, iOS compliance, feature-gating, existing tenancy).
 

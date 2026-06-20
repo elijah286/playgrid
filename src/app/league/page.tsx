@@ -1,47 +1,47 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
-import { getCurrentLeagueMemberships } from "@/lib/league/access";
+import { getMyLeagues } from "@/lib/league/console";
 
 export const metadata: Metadata = {
   title: "League Operations · XO Gridmaker",
 };
 
-/**
- * Wave 0 foundation preview. The layout has already gated access, so the user
- * here is a league member. The full operator console arrives in a later track;
- * this page exists to prove the gate + membership wiring end-to-end.
- */
+/** League picker. The layout has already gated access to league members. */
 export default async function LeagueHomePage() {
-  const memberships = await getCurrentLeagueMemberships();
+  const leagues = await getMyLeagues();
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-12 text-foreground">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-        Foundation preview
-      </p>
-      <h1 className="mt-1 text-2xl font-extrabold tracking-tight">
-        League Operations
-      </h1>
+      <h1 className="text-2xl font-extrabold tracking-tight">League Operations</h1>
       <p className="mt-2 text-sm text-muted">
-        This surface is gated and invisible to everyone except league members.
-        The operator console (dashboard, registration, rosters, communications)
-        ships in the next tracks.
+        Select a league to open its operator console.
       </p>
 
-      <h2 className="mt-8 text-sm font-semibold">Your league memberships</h2>
-      <ul className="mt-3 space-y-2 text-sm">
-        {memberships.map((m) => (
-          <li
-            key={`${m.leagueId}-${m.role}`}
-            className="rounded-lg border px-4 py-3"
-          >
-            <span className="text-muted">League</span>{" "}
-            <code className="text-foreground">{m.leagueId}</code>{" "}
-            <span className="text-muted">— role</span>{" "}
-            <strong>{m.role}</strong>
-          </li>
-        ))}
-      </ul>
+      {leagues.length === 0 ? (
+        <p className="mt-8 rounded-lg border px-4 py-6 text-sm text-muted">
+          You don&apos;t belong to any league yet.
+        </p>
+      ) : (
+        <ul className="mt-6 space-y-3">
+          {leagues.map((l) => (
+            <li key={l.id}>
+              <Link
+                href={`/league/${l.id}`}
+                className="block rounded-lg border px-4 py-3 transition hover:bg-foreground/5"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-semibold">{l.name}</span>
+                  <span className="text-xs uppercase tracking-wide text-muted">
+                    {l.sport}
+                  </span>
+                </div>
+                <div className="mt-1 text-xs text-muted">{l.roles.join(" · ")}</div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
