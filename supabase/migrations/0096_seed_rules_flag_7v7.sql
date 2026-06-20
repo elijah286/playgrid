@@ -7,6 +7,64 @@
 -- Body-specific deltas should be added as separate documents later.
 --
 -- All rows authoritative=false / needs_review=true.
+--
+-- Rebuild-from-scratch guard: these rules seeds (0096–0103) historically run
+-- before 0115 created rag_documents / rag_document_revisions. On an existing
+-- database (including production) the tables already exist, so the blocks below
+-- are harmless no-ops; on a fresh `supabase db reset` they let the seeds apply
+-- in order. 0115 stays the canonical definition (indexes, RLS, policies, comments).
+create extension if not exists vector;
+
+create table if not exists public.rag_documents (
+  id                uuid        primary key default gen_random_uuid(),
+  scope             text        not null check (scope in ('global','playbook')),
+  scope_id          uuid,
+  topic             text        not null,
+  subtopic          text,
+  title             text        not null,
+  content           text        not null,
+  sport_variant     text,
+  game_level        text,
+  sanctioning_body  text,
+  age_division      text,
+  -- Includes 'catalog' (the value the later 20260512 migration widens this
+  -- check to) so the GENERATED catalog seed (0200) applies on a fresh rebuild
+  -- without hand-editing it. End-state constraint is identical to production.
+  source            text        not null check (source in ('seed','admin_chat','coach_chat','official_pdf','catalog')),
+  source_url        text,
+  source_note       text,
+  authoritative     boolean     not null default false,
+  needs_review      boolean     not null default false,
+  last_verified_at  timestamptz,
+  verified_by       uuid        references auth.users(id) on delete set null,
+  created_by        uuid        references auth.users(id) on delete set null,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now(),
+  retired_at        timestamptz,
+  embedding         vector(1536),
+  constraint rag_documents_scope_id_check check (
+    (scope = 'global'   and scope_id is null) or
+    (scope = 'playbook' and scope_id is not null)
+  )
+);
+
+create table if not exists public.rag_document_revisions (
+  id                uuid        primary key default gen_random_uuid(),
+  document_id       uuid        not null references public.rag_documents(id) on delete cascade,
+  revision_number   int         not null,
+  title             text        not null,
+  content           text        not null,
+  source            text        not null,
+  source_url        text,
+  source_note       text,
+  authoritative     boolean     not null,
+  needs_review      boolean     not null,
+  change_kind       text        not null check (change_kind in ('create','edit','verify','retire','restore')),
+  change_summary    text,
+  changed_by        uuid        references auth.users(id) on delete set null,
+  created_at        timestamptz not null default now(),
+  unique (document_id, revision_number)
+);
 
 insert into public.rag_documents (
   scope, scope_id,
