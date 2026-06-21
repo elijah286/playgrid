@@ -217,7 +217,7 @@ export default async function LeagueDashboardPage({
       <div className="mb-2 mt-8 text-xs font-medium text-muted">Workflows</div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <WorkflowTile
-          soon
+          href={`/league/${leagueId}/registration`}
           icon={<ClipboardList className="size-5" />}
           title="Registration & payments"
           status={r.total === 0 ? "Set up registration" : `${r.total} signups`}
