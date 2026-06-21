@@ -2,6 +2,7 @@
 
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { getPublicRegistration } from "@/lib/league/public-registration";
+import { getLeagueStripeAccount, createRegistrationCheckout } from "@/lib/league/payments";
 
 export type RegistrationSubmission = {
   playerFirstName: string;
@@ -27,7 +28,7 @@ function isEmail(s: string): boolean {
 export async function submitPublicRegistrationAction(
   leagueId: string,
   input: RegistrationSubmission,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true; checkoutUrl?: string } | { ok: false; error: string }> {
   const data = await getPublicRegistration(leagueId);
   if (!data) return { ok: false, error: "This registration link isn't valid." };
   if (!data.isOpen) return { ok: false, error: "Registration is closed for this league." };
@@ -75,6 +76,26 @@ export async function submitPublicRegistrationAction(
       quantity: 1,
     }));
     await admin.from("league_registration_purchases").insert(rows);
+  }
+
+  // If the operator has Stripe enabled and there's a balance due, send the
+  // family to hosted checkout. Otherwise the registration stays unpaid and the
+  // operator settles offline (the pre-payments behavior).
+  const account = await getLeagueStripeAccount(leagueId);
+  if (account.chargesEnabled && account.accountId) {
+    try {
+      const url = await createRegistrationCheckout({
+        leagueId,
+        registrationId: reg.id as string,
+        leagueName: data.leagueName,
+        feeCents: data.feeCents,
+        items: chosen.map((i) => ({ name: i.name, priceCents: i.priceCents })),
+        connectedAccountId: account.accountId,
+      });
+      if (url) return { ok: true, checkoutUrl: url };
+    } catch {
+      // Payment setup failed — fall through to unpaid; operator can follow up.
+    }
   }
 
   return { ok: true };

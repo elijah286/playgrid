@@ -11,6 +11,17 @@ import { projectSystemNoticesToAdmins } from "@/lib/notifications/inbox-dispatch
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/** Mark a league registration paid once its Checkout Session completes. */
+async function markRegistrationPaid(session: Stripe.Checkout.Session): Promise<void> {
+  const regId = session.metadata?.registration_id;
+  if (!regId) return;
+  const admin = createServiceRoleClient();
+  await admin
+    .from("player_registrations")
+    .update({ payment_status: "paid", paid_at: new Date().toISOString() })
+    .eq("id", regId);
+}
+
 async function upsertSubscriptionFromStripe(sub: Stripe.Subscription): Promise<string> {
   const admin = createServiceRoleClient();
   const config = await getStripeConfig();
@@ -378,6 +389,11 @@ export async function POST(req: Request): Promise<NextResponse> {
           session.metadata?.pack_kind === "coach_cal_messages"
         ) {
           await applyCoachCalPackPurchase(session);
+        } else if (
+          session.mode === "payment" &&
+          session.metadata?.kind === "league_registration"
+        ) {
+          await markRegistrationPaid(session);
         }
         break;
       }

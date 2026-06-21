@@ -73,8 +73,15 @@ export function PublicRegistrationForm({
     };
     startTransition(async () => {
       const r = await submitPublicRegistrationAction(leagueId, payload);
-      if (!r.ok) setError(r.error);
-      else setDone(true);
+      if (!r.ok) {
+        setError(r.error);
+        return;
+      }
+      if (r.checkoutUrl) {
+        globalThis.location.href = r.checkoutUrl;
+        return;
+      }
+      setDone(true);
     });
   }
 
