@@ -44,7 +44,15 @@ export default async function LeagueDashboardPage({
       <h1 className="mt-2 text-2xl font-extrabold tracking-tight">{dash.league.name}</h1>
       <p className="mt-1 text-xs uppercase tracking-wide text-muted">{dash.league.sport}</p>
 
-      <h2 className="mt-8 text-sm font-semibold">Structure</h2>
+      <div className="mt-8 flex items-center justify-between">
+        <h2 className="text-sm font-semibold">Structure</h2>
+        <Link
+          href={`/league/${leagueId}/divisions`}
+          className="text-xs font-medium text-primary hover:underline"
+        >
+          Manage divisions →
+        </Link>
+      </div>
       <div className="mt-3 grid grid-cols-3 gap-3">
         <Stat label="Divisions" value={dash.divisions} />
         <Stat label="Teams" value={dash.teams} />
