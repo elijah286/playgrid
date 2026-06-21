@@ -11,6 +11,8 @@ import {
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { canUseAiFeatures, tierAtLeast } from "@/lib/billing/features";
 import { withTimeout } from "@/lib/perf/with-timeout";
+import { redirect } from "next/navigation";
+import { isLeagueOrganizer } from "@/lib/league/access";
 import { DashboardClient } from "./ui";
 
 // Bound how long a single dashboard data fetch can stall before the page
@@ -26,6 +28,18 @@ type Props = {
 };
 
 export default async function HomePage({ searchParams }: Props) {
+  // League operators land on their league console (their home) instead of the
+  // coach dashboard. Fail-open by construction: isLeagueOrganizer() returns
+  // false for non-organizers / signed-out / kill-switch / query errors, and we
+  // wrap it so any infra error also falls through to the normal coach home.
+  let isOrganizer = false;
+  try {
+    isOrganizer = await isLeagueOrganizer();
+  } catch {
+    isOrganizer = false;
+  }
+  if (isOrganizer) redirect("/league");
+
   const { error: errFromQuery, tab, welcome } = await searchParams;
   const [
     res,

@@ -1,20 +1,88 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import {
+  AlertTriangle,
+  Calendar,
+  ChevronRight,
+  ClipboardList,
+  Megaphone,
+  Palette,
+  Settings,
+  ShoppingBag,
+  BookOpen,
+  Users,
+} from "lucide-react";
 
 import { getCurrentLeagueMemberships } from "@/lib/league/access";
 import { loadLeagueDashboard } from "@/lib/league/console";
 
 export const metadata: Metadata = {
-  title: "League Console · XO Gridmaker",
+  title: "League console · XO Gridmaker",
 };
 
-function Stat({ label, value, hint }: { label: string; value: number; hint?: string }) {
+function GlanceCard({ label, icon, children }: { label: string; icon: ReactNode; children: ReactNode }) {
   return (
-    <div className="rounded-lg border px-4 py-3">
-      <div className="text-2xl font-bold tabular-nums">{value}</div>
-      <div className="text-xs font-medium text-foreground">{label}</div>
-      {hint ? <div className="mt-0.5 text-xs text-muted">{hint}</div> : null}
+    <div className="rounded-2xl border border-border bg-surface-raised p-4">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-muted">
+        {icon}
+        {label}
+      </div>
+      <div className="mt-1.5">{children}</div>
+    </div>
+  );
+}
+
+function WorkflowTile({
+  href,
+  soon,
+  icon,
+  title,
+  status,
+}: {
+  href?: string;
+  soon?: boolean;
+  icon: ReactNode;
+  title: string;
+  status: string;
+}) {
+  const inner = (
+    <>
+      <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-surface-inset text-foreground">
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          {title}
+          {soon ? (
+            <span className="rounded-full bg-surface-inset px-2 py-0.5 text-[11px] font-medium text-muted">
+              Soon
+            </span>
+          ) : null}
+        </div>
+        <div className="text-xs text-muted">{status}</div>
+      </div>
+      {!soon ? <ChevronRight className="size-4 text-muted" /> : null}
+    </>
+  );
+  const cls =
+    "flex items-center gap-3 rounded-2xl border border-border bg-surface-raised px-4 py-3.5";
+  return href && !soon ? (
+    <Link href={href} className={`${cls} transition hover:bg-foreground/5`}>
+      {inner}
+    </Link>
+  ) : (
+    <div className={`${cls} opacity-75`}>{inner}</div>
+  );
+}
+
+function MoreItem({ icon, label }: { icon: ReactNode; label: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2.5 text-sm text-muted opacity-75">
+      {icon}
+      {label}
+      <span className="ml-auto rounded-full bg-surface-inset px-2 py-0.5 text-[11px] font-medium">Soon</span>
     </div>
   );
 }
@@ -26,54 +94,127 @@ export default async function LeagueDashboardPage({
 }) {
   const { leagueId } = await params;
 
-  // Per-league isolation: a member of league A cannot open league B's console,
-  // even though the (league) layout confirmed membership in *some* league.
   const memberships = await getCurrentLeagueMemberships();
   if (!memberships.some((m) => m.leagueId === leagueId)) notFound();
+  const hasMultipleLeagues = new Set(memberships.map((m) => m.leagueId)).size > 1;
 
   const dash = await loadLeagueDashboard(leagueId);
   if (!dash) notFound();
 
   const r = dash.registrations;
 
-  return (
-    <div className="mx-auto max-w-3xl px-6 py-12 text-foreground">
-      <Link href="/league" className="text-xs text-muted hover:underline">
-        ← All leagues
-      </Link>
-      <h1 className="mt-2 text-2xl font-extrabold tracking-tight">{dash.league.name}</h1>
-      <p className="mt-1 text-xs uppercase tracking-wide text-muted">{dash.league.sport}</p>
+  const actions: string[] = [];
+  if (r.needsReview > 0) actions.push(`Approve ${r.needsReview} registration${r.needsReview === 1 ? "" : "s"}`);
+  if (r.unrostered > 0) actions.push(`Place ${r.unrostered} unrostered player${r.unrostered === 1 ? "" : "s"}`);
+  if (dash.divisions === 0) actions.push("Add your first division");
+  else if (dash.teams === 0) actions.push("Create your first team");
 
-      <div className="mt-8 flex items-center justify-between">
-        <h2 className="text-sm font-semibold">Structure</h2>
+  return (
+    <div className="mx-auto max-w-5xl px-4 py-8 text-foreground sm:px-6">
+      {/* context bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+          {hasMultipleLeagues ? (
+            <>
+              <Link href="/league" className="hover:underline">
+                Leagues
+              </Link>
+              <ChevronRight className="size-3.5" />
+            </>
+          ) : null}
+          <span className="font-medium text-foreground">{dash.league.name}</span>
+        </div>
         <Link
-          href={`/league/${leagueId}/divisions`}
-          className="text-xs font-medium text-primary hover:underline"
+          href="/playbooks"
+          className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-foreground/5"
         >
-          Manage divisions →
+          Coach view
         </Link>
       </div>
-      <div className="mt-3 grid grid-cols-3 gap-3">
-        <Stat label="Divisions" value={dash.divisions} />
-        <Stat label="Teams" value={dash.teams} />
-        <Stat label="Coaches" value={dash.coaches} />
+
+      <div className="pb-5 pt-5">
+        <h1 className="text-2xl font-extrabold tracking-tight">{dash.league.name}</h1>
+        <p className="mt-1 text-sm text-muted">
+          <span className="capitalize">{dash.league.sport}</span> · {dash.teams}{" "}
+          {dash.teams === 1 ? "team" : "teams"} · {r.total} {r.total === 1 ? "player" : "players"}
+        </p>
       </div>
 
-      <h2 className="mt-8 text-sm font-semibold">Registrations</h2>
-      <div className="mt-3 grid grid-cols-3 gap-3">
-        <Stat label="Total" value={r.total} />
-        <Stat label="Needs review" value={r.needsReview} hint="Submitted, awaiting a decision" />
-        <Stat label="Unrostered" value={r.unrostered} hint="Approved or waitlisted" />
-      </div>
-      <div className="mt-3 grid grid-cols-3 gap-3">
-        <Stat label="Approved" value={r.byStatus.approved} />
-        <Stat label="Rostered" value={r.byStatus.rostered} />
-        <Stat label="Waitlisted" value={r.byStatus.waitlisted} />
+      {/* at a glance */}
+      <div className="mb-2 text-xs font-medium text-muted">At a glance</div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <GlanceCard label="Registration" icon={<ClipboardList className="size-4" />}>
+          {r.total === 0 ? (
+            <p className="text-sm text-muted">Not open yet.</p>
+          ) : (
+            <>
+              <div className="text-2xl font-bold tabular-nums">{r.total}</div>
+              <div className="mt-2 flex justify-between text-xs">
+                <span className="text-emerald-600 dark:text-emerald-400">{r.byStatus.approved + r.byStatus.rostered} active</span>
+                {r.needsReview > 0 ? (
+                  <span className="text-amber-600 dark:text-amber-400">{r.needsReview} to review</span>
+                ) : null}
+              </div>
+            </>
+          )}
+        </GlanceCard>
+
+        <GlanceCard label="Roster gaps" icon={<Users className="size-4" />}>
+          <div className="text-2xl font-bold tabular-nums">
+            {r.unrostered} <span className="text-sm font-normal text-muted">unrostered</span>
+          </div>
+          <div className="mt-2 text-xs text-muted">
+            {dash.divisions} {dash.divisions === 1 ? "division" : "divisions"} · {dash.coaches}{" "}
+            {dash.coaches === 1 ? "coach" : "coaches"}
+          </div>
+        </GlanceCard>
+
+        <GlanceCard label="What's coming up" icon={<Calendar className="size-4" />}>
+          <p className="text-sm text-muted">No events scheduled yet.</p>
+        </GlanceCard>
+
+        <GlanceCard label="Action items" icon={<AlertTriangle className="size-4" />}>
+          {actions.length === 0 ? (
+            <p className="text-sm text-muted">You&apos;re all caught up.</p>
+          ) : (
+            <ul className="space-y-1 text-sm">
+              {actions.map((a) => (
+                <li key={a} className="text-foreground">
+                  {a}
+                </li>
+              ))}
+            </ul>
+          )}
+        </GlanceCard>
       </div>
 
-      <p className="mt-8 text-xs text-muted">
-        Roster management, registration review, and communications arrive in the next console slices.
-      </p>
+      {/* workflows */}
+      <div className="mb-2 mt-8 text-xs font-medium text-muted">Workflows</div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <WorkflowTile
+          soon
+          icon={<ClipboardList className="size-5" />}
+          title="Registration & payments"
+          status={r.total === 0 ? "Set up registration" : `${r.total} signups`}
+        />
+        <WorkflowTile
+          href={`/league/${leagueId}/divisions`}
+          icon={<Users className="size-5" />}
+          title="Roster, teams & coaches"
+          status={`${dash.divisions} ${dash.divisions === 1 ? "division" : "divisions"} · teams coming soon`}
+        />
+        <WorkflowTile soon icon={<Megaphone className="size-5" />} title="Communications" status="Send an announcement" />
+        <WorkflowTile soon icon={<Calendar className="size-5" />} title="Schedule & events" status="Build the calendar" />
+      </div>
+
+      {/* more */}
+      <div className="mb-2 mt-8 text-xs font-medium text-muted">More</div>
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        <MoreItem icon={<BookOpen className="size-4" />} label="Playbooks & drills" />
+        <MoreItem icon={<Palette className="size-4" />} label="Branding" />
+        <MoreItem icon={<ShoppingBag className="size-4" />} label="Store" />
+        <MoreItem icon={<Settings className="size-4" />} label="Settings" />
+      </div>
     </div>
   );
 }
