@@ -228,7 +228,12 @@ export default async function LeagueDashboardPage({
           title="Roster, teams & coaches"
           status={`${dash.teams} ${dash.teams === 1 ? "team" : "teams"} · ${dash.divisions} ${dash.divisions === 1 ? "division" : "divisions"}`}
         />
-        <WorkflowTile soon icon={<Megaphone className="size-5" />} title="Communications" status="Send an announcement" />
+        <WorkflowTile
+          href={`/league/${leagueId}/communications`}
+          icon={<Megaphone className="size-5" />}
+          title="Communications"
+          status="Send an announcement"
+        />
         <WorkflowTile
           href={`/league/${leagueId}/schedule`}
           icon={<Calendar className="size-5" />}
