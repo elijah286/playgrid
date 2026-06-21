@@ -30,7 +30,8 @@ export default async function DivisionsPage({
       </Link>
       <h1 className="mt-2 text-2xl font-extrabold tracking-tight">Divisions</h1>
       <p className="mt-1 text-sm text-muted">
-        Age groups for this league. Birthdate windows drive eligibility checks at registration.
+        Age groups for this league. Co-ed is pre-filled — turn on Boys/Girls per age, mark which run
+        this season, and set birthdate windows (they flag eligibility at registration, never hard-block).
       </p>
 
       <div className="mt-6">
