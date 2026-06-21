@@ -77,6 +77,12 @@ function WorkflowTile({
   );
 }
 
+function shortDate(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 function MoreItem({ icon, label }: { icon: ReactNode; label: string }) {
   return (
     <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2.5 text-sm text-muted opacity-75">
@@ -178,7 +184,18 @@ export default async function LeagueDashboardPage({
         </GlanceCard>
 
         <GlanceCard label="What's coming up" icon={<Calendar className="size-4" />}>
-          <p className="text-sm text-muted">No events scheduled yet.</p>
+          {dash.upcoming.length === 0 ? (
+            <p className="text-sm text-muted">No events scheduled yet.</p>
+          ) : (
+            <ul className="space-y-1 text-sm">
+              {dash.upcoming.map((e) => (
+                <li key={e.id} className="flex gap-2">
+                  <span className="shrink-0 text-muted">{shortDate(e.startsAt)}</span>
+                  <span className="truncate text-foreground">{e.title}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </GlanceCard>
 
         <GlanceCard label="Action items" icon={<AlertTriangle className="size-4" />}>
@@ -212,7 +229,12 @@ export default async function LeagueDashboardPage({
           status={`${dash.teams} ${dash.teams === 1 ? "team" : "teams"} · ${dash.divisions} ${dash.divisions === 1 ? "division" : "divisions"}`}
         />
         <WorkflowTile soon icon={<Megaphone className="size-5" />} title="Communications" status="Send an announcement" />
-        <WorkflowTile soon icon={<Calendar className="size-5" />} title="Schedule & events" status="Build the calendar" />
+        <WorkflowTile
+          href={`/league/${leagueId}/schedule`}
+          icon={<Calendar className="size-5" />}
+          title="Schedule & events"
+          status={dash.upcoming.length > 0 ? `Next: ${dash.upcoming[0].title}` : "Add games & practices"}
+        />
       </div>
 
       {/* more */}

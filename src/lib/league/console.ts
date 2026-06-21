@@ -84,6 +84,13 @@ export async function getMyLeagues(): Promise<LeagueListItem[]> {
   }));
 }
 
+export type UpcomingEvent = {
+  id: string;
+  title: string;
+  startsAt: string;
+  kind: string;
+};
+
 export type LeagueDashboard = {
   league: { id: string; name: string; sport: string };
   divisions: number;
@@ -91,6 +98,7 @@ export type LeagueDashboard = {
   teamsWithoutCoach: number;
   coaches: number;
   registrations: RegistrationSummary;
+  upcoming: UpcomingEvent[];
 };
 
 /** Operational summary for one league. Returns null if not visible to the user. */
@@ -106,7 +114,8 @@ export async function loadLeagueDashboard(
     .maybeSingle();
   if (!league) return null;
 
-  const [divs, teams, regs, coaches] = await Promise.all([
+  const nowIso = new Date().toISOString();
+  const [divs, teams, regs, coaches, events] = await Promise.all([
     supabase.from("league_divisions").select("id").eq("league_id", leagueId),
     supabase.from("teams").select("id, head_coach_name").eq("league_id", leagueId),
     supabase.from("player_registrations").select("status").eq("league_id", leagueId),
@@ -115,6 +124,13 @@ export async function loadLeagueDashboard(
       .select("user_id")
       .eq("league_id", leagueId)
       .eq("role", "coach"),
+    supabase
+      .from("league_events")
+      .select("id, title, starts_at, kind")
+      .eq("league_id", leagueId)
+      .gte("starts_at", nowIso)
+      .order("starts_at", { ascending: true })
+      .limit(3),
   ]);
 
   return {
@@ -130,5 +146,11 @@ export async function loadLeagueDashboard(
     registrations: summarizeRegistrations(
       (regs.data ?? []) as { status: RegistrationStatus }[],
     ),
+    upcoming: (events.data ?? []).map((e) => ({
+      id: e.id as string,
+      title: e.title as string,
+      startsAt: e.starts_at as string,
+      kind: e.kind as string,
+    })),
   };
 }
