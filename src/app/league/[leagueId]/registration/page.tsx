@@ -6,9 +6,11 @@ import QRCode from "qrcode";
 import { getCurrentLeagueMemberships } from "@/lib/league/access";
 import { getRegistrationConfigAction } from "@/app/actions/league-registration-config";
 import { listStoreItemsAction } from "@/app/actions/league-store";
+import { listRegistrationsAction } from "@/app/actions/league-registrations";
 import { RegistrationSettings } from "@/features/league/RegistrationSettings";
 import { StoreItemsManager } from "@/features/league/StoreItemsManager";
 import { ShareRegistrationLink } from "@/features/league/ShareRegistrationLink";
+import { RegistrationsReview } from "@/features/league/RegistrationsReview";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com";
 
@@ -27,11 +29,13 @@ export default async function RegistrationPage({
   if (!memberships.some((m) => m.leagueId === leagueId)) notFound();
 
   const registerUrl = `${SITE_URL}/register/${leagueId}`;
-  const [config, store, qrDataUrl] = await Promise.all([
+  const [config, store, registrations, qrDataUrl] = await Promise.all([
     getRegistrationConfigAction(leagueId),
     listStoreItemsAction(leagueId),
+    listRegistrationsAction(leagueId),
     QRCode.toDataURL(registerUrl, { width: 264, margin: 1 }),
   ]);
+  const regItems = registrations.ok ? registrations.items : [];
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-12 text-foreground sm:px-6">
@@ -45,6 +49,11 @@ export default async function RegistrationPage({
 
       <h2 className="mb-2 mt-7 text-sm font-semibold">Share with families</h2>
       <ShareRegistrationLink url={registerUrl} qrDataUrl={qrDataUrl} />
+
+      <h2 className="mb-2 mt-8 text-sm font-semibold">
+        Registrations{regItems.length > 0 ? ` (${regItems.length})` : ""}
+      </h2>
+      <RegistrationsReview leagueId={leagueId} initialItems={regItems} />
 
       <h2 className="mb-2 mt-8 text-sm font-semibold">Settings</h2>
       <RegistrationSettings leagueId={leagueId} initial={config} />
