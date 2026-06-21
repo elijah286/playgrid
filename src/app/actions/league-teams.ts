@@ -11,6 +11,8 @@ export type LeagueTeamRow = {
   id: string;
   name: string;
   divisionId: string | null;
+  headCoachName: string | null;
+  headCoachEmail: string | null;
 };
 
 type Client = Awaited<ReturnType<typeof createClient>>;
@@ -44,7 +46,7 @@ export async function listLeagueTeamsAction(leagueId: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("teams")
-    .select("id, name, league_division_id")
+    .select("id, name, league_division_id, head_coach_name, head_coach_email")
     .eq("league_id", leagueId)
     .order("name", { ascending: true });
   if (error) return { ok: false as const, error: error.message, items: [] as LeagueTeamRow[] };
@@ -52,19 +54,33 @@ export async function listLeagueTeamsAction(leagueId: string) {
     id: r.id as string,
     name: r.name as string,
     divisionId: (r.league_division_id as string | null) ?? null,
+    headCoachName: (r.head_coach_name as string | null) ?? null,
+    headCoachEmail: (r.head_coach_email as string | null) ?? null,
   }));
   return { ok: true as const, items };
 }
 
-export async function createLeagueTeamAction(
-  leagueId: string,
-  name: string,
-  divisionId?: string | null,
-) {
+export type LeagueTeamInput = {
+  name: string;
+  divisionId?: string | null;
+  headCoachName?: string | null;
+  headCoachEmail?: string | null;
+};
+
+function teamFields(input: LeagueTeamInput) {
+  return {
+    name: input.name.trim(),
+    league_division_id: input.divisionId || null,
+    head_coach_name: input.headCoachName?.trim() || null,
+    head_coach_email: input.headCoachEmail?.trim() || null,
+  };
+}
+
+export async function createLeagueTeamAction(leagueId: string, input: LeagueTeamInput) {
   const gate = await gateAdmin(leagueId);
   if (!gate.ok) return gate;
-  const trimmed = name.trim();
-  if (!trimmed) return { ok: false as const, error: "Team name is required." };
+  const fields = teamFields(input);
+  if (!fields.name) return { ok: false as const, error: "Team name is required." };
 
   const orgId = await operatorOrgId(gate.supabase, gate.userId);
   if (!orgId) return { ok: false as const, error: "No workspace found for your account." };
@@ -72,8 +88,7 @@ export async function createLeagueTeamAction(
   const { error } = await gate.supabase.from("teams").insert({
     org_id: orgId,
     league_id: leagueId,
-    league_division_id: divisionId || null,
-    name: trimmed,
+    ...fields,
   });
   if (error) return { ok: false as const, error: error.message };
   revalidatePath(`/league/${leagueId}/teams`);
@@ -83,17 +98,16 @@ export async function createLeagueTeamAction(
 export async function updateLeagueTeamAction(
   leagueId: string,
   teamId: string,
-  name: string,
-  divisionId?: string | null,
+  input: LeagueTeamInput,
 ) {
   const gate = await gateAdmin(leagueId);
   if (!gate.ok) return gate;
-  const trimmed = name.trim();
-  if (!trimmed) return { ok: false as const, error: "Team name is required." };
+  const fields = teamFields(input);
+  if (!fields.name) return { ok: false as const, error: "Team name is required." };
 
   const { error } = await gate.supabase
     .from("teams")
-    .update({ name: trimmed, league_division_id: divisionId || null })
+    .update(fields)
     .eq("id", teamId)
     .eq("league_id", leagueId);
   if (error) return { ok: false as const, error: error.message };

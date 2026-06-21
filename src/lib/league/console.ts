@@ -88,6 +88,7 @@ export type LeagueDashboard = {
   league: { id: string; name: string; sport: string };
   divisions: number;
   teams: number;
+  teamsWithoutCoach: number;
   coaches: number;
   registrations: RegistrationSummary;
 };
@@ -107,7 +108,7 @@ export async function loadLeagueDashboard(
 
   const [divs, teams, regs, coaches] = await Promise.all([
     supabase.from("league_divisions").select("id").eq("league_id", leagueId),
-    supabase.from("teams").select("id").eq("league_id", leagueId),
+    supabase.from("teams").select("id, head_coach_name").eq("league_id", leagueId),
     supabase.from("player_registrations").select("status").eq("league_id", leagueId),
     supabase
       .from("league_members")
@@ -124,6 +125,7 @@ export async function loadLeagueDashboard(
     },
     divisions: divs.data?.length ?? 0,
     teams: teams.data?.length ?? 0,
+    teamsWithoutCoach: (teams.data ?? []).filter((t) => !t.head_coach_name).length,
     coaches: coaches.data?.length ?? 0,
     registrations: summarizeRegistrations(
       (regs.data ?? []) as { status: RegistrationStatus }[],

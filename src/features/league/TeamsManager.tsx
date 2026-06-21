@@ -13,6 +13,8 @@ import {
 type Division = { id: string; name: string };
 type Msg = { kind: "error" | "success"; text: string } | null;
 
+const EMPTY = { name: "", divisionId: "", coachName: "", coachEmail: "" };
+
 export function TeamsManager({
   leagueId,
   initialTeams,
@@ -23,8 +25,7 @@ export function TeamsManager({
   divisions: Division[];
 }) {
   const [teams, setTeams] = useState(initialTeams);
-  const [name, setName] = useState("");
-  const [divisionId, setDivisionId] = useState("");
+  const [form, setForm] = useState(EMPTY);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [msg, setMsg] = useState<Msg>(null);
   const [pending, startTransition] = useTransition();
@@ -33,15 +34,18 @@ export function TeamsManager({
     id ? divisions.find((d) => d.id === id)?.name ?? "—" : "—";
 
   function reset() {
-    setName("");
-    setDivisionId("");
+    setForm(EMPTY);
     setEditingId(null);
   }
 
   function startEdit(t: LeagueTeamRow) {
     setEditingId(t.id);
-    setName(t.name);
-    setDivisionId(t.divisionId ?? "");
+    setForm({
+      name: t.name,
+      divisionId: t.divisionId ?? "",
+      coachName: t.headCoachName ?? "",
+      coachEmail: t.headCoachEmail ?? "",
+    });
     setMsg(null);
   }
 
@@ -53,12 +57,18 @@ export function TeamsManager({
   }
 
   function submit() {
-    if (!name.trim()) return;
+    if (!form.name.trim()) return;
     setMsg(null);
+    const input = {
+      name: form.name,
+      divisionId: form.divisionId || null,
+      headCoachName: form.coachName || null,
+      headCoachEmail: form.coachEmail || null,
+    };
     startTransition(async () => {
       const r = editingId
-        ? await updateLeagueTeamAction(leagueId, editingId, name, divisionId || null)
-        : await createLeagueTeamAction(leagueId, name, divisionId || null);
+        ? await updateLeagueTeamAction(leagueId, editingId, input)
+        : await createLeagueTeamAction(leagueId, input);
       if (!r.ok) {
         setMsg({ kind: "error", text: r.error });
         return;
@@ -90,8 +100,8 @@ export function TeamsManager({
           <label className="block text-sm">
             <span className="font-medium text-foreground">Team name</span>
             <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder="e.g. Cowboys"
               className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             />
@@ -99,8 +109,8 @@ export function TeamsManager({
           <label className="block text-sm">
             <span className="font-medium text-foreground">Division</span>
             <select
-              value={divisionId}
-              onChange={(e) => setDivisionId(e.target.value)}
+              value={form.divisionId}
+              onChange={(e) => setForm({ ...form, divisionId: e.target.value })}
               className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             >
               <option value="">Unassigned</option>
@@ -111,11 +121,30 @@ export function TeamsManager({
               ))}
             </select>
           </label>
+          <label className="block text-sm">
+            <span className="font-medium text-foreground">Head coach</span>
+            <input
+              value={form.coachName}
+              onChange={(e) => setForm({ ...form, coachName: e.target.value })}
+              placeholder="Coach name (optional)"
+              className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="font-medium text-foreground">Coach email</span>
+            <input
+              type="email"
+              value={form.coachEmail}
+              onChange={(e) => setForm({ ...form, coachEmail: e.target.value })}
+              placeholder="coach@example.com (optional)"
+              className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </label>
         </div>
         <div className="mt-3 flex items-center gap-2">
           <button
             type="button"
-            disabled={pending || !name.trim()}
+            disabled={pending || !form.name.trim()}
             onClick={submit}
             className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
           >
@@ -153,13 +182,14 @@ export function TeamsManager({
             <tr>
               <th className="px-4 py-3">Team</th>
               <th className="px-4 py-3">Division</th>
+              <th className="px-4 py-3">Head coach</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {teams.length === 0 ? (
               <tr>
-                <td colSpan={3} className="px-4 py-8 text-center text-sm text-muted">
+                <td colSpan={4} className="px-4 py-8 text-center text-sm text-muted">
                   No teams yet. Add your first team above.
                 </td>
               </tr>
@@ -168,6 +198,13 @@ export function TeamsManager({
                 <tr key={t.id}>
                   <td className="px-4 py-3 font-medium text-foreground">{t.name}</td>
                   <td className="px-4 py-3 text-muted">{divisionName(t.divisionId)}</td>
+                  <td className="px-4 py-3">
+                    {t.headCoachName ? (
+                      <span className="text-foreground">{t.headCoachName}</span>
+                    ) : (
+                      <span className="text-amber-600 dark:text-amber-400">Needs a coach</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1.5">
                       <button

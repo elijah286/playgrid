@@ -108,6 +108,8 @@ export default async function LeagueDashboardPage({
   if (r.unrostered > 0) actions.push(`Place ${r.unrostered} unrostered player${r.unrostered === 1 ? "" : "s"}`);
   if (dash.divisions === 0) actions.push("Add your first division");
   else if (dash.teams === 0) actions.push("Create your first team");
+  if (dash.teamsWithoutCoach > 0)
+    actions.push(`Assign a coach to ${dash.teamsWithoutCoach} team${dash.teamsWithoutCoach === 1 ? "" : "s"}`);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 text-foreground sm:px-6">
@@ -163,9 +165,15 @@ export default async function LeagueDashboardPage({
           <div className="text-2xl font-bold tabular-nums">
             {r.unrostered} <span className="text-sm font-normal text-muted">unrostered</span>
           </div>
+          {dash.teamsWithoutCoach > 0 ? (
+            <div className="mt-2 flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="size-3.5" />
+              {dash.teamsWithoutCoach} {dash.teamsWithoutCoach === 1 ? "team needs" : "teams need"} a coach
+            </div>
+          ) : null}
           <div className="mt-2 text-xs text-muted">
-            {dash.divisions} {dash.divisions === 1 ? "division" : "divisions"} · {dash.coaches}{" "}
-            {dash.coaches === 1 ? "coach" : "coaches"}
+            {dash.divisions} {dash.divisions === 1 ? "division" : "divisions"} · {dash.teams}{" "}
+            {dash.teams === 1 ? "team" : "teams"}
           </div>
         </GlanceCard>
 
