@@ -39,6 +39,10 @@ export async function listTeamsAction() {
     .from("teams")
     .select("id, name, theme, created_at")
     .eq("org_id", orgId)
+    // Exclude league teams — they live in the operator's org but belong to the
+    // league surface, never the coach product. (Coach teams all have league_id
+    // NULL, so this is a no-op for them.)
+    .is("league_id", null)
     .order("created_at", { ascending: true });
 
   if (error) return { ok: false as const, error: error.message, teams: [] };

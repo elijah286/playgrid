@@ -198,10 +198,10 @@ export default async function LeagueDashboardPage({
           status={r.total === 0 ? "Set up registration" : `${r.total} signups`}
         />
         <WorkflowTile
-          href={`/league/${leagueId}/divisions`}
+          href={`/league/${leagueId}/teams`}
           icon={<Users className="size-5" />}
           title="Roster, teams & coaches"
-          status={`${dash.divisions} ${dash.divisions === 1 ? "division" : "divisions"} · teams coming soon`}
+          status={`${dash.teams} ${dash.teams === 1 ? "team" : "teams"} · ${dash.divisions} ${dash.divisions === 1 ? "division" : "divisions"}`}
         />
         <WorkflowTile soon icon={<Megaphone className="size-5" />} title="Communications" status="Send an announcement" />
         <WorkflowTile soon icon={<Calendar className="size-5" />} title="Schedule & events" status="Build the calendar" />
