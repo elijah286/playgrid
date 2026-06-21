@@ -84,7 +84,19 @@ function shortDate(iso: string) {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function MoreItem({ icon, label }: { icon: ReactNode; label: string }) {
+function MoreItem({ icon, label, href }: { icon: ReactNode; label: string; href?: string }) {
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className="flex items-center gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2.5 text-sm text-foreground hover:bg-foreground/5"
+      >
+        {icon}
+        {label}
+        <ChevronRight className="ml-auto size-4 text-muted" />
+      </Link>
+    );
+  }
   return (
     <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2.5 text-sm text-muted opacity-75">
       {icon}
@@ -266,7 +278,11 @@ export default async function LeagueDashboardPage({
       {/* more */}
       <div className="mb-2 mt-8 text-xs font-medium text-muted">More</div>
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-        <MoreItem icon={<BookOpen className="size-4" />} label="Playbooks & drills" />
+        <MoreItem
+          icon={<BookOpen className="size-4" />}
+          label="Playbooks & drills"
+          href={`/league/${leagueId}/playbooks`}
+        />
         <MoreItem icon={<Palette className="size-4" />} label="Branding" />
         <MoreItem icon={<ShoppingBag className="size-4" />} label="Store" />
         <MoreItem icon={<Settings className="size-4" />} label="Settings" />
