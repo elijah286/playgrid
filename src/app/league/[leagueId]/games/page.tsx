@@ -1,0 +1,41 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+
+import { getCurrentLeagueMemberships, isLeagueAdminRole } from "@/lib/league/access";
+import { getGamesBoardAction } from "@/app/actions/league-games";
+import { GamesAndStandings } from "@/features/league/GamesAndStandings";
+
+export const metadata: Metadata = {
+  title: "Games & Standings · League Console · XO Gridmaker",
+};
+
+export default async function GamesPage({
+  params,
+}: {
+  params: Promise<{ leagueId: string }>;
+}) {
+  const { leagueId } = await params;
+
+  const memberships = await getCurrentLeagueMemberships();
+  if (!memberships.some((m) => m.leagueId === leagueId && isLeagueAdminRole(m.role))) notFound();
+
+  const res = await getGamesBoardAction(leagueId);
+  const board = res.ok && res.board ? res.board : { teams: [], games: [], standings: [] };
+
+  return (
+    <div className="mx-auto max-w-3xl px-4 py-12 text-foreground sm:px-6">
+      <Link href={`/league/${leagueId}`} className="text-xs text-muted hover:underline">
+        ← Console
+      </Link>
+      <h1 className="mt-2 text-2xl font-extrabold tracking-tight">Games &amp; Standings</h1>
+      <p className="mt-1 text-sm text-muted">
+        Schedule games between your teams, enter scores, and standings update automatically.
+      </p>
+
+      <div className="mt-6">
+        <GamesAndStandings leagueId={leagueId} initial={board} />
+      </div>
+    </div>
+  );
+}

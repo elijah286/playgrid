@@ -12,6 +12,7 @@ import {
   Settings,
   ShoppingBag,
   BookOpen,
+  Trophy,
   Users,
 } from "lucide-react";
 
@@ -247,6 +248,12 @@ export default async function LeagueDashboardPage({
           icon={<Calendar className="size-5" />}
           title="Schedule & events"
           status={dash.upcoming.length > 0 ? `Next: ${dash.upcoming[0].title}` : "Add games & practices"}
+        />
+        <WorkflowTile
+          href={`/league/${leagueId}/games`}
+          icon={<Trophy className="size-5" />}
+          title="Games & standings"
+          status="Scores & standings"
         />
       </div>
 
