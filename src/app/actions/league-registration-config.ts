@@ -67,6 +67,10 @@ export async function upsertRegistrationConfigAction(
     .select("id")
     .eq("league_id", leagueId)
     .is("division_id", null)
+    // Match the readers (getRegistrationConfig / getPublicRegistration), which
+    // both order by created_at asc — so the writer always edits the same row
+    // they consume. A unique index now prevents duplicates from forming.
+    .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
 

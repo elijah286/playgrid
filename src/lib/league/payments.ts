@@ -12,7 +12,10 @@ export async function getLeaguePlatformFeeBps(): Promise<number> {
     .eq("id", "default")
     .maybeSingle();
   const bps = data?.league_platform_fee_bps;
-  return typeof bps === "number" && bps >= 0 ? bps : 0;
+  // Clamp to [0, 100%] so a bad admin value can never make the fee exceed the
+  // charge (which would break every checkout).
+  if (typeof bps !== "number" || Number.isNaN(bps)) return 0;
+  return Math.min(10000, Math.max(0, Math.trunc(bps)));
 }
 
 export async function getLeagueStripeAccount(
@@ -49,7 +52,9 @@ export async function createRegistrationCheckout(opts: {
 
   const { stripe } = await getStripeClient();
   const feeBps = await getLeaguePlatformFeeBps();
-  const applicationFee = Math.round((total * feeBps) / 10000);
+  // Never let the application fee exceed the charge (defense-in-depth on top of
+  // the bps clamp).
+  const applicationFee = Math.min(Math.round((total * feeBps) / 10000), total);
 
   const lineItems: {
     price_data: { currency: string; unit_amount: number; product_data: { name: string } };

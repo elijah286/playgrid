@@ -1,4 +1,6 @@
 import { createServiceRoleClient } from "@/lib/supabase/admin";
+import { leagueOpsEnabled } from "@/lib/league/access";
+import { getLeagueStripeAccount } from "@/lib/league/payments";
 
 export type PublicStoreItem = {
   id: string;
@@ -15,17 +17,21 @@ export type PublicRegistrationData = {
   closedReason: "not_started" | "ended" | "closed" | null;
   feeCents: number;
   storeItems: PublicStoreItem[];
+  paymentsEnabled: boolean;
 };
 
-function computeOpen(
+export function computeOpen(
   win: { is_open: boolean; opens_at: string | null; closes_at: string | null } | null,
+  now: number = Date.now(),
 ): { open: boolean; reason: PublicRegistrationData["closedReason"] } {
   if (!win || !win.is_open) return { open: false, reason: "closed" };
-  const now = Date.now();
   if (win.opens_at && now < new Date(win.opens_at).getTime()) {
     return { open: false, reason: "not_started" };
   }
-  if (win.closes_at && now > new Date(win.closes_at).getTime()) {
+  // closes_at is stored as a date (UTC midnight). Treat it as an inclusive
+  // end-of-day boundary so a league set to "close June 25" stays open through
+  // all of June 25, not until the prior afternoon in west-of-UTC timezones.
+  if (win.closes_at && now > new Date(win.closes_at).getTime() + 24 * 60 * 60 * 1000) {
     return { open: false, reason: "ended" };
   }
   return { open: true, reason: null };
@@ -40,6 +46,9 @@ function computeOpen(
 export async function getPublicRegistration(
   leagueId: string,
 ): Promise<PublicRegistrationData | null> {
+  // Honor the platform kill switch on the public surface too.
+  if (!leagueOpsEnabled()) return null;
+
   const admin = createServiceRoleClient();
 
   const { data: league } = await admin
@@ -57,6 +66,9 @@ export async function getPublicRegistration(
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
+  // No registration configured for this league → not a public surface (also
+  // avoids leaking league names for arbitrary ids).
+  if (!win) return null;
 
   const { data: items } = await admin
     .from("league_store_items")
@@ -65,6 +77,8 @@ export async function getPublicRegistration(
     .eq("active", true)
     .order("sort_order", { ascending: true })
     .order("name", { ascending: true });
+
+  const account = await getLeagueStripeAccount(leagueId);
 
   const { open, reason } = computeOpen(
     win as { is_open: boolean; opens_at: string | null; closes_at: string | null } | null,
@@ -76,6 +90,7 @@ export async function getPublicRegistration(
     isOpen: open,
     closedReason: reason,
     feeCents: (win?.fee_cents as number) ?? 0,
+    paymentsEnabled: account.chargesEnabled && !!account.accountId,
     storeItems: (items ?? []).map((r) => ({
       id: r.id as string,
       name: r.name as string,

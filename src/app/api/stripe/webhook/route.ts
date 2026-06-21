@@ -397,6 +397,18 @@ export async function POST(req: Request): Promise<NextResponse> {
         }
         break;
       }
+      case "account.updated": {
+        // A connected operator account changed (onboarding progressed, or a
+        // capability was lost) — keep leagues.stripe_charges_enabled in sync so
+        // the cached gate that authorizes registration checkout stays accurate.
+        const account = event.data.object;
+        const admin = createServiceRoleClient();
+        await admin
+          .from("leagues")
+          .update({ stripe_charges_enabled: !!account.charges_enabled })
+          .eq("stripe_account_id", account.id);
+        break;
+      }
       case "customer.subscription.created":
       case "customer.subscription.updated":
       case "customer.subscription.deleted": {

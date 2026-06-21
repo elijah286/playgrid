@@ -35,12 +35,21 @@ const STATUS_OPTIONS: RegistrationStatus[] = [
   "withdrawn",
 ];
 
+const PAYMENT_STYLES: Record<string, string> = {
+  paid: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
+  unpaid: "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
+  refunded: "bg-surface-inset text-muted",
+  waived: "bg-surface-inset text-muted",
+};
+
 export function RegistrationsReview({
   leagueId,
   initialItems,
+  paymentsEnabled,
 }: {
   leagueId: string;
   initialItems: RegistrationListItem[];
+  paymentsEnabled: boolean;
 }) {
   const [items, setItems] = useState(initialItems);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -91,6 +100,15 @@ export function RegistrationsReview({
                   >
                     {it.status}
                   </span>
+                  {paymentsEnabled ? (
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${
+                        PAYMENT_STYLES[it.paymentStatus] ?? "bg-surface-inset text-muted"
+                      }`}
+                    >
+                      {it.paymentStatus}
+                    </span>
+                  ) : null}
                 </div>
                 <div className="mt-0.5 text-xs text-muted">
                   {it.guardian.name}

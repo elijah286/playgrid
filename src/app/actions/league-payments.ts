@@ -29,7 +29,10 @@ async function gateAdmin(leagueId: string) {
 }
 
 export async function getPaymentStatusAction(leagueId: string): Promise<LeaguePaymentStatus> {
-  if (!hasSupabaseEnv()) return { connected: false, chargesEnabled: false };
+  const inert = { connected: false, chargesEnabled: false };
+  if (!hasSupabaseEnv()) return inert;
+  // Don't expose a league's payment-connection state to non-admins.
+  if (!(await isLeagueAdmin(leagueId))) return inert;
   const admin = createServiceRoleClient();
   const { data } = await admin
     .from("leagues")

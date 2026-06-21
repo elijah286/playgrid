@@ -56,7 +56,11 @@ export default async function RegistrationPage({
       <h2 className="mb-2 mt-8 text-sm font-semibold">
         Registrations{regItems.length > 0 ? ` (${regItems.length})` : ""}
       </h2>
-      <RegistrationsReview leagueId={leagueId} initialItems={regItems} />
+      <RegistrationsReview
+        leagueId={leagueId}
+        initialItems={regItems}
+        paymentsEnabled={paymentStatus.chargesEnabled}
+      />
 
       <h2 className="mb-2 mt-8 text-sm font-semibold">Settings</h2>
       <RegistrationSettings leagueId={leagueId} initial={config} />

@@ -20,11 +20,13 @@ export function PublicRegistrationForm({
   leagueName,
   feeCents,
   storeItems,
+  paymentsEnabled,
 }: {
   leagueId: string;
   leagueName: string;
   feeCents: number;
   storeItems: PublicStoreItem[];
+  paymentsEnabled: boolean;
 }) {
   const [f, setF] = useState({
     playerFirstName: "",
@@ -49,6 +51,8 @@ export function PublicRegistrationForm({
       .reduce((sum, i) => sum + i.priceCents, 0);
     return feeCents + items;
   }, [feeCents, storeItems, selected]);
+
+  const willCharge = paymentsEnabled && total > 0;
 
   function set<K extends keyof typeof f>(k: K, v: string) {
     setF((prev) => ({ ...prev, [k]: v }));
@@ -198,7 +202,11 @@ export function PublicRegistrationForm({
           <span className="text-foreground">{money(total)}</span>
         </div>
         <p className="mt-1 text-xs text-muted">
-          You&apos;ll complete payment after the league confirms your spot.
+          {willCharge
+            ? "You'll be taken to secure checkout to pay after you submit."
+            : total > 0
+              ? "You'll complete payment after the league confirms your spot."
+              : "No payment required."}
         </p>
       </div>
 
@@ -214,7 +222,7 @@ export function PublicRegistrationForm({
         onClick={submit}
         className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white hover:bg-primary-hover disabled:opacity-50"
       >
-        {pending ? "Submitting…" : "Submit registration"}
+        {pending ? "Submitting…" : willCharge ? "Continue to payment" : "Submit registration"}
       </button>
     </div>
   );

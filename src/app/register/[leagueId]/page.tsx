@@ -47,6 +47,7 @@ export default async function PublicRegisterPage({
           leagueName={data.leagueName}
           feeCents={data.feeCents}
           storeItems={data.storeItems}
+          paymentsEnabled={data.paymentsEnabled}
         />
       ) : (
         <div className="rounded-2xl border border-border bg-surface-raised p-8 text-center">
