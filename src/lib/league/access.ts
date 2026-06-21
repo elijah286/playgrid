@@ -72,13 +72,31 @@ export async function getCurrentLeagueMemberships(): Promise<LeagueMembership[]>
 }
 
 /**
- * The surface gate: does the current user get to see league features at all?
- * True iff the kill switch is on AND the user has at least one membership.
- * Every existing (non-league) user resolves to false → zero league UI and data.
+ * Layer-1 gate: is the current user a league organizer? A SITE ADMIN grants this
+ * (a row in league_organizers); it is independent of league_members. Returns
+ * false when the kill switch is off, Supabase isn't configured, or signed out.
+ */
+export async function isLeagueOrganizer(): Promise<boolean> {
+  if (!leagueOpsEnabled() || !hasSupabaseEnv()) return false;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return false;
+  const { data } = await supabase
+    .from("league_organizers")
+    .select("user_id")
+    .eq("user_id", user.id);
+  return (data?.length ?? 0) > 0;
+}
+
+/**
+ * The surface gate: does the current user get to see the league product at all?
+ * Visible ONLY to site-admin-marked league organizers (plus the kill switch).
+ * Every current XO Gridmaker user resolves to false → zero league UI and data.
  */
 export async function hasLeagueAccess(): Promise<boolean> {
-  const memberships = await getCurrentLeagueMemberships();
-  return memberships.length > 0;
+  return isLeagueOrganizer();
 }
 
 /** Does the current user administer the given league? */

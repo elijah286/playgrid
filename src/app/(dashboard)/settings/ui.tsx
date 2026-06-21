@@ -19,6 +19,7 @@ import {
   Sparkles,
   Ticket,
   TrendingUp,
+  Trophy,
   Users,
 } from "lucide-react";
 import {
@@ -42,6 +43,7 @@ import { CoachAiFeedbackTabs } from "@/features/admin/CoachAiFeedbackTabs";
 import { CoachAiTokenUsageClient } from "@/features/admin/CoachAiTokenUsageClient";
 import type { KbMissRow } from "@/app/actions/coach-ai-feedback";
 import { CoachInvitationsAdminClient } from "@/features/admin/CoachInvitationsAdminClient";
+import { LeagueOrganizersAdminClient } from "@/features/admin/LeagueOrganizersAdminClient";
 import { BillingAdminClient } from "@/features/admin/BillingAdminClient";
 import { TrafficAdminClient } from "@/features/admin/TrafficAdminClient";
 import { GeographyAdminClient } from "@/features/admin/GeographyAdminClient";
@@ -106,7 +108,8 @@ type Tab =
   | "site"
   | "integrations"
   | "notif_health"
-  | "beta";
+  | "beta"
+  | "league_organizers";
 
 const STORAGE_KEY = "site-admin-active-tab";
 
@@ -128,7 +131,8 @@ function isTab(value: string | null | undefined): value is Tab {
     value === "site" ||
     value === "integrations" ||
     value === "notif_health" ||
-    value === "beta"
+    value === "beta" ||
+    value === "league_organizers"
   );
 }
 
@@ -283,6 +287,11 @@ export function SettingsClient({
           label: "Coach invites",
           icon: Ticket,
           badge: overviewProps.pendingInvites,
+        },
+        {
+          value: "league_organizers",
+          label: "League organizers",
+          icon: Trophy,
         },
       ],
     },
@@ -452,6 +461,8 @@ export function SettingsClient({
             initialError={invitesError}
           />
         )}
+
+        {tab === "league_organizers" && <LeagueOrganizersAdminClient />}
 
         {tab === "revenue" && (
           <LazyContent state={revenueData}>

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { getMyLeagues } from "@/lib/league/console";
+import { CreateLeagueForm } from "@/features/league/CreateLeagueForm";
 
 export const metadata: Metadata = {
   title: "League Operations · XO Gridmaker",
@@ -19,8 +20,8 @@ export default async function LeagueHomePage() {
       </p>
 
       {leagues.length === 0 ? (
-        <p className="mt-8 rounded-lg border px-4 py-6 text-sm text-muted">
-          You don&apos;t belong to any league yet.
+        <p className="mt-8 text-sm text-muted">
+          You don&apos;t run any leagues yet. Create your first one to open the console.
         </p>
       ) : (
         <ul className="mt-6 space-y-3">
@@ -42,6 +43,10 @@ export default async function LeagueHomePage() {
           ))}
         </ul>
       )}
+
+      <div className="mt-8 border-t pt-6">
+        <CreateLeagueForm />
+      </div>
     </div>
   );
 }
