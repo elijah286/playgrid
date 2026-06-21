@@ -131,6 +131,15 @@ describe("updateSession public paths — metadata image routes", () => {
     },
   );
 
+  it("lets an anonymous parent reach a public /register/<league> link without a login redirect", async () => {
+    const req = new NextRequest(
+      "https://www.xogridmaker.com/register/00000000-0000-0000-0000-000000000000",
+      { headers: { host: "www.xogridmaker.com" } },
+    );
+    const res = await updateSession(req);
+    expect(res.headers.get("location")).toBeNull();
+  });
+
   it("still gates a genuinely private route for anonymous callers", async () => {
     const req = new NextRequest("https://www.xogridmaker.com/home", {
       headers: { host: "www.xogridmaker.com" },

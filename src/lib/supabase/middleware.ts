@@ -45,6 +45,7 @@ const PUBLIC_PREFIXES = [
   // landing from search. Pages enforce their own per-feature gates.
   "/learn/",
   "/invite/", // invite landing page (pre-login preview)
+  "/register/", // public league registration (parent intake). Page enforces its own "registration open" gate.
   "/auth/", // OAuth/PKCE callback — runs before a session exists
   "/api/contact",
   "/api/health",
