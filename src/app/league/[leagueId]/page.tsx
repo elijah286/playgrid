@@ -181,6 +181,14 @@ export default async function LeagueDashboardPage({
             {dash.divisions} {dash.divisions === 1 ? "division" : "divisions"} · {dash.teams}{" "}
             {dash.teams === 1 ? "team" : "teams"}
           </div>
+          {dash.teams > 0 ? (
+            <Link
+              href={`/league/${leagueId}/roster`}
+              className="mt-2 inline-block text-xs font-medium text-primary hover:underline"
+            >
+              {r.unrostered > 0 ? "Assign players →" : "Manage rosters →"}
+            </Link>
+          ) : null}
         </GlanceCard>
 
         <GlanceCard label="What's coming up" icon={<Calendar className="size-4" />}>
