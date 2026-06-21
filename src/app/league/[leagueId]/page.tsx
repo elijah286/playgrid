@@ -164,6 +164,12 @@ export default async function LeagueDashboardPage({
                   <span className="text-amber-600 dark:text-amber-400">{r.needsReview} to review</span>
                 ) : null}
               </div>
+              <Link
+                href={`/league/${leagueId}/financials`}
+                className="mt-2 inline-block text-xs font-medium text-primary hover:underline"
+              >
+                View financials →
+              </Link>
             </>
           )}
         </GlanceCard>

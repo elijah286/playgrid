@@ -111,6 +111,7 @@ export async function submitPublicRegistrationAction(
         payment_status: "unpaid",
         applicant,
         notes: notes || null,
+        fee_cents: data.feeCents,
       })
       .select("id")
       .single();
@@ -118,16 +119,26 @@ export async function submitPublicRegistrationAction(
       return { ok: false, error: error?.message ?? "We couldn't submit your registration." };
     }
     registrationId = reg.id as string;
+  }
 
-    if (chosen.length > 0) {
-      const rows = chosen.map((i) => ({
-        registration_id: registrationId,
-        store_item_id: i.id,
-        item_name: i.name,
-        unit_price_cents: i.priceCents,
-        quantity: 1,
-      }));
-      await admin.from("league_registration_purchases").insert(rows);
+  // Sync purchases to the CURRENT selection for BOTH paths (new + dup-reuse), so
+  // the recorded purchases always match what checkout charges. Delete-then-insert
+  // makes a re-submit with a different add-on selection idempotent. The insert
+  // error is surfaced — purchases must not silently diverge from the charge.
+  await admin.from("league_registration_purchases").delete().eq("registration_id", registrationId);
+  if (chosen.length > 0) {
+    const rows = chosen.map((i) => ({
+      registration_id: registrationId,
+      store_item_id: i.id,
+      item_name: i.name,
+      unit_price_cents: i.priceCents,
+      quantity: 1,
+    }));
+    const { error: purchaseErr } = await admin
+      .from("league_registration_purchases")
+      .insert(rows);
+    if (purchaseErr) {
+      return { ok: false, error: "We couldn't save your add-on selections. Please try again." };
     }
   }
 
