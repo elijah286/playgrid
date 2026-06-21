@@ -32,15 +32,7 @@ export default async function TeamsPage({
       <Link href={`/league/${leagueId}`} className="text-xs text-muted hover:underline">
         ← Console
       </Link>
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-extrabold tracking-tight">Teams</h1>
-        <Link
-          href={`/league/${leagueId}/divisions`}
-          className="text-xs font-medium text-primary hover:underline"
-        >
-          Manage divisions →
-        </Link>
-      </div>
+      <h1 className="mt-2 text-2xl font-extrabold tracking-tight">Teams</h1>
       <p className="mt-1 text-sm text-muted">
         Create teams and group them by division. Assigning coaches and players comes next.
       </p>

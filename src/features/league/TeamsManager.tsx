@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 
 import {
   createLeagueTeamAction,
@@ -106,21 +107,29 @@ export function TeamsManager({
               className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </label>
-          <label className="block text-sm">
-            <span className="font-medium text-foreground">Division</span>
-            <select
-              value={form.divisionId}
-              onChange={(e) => setForm({ ...form, divisionId: e.target.value })}
-              className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          <div className="text-sm">
+            <label className="block">
+              <span className="font-medium text-foreground">Division</span>
+              <select
+                value={form.divisionId}
+                onChange={(e) => setForm({ ...form, divisionId: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="">Unassigned</option>
+                {divisions.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Link
+              href={`/league/${leagueId}/divisions`}
+              className="mt-1.5 inline-block text-xs font-medium text-primary hover:underline"
             >
-              <option value="">Unassigned</option>
-              {divisions.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          </label>
+              Manage divisions →
+            </Link>
+          </div>
           <label className="block text-sm">
             <span className="font-medium text-foreground">Head coach</span>
             <input
