@@ -11,7 +11,8 @@ import {
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { canUseAiFeatures, tierAtLeast } from "@/lib/billing/features";
 import { withTimeout } from "@/lib/perf/with-timeout";
-import { redirect } from "next/navigation";
+import Link from "next/link";
+import { Trophy, ChevronRight } from "lucide-react";
 import { isLeagueOrganizer } from "@/lib/league/access";
 import { DashboardClient } from "./ui";
 
@@ -28,17 +29,17 @@ type Props = {
 };
 
 export default async function HomePage({ searchParams }: Props) {
-  // League operators land on their league console (their home) instead of the
-  // coach dashboard. Fail-open by construction: isLeagueOrganizer() returns
-  // false for non-organizers / signed-out / kill-switch / query errors, and we
-  // wrap it so any infra error also falls through to the normal coach home.
+  // League operators get the SAME coach dashboard as everyone else (their
+  // starting experience), plus a banner inviting them into the league console —
+  // rather than an auto-redirect. Fail-open by construction: isLeagueOrganizer()
+  // returns false for non-organizers / signed-out / kill-switch / query errors,
+  // wrapped so any infra error just hides the banner.
   let isOrganizer = false;
   try {
     isOrganizer = await isLeagueOrganizer();
   } catch {
     isOrganizer = false;
   }
-  if (isOrganizer) redirect("/league");
 
   const { error: errFromQuery, tab, welcome } = await searchParams;
   const [
@@ -101,6 +102,28 @@ export default async function HomePage({ searchParams }: Props) {
 
   return (
     <div className="space-y-8">
+      {isOrganizer && (
+        <Link
+          href="/league"
+          className="flex items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 transition hover:bg-primary/10"
+        >
+          <span className="flex items-center gap-2.5 text-sm">
+            <Trophy className="size-5 shrink-0 text-primary" />
+            <span>
+              <span className="font-semibold text-foreground">
+                Try the league operator experience
+              </span>
+              <span className="ml-1.5 text-muted">
+                — run divisions, registration, schedules &amp; more.
+              </span>
+            </span>
+          </span>
+          <span className="flex shrink-0 items-center gap-1 whitespace-nowrap text-sm font-medium text-primary">
+            Open console
+            <ChevronRight className="size-4" />
+          </span>
+        </Link>
+      )}
       {errFromQuery && (
         <p className="rounded-lg bg-danger-light px-3 py-2 text-sm text-danger">
           {errFromQuery}
