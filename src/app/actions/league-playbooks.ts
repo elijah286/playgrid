@@ -9,6 +9,7 @@ import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { isLeagueAdmin } from "@/lib/league/access";
 import { copyPlaybookContents } from "@/lib/data/playbook-copy";
 import { defaultSettingsForVariant } from "@/domain/playbook/settings";
+import { leagueHasPlaybooks } from "@/lib/league/sportConfig";
 import { sendCoachPlaybookInvite } from "@/lib/notifications/coach-playbook-email";
 import type { SportVariant } from "@/domain/play/types";
 import {
@@ -35,7 +36,18 @@ async function gateAdmin(leagueId: string) {
   if (!(await isLeagueAdmin(leagueId))) {
     return { ok: false as const, error: "You don't administer this league." };
   }
-  return { ok: true as const, userId: user.id, admin: createServiceRoleClient() };
+  // The playbook bridge is football-only — refuse for any other sport (the
+  // page hides it, this is defense-in-depth).
+  const admin = createServiceRoleClient();
+  const { data: league } = await admin
+    .from("leagues")
+    .select("sport")
+    .eq("id", leagueId)
+    .maybeSingle();
+  if (!leagueHasPlaybooks((league?.sport as string | null) ?? null)) {
+    return { ok: false as const, error: "Playbooks aren't available for this sport." };
+  }
+  return { ok: true as const, userId: user.id, admin };
 }
 
 export async function listLeaguePlaybooksAction(leagueId: string) {

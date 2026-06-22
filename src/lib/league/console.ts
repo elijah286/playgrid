@@ -9,6 +9,17 @@ import { isUnrostered, type RegistrationStatus } from "./registration";
  * a pure `summarizeRegistrations` (unit-tested) + thin Supabase fetches.
  */
 
+/** A league's sport (RLS-scoped to leagues the caller belongs to), or null. */
+export async function getLeagueSport(leagueId: string): Promise<string | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("leagues")
+    .select("sport")
+    .eq("id", leagueId)
+    .maybeSingle();
+  return (data?.sport as string | null) ?? null;
+}
+
 export type LeagueListItem = {
   id: string;
   name: string;

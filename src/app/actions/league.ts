@@ -6,12 +6,13 @@ import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { isLeagueOrganizer } from "@/lib/league/access";
 import { seedStandardDivisions } from "@/lib/league/divisions";
+import { isLeagueSport } from "@/lib/league/sportConfig";
 
 /**
  * Organizer self-service: create a league. Authorization is enforced twice —
  * here (nice error) and in the create_league SECURITY DEFINER RPC (hard gate).
  */
-export async function createLeagueAction(name: string) {
+export async function createLeagueAction(name: string, sport: string = "football") {
   if (!hasSupabaseEnv()) {
     return { ok: false as const, error: "Supabase is not configured." };
   }
@@ -20,9 +21,10 @@ export async function createLeagueAction(name: string) {
   }
   const trimmed = name.trim();
   if (!trimmed) return { ok: false as const, error: "Enter a league name." };
+  const p_sport = isLeagueSport(sport) ? sport : "football";
 
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("create_league", { p_name: trimmed });
+  const { data, error } = await supabase.rpc("create_league", { p_name: trimmed, p_sport });
   if (error) return { ok: false as const, error: error.message };
 
   const leagueId = data as string;

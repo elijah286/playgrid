@@ -18,6 +18,7 @@ import {
 
 import { getCurrentLeagueMemberships } from "@/lib/league/access";
 import { loadLeagueDashboard } from "@/lib/league/console";
+import { leagueHasPlaybooks } from "@/lib/league/sportConfig";
 
 export const metadata: Metadata = {
   title: "League console · XO Gridmaker",
@@ -121,6 +122,7 @@ export default async function LeagueDashboardPage({
   if (!dash) notFound();
 
   const r = dash.registrations;
+  const hasPlaybooks = leagueHasPlaybooks(dash.league.sport);
 
   const actions: string[] = [];
   if (r.needsReview > 0) actions.push(`Approve ${r.needsReview} registration${r.needsReview === 1 ? "" : "s"}`);
@@ -145,12 +147,14 @@ export default async function LeagueDashboardPage({
           ) : null}
           <span className="font-medium text-foreground">{dash.league.name}</span>
         </div>
-        <Link
-          href="/playbooks"
-          className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-foreground/5"
-        >
-          Coach view
-        </Link>
+        {hasPlaybooks ? (
+          <Link
+            href="/playbooks"
+            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-foreground/5"
+          >
+            Coach view
+          </Link>
+        ) : null}
       </div>
 
       <div className="pb-5 pt-5">
@@ -278,11 +282,13 @@ export default async function LeagueDashboardPage({
       {/* more */}
       <div className="mb-2 mt-8 text-xs font-medium text-muted">More</div>
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-        <MoreItem
-          icon={<BookOpen className="size-4" />}
-          label="Playbooks & drills"
-          href={`/league/${leagueId}/playbooks`}
-        />
+        {hasPlaybooks ? (
+          <MoreItem
+            icon={<BookOpen className="size-4" />}
+            label="Playbooks & drills"
+            href={`/league/${leagueId}/playbooks`}
+          />
+        ) : null}
         <MoreItem icon={<Palette className="size-4" />} label="Branding" />
         <MoreItem icon={<ShoppingBag className="size-4" />} label="Store" />
         <MoreItem icon={<Settings className="size-4" />} label="Settings" />

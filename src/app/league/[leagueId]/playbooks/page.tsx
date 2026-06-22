@@ -3,6 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getCurrentLeagueMemberships, isLeagueAdminRole } from "@/lib/league/access";
+import { getLeagueSport } from "@/lib/league/console";
+import { leagueHasPlaybooks } from "@/lib/league/sportConfig";
 import { listLeaguePlaybooksAction } from "@/app/actions/league-playbooks";
 import { LeaguePlaybooksManager } from "@/features/league/LeaguePlaybooksManager";
 
@@ -19,6 +21,9 @@ export default async function LeaguePlaybooksPage({
 
   const memberships = await getCurrentLeagueMemberships();
   if (!memberships.some((m) => m.leagueId === leagueId && isLeagueAdminRole(m.role))) notFound();
+
+  // Playbook seeding is the football-only coach-product bridge.
+  if (!leagueHasPlaybooks(await getLeagueSport(leagueId))) notFound();
 
   const res = await listLeaguePlaybooksAction(leagueId);
   const teams = res.ok ? res.teams : [];
