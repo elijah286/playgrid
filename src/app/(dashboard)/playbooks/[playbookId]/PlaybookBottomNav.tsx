@@ -25,12 +25,18 @@ import { signOutAction } from "@/app/actions/auth";
  * top-tab labels collapse poorly into a horizontal scroll.
  *
  * Five primary slots — the surfaces that matter from the sideline:
- *   Plays · Messages · Coach Cal · Game Mode · More
+ *   Plays · Calendar · Coach Cal · Messages · More
  *
- * Calendar, Roster, Formations, Results, and Practice Plans all live
- * in the "More" sheet. Cal and Game aren't tabs — they're actions.
- * Tapping Cal opens the chat; tapping Game launches game mode (or
- * surfaces an upgrade prompt).
+ * Slot order is deliberately kept in lockstep with the lobby's
+ * HomeBottomNav (Playbooks · Calendar · Cal · Inbox · More) so a coach
+ * never sees a function jump slots when crossing the playbook boundary:
+ * Calendar stays slot 2, Cal stays the centered slot 3, and the
+ * "communications" slot 4 (Inbox in the lobby, team Chat here) keeps its
+ * position. Only slot 1 changes — the contextual content surface (the
+ * playbook list vs. this team's plays), the same way Slack's Home swaps.
+ *
+ * Roster, Formations, Results, and Practice Plans all live in the "More"
+ * sheet. Cal isn't a tab — it's an action; tapping it opens the chat.
  *
  * Visible only on mobile (`<sm`). The top tab bar is hidden in the same
  * breakpoint so the two patterns don't fight for screen real estate.
@@ -58,7 +64,9 @@ type TabDef = {
   badge?: number;
 };
 
-const PRIMARY_KEYS: PlaybookBottomNavTab[] = ["plays", "messages", "calendar"];
+// Membership only (used via `.includes`); visual order is set in the JSX
+// below. Listed in render order for readability: Plays · Calendar · Messages.
+const PRIMARY_KEYS: PlaybookBottomNavTab[] = ["plays", "calendar", "messages"];
 
 export function PlaybookBottomNav({
   active,
@@ -179,9 +187,11 @@ export function PlaybookBottomNav({
           paddingRight: "env(safe-area-inset-right, 0px)",
         }}
       >
-        {/* Order: Plays · Messages · [Cal] · Calendar · More.
-            Cal is centered between team-comm and time-comm tabs so
-            its svelte gradient circle reads as the visual centerpiece. */}
+        {/* Order: Plays · Calendar · [Cal] · Messages · More.
+            Mirrors the lobby HomeBottomNav slot-for-slot (Calendar in
+            slot 2, Cal centered in slot 3, comms in slot 4) so nothing
+            jumps when a coach enters a playbook. Cal stays centered so
+            its gradient circle reads as the visual centerpiece. */}
         {byKey.plays && (
           <NavButton
             isActive={active === byKey.plays.key}
@@ -191,16 +201,6 @@ export function PlaybookBottomNav({
             onClick={() => onChange(byKey.plays!.key)}
           />
         )}
-        {byKey.messages && (
-          <NavButton
-            isActive={active === byKey.messages.key}
-            label={byKey.messages.shortLabel}
-            Icon={byKey.messages.Icon}
-            badge={byKey.messages.badge}
-            onClick={() => onChange(byKey.messages!.key)}
-          />
-        )}
-        {showCoachCal && <CalNavButton />}
         {byKey.calendar && (
           <NavButton
             isActive={active === byKey.calendar.key}
@@ -208,6 +208,16 @@ export function PlaybookBottomNav({
             Icon={byKey.calendar.Icon}
             badge={byKey.calendar.badge}
             onClick={() => onChange(byKey.calendar!.key)}
+          />
+        )}
+        {showCoachCal && <CalNavButton />}
+        {byKey.messages && (
+          <NavButton
+            isActive={active === byKey.messages.key}
+            label={byKey.messages.shortLabel}
+            Icon={byKey.messages.Icon}
+            badge={byKey.messages.badge}
+            onClick={() => onChange(byKey.messages!.key)}
           />
         )}
         {moreTabs.length > 0 && (

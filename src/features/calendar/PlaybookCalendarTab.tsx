@@ -259,8 +259,14 @@ export function PlaybookCalendarTab({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
+      {/* Toolbar mirrors HomeCalendarTab's: views on the left, actions on
+          the right, wrapping the same way on mobile so the playbook calendar
+          reads as the same screen as the lobby one — just scoped to this team.
+          The playbook-only Upcoming/Past toggle sits beside the view control;
+          the Coach Cal helper drops to its own line below (see further down)
+          so it doesn't crowd the New event primary. */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex overflow-hidden rounded-lg ring-1 ring-border">
             {(["list", "week", "month"] as const).map((v) => {
               const active = view === v;
@@ -315,9 +321,6 @@ export function PlaybookCalendarTab({
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {viewerIsCoach && (
-            <CoachCalCTA entryPoint="playbook_schedule_season" />
-          )}
           {showListUi && mode !== "past" && selectableKeys.size > 0 && (
             <button
               type="button"
@@ -337,14 +340,17 @@ export function PlaybookCalendarTab({
               {selectMode ? "Done" : "Select"}
             </button>
           )}
+          {/* Icon-only so the action row matches the lobby's lean
+              "[Select] [New event]" — Subscribe is a power-user affordance,
+              not a primary action. */}
           <button
             type="button"
             onClick={() => setSubscribeOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted ring-1 ring-border hover:bg-surface-hover hover:text-foreground"
+            className="inline-flex items-center justify-center rounded-lg p-2 text-muted ring-1 ring-border hover:bg-surface-hover hover:text-foreground"
             title="Subscribe to this calendar"
+            aria-label="Subscribe to this calendar"
           >
-            <Rss className="size-3.5" />
-            Subscribe
+            <Rss className="size-4" />
           </button>
           {viewerIsCoach ? (
             <Button variant="primary" size="sm" onClick={openCreate}>
@@ -370,6 +376,13 @@ export function PlaybookCalendarTab({
           )}
         </div>
       </div>
+
+      {/* Coach Cal helper on its own line, below the toolbar — keeps the
+          action row uncluttered while still offering "let Cal plan your
+          season" to coaches. */}
+      {viewerIsCoach && (
+        <CoachCalCTA entryPoint="playbook_schedule_season" />
+      )}
 
       {loading && (
         <p className="py-8 text-center text-sm text-muted">Loading events…</p>
