@@ -1514,6 +1514,15 @@ export const FEATURES: FeatureEntry[] = [
   },
   // ── Marketing site ──────────────────────────────────────────────
   {
+    id: "marketing-join-app-nudge",
+    name: "“Get the app for notifications” nudge at join",
+    description:
+      "When someone accepts a team invite on the web, the success screen nudges them to install the app — because push notifications for games, schedule changes, and team messages are app-only. The prompt is platform-aware: a Download-on-the-App-Store / Get-it-on-Google-Play button on phones, and a scan-to-install QR code on desktop. A shareable /get-app smart link redirects each device to the right store. Auto-approved players now see this confirmation screen instead of being sent straight to the playbook.",
+    category: "Marketing site",
+    status: "ga",
+    addedDate: "2026-06-22",
+  },
+  {
     id: "marketing-ios-app-banner",
     name: "iOS app install banner",
     description:

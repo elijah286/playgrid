@@ -13,6 +13,7 @@ import {
   type UnclaimedRosterEntry,
 } from "@/app/actions/playbook-roster";
 import { Button, useToast } from "@/components/ui";
+import { GetTheAppCallout } from "@/components/native/GetTheAppCallout";
 
 const POSITION_OPTIONS = [
   "QB",
@@ -40,7 +41,13 @@ type Phase =
       status: "active" | "pending";
       entries: UnclaimedRosterEntry[];
     }
-  | { kind: "done"; mode: Mode; status: "active" | "pending" };
+  | {
+      kind: "done";
+      mode: Mode;
+      status: "active" | "pending";
+      /** Set when the joiner has live playbook access to link straight to. */
+      playbookId?: string;
+    };
 
 export function AcceptInviteButton({
   token,
@@ -106,11 +113,10 @@ export function AcceptInviteButton({
     const entries = rosterRes.ok ? rosterRes.entries : [];
     setPending(false);
     if (entries.length === 0) {
-      if (res.status === "active") {
-        router.push(`/playbooks/${res.playbookId}`);
-        return;
-      }
-      setPhase({ kind: "done", mode, status: res.status });
+      // Land on the "You're in" screen even for auto-approved (active) joiners
+      // — it carries the "get the app for notifications" nudge. The screen
+      // links straight to the playbook when access is live.
+      setPhase({ kind: "done", mode, status: res.status, playbookId: res.playbookId });
       return;
     }
     setPhase({
@@ -131,15 +137,21 @@ export function AcceptInviteButton({
             toast(`Couldn't submit claim: ${r.error}`, "error");
             return false;
           }
-          setPhase({ kind: "done", mode: "player", status: phase.status });
+          setPhase({
+            kind: "done",
+            mode: "player",
+            status: phase.status,
+            playbookId: phase.playbookId,
+          });
           return true;
         }}
         onSkip={() => {
-          if (phase.status === "active") {
-            router.push(`/playbooks/${phase.playbookId}`);
-            return;
-          }
-          setPhase({ kind: "done", mode: "player", status: phase.status });
+          setPhase({
+            kind: "done",
+            mode: "player",
+            status: phase.status,
+            playbookId: phase.playbookId,
+          });
         }}
       />
     );
@@ -152,15 +164,18 @@ export function AcceptInviteButton({
           ? "You have player access to the playbook while you wait."
           : "The coach still needs to approve your player access too, so you won't see plays yet.";
       return (
-        <div className="space-y-2">
-          <p className="text-sm font-semibold text-foreground">
-            Coach request sent.
-          </p>
-          <p className="text-xs text-muted">
-            The playbook owner will review your request for coach access.
-            You&apos;ll get edit privileges once they approve.
-          </p>
-          <p className="text-xs text-muted">{playerLine}</p>
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <p className="text-sm font-semibold text-foreground">
+              Coach request sent.
+            </p>
+            <p className="text-xs text-muted">
+              The playbook owner will review your request for coach access.
+              You&apos;ll get edit privileges once they approve.
+            </p>
+            <p className="text-xs text-muted">{playerLine}</p>
+          </div>
+          <GetTheAppCallout source="invite_accept_coach" />
           <Button
             variant="secondary"
             onClick={() => router.push("/home")}
@@ -173,18 +188,29 @@ export function AcceptInviteButton({
     }
     // Player finished the flow. If they submitted a claim, it's always
     // pending coach approval regardless of their access status.
+    const active = phase.status === "active";
     return (
-      <div className="space-y-2">
-        <p className="text-sm font-semibold text-foreground">
-          {phase.status === "active"
-            ? "You\u2019re in."
-            : "Request sent."}
-        </p>
-        <p className="text-xs text-muted">
-          {phase.status === "active"
-            ? "You have access to the playbook. Any player claim you submitted is pending coach approval."
-            : "The coach will review and approve your access. You\u2019ll see the playbook once they do."}
-        </p>
+      <div className="space-y-3">
+        <div className="space-y-2">
+          <p className="text-sm font-semibold text-foreground">
+            {active ? "You\u2019re in." : "Request sent."}
+          </p>
+          <p className="text-xs text-muted">
+            {active
+              ? "You have access to the playbook. Any player claim you submitted is pending coach approval."
+              : "The coach will review and approve your access. You\u2019ll see the playbook once they do."}
+          </p>
+        </div>
+        <GetTheAppCallout source="invite_accept" />
+        {active && phase.playbookId && (
+          <Button
+            variant="primary"
+            onClick={() => router.push(`/playbooks/${phase.playbookId}`)}
+            className="w-full"
+          >
+            Go to the playbook
+          </Button>
+        )}
         <Button
           variant="secondary"
           onClick={() => router.push("/home")}

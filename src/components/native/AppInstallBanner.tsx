@@ -5,22 +5,18 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { isNativeApp } from "@/lib/native/isNativeApp";
 import { track } from "@/lib/analytics/track";
+import { playStoreUrl } from "@/lib/native/appStore";
 
 const DISMISS_KEY = "playgrid:android-app-banner-dismissed";
-const PLAY_STORE_APP_ID = "com.xogridmaker.app";
 
 // Append a Play "referrer" so an install from this banner can be attributed
 // back to the web click — read post-install via the Play Install Referrer API
-// (wired in Phase 2). URLSearchParams encodes the nested referrer string.
-function playStoreUrl(): string {
-  const referrer = new URLSearchParams({
-    utm_source: "web_banner",
-    utm_medium: "app_install_banner",
-    utm_campaign: "android_smart_banner",
-  }).toString();
-  const params = new URLSearchParams({ id: PLAY_STORE_APP_ID, referrer });
-  return `https://play.google.com/store/apps/details?${params.toString()}`;
-}
+// (wired in Phase 2).
+const BANNER_PLAY_STORE_URL = playStoreUrl({
+  source: "web_banner",
+  medium: "app_install_banner",
+  campaign: "android_smart_banner",
+});
 
 /**
  * Android-only "Smart App Banner": a top, in-flow bar that nudges mobile-web
@@ -106,7 +102,7 @@ export function AppInstallBanner() {
         </p>
       </div>
       <a
-        href={playStoreUrl()}
+        href={BANNER_PLAY_STORE_URL}
         target="_blank"
         rel="noopener noreferrer"
         onClick={() =>

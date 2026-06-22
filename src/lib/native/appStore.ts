@@ -1,5 +1,7 @@
 /**
- * App Store constants + the render decision for the iOS web-install banner.
+ * App Store / Play Store links + the render decision for the iOS web-install
+ * banner. Single source of truth for both store ids so banners, the invite
+ * "get the app" callout, and the /get-app smart link can't drift.
  *
  * Two surfaces nudge mobile-web visitors toward the iOS app:
  *  - Apple's native Smart App Banner, emitted via the `apple-itunes-app`
@@ -77,4 +79,48 @@ export function shouldShowIosBanner(env: IosBannerEnv): boolean {
   if (isMobileSafari(env.userAgent)) return false;
   if (env.dismissed) return false;
   return true;
+}
+
+// ── Google Play (Android) ──────────────────────────────────────────────────
+export const PLAY_STORE_ID = "com.xogridmaker.app";
+
+export type StoreUtm = { source?: string; medium?: string; campaign?: string };
+
+/**
+ * Play Store listing URL with an attribution referrer. Play forwards the
+ * referrer to the installed app (Install Referrer API), so an install from a
+ * given surface can be attributed back to the web click that drove it.
+ */
+export function playStoreUrl(utm: StoreUtm = {}): string {
+  const referrer = new URLSearchParams({
+    utm_source: utm.source ?? "web",
+    utm_medium: utm.medium ?? "app_promo",
+    utm_campaign: utm.campaign ?? "generic",
+  }).toString();
+  const params = new URLSearchParams({ id: PLAY_STORE_ID, referrer });
+  return `https://play.google.com/store/apps/details?${params.toString()}`;
+}
+
+// ── Cross-platform ──────────────────────────────────────────────────────────
+export type AppPlatform = "ios" | "android" | "desktop";
+
+/**
+ * Coarse platform bucket for "which store?" decisions. maxTouchPoints lets a
+ * client caller catch iPadOS reporting a desktop Mac UA; server callers omit it
+ * (an iPad then reads as "desktop", which falls back to the both-stores page —
+ * acceptable, since the page links both stores).
+ */
+export function appPlatform(userAgent: string, maxTouchPoints = 0): AppPlatform {
+  if (isIosBrowser(userAgent, maxTouchPoints)) return "ios";
+  if (/android/i.test(userAgent)) return "android";
+  return "desktop";
+}
+
+/** Best store URL for a known mobile platform. (iOS ignores utm — App Store
+ *  campaign tracking needs a provider token we don't carry.) */
+export function storeUrl(
+  platform: "ios" | "android",
+  utm: StoreUtm = {},
+): string {
+  return platform === "android" ? playStoreUrl(utm) : APP_STORE_URL;
 }

@@ -2,10 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   APP_STORE_ID,
   APP_STORE_URL,
+  PLAY_STORE_ID,
+  appPlatform,
   appStoreConfigured,
   isIosBrowser,
   isMobileSafari,
+  playStoreUrl,
   shouldShowIosBanner,
+  storeUrl,
   type IosBannerEnv,
 } from "./appStore";
 
@@ -111,5 +115,53 @@ describe("shouldShowIosBanner", () => {
     expect(
       shouldShowIosBanner(env({ userAgent: MAC_SAFARI, maxTouchPoints: 0 })),
     ).toBe(false);
+  });
+});
+
+describe("playStoreUrl", () => {
+  it("targets the Play listing with a referrer for attribution", () => {
+    const url = new URL(
+      playStoreUrl({ source: "s", medium: "m", campaign: "c" }),
+    );
+    expect(url.origin + url.pathname).toBe(
+      "https://play.google.com/store/apps/details",
+    );
+    expect(url.searchParams.get("id")).toBe(PLAY_STORE_ID);
+    const referrer = new URLSearchParams(url.searchParams.get("referrer") ?? "");
+    expect(referrer.get("utm_source")).toBe("s");
+    expect(referrer.get("utm_medium")).toBe("m");
+    expect(referrer.get("utm_campaign")).toBe("c");
+  });
+
+  it("falls back to generic referrer tags", () => {
+    const referrer = new URLSearchParams(
+      new URL(playStoreUrl()).searchParams.get("referrer") ?? "",
+    );
+    expect(referrer.get("utm_source")).toBe("web");
+    expect(referrer.get("utm_campaign")).toBe("generic");
+  });
+});
+
+describe("appPlatform", () => {
+  it("buckets iOS, Android, and desktop", () => {
+    expect(appPlatform(IPHONE_SAFARI, 5)).toBe("ios");
+    expect(appPlatform(IPAD_SAFARI_DESKTOP_UA, 5)).toBe("ios");
+    expect(appPlatform(ANDROID_CHROME)).toBe("android");
+    expect(appPlatform(MAC_SAFARI, 0)).toBe("desktop");
+  });
+
+  it("treats a touchless Mac UA as desktop when touch points are unknown (server)", () => {
+    // Server callers omit maxTouchPoints; an iPad-as-Mac UA then reads desktop.
+    expect(appPlatform(IPAD_SAFARI_DESKTOP_UA)).toBe("desktop");
+  });
+});
+
+describe("storeUrl", () => {
+  it("returns the App Store URL for iOS", () => {
+    expect(storeUrl("ios")).toBe(APP_STORE_URL);
+  });
+
+  it("returns a Play URL for Android", () => {
+    expect(storeUrl("android")).toContain("play.google.com");
   });
 });
