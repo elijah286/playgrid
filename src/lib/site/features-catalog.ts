@@ -1514,6 +1514,15 @@ export const FEATURES: FeatureEntry[] = [
   },
   // ── Marketing site ──────────────────────────────────────────────
   {
+    id: "marketing-ios-app-banner",
+    name: "iOS app install banner",
+    description:
+      "iPhone and iPad mobile-web visitors are nudged to install the XO Gridmaker app from the App Store. In Safari this is Apple's native Smart App Banner (which also shows 'Open' when the app is already installed); in other iOS browsers (Chrome, Firefox, in-app webviews) a matching dismissible bar at the top of the page deep-links to the App Store listing. Shown only on iOS (never on desktop, Android, or inside the native app); dismissal sticks across sessions. Impressions, clicks, and dismissals are tracked for conversion measurement.",
+    category: "Marketing site",
+    status: "ga",
+    addedDate: "2026-06-22",
+  },
+  {
     id: "marketing-android-app-banner",
     name: "Android app install banner",
     description:

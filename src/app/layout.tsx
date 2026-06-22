@@ -17,10 +17,12 @@ import MetaPixel from "@/components/MetaPixel";
 import { NativeAppShell } from "@/components/native/NativeAppShell";
 import { PullToRefresh } from "@/components/native/PullToRefresh";
 import { AppInstallBanner } from "@/components/native/AppInstallBanner";
+import { IosAppBanner } from "@/components/native/IosAppBanner";
 import { OfflineStatusBanner } from "@/components/offline/OfflineStatusBanner";
 import { ConnectionRecovery } from "@/components/system/ConnectionRecovery";
 import { withFullContext } from "@/lib/seo/ld-json";
 import { NATIVE_APP_UA_MARKER } from "@/lib/native/nativeRequest";
+import { APP_STORE_ID, appStoreConfigured } from "@/lib/native/appStore";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getUserWithTimeout } from "@/lib/supabase/get-user-with-timeout";
@@ -72,6 +74,13 @@ export const metadata: Metadata = {
   },
   other: {
     "article:publisher": FACEBOOK_URL,
+    // Apple Smart App Banner — Mobile Safari renders this natively (and shows
+    // "Open" when the app is already installed). Non-Safari iOS browsers get
+    // the custom <IosAppBanner> instead. Emitted only once the App Store id is
+    // real so we never ship app-id=undefined.
+    ...(appStoreConfigured()
+      ? { "apple-itunes-app": `app-id=${APP_STORE_ID}, app-argument=${SITE_URL}` }
+      : {}),
   },
   twitter: {
     card: "summary_large_image",
@@ -256,6 +265,7 @@ export default async function RootLayout({
               >
                 <ConfigBanner />
                 <AppInstallBanner />
+                <IosAppBanner />
                 <SiteHeader />
                 <div className="flex flex-1 flex-col">{children}</div>
                 <SiteFooter />
