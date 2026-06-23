@@ -16,6 +16,7 @@ import {
   Menu as MenuIcon,
   MessageCircle,
   Settings as SettingsIcon,
+  Smartphone,
   Sparkles,
   Ticket,
   TrendingUp,
@@ -56,6 +57,7 @@ import { PlaybookSeedsAdminClient } from "@/features/admin/PlaybookSeedsAdminCli
 import { BetaFeaturesAdminClient } from "@/features/admin/BetaFeaturesAdminClient";
 import { NotificationHealthAdminClient } from "@/features/admin/NotificationHealthAdminClient";
 import { OpexAdminClient } from "@/features/admin/OpexAdminClient";
+import { AppMetricsAdminClient } from "@/features/admin/AppMetricsAdminClient";
 import type { FeedbackRow } from "@/app/actions/feedback";
 import type { CoachInvitationRow } from "@/app/actions/coach-invitations";
 import type {
@@ -84,6 +86,7 @@ import {
   loadIntegrationsTabData,
   loadSiteTabData,
   loadOpexTabData,
+  loadAppMetricsTabData,
   loadRevenueTabData,
   loadTokenUsageTabData,
   loadSeedsTabData,
@@ -97,6 +100,7 @@ type Tab =
   | "analytics"
   | "geography"
   | "opex"
+  | "app"
   | "invites"
   | "revenue"
   | "payments"
@@ -120,6 +124,7 @@ function isTab(value: string | null | undefined): value is Tab {
     value === "analytics" ||
     value === "geography" ||
     value === "opex" ||
+    value === "app" ||
     value === "invites" ||
     value === "revenue" ||
     value === "payments" ||
@@ -215,6 +220,7 @@ export function SettingsClient({
   );
   const siteData = useLazyData(tab === "site", loadSiteTabData);
   const opexData = useLazyData(tab === "opex", loadOpexTabData);
+  const appData = useLazyData(tab === "app", loadAppMetricsTabData);
   const revenueData = useLazyData(tab === "revenue", loadRevenueTabData);
   const tokenUsageData = useLazyData(tab === "ai_usage", loadTokenUsageTabData);
   const seedsData = useLazyData(tab === "seeds", loadSeedsTabData);
@@ -271,6 +277,7 @@ export function SettingsClient({
         { value: "analytics", label: "Analytics", icon: BarChart3 },
         { value: "geography", label: "Geography", icon: Globe },
         { value: "opex", label: "Opex", icon: DollarSign },
+        { value: "app", label: "App", icon: Smartphone },
       ],
     },
     {
@@ -690,6 +697,12 @@ export function SettingsClient({
                 initialError={d.error}
               />
             )}
+          </LazyContent>
+        )}
+
+        {tab === "app" && (
+          <LazyContent state={appData}>
+            {(d) => <AppMetricsAdminClient summary={d.summary} error={d.error} />}
           </LazyContent>
         )}
 

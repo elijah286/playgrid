@@ -52,6 +52,7 @@ import { listCoachAiTokenUsageAction } from "@/app/actions/coach-ai-token-usage"
 import { listSeedFormationsAction } from "@/app/actions/formations";
 import { getBetaFeatures } from "@/lib/site/beta-features-config";
 import { getReengagementMetricsAction } from "@/app/actions/admin-reengagement";
+import { getAppMetricsSummaryAction } from "@/app/actions/admin-app-metrics";
 
 function currentMonthYM(): string {
   const d = new Date();
@@ -267,6 +268,15 @@ export async function loadReengagementTabData() {
   const res = await getReengagementMetricsAction();
   return {
     metrics: res.ok ? res.metrics : null,
+    error: res.ok ? null : res.error,
+  };
+}
+
+/** App tab — native install/active metrics with internal+tester accounts excluded. */
+export async function loadAppMetricsTabData() {
+  const res = await getAppMetricsSummaryAction(7);
+  return {
+    summary: res.ok ? res.summary : null,
     error: res.ok ? null : res.error,
   };
 }
