@@ -92,6 +92,18 @@ export async function signIn(page: Page, email: string, password: string): Promi
   await page.waitForURL((u) => u.pathname === "/home" || u.pathname === "/", {
     timeout: 15_000,
   });
+  // Brand-new accounts hit the "Agree to our terms to continue" gate on first
+  // login (TermsAcceptancePrompt). Accept it the way a real new user does: tick
+  // the agreement checkbox (the button is disabled until then), then continue.
+  // It's recorded server-side, so subsequent logins skip the gate.
+  const agree = page.getByRole("button", { name: /agree (&|and) continue/i });
+  if (await agree.count()) {
+    await page.getByRole("checkbox").first().check();
+    await agree.first().click();
+    // The component does a full window.location.reload() on success.
+    await page.waitForLoadState("networkidle").catch(() => {});
+    await page.waitForTimeout(500);
+  }
 }
 
 /** Credentials from env, with the same defaults as scripts/seed-functional-test.mjs. */

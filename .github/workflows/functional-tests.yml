@@ -20,6 +20,11 @@ permissions:
 jobs:
   functional:
     runs-on: ubuntu-latest
+    # Microsoft's official Playwright image ships Chromium + every OS dependency
+    # pre-installed, so we never re-download/`apt`-install the browser per run.
+    # The tag MUST match the pinned @playwright/test version in package.json —
+    # the browser build is baked in at that version.
+    container: mcr.microsoft.com/playwright:v1.61.1-jammy
     # For the post-deploy trigger, only run when the deploy actually succeeded.
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     concurrency:
@@ -48,8 +53,7 @@ jobs:
 
       - run: npm ci
 
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+      # No `playwright install` — the container already has the matching browser.
 
       # Keep the dedicated test accounts present + passwords in sync (idempotent).
       - name: Seed test accounts

@@ -100,7 +100,9 @@ async function ensureAccount(email, password, displayName) {
   }
 
   // Profile is normally auto-created by handle_new_user; upsert to be safe and
-  // set a recognizable display name.
+  // set a recognizable display name. We deliberately do NOT pre-accept Terms —
+  // the harness clicks through the "Agree to our terms" gate in the UI exactly
+  // like a real new user does (handled in signIn).
   const { error: upErr } = await admin
     .from("profiles")
     .upsert({ id: userId, display_name: displayName }, { onConflict: "id" });
