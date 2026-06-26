@@ -282,6 +282,47 @@ export async function updatePlayerInvitePolicyAction(
   return { ok: true as const };
 }
 
+/**
+ * Owner-controlled: whether new members who accept an invite must be
+ * approved by the coach before they're confirmed on the roster. When
+ * true, joiners land tentative (status='pending') and show as "waiting
+ * on coach approval"; when false (default) they're auto-confirmed.
+ * Enforced centrally in accept_invite. Stored on
+ * playbooks.roster_approval_required (migration 20260626160000).
+ */
+export async function updateRosterApprovalRequiredAction(
+  playbookId: string,
+  required: boolean,
+) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { data: caller } = await supabase
+    .from("playbook_members")
+    .select("role, status")
+    .eq("playbook_id", playbookId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!caller || caller.status !== "active" || caller.role !== "owner") {
+    return {
+      ok: false as const,
+      error: "Only the playbook owner can change roster approval.",
+    };
+  }
+
+  const { error } = await supabase
+    .from("playbooks")
+    .update({ roster_approval_required: required })
+    .eq("id", playbookId);
+  if (error) return { ok: false as const, error: error.message };
+  revalidatePath(`/playbooks/${playbookId}`);
+  return { ok: true as const };
+}
+
 export async function updatePlaybookAppearanceAction(
   playbookId: string,
   appearance: { logo_url: string | null; color: string | null },

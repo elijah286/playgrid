@@ -117,7 +117,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
     () =>
       supabase
         .from("playbooks")
-        .select("id, name, season, sport_variant, player_count, logo_url, color, custom_offense_count, settings, allow_coach_duplication, allow_player_duplication, allow_game_results_duplication, player_invite_policy, is_example, is_public_example, example_author_label, is_archived")
+        .select("id, name, season, sport_variant, player_count, logo_url, color, custom_offense_count, settings, allow_coach_duplication, allow_player_duplication, allow_game_results_duplication, player_invite_policy, roster_approval_required, is_example, is_public_example, example_author_label, is_archived")
         .eq("id", playbookId)
         .single(),
   );
@@ -270,6 +270,13 @@ export default async function PlaybookDetailPage({ params }: Props) {
       | "disabled"
       | "approval"
       | "open";
+  // Owner-controlled: whether joiners must be approved before they're
+  // confirmed on the roster. Default false (auto-confirmed). Enforced in
+  // accept_invite; surfaced as a toggle in the Roster tab.
+  const rosterApprovalRequired = Boolean(
+    (book as unknown as { roster_approval_required?: boolean | null })
+      .roster_approval_required,
+  );
   // Players can hit Share when the owner has opted in. The dialog will
   // run in `viewerOnly` mode for them — straight to a player invite,
   // no "Send a copy" / "Co-coach" cards.
@@ -487,6 +494,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
         isArchived={Boolean((book as unknown as { is_archived?: boolean | null }).is_archived)}
         isExamplePreview={isExamplePreview}
         playbookId={playbookId}
+        viewerUserId={user?.id ?? null}
         sportVariant={book.sport_variant as string}
         playerCount={(book.player_count as number | null) ?? undefined}
         initialPlays={listed.ok ? listed.plays : []}
@@ -531,6 +539,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
           canInvitePlayers,
           inviteAsViewerOnly,
           playerInvitePolicy,
+          rosterApprovalRequired,
           viewerIsCoach,
           senderName,
           ownerDisplayName,

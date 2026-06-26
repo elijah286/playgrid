@@ -160,6 +160,8 @@ import {
   unlinkRosterEntryAction,
   claimRosterSlotAction,
 } from "@/app/actions/playbook-roster";
+import { updateRosterApprovalRequiredAction } from "@/app/actions/playbooks";
+import { bucketRoster } from "./roster-buckets";
 import { type PlaybookInvite } from "@/app/actions/invites";
 import { setPlaybookViewPrefsAction } from "@/app/actions/playbook-view-prefs";
 import type { PlaybookViewPrefs } from "@/domain/playbook/view-prefs";
@@ -328,6 +330,7 @@ type PlaybookDetailClientProps = Parameters<typeof PlaybookDetailClientInner>[0]
 
 function PlaybookDetailClientInner({
   playbookId,
+  viewerUserId = null,
   sportVariant,
   playerCount: playbookPlayerCount,
   initialPlays,
@@ -358,6 +361,9 @@ function PlaybookDetailClientInner({
   canUseTeamFeatures = false,
 }: {
   playbookId: string;
+  /** The signed-in viewer's user id (null for anonymous example previews).
+   *  Lets the Roster tab tell "is this me?" for self-service claim/add. */
+  viewerUserId?: string | null;
   sportVariant: string;
   playerCount?: number;
   initialPlays: PlaybookDetailPlayRow[];
@@ -429,6 +435,7 @@ function PlaybookDetailClientInner({
     canInvitePlayers: boolean;
     inviteAsViewerOnly: boolean;
     playerInvitePolicy: "disabled" | "approval" | "open";
+    rosterApprovalRequired: boolean;
     viewerIsCoach: boolean;
     senderName: string | null;
     ownerDisplayName: string | null;
@@ -1905,11 +1912,13 @@ function PlaybookDetailClientInner({
       {tab === "roster" && (
         <RosterPanel
           playbookId={playbookId}
+          viewerUserId={viewerUserId}
           members={initialRoster}
           claims={initialRosterClaims}
           viewerIsCoach={headerProps.viewerIsCoach}
           canEditRoster={headerProps.canShare}
           canManage={headerProps.canManage}
+          approvalRequired={headerProps.rosterApprovalRequired}
           teamName={headerProps.name}
           senderName={headerProps.senderName}
         />
@@ -3084,20 +3093,24 @@ function PlaybookDetailClientInner({
 
 function RosterPanel({
   playbookId,
+  viewerUserId,
   members,
   claims,
   viewerIsCoach,
   canEditRoster,
   canManage,
+  approvalRequired,
   teamName,
   senderName,
 }: {
   playbookId: string;
+  viewerUserId: string | null;
   members: PlaybookRosterMember[];
   claims: PendingRosterClaim[];
   viewerIsCoach: boolean;
   canEditRoster: boolean;
   canManage: boolean;
+  approvalRequired: boolean;
   teamName: string;
   senderName: string | null;
 }) {
@@ -3107,34 +3120,20 @@ function RosterPanel({
   const [renaming, setRenaming] = useState<PlaybookRosterMember | null>(null);
   const [roleEditing, setRoleEditing] = useState<PlaybookRosterMember | null>(null);
   const [positionEditing, setPositionEditing] = useState<PlaybookRosterMember | null>(null);
+  const [approvalBusy, setApprovalBusy] = useState(false);
   function openAddPlayer() {
     if (!canEditRoster) return;
     setShowAddPlayerModal(true);
   }
   const [pendingId, setPendingId] = useState<string | null>(null);
 
-  // A roster slot is identified by `label IS NOT NULL` — it represents a
-  // player on the team (claimed or unclaimed). Coach/parent access rows
-  // have label=null. A user can hold both: an access row (label=null)
-  // AND manage/own one or more slots.
-  const players = members.filter((m) => m.label !== null);
-  const coaches = members.filter(
-    (m): m is PlaybookRosterMember & { user_id: string } =>
-      m.role !== "viewer" && m.user_id !== null && m.label === null,
-  );
-  const pending = members.filter(
-    (m): m is PlaybookRosterMember & { user_id: string } =>
-      m.status === "pending" && m.user_id !== null && m.label === null,
-  );
-  const coachUpgradeRequests = members.filter(
-    (m): m is PlaybookRosterMember & { user_id: string } =>
-      m.status === "active" &&
-      !!m.coach_upgrade_requested_at &&
-      m.user_id !== null &&
-      m.label === null,
-  );
-  const active = players.filter((m) => m.status === "active");
-  const activeCoaches = coaches.filter((m) => m.status === "active");
+  // Classify rows into the buckets the panel renders. Extracted to
+  // roster-buckets.ts (pure + unit-tested) — see that file for the rules.
+  // `rosterRows` = the Players table (confirmed + tentative joiners);
+  // `pending` = the coach approval queue (tentative rows also appear inline
+  // in the table, so a player sees themselves the moment they join).
+  const { players, rosterRows, activeCoaches, pending, coachUpgradeRequests } =
+    bucketRoster(members);
   const roleLabel = (r: PlaybookRosterMember["role"]) =>
     r === "owner" ? "Coach (owner)" : r === "editor" ? "Coach" : "Player";
 
@@ -3307,8 +3306,37 @@ function RosterPanel({
   // already pre-added someone with the same name, offer a one-click
   // link so the roster doesn't end up with two rows for one person.
   const suggestions = buildMergeSuggestions(players).filter(
-    (s) => !dismissedSuggestions.has(`${s.userMemberId}:${s.unclaimedMemberId}`),
+    (s) =>
+      !dismissedSuggestions.has(`${s.userMemberId}:${s.unclaimedMemberId}`) &&
+      // Don't heuristically suggest a slot that already has an explicit
+      // pending claim (self-add or claim-later) — the coach resolves that in
+      // "Player claims", and a duplicate suggestion here would offer a
+      // second, divergent way to link the same person.
+      !claimsByMember.has(s.unclaimedMemberId),
   );
+
+  // Is the signed-in viewer a plain player (no roster-edit rights)? They get
+  // inline "claim this name" affordances on unclaimed rows instead of the
+  // coach action menu.
+  const isPlainPlayer = !canEditRoster && viewerUserId !== null;
+  const viewerPendingClaim =
+    claims.find((c) => c.userId === viewerUserId) ?? null;
+
+  async function setApprovalRequired(next: boolean) {
+    setApprovalBusy(true);
+    const res = await updateRosterApprovalRequiredAction(playbookId, next);
+    setApprovalBusy(false);
+    if (!res.ok) toast(`Couldn't update: ${res.error}`, "error");
+    else {
+      toast(
+        next
+          ? "New players will be tentative until you approve them."
+          : "New players are added to the roster automatically.",
+        "success",
+      );
+      router.refresh();
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -3328,7 +3356,45 @@ function RosterPanel({
         </div>
       </div>
 
-      {suggestions.length > 0 && (
+      {isPlainPlayer && viewerPendingClaim && (
+        <section className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+          <p className="text-sm font-semibold text-foreground">
+            Waiting on coach approval
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            You asked to be added as{" "}
+            <span className="font-medium text-foreground">
+              {viewerPendingClaim.memberLabel || "a player"}
+            </span>
+            . Your coach will confirm it — check back here once they do.
+          </p>
+        </section>
+      )}
+
+      {canManage && (
+        <section className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface-inset p-3">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">
+              Approve new players before they join the roster
+            </p>
+            <p className="text-xs text-muted">
+              {approvalRequired
+                ? "New players who accept an invite show as tentative until you approve them."
+                : "New players who accept an invite are added to the roster automatically."}
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant={approvalRequired ? "primary" : "secondary"}
+            loading={approvalBusy}
+            onClick={() => setApprovalRequired(!approvalRequired)}
+          >
+            {approvalRequired ? "On" : "Off"}
+          </Button>
+        </section>
+      )}
+
+      {canEditRoster && suggestions.length > 0 && (
         <section className="rounded-xl border border-border bg-surface-inset p-4">
           <h3 className="mb-2 text-sm font-semibold text-foreground">
             Possible matches
@@ -3389,7 +3455,7 @@ function RosterPanel({
         </section>
       )}
 
-      {claimsByMember.size > 0 && (
+      {canEditRoster && claimsByMember.size > 0 && (
         <section className="rounded-xl border border-primary/30 bg-primary/5 p-4">
           <h3 className="mb-2 text-sm font-semibold text-foreground">
             Player claims
@@ -3473,7 +3539,7 @@ function RosterPanel({
         </section>
       )}
 
-      {pending.length > 0 && (
+      {canEditRoster && pending.length > 0 && (
         <section className="rounded-xl border border-warning/30 bg-warning/5 p-4">
           <h3 className="mb-2 text-sm font-semibold text-foreground">
             Pending approvals
@@ -3516,7 +3582,7 @@ function RosterPanel({
         </section>
       )}
 
-      {coachUpgradeRequests.length > 0 && (
+      {canEditRoster && coachUpgradeRequests.length > 0 && (
         <section className="rounded-xl border border-primary/30 bg-primary/5 p-4">
           <h3 className="mb-2 text-sm font-semibold text-foreground">
             Coach access requests
@@ -3608,23 +3674,23 @@ function RosterPanel({
         </section>
       )}
 
-      {active.length === 0 && activeCoaches.length === 0 ? (
+      {rosterRows.length === 0 && activeCoaches.length === 0 && !isPlainPlayer ? (
         <div className="rounded-xl border border-border bg-surface-raised p-8 text-center">
           <p className="text-sm font-semibold text-foreground">No one on the roster yet</p>
           <p className="mt-1 text-xs text-muted">
             {canEditRoster
               ? viewerIsCoach
-                ? "Add players below, or use Invite to share this playbook with a player or coach."
-                : "Add your players' names, jerseys, and positions below. Inviting them comes with Team Coach."
-              : "Your coach will add the roster here."}
+                ? "Players land here automatically when they accept an invite. You can also pre-add names below."
+                : "Players land here when they accept an invite. Pre-add names below; inviting them comes with Team Coach."
+              : "You'll appear here once your coach shares the playbook and you join."}
           </p>
         </div>
-      ) : active.length === 0 ? null : (
+      ) : rosterRows.length === 0 ? null : (
         <section>
           <h3 className="mb-2 text-sm font-semibold text-foreground">
             Players
             <span className="ml-2 rounded-full bg-surface-inset px-2 py-0.5 text-[11px] text-muted ring-1 ring-border">
-              {active.length}
+              {rosterRows.length}
             </span>
           </h3>
         <div className="rounded-xl border border-border bg-surface-raised">
@@ -3640,9 +3706,11 @@ function RosterPanel({
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {active.map((m) => {
+                {rosterRows.map((m) => {
                   const name = m.label || m.display_name || "—";
                   const unclaimed = m.user_id === null && m.managed_by === null;
+                  const tentative = m.status === "pending";
+                  const isMe = m.user_id !== null && m.user_id === viewerUserId;
                   const items: ActionMenuItem[] = [
                     {
                       label: "Rename",
@@ -3687,11 +3755,29 @@ function RosterPanel({
                           },
                         ]
                       : [
-                          {
-                            label: "Unlink user",
-                            icon: X,
-                            onSelect: () => unlinkUser(m.id, name),
-                          },
+                          // "Unlink" only applies to a user occupying a named
+                          // slot (label set) — it frees the slot but keeps
+                          // their access. A plain joined player (no label) has
+                          // no slot to unlink from, so offer "Remove from team"
+                          // instead.
+                          ...(m.label !== null
+                            ? [
+                                {
+                                  label: "Unlink user",
+                                  icon: X,
+                                  onSelect: () => unlinkUser(m.id, name),
+                                },
+                              ]
+                            : m.role !== "owner" && m.user_id
+                            ? [
+                                {
+                                  label: "Remove from team",
+                                  icon: UserMinus,
+                                  onSelect: () =>
+                                    removeStaff(m.user_id as string, name),
+                                },
+                              ]
+                            : []),
                           ...(m.role !== "owner" && m.user_id
                             ? [
                                 {
@@ -3727,6 +3813,11 @@ function RosterPanel({
                               Unclaimed
                             </Badge>
                           )}
+                          {tentative && (
+                            <Badge variant="warning" className="text-[10px]">
+                              Tentative
+                            </Badge>
+                          )}
                           {m.is_minor && (
                             <Badge variant="warning" className="text-[10px]">
                               Minor
@@ -3736,6 +3827,31 @@ function RosterPanel({
                         {m.managed_by && m.user_id === null && (
                           <div className="mt-0.5 text-[11px] font-normal text-muted">
                             Managed by {m.manager_display_name ?? "a parent"}
+                          </div>
+                        )}
+                        {tentative && isMe && (
+                          <div className="mt-0.5 text-[11px] font-normal text-muted">
+                            Waiting on coach approval
+                          </div>
+                        )}
+                        {isPlainPlayer && unclaimed && (
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              loading={pendingId === m.id}
+                              onClick={() => claimSlot(m.id, name, false)}
+                            >
+                              This is me
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={pendingId === m.id}
+                              onClick={() => claimSlot(m.id, name, true)}
+                            >
+                              I&rsquo;m their parent
+                            </Button>
                           </div>
                         )}
                       </td>
