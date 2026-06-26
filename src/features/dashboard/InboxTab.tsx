@@ -35,6 +35,7 @@ import {
   deleteAlertAction,
   listResolvedInboxEventsAction,
   unarchiveAlertAction,
+  type AdminNoticeKind,
   type AlertRef,
   type InboxAlert,
   type InboxAlertKind,
@@ -70,8 +71,18 @@ function alertRef(a: InboxAlert): AlertRef {
   return { kind: a.kind, sourceId: a.sourceId };
 }
 
+/** Coach-feedback admin notice — top priority + red across every inbox
+ *  surface. Mirrors isFeedbackAlert in src/app/actions/inbox.ts (kept local
+ *  because that module is "use server" and can't export sync helpers). */
+function isFeedbackAlert(a: InboxAlert): boolean {
+  return a.kind === "admin_notice" && a.adminKind === "feedback_received";
+}
+
 /** Lower bucket = more urgent. Drives default sort and the inbox tab's red badge. */
 function urgencyBucket(a: InboxAlert): number {
+  // Coach feedback outranks everything — even critical alerts — so it sits at
+  // the very top of the default sort.
+  if (isFeedbackAlert(a)) return -1;
   if (a.kind === "system_alert") {
     return a.severity === "critical" ? 0 : a.severity === "warn" ? 1 : 4;
   }
@@ -312,7 +323,9 @@ export function InboxTab({
   // everywhere (counts, filters, urgency badge).
   const adminFilteredAlerts = useMemo(() => {
     if (isSiteAdmin && !showAdminNotices) {
-      return alerts.filter((a) => a.kind !== "admin_notice");
+      // Feedback is never hidden by the system-notices toggle — it's the
+      // highest-signal alert and must always be visible.
+      return alerts.filter((a) => a.kind !== "admin_notice" || isFeedbackAlert(a));
     }
     return alerts;
   }, [alerts, isSiteAdmin, showAdminNotices]);
@@ -1461,7 +1474,7 @@ function InboxDetailPanel({
             {alert.playbookName}
           </span>
           <span aria-hidden>·</span>
-          <KindBadge kind={alert.kind} />
+          <KindBadge kind={alert.kind} adminKind={alert.adminKind} />
           <span aria-hidden>·</span>
           <span>{timeAgo(alert.createdAt)}</span>
         </div>
@@ -2202,7 +2215,7 @@ function AlertRow({
             >
               {alert.playbookName}
             </Link>
-            <KindBadge kind={alert.kind} />
+            <KindBadge kind={alert.kind} adminKind={alert.adminKind} />
             <span className="text-[11px] text-muted-light">
               {timeAgo(alert.createdAt)}
             </span>
@@ -2356,14 +2369,18 @@ function RowFrame({
   const leftRevealActive = dragX >= SWIPE_THRESHOLD;
   const rightRevealActive = dragX <= -SWIPE_THRESHOLD;
   // Foreground row classes (extracted so we can reuse the same chrome under
-  // the swipe-translatable wrapper).
-  const fgClasses = `group relative flex items-center gap-3 pl-5 pr-3 py-2.5 transition-colors ${
+  // the swipe-translatable wrapper). Feedback rows get a red left rail + tint
+  // so they read as urgent at a glance.
+  const isFeedback = isFeedbackAlert(alert);
+  const fgClasses = `group relative flex items-center gap-3 ${
+    isFeedback ? "border-l-4 border-red-600 pl-4" : "pl-5"
+  } pr-3 py-2.5 transition-colors ${
     selectMode
       ? "cursor-pointer"
       : unread && !isArchived
         ? "cursor-pointer bg-primary/[0.04]"
         : "cursor-pointer bg-surface"
-  } ${selected ? "bg-primary/10" : ""}`;
+  } ${selected ? "bg-primary/10" : isFeedback ? "bg-red-50 dark:bg-red-950/30" : ""}`;
   const readLabel = unread ? "Mark read" : "Mark unread";
   return (
     <li
@@ -2641,7 +2658,7 @@ function RsvpRow({
             >
               {alert.playbookName}
             </Link>
-            <KindBadge kind={alert.kind} />
+            <KindBadge kind={alert.kind} adminKind={alert.adminKind} />
             <span
               className="text-[11px] text-muted-light"
               suppressHydrationWarning
@@ -2715,7 +2732,21 @@ function PlaybookAvatar({
   );
 }
 
-function KindBadge({ kind }: { kind: InboxAlertKind | ResolvedKind }) {
+function KindBadge({
+  kind,
+  adminKind,
+}: {
+  kind: InboxAlertKind | ResolvedKind;
+  adminKind?: AdminNoticeKind;
+}) {
+  // Feedback gets a loud solid-red pill so it's unmistakable in the row.
+  if (kind === "admin_notice" && adminKind === "feedback_received") {
+    return (
+      <span className="rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+        feedback
+      </span>
+    );
+  }
   const map: Record<InboxAlertKind | ResolvedKind, { label: string; cls: string }> = {
     roster_claim: { label: "claim", cls: "bg-primary/10 text-primary" },
     membership: { label: "join", cls: "bg-secondary/10 text-secondary" },
@@ -2779,7 +2810,7 @@ function NotificationRow({
             >
               {alert.playbookName}
             </Link>
-            <KindBadge kind={alert.kind} />
+            <KindBadge kind={alert.kind} adminKind={alert.adminKind} />
             <span className="text-[11px] text-muted-light">
               {timeAgo(alert.createdAt)}
             </span>

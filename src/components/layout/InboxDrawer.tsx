@@ -164,12 +164,22 @@ function groupByPlaybook(alerts: InboxAlert[]): PlaybookAlertGroup[] {
   // Render groups ordered by their newest alert so the freshest
   // playbook always comes first — matches the coach's mental model
   // ("what just happened?"). Within a group, alerts come back from
-  // listInboxAlertsAction already newest-first.
+  // listInboxAlertsAction already newest-first. EXCEPTION: any group holding
+  // coach feedback floats to the very top — feedback is the highest-signal
+  // alert and must be the first thing an admin sees.
   return [...byId.values()].sort((a, b) => {
+    const fb = (g: PlaybookAlertGroup) => (g.alerts.some(isFeedbackAlert) ? 0 : 1);
+    if (fb(a) !== fb(b)) return fb(a) - fb(b);
     const aT = a.alerts[0]?.createdAt ?? "";
     const bT = b.alerts[0]?.createdAt ?? "";
     return bT.localeCompare(aT);
   });
+}
+
+/** Coach-feedback admin notice — top priority + red. Mirrors isFeedbackAlert
+ *  in src/app/actions/inbox.ts (that module is "use server", can't export it). */
+function isFeedbackAlert(a: InboxAlert): boolean {
+  return a.kind === "admin_notice" && a.adminKind === "feedback_received";
 }
 
 function PlaybookGroup({
@@ -226,20 +236,31 @@ function AlertRow({
   alert: InboxAlert;
   onClose: () => void;
 }) {
-  const Icon = iconForKind(alert.kind);
+  const Icon = iconForAlert(alert);
   const summary = summaryForAlert(alert);
   const time = formatRelativeTime(alert.createdAt);
+  const feedback = isFeedbackAlert(alert);
   return (
     <Link
       href={hrefForAlert(alert)}
       onClick={onClose}
-      className="flex items-start gap-3 px-4 py-2.5 transition-colors hover:bg-surface-inset"
+      className={`flex items-start gap-3 px-4 py-2.5 transition-colors hover:bg-surface-inset ${
+        feedback ? "border-l-4 border-red-600 bg-red-50 pl-3 dark:bg-red-950/30" : ""
+      }`}
     >
-      <span className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-surface-inset text-muted">
+      <span
+        className={`mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full ${
+          feedback ? "bg-red-600 text-white" : "bg-surface-inset text-muted"
+        }`}
+      >
         <Icon className="size-3.5" aria-hidden />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13px] font-medium text-foreground">
+        <span
+          className={`block truncate text-[13px] ${
+            feedback ? "font-semibold text-red-700 dark:text-red-300" : "font-medium text-foreground"
+          }`}
+        >
           {summary}
         </span>
         {time && (
@@ -248,6 +269,15 @@ function AlertRow({
       </span>
     </Link>
   );
+}
+
+function iconForAlert(a: InboxAlert) {
+  // Coach feedback gets its own glyph so it reads as a message at a glance,
+  // not just another shielded ops notice.
+  if (a.kind === "admin_notice" && a.adminKind === "feedback_received") {
+    return MessageSquare;
+  }
+  return iconForKind(a.kind);
 }
 
 function iconForKind(kind: InboxAlertKind) {

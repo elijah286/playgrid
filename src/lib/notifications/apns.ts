@@ -41,6 +41,12 @@ export type ApnsMessage = {
   /** Extra string key/values delivered alongside `aps`. */
   data?: Record<string, string>;
   /**
+   * iOS interruption level (aps.interruption-level). "time-sensitive" breaks
+   * through Focus / Do Not Disturb so the highest-signal alerts still land.
+   * Omitted → Apple's default. Ignored for silent (content-available) pushes.
+   */
+  interruptionLevel?: "active" | "time-sensitive";
+  /**
    * Silent push: sets aps.content-available and sends as an
    * `apns-push-type: background` at priority 5. With no title/body this wakes
    * the app to do background work (e.g. token refresh) without showing a
@@ -102,6 +108,9 @@ export function buildApnsPayload(message: ApnsMessage): string {
   if (message.title || message.body) {
     aps.alert = { title: message.title, body: message.body };
     aps.sound = "default";
+    // Elevate stand-out alerts so they pierce Focus / DND. Only on visible
+    // pushes — silent refreshes never carry an interruption level.
+    if (message.interruptionLevel) aps["interruption-level"] = message.interruptionLevel;
   }
   const payload: Record<string, unknown> = { aps };
   for (const [k, v] of Object.entries(message.data ?? {})) payload[k] = v;

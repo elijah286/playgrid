@@ -73,11 +73,15 @@ export async function notifyUser(opts: {
 // Operational notices worth a device push to site admins. play_milestone is
 // deliberately excluded — it's engagement telemetry for the in-app feed, not a
 // device-interrupt-worthy event, and pushing it would be exactly the noise we
-// want to avoid.
-const ADMIN_PUSH_NOTICE_KINDS = [
+// want to avoid. feedback_received IS included: a coach taking the time to write
+// is the highest-signal event we get, and missing it is what lost us a customer.
+// Exported so a regression test can assert a DB-emitted kind that should push
+// never silently drops off this list (the play_milestone footgun).
+export const ADMIN_PUSH_NOTICE_KINDS = [
   "user_signup",
   "subscription_purchased",
   "subscription_canceled",
+  "feedback_received",
 ] as const;
 
 type ClaimedNotice = {
@@ -89,7 +93,7 @@ type ClaimedNotice = {
   href: string | null;
 };
 
-function adminPushMessage(n: ClaimedNotice): PushMessage {
+export function adminPushMessage(n: ClaimedNotice): PushMessage {
   const who = (n.user_display_name?.trim() || n.user_email || "Someone").trim();
   switch (n.kind) {
     case "user_signup":
@@ -99,6 +103,17 @@ function adminPushMessage(n: ClaimedNotice): PushMessage {
       return { title: "New purchase 💳", body: `${who} ${n.body}`, link: n.href ?? "/admin/users" };
     case "subscription_canceled":
       return { title: "Subscription canceled", body: `${who} ${n.body}`, link: n.href ?? "/admin/users" };
+    case "feedback_received":
+      // body already reads e.g. "Joseph sent feedback: “…”" (self-contained,
+      // includes the who + an excerpt) — surface it verbatim so the founder
+      // gets the gist on the lock screen without opening the app. Time-sensitive
+      // so it pierces Focus/DND: feedback is the highest-signal event we get.
+      return {
+        title: "New feedback 📣",
+        body: n.body,
+        link: n.href ?? "/settings?tab=feedback",
+        interruptionLevel: "time-sensitive",
+      };
     default:
       return { title: "Site update", body: n.body, link: n.href ?? "/admin/users" };
   }

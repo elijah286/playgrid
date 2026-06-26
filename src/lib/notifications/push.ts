@@ -42,6 +42,13 @@ export type PushMessage = {
   link?: string;
   /** Extra string key/values delivered in the data payload. */
   data?: Record<string, string>;
+  /**
+   * iOS interruption level. "time-sensitive" breaks through Focus / Do Not
+   * Disturb and floats the banner above ordinary notifications — reserved for
+   * the highest-signal alerts (e.g. coach feedback). Omitted → Apple's default
+   * ("active"). Has no effect on Android, which already sends at high priority.
+   */
+  interruptionLevel?: "active" | "time-sensitive";
 };
 
 type ServiceAccount = {

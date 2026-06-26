@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { rateLimit } from "@/lib/rate-limit";
 import {
   getFeedbackWidgetSettings,
   setFeedbackWidgetEnabled,
@@ -35,6 +36,20 @@ export async function submitFeedbackAction(message: string) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Please sign in to send feedback." };
+
+  // Each insert now fans a time-sensitive push to every site admin, so cap how
+  // fast one account can fire them — generous for real use, but it stops a
+  // single coach from spamming the admin inbox/devices.
+  const allowed = await rateLimit(`feedback:${user.id}`, {
+    windowSeconds: 60 * 60,
+    max: 10,
+  });
+  if (!allowed) {
+    return {
+      ok: false as const,
+      error: "You're sending feedback very fast — give it a minute and try again.",
+    };
+  }
 
   const { error } = await supabase
     .from("feedback")

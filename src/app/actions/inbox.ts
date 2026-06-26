@@ -27,7 +27,10 @@ export type AdminNoticeKind =
   | "user_signup"
   | "subscription_purchased"
   | "subscription_canceled"
-  | "play_milestone";
+  | "play_milestone"
+  // Coach-submitted feedback (widget, contact/support form, or cancellation
+  // survey) — written by the feedback triggers in 20260626120000.
+  | "feedback_received";
 
 /** Active = visible in the default Active view + counted in the red-bang
  *  badge. Archived = visible only in the Archived view + not counted.
@@ -264,8 +267,23 @@ export async function listInboxAlertsAction(): Promise<
     filtered.push({ ...a, status: overlay === "archived" ? "archived" : "active" });
   }
 
-  filtered.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  // Coach feedback is the single highest-signal alert — pin it above
+  // everything regardless of recency so it's the first thing an admin sees,
+  // in both the bell drawer and the full inbox. Everything else stays
+  // newest-first.
+  filtered.sort((a, b) => {
+    const fb = (x: InboxAlert) => (isFeedbackAlert(x) ? 0 : 1);
+    return fb(a) - fb(b) || b.createdAt.localeCompare(a.createdAt);
+  });
   return { ok: true, alerts: filtered, isSiteAdmin };
+}
+
+/** True for a coach-feedback admin notice — the alert we treat as top
+ *  priority + red across every inbox surface. Local (not exported): this is a
+ *  "use server" module, so it can only export async actions. The client mirrors
+ *  this check inline (InboxTab/InboxDrawer). */
+function isFeedbackAlert(a: InboxAlert): boolean {
+  return a.kind === "admin_notice" && a.adminKind === "feedback_received";
 }
 
 function stateOverlayKey(kind: InboxAlertKind, sourceId: string): string {
@@ -899,8 +917,10 @@ export async function getInboxBadgeStateAction(): Promise<
   // (the action only inserts them when isSiteAdmin is true).
   const active = res.alerts.filter((a) => a.status === "active");
   const count = active.length;
+  // Coach feedback turns the bell red just like an RSVP/billing alert — it's
+  // too important to sit behind a neutral badge.
   const urgent = active.some(
-    (a) => a.kind === "rsvp_pending" || a.kind === "system_alert",
+    (a) => a.kind === "rsvp_pending" || a.kind === "system_alert" || isFeedbackAlert(a),
   );
   return { ok: true, count, urgent };
 }
