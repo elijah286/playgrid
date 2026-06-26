@@ -16,6 +16,8 @@ export type FunctionalTestRun = {
   totalSteps: number;
   failedSteps: number;
   createdAt: string;
+  /** Per-scenario animated-GIF summary URLs ({ scenario: url }), from meta.gifs. */
+  gifs: Record<string, string> | null;
 };
 
 export type FunctionalTestStep = {
@@ -56,7 +58,7 @@ export async function listFunctionalTestRunsAction(
   const { data, error } = await admin
     .from("functional_test_runs")
     .select(
-      "id, git_sha, trigger, status, environment, started_at, finished_at, duration_ms, total_steps, failed_steps, created_at",
+      "id, git_sha, trigger, status, environment, started_at, finished_at, duration_ms, total_steps, failed_steps, created_at, meta",
     )
     .order("created_at", { ascending: false })
     .limit(Math.max(1, Math.min(100, Math.floor(limit))));
@@ -74,6 +76,8 @@ export async function listFunctionalTestRunsAction(
     totalSteps: (r.total_steps as number) ?? 0,
     failedSteps: (r.failed_steps as number) ?? 0,
     createdAt: r.created_at as string,
+    gifs:
+      (r.meta as { gifs?: Record<string, string> } | null)?.gifs ?? null,
   }));
   return { ok: true, runs };
 }

@@ -54,6 +54,22 @@ export default class FunctestReporter implements Reporter {
     const failed =
       this.sawFailure || result.status !== "passed" || steps.some((s) => s.status === "failed");
 
+    const meta: Record<string, unknown> = { browser: "chromium" };
+
+    // Assemble one animated GIF per scenario from its step screenshots — a quick
+    // visual summary of each workflow. Uploaded via service-role (available both
+    // locally and in CI); the URLs ride in meta.gifs, which both ingest paths
+    // already persist. Skipped if no service-role key (the GIF can't be stored).
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const prefix = `${this.startedAtMs}-${(process.env.GITHUB_SHA || process.env.GIT_SHA || "local").slice(0, 7)}`;
+      try {
+        const gifs = await buildScenarioGifs(steps, prefix);
+        if (Object.keys(gifs).length) meta.gifs = gifs;
+      } catch (e) {
+        console.error("[functest-reporter] gif assembly failed:", e);
+      }
+    }
+
     const payload = {
       gitSha: process.env.GITHUB_SHA || process.env.GIT_SHA || null,
       trigger: process.env.FUNCTEST_TRIGGER || "manual",
@@ -62,7 +78,7 @@ export default class FunctestReporter implements Reporter {
       startedAt: new Date(this.startedAtMs).toISOString(),
       finishedAt: new Date(finishedAtMs).toISOString(),
       durationMs: finishedAtMs - this.startedAtMs,
-      meta: { browser: "chromium" },
+      meta,
       steps,
     };
 
@@ -105,6 +121,66 @@ export default class FunctestReporter implements Reporter {
 
 function slug(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "step";
+}
+
+/**
+ * Build one animated GIF per scenario from its step screenshots (a quick visual
+ * summary of each workflow) and upload them to the test-screenshots bucket.
+ * Returns { scenario: publicUrl }. Uses sharp's animated-join (already a dep).
+ */
+async function buildScenarioGifs(
+  steps: StepRecord[],
+  prefix: string,
+): Promise<Record<string, string>> {
+  const [{ createClient }, sharpMod] = await Promise.all([
+    import("@supabase/supabase-js"),
+    import("sharp"),
+  ]);
+  const sharp = sharpMod.default;
+  const admin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+
+  // Group frames by scenario, preserving step order.
+  const byScenario = new Map<string, StepRecord[]>();
+  for (const s of steps) {
+    if (!s.screenshotBase64) continue;
+    const arr = byScenario.get(s.scenario) ?? [];
+    arr.push(s);
+    byScenario.set(s.scenario, arr);
+  }
+
+  const out: Record<string, string> = {};
+  for (const [scenario, scSteps] of byScenario) {
+    if (scSteps.length === 0) continue;
+    try {
+      // Resize each frame to a uniform width first (smaller GIF, and join needs
+      // matching dimensions). Hold each frame ~1.5s so the summary is readable.
+      const frames = await Promise.all(
+        scSteps.map((s) =>
+          sharp(Buffer.from(s.screenshotBase64!, "base64"))
+            .resize({ width: 900 })
+            .png()
+            .toBuffer(),
+        ),
+      );
+      const gif = await sharp(frames, { join: { animated: true } })
+        .gif({ delay: scSteps.map(() => 1500), loop: 0 })
+        .toBuffer();
+      const key = `gifs/${prefix}-${slug(scenario)}.gif`;
+      const { error } = await admin.storage
+        .from("test-screenshots")
+        .upload(key, gif, { contentType: "image/gif", upsert: true });
+      if (!error) {
+        out[scenario] = admin.storage.from("test-screenshots").getPublicUrl(key).data.publicUrl;
+      }
+    } catch (e) {
+      console.error(`[functest-reporter] gif(${scenario}) failed:`, e instanceof Error ? e.message : e);
+    }
+  }
+  return out;
 }
 
 /** Mirror of the ingest endpoint's write path, for local runs without CRON_SECRET. */

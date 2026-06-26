@@ -175,9 +175,46 @@ function RunRow({ run }: { run: FunctionalTestRun }) {
       </button>
       {open && (
         <div className="border-t border-border">
+          {run.gifs && Object.keys(run.gifs).length > 0 && (
+            <ScenarioGifs gifs={run.gifs} />
+          )}
           <StepGallery runId={run.id} />
         </div>
       )}
+    </div>
+  );
+}
+
+/** Animated per-scenario replays — a quick visual summary of each workflow,
+ *  assembled from the step screenshots by the reporter. */
+function ScenarioGifs({ gifs }: { gifs: Record<string, string> }) {
+  return (
+    <div className="border-b border-border px-4 py-4">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
+        Workflow replays
+      </p>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {Object.entries(gifs).map(([scenario, url]) => (
+          <figure
+            key={scenario}
+            className="overflow-hidden rounded-xl border border-border bg-surface-raised"
+          >
+            <a href={url} target="_blank" rel="noreferrer">
+              {/* Animated GIF replay of the scenario (external Supabase URL). */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={url}
+                alt={`${scenario} replay`}
+                className="w-full bg-surface-inset"
+                loading="lazy"
+              />
+            </a>
+            <figcaption className="px-2.5 py-1.5 text-xs font-medium text-foreground">
+              {scenario}
+            </figcaption>
+          </figure>
+        ))}
+      </div>
     </div>
   );
 }
