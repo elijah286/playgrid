@@ -63,6 +63,7 @@ import { cn } from "@/lib/utils";
 import { track } from "@/lib/analytics/track";
 import { TutorialDeepLinkLauncher } from "@/features/tutorials/TutorialDeepLinkLauncher";
 import type { SportVariant } from "@/domain/play/types";
+import { recordRatingTrigger } from "@/app/actions/rating-prompt";
 
 type Props = {
   playbookId: string;
@@ -851,6 +852,8 @@ export function PrintPlaybookClient({
             ? "playbook"
             : "playcard";
       const name = `${label}-${playbookId.slice(0, 8)}.pdf`;
+      void recordRatingTrigger("first_print");
+      window.dispatchEvent(new CustomEvent("xo:rating-check"));
       await exportSvgsToMultiPagePdf(pages, name);
       toast(
         `${

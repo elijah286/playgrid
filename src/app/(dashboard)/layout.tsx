@@ -13,6 +13,7 @@ import { TermsAcceptancePrompt } from "@/components/account/TermsAcceptancePromp
 import { termsAcceptanceNeeded } from "@/lib/auth/terms";
 import { OfflineAutoRefreshMount } from "@/components/offline/OfflineAutoRefreshMount";
 import { NativeWelcomeSpotlight } from "@/components/native/NativeWelcomeSpotlight";
+import { RatingNudge } from "@/components/native/RatingNudge";
 import { userSignedInWithApple } from "@/lib/auth/provider";
 
 // Auth is NOT enforced here. Anon visitors may reach example-playbook
@@ -80,6 +81,7 @@ export default async function DashboardLayout({
           cleared, so a new user never sees both modals stacked. */}
       <NameCapturePrompt needed={nameCaptureNeeded && !termsNeeded} />
       {user && <NativeWelcomeSpotlight />}
+      {user && <RatingNudge />}
       <TimeOnSiteTracker />
       {feedbackSettings.enabled && (
         <FeedbackWidget

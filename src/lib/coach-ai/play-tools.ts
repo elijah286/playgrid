@@ -1672,6 +1672,11 @@ const create_play: CoachAiTool = {
       });
       if (!createRes.ok) return { ok: false, error: createRes.error };
 
+      // Rating prompt: coach saved a Cal-generated play — fire the trigger.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      void (require("@/app/actions/rating-prompt") as typeof import("@/app/actions/rating-prompt"))
+        .recordRatingTrigger("cal_save");
+
       const newDoc = coachDiagramToPlayDocument(diagramWithVariant);
       newDoc.metadata.coachName = name;
       if (formationName) newDoc.metadata.formation = formationName;

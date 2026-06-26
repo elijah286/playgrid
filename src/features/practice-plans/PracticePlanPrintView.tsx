@@ -5,6 +5,7 @@ import {
   formatOffset,
   type PracticePlanDocument,
 } from "@/domain/practice-plan/types";
+import { recordRatingTrigger } from "@/app/actions/rating-prompt";
 
 /**
  * Print-optimized layout. Designed to fit 60-120 min practices on 1-2 pages
@@ -21,6 +22,8 @@ export function PracticePlanPrintView({
 }) {
   useEffect(() => {
     if (!autoPrint) return;
+    void recordRatingTrigger("first_print");
+    window.dispatchEvent(new CustomEvent("xo:rating-check"));
     // Small delay so fonts/layout settle.
     const t = setTimeout(() => window.print(), 250);
     return () => clearTimeout(t);
@@ -37,7 +40,11 @@ export function PracticePlanPrintView({
         </div>
         <button
           type="button"
-          onClick={() => window.print()}
+          onClick={() => {
+            void recordRatingTrigger("first_print");
+            window.dispatchEvent(new CustomEvent("xo:rating-check"));
+            window.print();
+          }}
           className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-neutral-700"
         >
           Print

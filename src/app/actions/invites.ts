@@ -13,6 +13,7 @@ import { ensureSeatsAvailable } from "@/lib/billing/seats";
 import { sanitizeSharedPrefs, type PlaybookViewPrefs } from "@/domain/playbook/view-prefs";
 import { tagShareUrl } from "@/lib/share/tag-url";
 import { notifyPlaybookOwners } from "@/lib/notifications/inbox-dispatch";
+import { recordRatingTrigger } from "@/app/actions/rating-prompt";
 
 const DEFAULT_FROM_EMAIL = "XO Gridmaker <onboarding@resend.dev>";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -239,6 +240,17 @@ export async function createInviteAction(input: {
     .single();
 
   if (error) return { ok: false, error: error.message };
+
+  // Rating prompt: fire the second-share trigger when the user creates their
+  // 2nd invite link, indicating they've shared the playbook with a second person.
+  const { count: inviteCount } = await admin
+    .from("playbook_invites")
+    .select("id", { count: "exact", head: true })
+    .eq("created_by", user.id);
+  if (inviteCount === 2) {
+    void recordRatingTrigger("second_share");
+  }
+
   revalidatePath(`/playbooks/${input.playbookId}`);
   return { ok: true, invite: data as PlaybookInvite };
 }

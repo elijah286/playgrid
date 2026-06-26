@@ -26,6 +26,7 @@ import { recordPlaybookVersion } from "@/lib/versions/playbook-version-writer";
 import { revalidateExampleSurfacesIfPublicPlaybook } from "@/lib/site/example-playbooks";
 import { timed } from "@/lib/perf/timed";
 import { resolveOpponentHiddenOnLoad } from "@/lib/playbook/opponent-visibility";
+import { recordRatingTrigger } from "@/app/actions/rating-prompt";
 
 /**
  * Returns true if the signed-in user has created at least one play in a
@@ -373,6 +374,19 @@ export async function createPlayAction(
 
   // 10th-play system notice fires from a play_versions trigger — see
   // 20260506180000_system_notices.sql.
+
+  // Rating prompt: fire the third-play trigger when the user creates their 3rd
+  // non-tutorial play. Tutorial plays don't count toward this milestone.
+  if (!isTutorial) {
+    const { count: playCount } = await supabase
+      .from("play_versions")
+      .select("id", { count: "exact", head: true })
+      .eq("created_by", user.id)
+      .eq("kind", "create");
+    if (playCount === 3) {
+      void recordRatingTrigger("third_play");
+    }
+  }
 
   await revalidateExampleSurfacesIfPublicPlaybook(playbookId);
 

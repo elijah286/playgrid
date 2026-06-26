@@ -12,6 +12,11 @@ import { setCoachCalUpgradeBannerEnabledAction } from "@/app/actions/admin-coach
 import { setCoachCalVersionAction } from "@/app/actions/admin-coach-cal-version";
 import { setCoachAiEvalDaysAction } from "@/app/actions/admin-coach-ai-eval";
 import {
+  setSuggestReviewsAction,
+  resetRatingPromptForSelfAction,
+} from "@/app/actions/admin-review-prompt";
+import type { SuggestReviews } from "@/lib/site/review-prompt-config";
+import {
   COACH_AI_EVAL_DAYS_MIN,
   COACH_AI_EVAL_DAYS_MAX,
 } from "@/lib/site/coach-ai-eval-config";
@@ -33,6 +38,7 @@ export function SiteSettingsAdminClient({
   initialCoachCalUpgradeBannerEnabled,
   initialCoachCalVersion,
   initialCoachAiEvalDays,
+  initialSuggestReviews,
 }: {
   initialHideLobbyAnimation: boolean;
   initialExamplesPageEnabled: boolean;
@@ -45,6 +51,7 @@ export function SiteSettingsAdminClient({
   initialCoachCalUpgradeBannerEnabled: boolean;
   initialCoachCalVersion: "v1" | "v2";
   initialCoachAiEvalDays: number;
+  initialSuggestReviews: SuggestReviews;
 }) {
   const { toast } = useToast();
 
@@ -76,6 +83,10 @@ export function SiteSettingsAdminClient({
   const [savedEvalDays, setSavedEvalDays] = useState(initialCoachAiEvalDays);
   const [evalDaysInput, setEvalDaysInput] = useState(String(initialCoachAiEvalDays));
   const [evalDaysPending, startEvalDaysTransition] = useTransition();
+
+  const [suggestReviews, setSuggestReviews] = useState<SuggestReviews>(initialSuggestReviews);
+  const [suggestReviewsPending, startSuggestReviewsTransition] = useTransition();
+  const [resetPending, startResetTransition] = useTransition();
 
   function saveEvalDays() {
     const next = Number(evalDaysInput);
@@ -308,6 +319,43 @@ export function SiteSettingsAdminClient({
     });
   }
 
+  function resetRatingPrompt() {
+    startResetTransition(async () => {
+      const res = await resetRatingPromptForSelfAction();
+      if (!res.ok) {
+        toast(res.error, "error");
+        return;
+      }
+      try {
+        localStorage.removeItem("playgrid:rating-nudge-shown");
+      } catch {
+        // ignore
+      }
+      toast("Rating prompt state cleared — triggers and cooldown reset.", "success");
+    });
+  }
+
+  function switchSuggestReviews(next: SuggestReviews) {
+    const prev = suggestReviews;
+    if (next === prev) return;
+    setSuggestReviews(next);
+    startSuggestReviewsTransition(async () => {
+      const res = await setSuggestReviewsAction(next);
+      if (!res.ok) {
+        setSuggestReviews(prev);
+        toast(res.error, "error");
+        return;
+      }
+      const label =
+        next === "everyone"
+          ? "everyone"
+          : next === "only_admins"
+            ? "admins only"
+            : "off";
+      toast(`App Store rating nudge: ${label}.`, "success");
+    });
+  }
+
   function toggleExamplesEnabled(next: boolean) {
     const prev = examplesEnabled;
     setExamplesEnabled(next);
@@ -327,6 +375,47 @@ export function SiteSettingsAdminClient({
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-foreground">Suggest reviews</p>
+          <p className="mt-0.5 text-xs text-muted">
+            Who sees the in-app App Store rating nudge after hitting an
+            engagement milestone (saved a Cal play, 3rd play created, 2nd share,
+            first print). Set to <strong>Admins only</strong> while validating,
+            then switch to <strong>Everyone</strong> to roll out broadly.{" "}
+            <button
+              type="button"
+              onClick={resetRatingPrompt}
+              disabled={resetPending}
+              className="underline decoration-dotted underline-offset-2 hover:text-foreground disabled:opacity-50"
+            >
+              {resetPending ? "Resetting…" : "Reset my state"}
+            </button>
+          </p>
+        </div>
+        <div className="inline-flex items-center gap-1 rounded-lg bg-surface p-1 ring-1 ring-border">
+          {(["everyone", "only_admins", "off"] as const).map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              className={`rounded-md px-3 py-1 text-sm transition-colors ${
+                suggestReviews === opt
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted hover:text-foreground"
+              }`}
+              disabled={suggestReviewsPending}
+              onClick={() => switchSuggestReviews(opt)}
+            >
+              {opt === "everyone"
+                ? "Everyone"
+                : opt === "only_admins"
+                  ? "Admins only"
+                  : "Off"}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-foreground">
