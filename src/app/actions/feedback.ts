@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { rateLimit } from "@/lib/rate-limit";
+import { pushFreshAdminNoticesAfterResponse } from "@/lib/notifications/inbox-dispatch";
 import {
   getFeedbackWidgetSettings,
   setFeedbackWidgetEnabled,
@@ -57,6 +58,10 @@ export async function submitFeedbackAction(message: string) {
     .from("feedback")
     .insert({ user_id: user.id, message: trimmed });
   if (error) return { ok: false as const, error: error.message };
+
+  // The insert's trigger just wrote a 'feedback_received' admin notice — buzz
+  // every admin's phone immediately rather than waiting on the cron.
+  pushFreshAdminNoticesAfterResponse(createServiceRoleClient());
 
   return { ok: true as const };
 }

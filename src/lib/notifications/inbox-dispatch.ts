@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import type { createServiceRoleClient } from "@/lib/supabase/admin";
 import { sendPushToUsers, type PushMessage } from "@/lib/notifications/push";
 import type { PushCategory } from "@/lib/notifications/categories";
@@ -185,6 +186,32 @@ export async function sweepUnpushedAdminNotices(opts: {
     .select("id, kind, body, user_display_name, user_email, href");
 
   return { pushed: await fanNoticesToAdmins(admin, (claimed ?? []) as ClaimedNotice[]) };
+}
+
+/**
+ * Push freshly-written admin notices (feedback, signups, …) to admin devices
+ * NOW, after the response streams — so delivery doesn't wait on the every-minute
+ * cron sweep (which may not be scheduled in every environment). Call this from a
+ * request context right after the source row is inserted; the DB trigger has
+ * already written the notice in the same transaction, so the sweep will claim
+ * and push it. Best-effort and idempotent (the pushed_at claim dedupes against
+ * the cron), and errors never surface to the user. Feedback has no other instant
+ * hook — signups/subscriptions get theirs from the auth callback / Stripe
+ * webhook — so this is what makes a coach's feedback buzz the founder's phone
+ * the moment it lands.
+ */
+export function pushFreshAdminNoticesAfterResponse(admin: Admin): void {
+  try {
+    after(async () => {
+      try {
+        await sweepUnpushedAdminNotices({ admin, maxAgeMs: 5 * 60 * 1000 });
+      } catch {
+        // best-effort; the cron sweep remains a backstop
+      }
+    });
+  } catch {
+    // after() throws if called outside a request scope (e.g. a script) — skip.
+  }
 }
 
 /** Fan a set of already-claimed notices out to every site admin's devices. */

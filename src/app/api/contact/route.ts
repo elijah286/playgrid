@@ -4,6 +4,7 @@ import { getStoredResendConfig } from "@/lib/site/resend-config";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { pushFreshAdminNoticesAfterResponse } from "@/lib/notifications/inbox-dispatch";
 
 const DEFAULT_FROM_EMAIL = "XO Gridmaker <onboarding@resend.dev>";
 
@@ -72,6 +73,9 @@ export async function POST(req: Request) {
         source: "contact",
       });
       savedToFeedback = !error;
+      // The insert's trigger wrote a 'feedback_received' admin notice — push it
+      // to admin devices immediately (after the response), don't wait on cron.
+      if (savedToFeedback) pushFreshAdminNoticesAfterResponse(admin);
     } catch {
       /* non-fatal — email path below is still attempted */
     }

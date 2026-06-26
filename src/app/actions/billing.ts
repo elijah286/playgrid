@@ -6,6 +6,7 @@ import { Resend } from "resend";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { pushFreshAdminNoticesAfterResponse } from "@/lib/notifications/inbox-dispatch";
 import { hasUsedCoachProTrial, type SubscriptionTier } from "@/lib/billing/entitlement";
 import { getStripeClient, priceIdFor, seatPriceIdFor, isSeatPriceId, type BillingInterval } from "@/lib/billing/stripe";
 import { getSeatUsage, ensureOwnerSeatGrantRow } from "@/lib/billing/seats";
@@ -783,6 +784,10 @@ export async function cancelSubscriptionAction(input: {
     message,
     stripe_subscription_id: sub.stripe_subscription_id,
   });
+
+  // That insert's trigger wrote a 'feedback_received' admin notice with the
+  // coach's reason — push it to admin phones immediately (after the response).
+  pushFreshAdminNoticesAfterResponse(admin);
 
   await sendCancellationAdminEmail({
     userEmail: user.email ?? "(no email)",
