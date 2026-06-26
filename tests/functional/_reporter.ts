@@ -66,28 +66,105 @@ export default class FunctestReporter implements Reporter {
       steps,
     };
 
+    // Production path (CI): POST to the authenticated ingest endpoint.
     const ingestUrl = process.env.INGEST_URL;
     const secret = process.env.CRON_SECRET;
-    if (!ingestUrl || !secret) {
-      console.log(
-        `[functest-reporter] ${payload.status} — ${steps.length} steps. INGEST_URL/CRON_SECRET not set, skipping ingest.`,
-      );
+    if (ingestUrl && secret) {
+      try {
+        const res = await fetch(ingestUrl, {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${secret}` },
+          body: JSON.stringify(payload),
+        });
+        const text = await res.text().catch(() => "");
+        console.log(`[functest-reporter] ingest → ${res.status} ${text.slice(0, 200)}`);
+      } catch (e) {
+        console.error("[functest-reporter] ingest POST failed:", e);
+      }
       return;
     }
 
-    try {
-      const res = await fetch(ingestUrl, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${secret}`,
-        },
-        body: JSON.stringify(payload),
-      });
-      const text = await res.text().catch(() => "");
-      console.log(`[functest-reporter] ingest → ${res.status} ${text.slice(0, 200)}`);
-    } catch (e) {
-      console.error("[functest-reporter] ingest POST failed:", e);
+    // Local fallback: no CRON_SECRET, but a service-role key is available — write
+    // straight to Supabase (same effect as the endpoint) so a local run still
+    // populates the Functional Testing dashboard.
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      try {
+        const n = await directWrite(payload);
+        console.log(`[functest-reporter] direct-write → run + ${n} steps to Supabase`);
+      } catch (e) {
+        console.error("[functest-reporter] direct-write failed:", e);
+      }
+      return;
     }
+
+    console.log(
+      `[functest-reporter] ${payload.status} — ${steps.length} steps. No INGEST_URL/CRON_SECRET or service-role key; skipping ingest.`,
+    );
   }
+}
+
+function slug(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "step";
+}
+
+/** Mirror of the ingest endpoint's write path, for local runs without CRON_SECRET. */
+async function directWrite(payload: {
+  gitSha: string | null;
+  trigger: string;
+  environment: string;
+  status: string;
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  meta: Record<string, unknown>;
+  steps: StepRecord[];
+}): Promise<number> {
+  const { createClient } = await import("@supabase/supabase-js");
+  const admin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+  const failedSteps = payload.steps.filter((s) => s.status === "failed").length;
+  const { data: run, error: runErr } = await admin
+    .from("functional_test_runs")
+    .insert({
+      git_sha: payload.gitSha,
+      trigger: payload.trigger,
+      status: payload.status,
+      environment: payload.environment,
+      started_at: payload.startedAt,
+      finished_at: payload.finishedAt,
+      duration_ms: payload.durationMs,
+      total_steps: payload.steps.length,
+      failed_steps: failedSteps,
+      meta: payload.meta,
+    })
+    .select("id")
+    .single();
+  if (runErr || !run) throw new Error(runErr?.message ?? "run insert failed");
+  const runId = run.id as string;
+
+  for (const s of payload.steps) {
+    let screenshotUrl: string | null = null;
+    if (s.screenshotBase64) {
+      const bytes = Buffer.from(s.screenshotBase64, "base64");
+      const key = `${runId}/${String(s.ordinal).padStart(3, "0")}-${slug(s.stepName)}.png`;
+      const { error } = await admin.storage
+        .from("test-screenshots")
+        .upload(key, bytes, { contentType: "image/png", upsert: true });
+      if (!error) screenshotUrl = admin.storage.from("test-screenshots").getPublicUrl(key).data.publicUrl;
+    }
+    await admin.from("functional_test_steps").insert({
+      run_id: runId,
+      scenario: s.scenario,
+      step_name: s.stepName,
+      ordinal: s.ordinal,
+      status: s.status,
+      duration_ms: s.durationMs,
+      screenshot_url: screenshotUrl,
+      error_message: s.errorMessage ?? null,
+    });
+  }
+  return payload.steps.length;
 }

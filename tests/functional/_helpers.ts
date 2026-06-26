@@ -90,7 +90,7 @@ export async function signIn(page: Page, email: string, password: string): Promi
   await page.locator('input[type="password"]').fill(password);
   await page.locator('input[type="password"]').press("Enter");
   await page.waitForURL((u) => u.pathname === "/home" || u.pathname === "/", {
-    timeout: 15_000,
+    timeout: 25_000, // prod sign-in can be slow under load; 15s was occasionally tight
   });
   // Brand-new accounts hit the "Agree to our terms to continue" gate on first
   // login (TermsAcceptancePrompt). Accept it the way a real new user does: tick
