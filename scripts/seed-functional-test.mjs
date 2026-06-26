@@ -110,9 +110,37 @@ async function ensureAccount(email, password, displayName) {
   return userId;
 }
 
+/**
+ * Put the coach on Team Coach via a comp grant. Inviting players / sharing is a
+ * paid feature, and the coaches who actually do this are paying customers — so a
+ * realistic "coach who builds a team" account is on Team Coach. This provisions
+ * the account's PLAN (we can't run Stripe in a test); the test scenarios still
+ * perform every coach ACTION through the real UI. comp_grants feeds the
+ * user_entitlements view (subscriptions ∪ comp_grants).
+ */
+async function ensureTeamCoach(userId) {
+  const { data: ex } = await admin
+    .from("comp_grants")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("tier", "coach")
+    .is("revoked_at", null)
+    .maybeSingle();
+  if (ex) {
+    console.log("Coach already on Team Coach (comp).");
+    return;
+  }
+  const { error } = await admin
+    .from("comp_grants")
+    .insert({ user_id: userId, tier: "coach", note: "functional-test coach account" });
+  if (error) throw new Error(`comp_grant: ${error.message}`);
+  console.log("Granted Team Coach comp to coach.");
+}
+
 async function main() {
   const coachId = await ensureAccount(coachEmail, coachPassword, "Functest Coach");
   const playerId = await ensureAccount(playerEmail, playerPassword, "Functest Player");
+  await ensureTeamCoach(coachId);
   console.log(JSON.stringify({ coachId, playerId, coachEmail, playerEmail }, null, 2));
   console.log(
     "\nBoth accounts are on @xogridmaker.com → auto-excluded from analytics. Done.",

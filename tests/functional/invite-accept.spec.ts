@@ -1,20 +1,24 @@
 /**
  * INVITE → ACCEPT — the regression that started all of this.
  *
- * A coach creates a playbook + a player invite link; the player opens it and
- * accepts. The load-bearing assertion is that accepting does NOT surface the
- * "Could not accept invite…" toast (the 42P10 the broken accept_invite RPC
- * produced) and DOES reach a success state. This is the scenario that, had it
- * existed, would have caught the bug before a customer canceled.
+ * A coach (Team Coach) creates a playbook and a player invite link via the real
+ * Share → "Add a player" → "Copy link" flow; the player opens the link and
+ * accepts. The load-bearing assertion: accepting does NOT surface the "Could not
+ * accept invite…" toast (the 42P10 the broken accept_invite RPC produced) and
+ * DOES reach a success state. Had this existed, it would have caught the bug
+ * before a customer canceled.
  *
- * Selectors for the create/share flow are inferred from the app and may need a
- * pass on first local run; the accept selectors come from AcceptInviteButton.
+ * The invite URL itself is resolved via service-role (the same token the coach's
+ * "Copy link" put on the clipboard) — test plumbing to obtain what the coach
+ * would paste. Every actual user action (create playbook, create the invite,
+ * accept it) goes through the real UI.
  */
 import {
   test,
   expect,
   signIn,
   testAccounts,
+  serviceClient,
   cleanupFunctestPlaybooks,
   FUNCTEST_PREFIX,
 } from "./_helpers";
@@ -28,10 +32,12 @@ test.afterAll(async () => {
 test("invite → accept", async ({ browser, recorder }) => {
   recorder.scenario = "invite-accept";
   const playbookName = `${FUNCTEST_PREFIX} invite ${Date.now()}`;
-  let inviteUrl = "";
+  let playbookId = "";
 
   // ── Coach: create a throwaway playbook + a player invite link ──────────────
-  const coachCtx = await browser.newContext();
+  const coachCtx = await browser.newContext({
+    permissions: ["clipboard-read", "clipboard-write"],
+  });
   const coach = await coachCtx.newPage();
   try {
     await recorder.step("coach signs in", coach, async () => {
@@ -40,32 +46,37 @@ test("invite → accept", async ({ browser, recorder }) => {
 
     await recorder.step("coach creates a playbook", coach, async () => {
       await coach.goto("/home", { waitUntil: "networkidle" });
-      await coach.getByRole("button", { name: /new playbook/i }).first().click();
-      await coach.getByRole("textbox").first().fill(playbookName);
-      await coach
-        .getByRole("button", { name: /create|continue|next|save|done|finish/i })
-        .first()
-        .click();
-      await coach.waitForURL(/\/playbooks\/[0-9a-f-]+/i, { timeout: 20_000 });
+      await coach.getByRole("button").filter({ hasText: /new playbook/i }).first().click();
+      await coach.getByPlaceholder(/varsity/i).waitFor();
+      await coach.getByPlaceholder(/varsity/i).fill(playbookName);
+      await coach.getByRole("button", { name: /^create$/i }).click();
+      await coach.waitForURL(/\/playbooks\/[0-9a-f-]+/i, { timeout: 25_000 });
+      playbookId = coach.url().match(/playbooks\/([0-9a-f-]+)/i)?.[1] ?? "";
+      expect(playbookId).not.toBe("");
     });
 
     await recorder.step("coach creates a player invite link", coach, async () => {
-      await coach.getByRole("button", { name: /invite|share/i }).first().click();
-      await coach
-        .getByRole("button", { name: /create link|invite players?|generate|new link/i })
-        .first()
-        .click();
-      const link = coach.locator('input[readonly], a[href*="/invite/"]').first();
-      await link.waitFor({ timeout: 10_000 });
-      inviteUrl =
-        (await link.getAttribute("value")) || (await link.getAttribute("href")) || "";
-      expect(inviteUrl, "invite URL should be present in the share dialog").toContain(
-        "/invite/",
-      );
+      await coach.goto(`/playbooks/${playbookId}?share=1`, { waitUntil: "networkidle" });
+      await coach.getByText("Add a player", { exact: false }).first().click();
+      await coach.getByRole("button", { name: /copy link/i }).first().click();
     });
   } finally {
     await coachCtx.close();
   }
+
+  // Resolve the invite link the coach just generated (the token "Copy link" put
+  // on the clipboard). Service-role read only; the player accepts via the UI.
+  const admin = serviceClient();
+  test.skip(!admin, "SUPABASE_SERVICE_ROLE_KEY not set — cannot resolve invite token.");
+  const { data: inv } = await admin!
+    .from("playbook_invites")
+    .select("token")
+    .eq("playbook_id", playbookId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  expect(inv?.token, "coach's Share → Add a player should have created an invite").toBeTruthy();
+  const inviteUrl = `/invite/${inv!.token}`;
 
   // ── Player: accept the invite via the real accept page ─────────────────────
   const playerCtx = await browser.newContext();
@@ -76,8 +87,7 @@ test("invite → accept", async ({ browser, recorder }) => {
     });
 
     await recorder.step("player opens the invite link", player, async () => {
-      const path = inviteUrl.replace(/^https?:\/\/[^/]+/, "");
-      await player.goto(path, { waitUntil: "networkidle" });
+      await player.goto(inviteUrl, { waitUntil: "networkidle" });
       await expect(
         player.getByRole("button", { name: /accept invite/i }),
       ).toBeVisible({ timeout: 15_000 });

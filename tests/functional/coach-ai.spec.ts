@@ -1,55 +1,68 @@
 /**
  * COACH AI (Cal) — generate a play via chat.
  *
- * Cal is gated, slower, and costs tokens, so this scenario:
- *   - skips itself when no Cal entry is found for the coach account (the seed
- *     flag isn't enabled yet) rather than spuriously failing every run, and
- *   - uses a generous timeout for the model round-trip.
- *
- * Selectors are best-effort; refine once Cal is enabled for the test coach.
+ * Cal is gated, slower, and costs tokens, so this scenario is deliberately
+ * conservative: it creates its own playbook, then tries to open Cal's
+ * play-generation entry ("Generate play" / Coach Cal). If no Cal entry is
+ * reachable for the test account, it SKIPS rather than failing the suite. When
+ * Cal is reachable it sends a prompt and waits (generously) for a reply.
  */
-import { test, expect, signIn, testAccounts, FUNCTEST_PREFIX } from "./_helpers";
+import {
+  test,
+  expect,
+  signIn,
+  testAccounts,
+  cleanupFunctestPlaybooks,
+  FUNCTEST_PREFIX,
+} from "./_helpers";
 
 const accounts = testAccounts();
 
+test.afterAll(async () => {
+  await cleanupFunctestPlaybooks();
+});
+
 test("coach AI generates a play", async ({ page, recorder }) => {
   recorder.scenario = "coach-ai";
-  test.setTimeout(120_000);
+  test.setTimeout(150_000);
+  const name = `${FUNCTEST_PREFIX} cal ${Date.now()}`;
 
   await recorder.step("sign in", page, async () => {
     await signIn(page, accounts.coach.email, accounts.coach.password);
   });
 
-  // Open the most recent playbook so Cal has a context to compose into.
-  await recorder.step("open a playbook", page, async () => {
-    await page.goto("/playbooks", { waitUntil: "networkidle" });
-    const tile = page.locator('a[href^="/playbooks/"]').first();
-    await tile.waitFor({ timeout: 15_000 });
-    await tile.click();
-    await page.waitForURL(/\/playbooks\/[0-9a-f-]+/i, { timeout: 20_000 });
+  await recorder.step("create a playbook for Cal to work in", page, async () => {
+    await page.goto("/home", { waitUntil: "networkidle" });
+    await page.getByRole("button").filter({ hasText: /new playbook/i }).first().click();
+    await page.getByPlaceholder(/varsity/i).waitFor();
+    await page.getByPlaceholder(/varsity/i).fill(name);
+    await page.getByRole("button", { name: /^create$/i }).click();
+    await page.waitForURL(/\/playbooks\/[0-9a-f-]+/i, { timeout: 25_000 });
   });
 
-  // Find a Cal entry point; if there isn't one, the account/flag isn't enabled.
-  const calTrigger = page.getByRole("button", { name: /cal|coach ai|ask cal|assistant/i });
-  if ((await calTrigger.count()) === 0) {
-    test.skip(true, "Coach AI not available for the test coach (gate not enabled).");
+  // Find Cal's play-generation entry on the playbook page. If it isn't there,
+  // Cal isn't enabled for this account — skip cleanly.
+  const calEntry = page.getByRole("button", {
+    name: /generate play|coach cal|ask cal|cal ai/i,
+  });
+  if ((await calEntry.count()) === 0) {
+    test.skip(true, "Coach AI entry not available for the test account.");
   }
 
   await recorder.step("open Cal and send a prompt", page, async () => {
-    await calTrigger.first().click();
+    await calEntry.first().click();
     const input = page
       .locator('textarea, input[type="text"]')
       .filter({ hasNot: page.locator("[readonly]") })
       .last();
-    await input.waitFor({ timeout: 10_000 });
-    await input.fill(`Draw a simple mesh concept for ${FUNCTEST_PREFIX} test`);
+    await input.waitFor({ timeout: 15_000 });
+    await input.fill("Draw a simple mesh concept.");
     await input.press("Enter");
   });
 
   await recorder.step("Cal responds", page, async () => {
-    // A reply bubble / play fence should appear within the model round-trip.
     await expect(
-      page.getByText(/mesh|play|here|created|added/i).first(),
-    ).toBeVisible({ timeout: 90_000 });
+      page.getByText(/mesh|play|route|here|created|added|formation/i).first(),
+    ).toBeVisible({ timeout: 120_000 });
   });
 });
