@@ -17,7 +17,9 @@ export type FeedbackRow = {
   email: string | null;
   displayName: string | null;
   message: string;
-  source: "widget" | "contact";
+  // "cancellation" = the free-text a coach left in the in-app cancel survey,
+  // surfaced here so every channel of feedback lives in one admin list.
+  source: "widget" | "contact" | "cancellation";
   createdAt: string;
 };
 
@@ -79,18 +81,31 @@ export async function listFeedbackForAdminAction() {
   }
 
   const admin = createServiceRoleClient();
-  const { data: rows, error } = await admin
-    .from("feedback")
-    .select("id, user_id, message, created_at, name, email, source")
-    .order("created_at", { ascending: false })
-    .limit(500);
+  // Pull both feedback channels in parallel: the feedback widget / contact form
+  // (public.feedback) and the in-app cancel survey (the coach's "why I left",
+  // public.subscription_cancellation_feedback). The cancel query is best-effort
+  // — a failure there must not blank out the whole Feedback tab.
+  const [{ data: rows, error }, { data: cancelRows, error: cancelErr }] = await Promise.all([
+    admin
+      .from("feedback")
+      .select("id, user_id, message, created_at, name, email, source")
+      .order("created_at", { ascending: false })
+      .limit(500),
+    admin
+      .from("subscription_cancellation_feedback")
+      .select("id, user_id, message, created_at")
+      .order("created_at", { ascending: false })
+      .limit(500),
+  ]);
   if (error) return { ok: false as const, error: error.message, items: [] };
+  const cancels = cancelErr ? [] : cancelRows ?? [];
 
   const userIds = Array.from(
     new Set(
-      (rows ?? [])
-        .map((r) => r.user_id as string | null)
-        .filter((id): id is string => !!id),
+      [
+        ...(rows ?? []).map((r) => r.user_id as string | null),
+        ...cancels.map((r) => r.user_id as string | null),
+      ].filter((id): id is string => !!id),
     ),
   );
   const [{ data: profiles }, authRes] = userIds.length
@@ -102,7 +117,7 @@ export async function listFeedbackForAdminAction() {
   const profileMap = new Map((profiles ?? []).map((p) => [p.id, p.display_name as string | null]));
   const emailMap = new Map((authRes.data.users ?? []).map((u) => [u.id, u.email ?? null]));
 
-  const items: FeedbackRow[] = (rows ?? []).map((r) => {
+  const fromFeedback: FeedbackRow[] = (rows ?? []).map((r) => {
     const uid = (r.user_id as string | null) ?? null;
     const source = (r.source as string) === "contact" ? "contact" : "widget";
     return {
@@ -117,6 +132,26 @@ export async function listFeedbackForAdminAction() {
       createdAt: r.created_at as string,
     };
   });
+
+  // Namespace the id (`cancellation:<uuid>`) so it never collides with a
+  // feedback-table id and so the UI can tell it isn't deletable via
+  // deleteFeedbackAction (which only targets public.feedback).
+  const fromCancellations: FeedbackRow[] = cancels.map((r) => {
+    const uid = r.user_id as string;
+    return {
+      id: `cancellation:${r.id as string}`,
+      userId: uid,
+      email: emailMap.get(uid) ?? null,
+      displayName: profileMap.get(uid) ?? null,
+      message: r.message as string,
+      source: "cancellation" as const,
+      createdAt: r.created_at as string,
+    };
+  });
+
+  const items: FeedbackRow[] = [...fromFeedback, ...fromCancellations].sort((a, b) =>
+    b.createdAt.localeCompare(a.createdAt),
+  );
 
   return { ok: true as const, items };
 }

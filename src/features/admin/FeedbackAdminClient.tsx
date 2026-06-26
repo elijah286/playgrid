@@ -187,6 +187,11 @@ export function FeedbackAdminClient({
                         Contact form
                       </span>
                     )}
+                    {item.source === "cancellation" && (
+                      <span className="shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                        Cancellation
+                      </span>
+                    )}
                   </p>
                   {item.email && item.displayName && (
                     <p className="truncate text-xs text-muted">{item.email}</p>
@@ -199,14 +204,16 @@ export function FeedbackAdminClient({
                   >
                     {new Date(item.createdAt).toLocaleString()}
                   </time>
-                  <IconButton
-                    icon={Trash2}
-                    variant="ghost"
-                    size="sm"
-                    tooltip="Delete feedback"
-                    aria-label="Delete feedback"
-                    onClick={() => remove(item.id)}
-                  />
+                  {item.source !== "cancellation" && (
+                    <IconButton
+                      icon={Trash2}
+                      variant="ghost"
+                      size="sm"
+                      tooltip="Delete feedback"
+                      aria-label="Delete feedback"
+                      onClick={() => remove(item.id)}
+                    />
+                  )}
                 </div>
               </div>
               <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">
