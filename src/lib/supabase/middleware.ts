@@ -59,6 +59,7 @@ const PUBLIC_PREFIXES = [
   "/api/email/unsubscribe", // RFC 8058 one-click: mail clients POST without a session. Verifies HMAC token.
   "/api/trash/purge", // Cron: auth via bearer CRON_SECRET.
   "/api/auth/purge-unconfirmed", // Cron: auth via bearer CRON_SECRET.
+  "/api/functional-tests/", // CI ingest of functional-test runs. Auth via bearer CRON_SECRET.
   "/monitoring", // Sentry tunnel
   // Example playbook viewing — pages enforce their own anon/member check
   // against the `is_public_example` flag, so anon visitors don't bounce.
