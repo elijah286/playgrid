@@ -44,6 +44,15 @@ export type FeatureEntry = {
 export const FEATURES: FeatureEntry[] = [
   // ── Roster & sharing ─────────────────────────────────────────────
   {
+    id: "join-puts-you-on-roster",
+    name: "Joining puts players on the roster",
+    description:
+      "When a player accepts an invite, they're added to the roster automatically — their name plus the position they picked. Coaches who want to vet new members can flip on 'approve new players,' which makes joiners show as tentative until the coach confirms them. Players who match a name the coach pre-added can claim that spot to merge into it.",
+    category: "Roster & sharing",
+    status: "ga",
+    addedDate: "2026-06-26",
+  },
+  {
     id: "content-reporting",
     name: "Report objectionable content",
     description:
@@ -700,6 +709,15 @@ export const FEATURES: FeatureEntry[] = [
     category: "Plays & formations",
     status: "ga",
     addedDate: "2026-05-03",
+  },
+  {
+    id: "coach-cal-flip-play",
+    name: "Flip a play with Coach Cal",
+    description:
+      "Ask Coach Cal to \"flip\" or \"mirror\" a play and it now does it correctly. Because \"flip\" can mean a few different things, Cal first asks which you want: mirror the whole play to the other side (everyone moves and routes mirror), flip just the routes while everyone stays put, or flip the formation (Trips Right → Trips Left) while everyone keeps their same route. The mirror is computed exactly by reflecting across the field, so spacing and routes stay clean, and Cal offers to either overwrite the play or save the mirrored version as a new one.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-06-26",
   },
   {
     id: "coach-cal-in-app-cta-schedule-season",

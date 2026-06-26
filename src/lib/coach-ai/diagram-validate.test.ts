@@ -2372,3 +2372,106 @@ describe("validateProseRouteCoherence — flags prose-vs-route drift", () => {
     expect(errors).toEqual([]);
   });
 });
+
+describe("validateDiagrams — flip_play (flipPlayCalled) bypass", () => {
+  // Full-roster "Flood Right" prior fence (flag_7v7, no center route).
+  const priorFlood = {
+    title: "Flood Right",
+    variant: "flag_7v7",
+    focus: "O" as const,
+    players: [
+      { id: "Q", x: 0, y: -3, team: "O" as const },
+      { id: "X", x: -12, y: 0, team: "O" as const }, // red
+      { id: "Z", x: 12, y: 0, team: "O" as const },  // blue
+      { id: "Y", x: 6, y: 0, team: "O" as const },   // green
+      { id: "H", x: -6, y: 0, team: "O" as const },  // yellow
+      { id: "S", x: 9, y: 0, team: "O" as const },   // purple
+      { id: "B", x: 2, y: -5, team: "O" as const },  // orange
+    ],
+    routes: [
+      { from: "Z", path: [[12, 8], [16, 14]], route_kind: "Corner", direction: "right" as const },
+      { from: "Y", path: [[6, 10], [11, 10]], route_kind: "Out", direction: "right" as const },
+      { from: "X", path: [[-12, 16]], route_kind: "Go" },
+      { from: "S", path: [[9, 16]], route_kind: "Go" },
+      { from: "H", path: [[-6, 5]], route_kind: "Hitch" },
+      { from: "B", path: [[2, 1], [8, 1]], route_kind: "Flat", direction: "right" as const },
+    ],
+  };
+  const neg = (n: number) => (n === 0 ? 0 : -n);
+  const swapDir = (d: string | undefined) => (d === "left" ? "right" : d === "right" ? "left" : d);
+  // Full-mirror of the prior fence (players + routes x-negated; direction swapped).
+  const flipped = {
+    ...priorFlood,
+    players: priorFlood.players.map((p) => ({ ...p, x: neg(p.x) })),
+    routes: priorFlood.routes.map((r) => ({
+      ...r,
+      direction: swapDir((r as { direction?: string }).direction),
+      path: r.path.map(([x, y]) => [neg(x), y] as [number, number]),
+    })),
+  };
+  const prose =
+    "\n@X, @Z, @Y, @H, @S, and @B all run their routes (now mirrored to the other side).";
+  const priorJson = JSON.stringify(priorFlood);
+
+  it("WITHOUT flip flags: a moved-player mirror trips the surgical-edit + place_offense gates", () => {
+    const result = validateDiagrams({
+      text: makeFence(flipped) + prose,
+      variant: "flag_7v7",
+      lastPlaceDefense: null,
+      priorAssistantTurnHadFence: true,
+      priorAssistantFenceJson: priorJson,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.find((e) => /drifted/i.test(e) || /surgical/i.test(e))).toBeDefined();
+    expect(result.errors.find((e) => /place_offense was NOT called/i.test(e))).toBeDefined();
+  });
+
+  it("WITH flip flags: the hand-authoring/regeneration gates are all suppressed", () => {
+    const result = validateDiagrams({
+      text: makeFence(flipped) + prose,
+      variant: "flag_7v7",
+      lastPlaceDefense: null,
+      priorAssistantTurnHadFence: true,
+      priorAssistantFenceJson: priorJson,
+      modifyPlayRouteCalled: true, // agent sets this for flip_play
+      flipPlayCalled: true,
+    });
+    if (!result.ok) {
+      // None of the trusted-transform gates may fire.
+      expect(result.errors.find((e) => /drifted/i.test(e) || /surgical/i.test(e))).toBeUndefined();
+      expect(result.errors.find((e) => /place_offense was NOT called/i.test(e))).toBeUndefined();
+      expect(result.errors.find((e) => /hand-authored/i.test(e))).toBeUndefined();
+      expect(result.errors.find((e) => /doesn't satisfy it/i.test(e))).toBeUndefined();
+      expect(result.errors.find((e) => /regenerated|did NOT call/i.test(e))).toBeUndefined();
+    }
+  });
+
+  it("WITH flip flags: a clean full-mirror passes validation end-to-end", () => {
+    const result = validateDiagrams({
+      text: makeFence(flipped) + prose,
+      variant: "flag_7v7",
+      lastPlaceDefense: null,
+      priorAssistantTurnHadFence: true,
+      priorAssistantFenceJson: priorJson,
+      modifyPlayRouteCalled: true,
+      flipPlayCalled: true,
+    });
+    expect(result.ok, result.ok ? undefined : result.errors.join(" | ")).toBe(true);
+  });
+
+  it("flip flags do NOT relax gates for OTHER turns (opt-in only)", () => {
+    // Same moved-player fence, but flipPlayCalled omitted → drift still fires.
+    const result = validateDiagrams({
+      text: makeFence(flipped) + prose,
+      variant: "flag_7v7",
+      lastPlaceDefense: null,
+      priorAssistantTurnHadFence: true,
+      priorAssistantFenceJson: priorJson,
+      modifyPlayRouteCalled: true, // even with modify flag, drift must fire without flipPlayCalled
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.find((e) => /drifted/i.test(e) || /surgical/i.test(e))).toBeDefined();
+  });
+});

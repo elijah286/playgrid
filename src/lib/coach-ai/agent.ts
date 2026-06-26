@@ -413,6 +413,12 @@ Rules:
 
 - **PLAY EDITS — \`revise_play\` is the ONLY way to change a play that's already in the chat.** When the coach asks to modify a play you (or an earlier turn) just rendered ("make the drag deeper", "swap @Z to a Post", "deepen the under-drag to 4 yards", "change @H to a slant"), call \`revise_play({ prior_play_fence: "...", mods: [{ player: "Z", set_family: "Post" }, ...] })\`. The tool: (a) preserves \`players[]\` byte-for-byte (positions, IDs, team) — you cannot accidentally flip the formation; (b) recomputes route paths from the catalog template; (c) sanitizes the output. Multiple mods apply atomically — if any one fails, the whole batch rejects. **DO NOT regenerate the fence by hand or by calling compose_play again** — that resets every other tweak. revise_play is the surgical path; use it.
 
+- **FLIPPING / MIRRORING A PLAY — \`flip_play\`, and ASK what "flip" means FIRST.** When the coach asks to "flip", "mirror", "reverse", or "run it the other way" on a play in the chat, do NOT guess and do NOT use \`revise_play\` (it can't move players — it'll produce a useless half-flipped mess). "Flip" genuinely means three different things, and they produce different plays, so this is one of the rare cases where you ASK before acting. Ask ONE short question offering the options, then call \`flip_play({ prior_play_fence, mode })\` with the coach's pick:
+  - **\`full\`** — "Mirror the whole play to the other side" (players move across the field AND routes mirror). This is the usual meaning of "flip it / run it to the other side." Lead with this.
+  - **\`routes\`** — "Flip just the routes, keep everyone where they are" (an out becomes an in, etc.; formation unchanged).
+  - **\`formation\`** — "Flip the formation but keep the same routes" (Trips Right → Trips Left, each player runs the same route from their new spot).
+  Example ask: *"Happy to flip it — do you want the whole play mirrored to the other side, just the routes flipped with everyone staying put, or the formation flipped but everyone keeping their same route?"* STOP after asking; wait for the answer; then call \`flip_play\` with the matching mode and drop its fence VERBATIM. If the coach's wording already makes the mode obvious ("flip the formation to the left", "mirror the whole thing"), skip the question and call \`flip_play\` directly. \`flip_play\` derives all geometry by reflecting across the field center — you never author coordinates. It does NOT auto-save: the flipped play shows in the chat; if the coach wants it kept, ask whether to overwrite this play or save the mirror as a NEW play (then \`update_play\` / \`create_play\`). One more thing: the title doesn't auto-update, so if the play's name has a side in it ("Flood Right"), call out the new side in your reply (or offer to rename to "Flood Left").
+
 - **SURGICAL EDITS — minimum diff that obliges the request.** When the coach asks for a small change ("make it a curved line", "add depth to the QB", "deepen the drag", "swap @Z to a Post"), the modification must be the SMALLEST diff that obliges the request. EVERY player not explicitly targeted MUST round-trip byte-identical: same id, same x/y, same team. Same for routes you didn't change. The chat-time validator REJECTS any edit where offense players[] drifts from the prior fence (unless the coach asked for a formation change AND you called place_offense). Common ways this gate fires:
   - **You fabricated \`prior_play_fence\` from memory** — the prior fence is in the chat above; copy it BYTE-FOR-BYTE, do not retype it. If the rendered diagram from compose_play is multi-line JSON, copy the entire JSON between \`\`\`play and \`\`\` exactly.
   - **You called modify_play_route / revise_play with the wrong input** — the tool dutifully edits whatever you pass it. If you pass it a wrong-formation fence, it returns a wrong-formation fence.
@@ -1863,6 +1869,7 @@ const TOOL_STATUS: Record<string, string> = {
   place_offense:      "Aligning offense…",
   get_concept_skeleton: "Building concept skeleton…",
   modify_play_route:    "Modifying route…",
+  flip_play:            "Flipping the play…",
   propose_save_defense_play: "Proposing to save the defense as a new play…",
   list_plays:         "Reading plays…",
   get_play:           "Fetching play…",
@@ -2396,6 +2403,15 @@ export async function runAgent(
   let conceptSkeletonCallCount = 0;
   let modifyPlayRouteInvoked = false;
   let addDefenseToPlayInvoked = false;
+  // flip_play mirrors an existing play (players move across the field
+  // center). That legitimately changes players[], so the validator's
+  // "did Cal hand-author / regenerate this?" gates (surgical-edit drift,
+  // mandatory place_offense, route-template, concept-fidelity) must NOT
+  // fire — the geometry came from a trusted deterministic transform of a
+  // prior canonical fence, not from hand authoring. This flag relaxes
+  // exactly those gates (geometry-validity gates still run). Opt-in: every
+  // other turn leaves it false, so existing flows are unaffected.
+  let flipPlayInvoked = false;
   /** When get_concept_skeleton runs successfully, the verbatim ```play
    *  fence JSON it returned. The validator uses this to enforce
    *  route-path fidelity — Cal must emit the skeleton's routes verbatim,
@@ -2685,6 +2701,7 @@ export async function runAgent(
           skeletonReturnedFenceJson,
           modifyPlayRouteCalled: modifyPlayRouteInvoked,
           addDefenseToPlayCalled: addDefenseToPlayInvoked,
+          flipPlayCalled: flipPlayInvoked,
           priorAssistantTurnHadFence,
           priorAssistantFenceJson,
           userRequestsNewPlay,
@@ -2894,6 +2911,7 @@ export async function runAgent(
       const FENCE_PRODUCING_TOOLS = new Set([
         "compose_play",
         "revise_play",
+        "flip_play",
         "modify_play_route",
         "compose_defense",
         "set_defender_assignment",
@@ -3041,6 +3059,13 @@ export async function runAgent(
         if (fenceMatch) skeletonReturnedFenceJson = fenceMatch[1].trim();
       }
       if (tu.name === "revise_play"      && r.ok) modifyPlayRouteInvoked = true;
+      if (tu.name === "flip_play"        && r.ok) {
+        // flip is an edit of an existing play; mark it modify-equivalent
+        // so GATE B (modify-not-regenerate) treats it as a surgical edit,
+        // and set the dedicated flip flag for the position/route gates.
+        flipPlayInvoked = true;
+        modifyPlayRouteInvoked = true;
+      }
       if (tu.name === "compose_defense"  && r.ok) addDefenseToPlayInvoked = true;
       // Mark place_offense as invoked. The validator uses this to enforce
       // that any full-offense diagram had place_offense called this turn,
@@ -3932,6 +3957,7 @@ export function findPriorOffenseFenceJson(
 const PRIOR_FENCE_TOOLS: Readonly<Record<string, string>> = {
   modify_play_route:        "prior_play_fence",
   revise_play:              "prior_play_fence",
+  flip_play:                "prior_play_fence",
   set_defender_assignment:  "prior_play_fence",
   compose_defense:          "on_play",
 };

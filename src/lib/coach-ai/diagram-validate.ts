@@ -598,6 +598,18 @@ export function validateDiagrams(opts: {
    *  add_defense_to_play tool was removed 2026-05-20 in favor of
    *  compose_defense as the single overlay path. */
   addDefenseToPlayCalled?: boolean;
+  /** True iff flip_play ran ok this turn. flip_play mirrors an existing
+   *  play across the field center (players move, routes reflect) via a
+   *  deterministic geometric transform of a prior canonical fence — NOT
+   *  hand authoring. So the "did Cal hand-author / regenerate this?"
+   *  heuristics (surgical-edit drift, mandatory place_offense,
+   *  route-template, concept-fidelity) must be relaxed for this turn; the
+   *  geometry-validity gates (sanitizer, color clash, motion, roster,
+   *  bounds) still run. A mirror provably preserves player count/ids,
+   *  route families, and depths, so concept fidelity holds by
+   *  construction. Opt-in: undefined for every other tool, so existing
+   *  flows are byte-identical. */
+  flipPlayCalled?: boolean;
   /** True iff the prior assistant turn contained a ```play fence.
    *  Together with the modify-tool flags, this gates the
    *  "regenerated instead of modifying" failure mode (image 2 from
@@ -933,7 +945,8 @@ export function validateDiagrams(opts: {
       opts.priorAssistantTurnHadFence === true &&
       opts.priorAssistantFenceJson &&
       !opts.userRequestsNewPlay &&
-      !opts.placeOffenseCalled
+      !opts.placeOffenseCalled &&
+      !opts.flipPlayCalled // flip_play legitimately mirrors player positions
     ) {
       try {
         const priorJson = JSON.parse(opts.priorAssistantFenceJson) as Diagram;
@@ -1094,6 +1107,7 @@ export function validateDiagrams(opts: {
     if (
       offense.length >= expected &&
       !opts.placeOffenseCalled &&
+      !opts.flipPlayCalled && // flip_play mirrors an already-placed roster
       opts.currentUserTurnHadImage !== true
     ) {
       errors.push(
@@ -1416,6 +1430,11 @@ export function validateDiagrams(opts: {
         }
 
         for (const conceptName of claimedConcepts) {
+          // flip_play preserves route families + depths by construction
+          // (a geometric mirror only negates x), so concept fidelity holds
+          // without re-deriving it from the mirrored geometry — which the
+          // diagram→spec parser can mis-classify on a reflected fence.
+          if (opts.flipPlayCalled) break;
           const result = assertConcept(derived, conceptName);
           if (!result.ok) {
             errors.push(
@@ -1581,7 +1600,9 @@ export function validateDiagrams(opts: {
           //
           // Cal can escape the check by labeling "(custom route)" in the
           // surrounding prose for genuinely off-catalog shapes.
-          if (path.length >= 2 && !customRouteLabeled) {
+          if (path.length >= 2 && !customRouteLabeled && !opts.flipPlayCalled) {
+            // flip_play's routes are a deterministic mirror of an
+            // already-canonical prior fence — not hand authoring.
             errors.push(
               `${tag}route from "${from}" was hand-authored (${path.length} waypoints) but no get_route_template was called for this route. Named routes (Slant, Post, Curl, Hitch, Out, In, Corner, Dig, etc.) MUST come from get_route_template — copy its \`path\` and \`curve\` verbatim. If this is genuinely a custom shape, write "(custom route)" in your prose to acknowledge it's off-catalog.`,
             );

@@ -18,6 +18,7 @@ import {
 } from "@/domain/play/defensiveAlignments";
 import { synthesizeAlignment } from "@/domain/play/defensiveSynthesize";
 import { applyRouteMods, type RouteMod } from "./play-mutations";
+import { mirrorCoachDiagram, type FlipMode } from "@/domain/play/mirror";
 import { validateRouteAssignments } from "./route-assignment-validate";
 import { applyLabelAliasesToFence, applyLabelAliasesToSpec } from "./user-preferences";
 import { findTemplate as findRouteTemplate } from "@/domain/play/routeTemplates";
@@ -1273,6 +1274,81 @@ const revise_play: CoachAiTool = {
       result:
         `Applied ${r.appliedSummaries.length} mod(s): ${r.appliedSummaries.join("; ")}.\n` +
         `All other players, routes, and zones are byte-identical to the prior diagram.\n\n` +
+        `**PLAY FENCE — drop VERBATIM into your reply between \`\`\`play and \`\`\`:**\n` +
+        `\`\`\`play\n${fenceJson}\n\`\`\``,
+    };
+  },
+};
+
+const flip_play: CoachAiTool = {
+  def: {
+    name: "flip_play",
+    description:
+      "Mirror an existing play left↔right. Use this whenever the coach asks to \"flip\", \"mirror\", \"reverse\", or \"run it the other way\" on a play already in the chat. " +
+      "\"Flip\" is AMBIGUOUS — pick the `mode` the coach intends (ask them first if it's not obvious; see the play-edit rules in the system prompt):\n" +
+      "• `full` — mirror the WHOLE play across the field center: every player moves to the opposite side AND every route mirrors. This is the football-vernacular \"flip it / run it to the other side.\" The most common meaning.\n" +
+      "• `routes` — keep every player where they are; mirror each route about its own player (an out becomes an in, a route breaking right now breaks left). The formation is untouched.\n" +
+      "• `formation` — mirror player POSITIONS (the formation flips, Trips Right → Trips Left) but each route keeps its same field-direction, re-anchored to follow its player.\n" +
+      "Inputs: (1) `prior_play_fence` — the previous diagram JSON, copied VERBATIM from the most recent ```play fence in the chat (entire body between ```play and ```). (2) `mode` — one of full / routes / formation. " +
+      "Returns a SANITIZED full fence with the mirror applied. Geometry is derived deterministically (x → -x); Cal never authors coordinates. " +
+      "The title is left unchanged — if the play had a side in its name (\"Flood Right\"), mention the new side in your reply or follow up with the coach about renaming.",
+    input_schema: {
+      type: "object",
+      properties: {
+        prior_play_fence: {
+          type: "string",
+          description: "The previous diagram JSON, copied verbatim from the most recent ```play fence in the chat (the entire body between the opening ```play and closing ```). MUST include all players, routes, and any zones from that diagram.",
+        },
+        mode: {
+          type: "string",
+          enum: ["full", "routes", "formation"],
+          description: "full = mirror whole play (players + routes); routes = mirror routes only, players stay; formation = mirror player positions only, routes keep their direction. When in doubt ask the coach which they mean before calling.",
+        },
+      },
+      required: ["prior_play_fence", "mode"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    const priorJson = typeof input.prior_play_fence === "string" ? input.prior_play_fence : "";
+    const mode = (typeof input.mode === "string" ? input.mode : "") as FlipMode;
+    if (mode !== "full" && mode !== "routes" && mode !== "formation") {
+      return { ok: false, error: `flip_play needs mode = "full", "routes", or "formation" (got "${input.mode}").` };
+    }
+    if (!priorJson.trim()) {
+      return { ok: false, error: "flip_play needs prior_play_fence — copy the previous ```play fence verbatim." };
+    }
+    let fence: import("@/features/coach-ai/coachDiagramConverter").CoachDiagram & Record<string, unknown>;
+    try {
+      fence = JSON.parse(priorJson);
+    } catch (e) {
+      return { ok: false, error: `could not parse prior_play_fence as JSON: ${(e as Error).message}` };
+    }
+    if (!Array.isArray(fence.players) || fence.players.length === 0) {
+      return { ok: false, error: "prior_play_fence has no players[] — nothing to flip." };
+    }
+
+    const variant = ctx.sportVariant as "tackle_11" | "flag_7v7" | "flag_5v5" | undefined;
+    const { diagram } = mirrorCoachDiagram(fence, mode, variant);
+    // Preserve passthrough fields (title, tip, metadata, etc.) the
+    // mirror left intact; mirrorCoachDiagram already spreads `...input`,
+    // so `diagram` carries them. Re-apply coach label aliases for parity
+    // with revise_play / compose_play (Task #36).
+    const aliasedFence = (ctx.calVersion ?? "v2") !== "v1" && ctx.preferenceOverrides
+      ? applyLabelAliasesToFence(diagram, ctx.preferenceOverrides)
+      : diagram;
+    const fenceJson = JSON.stringify(aliasedFence, null, 2);
+    const modeLabel =
+      mode === "full"
+        ? "mirrored the whole play left↔right (players moved to the opposite side; routes mirrored)"
+        : mode === "routes"
+          ? "mirrored the routes (players stayed where they were; each route flipped to the other side)"
+          : "mirrored the formation (players moved to the opposite side; each route kept its direction)";
+    return {
+      ok: true,
+      result:
+        `Flipped the play — ${modeLabel}. Geometry derived by reflecting across the field center; ` +
+        `player ids, count, and teams are unchanged.\n\n` +
         `**PLAY FENCE — drop VERBATIM into your reply between \`\`\`play and \`\`\`:**\n` +
         `\`\`\`play\n${fenceJson}\n\`\`\``,
     };
@@ -3401,7 +3477,7 @@ const update_plan_step: CoachAiTool = {
 // Lazy import to avoid a circular dependency through the propose tool
 // (which imports CoachAiTool from this file).
 import { propose_save_defense_play } from "./save-defense-tools";
-export const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, get_concept_skeleton, compose_play, revise_play, compose_defense, place_defense, place_offense, modify_play_route, set_defender_assignment, propose_save_defense_play, flag_outside_kb, flag_refusal, propose_plan, update_plan_step];
+export const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, get_concept_skeleton, compose_play, revise_play, flip_play, compose_defense, place_defense, place_offense, modify_play_route, set_defender_assignment, propose_save_defense_play, flag_outside_kb, flag_refusal, propose_plan, update_plan_step];
 
 // Loaded lazily to avoid a circular import (user-preferences imports CoachAiTool).
 function userPreferenceTools(): CoachAiTool[] {
