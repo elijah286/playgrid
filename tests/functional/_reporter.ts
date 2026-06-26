@@ -20,8 +20,11 @@ import type {
 } from "@playwright/test/reporter";
 import type { StepRecord } from "./_helpers";
 
+type TestRecord = { scenario: string; steps: StepRecord[]; videoPaths: string[] };
+
 export default class FunctestReporter implements Reporter {
   private steps: StepRecord[] = [];
+  private tests: TestRecord[] = [];
   private startedAtMs = Date.now();
   private sawFailure = false;
 
@@ -29,21 +32,35 @@ export default class FunctestReporter implements Reporter {
     this.startedAtMs = Date.now();
   }
 
-  onTestEnd(_test: TestCase, result: TestResult): void {
+  onTestEnd(test: TestCase, result: TestResult): void {
     if (result.status !== "passed") this.sawFailure = true;
     const att = result.attachments.find((a) => a.name === "functest-steps");
-    if (!att) return;
-    try {
-      const raw = att.body
-        ? att.body.toString("utf8")
-        : att.path
-          ? readFileSync(att.path, "utf8")
-          : null;
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as StepRecord[];
-      if (Array.isArray(parsed)) this.steps.push(...parsed);
-    } catch {
-      /* a malformed attachment shouldn't sink the whole report */
+    let parsed: StepRecord[] = [];
+    if (att) {
+      try {
+        const raw = att.body
+          ? att.body.toString("utf8")
+          : att.path
+            ? readFileSync(att.path, "utf8")
+            : null;
+        if (raw) {
+          const j = JSON.parse(raw) as StepRecord[];
+          if (Array.isArray(j)) parsed = j;
+        }
+      } catch {
+        /* a malformed attachment shouldn't sink the whole report */
+      }
+    }
+    this.steps.push(...parsed);
+    // Video clips for this scenario: the config records page-fixture contexts;
+    // multi-context specs (invite-accept) attach their own clips. Both land as
+    // 'video' attachments — stitched in order in the replay.
+    const videoPaths = result.attachments
+      .filter((a) => a.name === "video" && a.path)
+      .map((a) => a.path as string);
+    const scenario = parsed[0]?.scenario || test.title;
+    if (parsed.length || videoPaths.length) {
+      this.tests.push({ scenario, steps: parsed, videoPaths });
     }
   }
 
@@ -56,17 +73,17 @@ export default class FunctestReporter implements Reporter {
 
     const meta: Record<string, unknown> = { browser: "chromium" };
 
-    // Assemble one animated GIF per scenario from its step screenshots — a quick
-    // visual summary of each workflow. Uploaded via service-role (available both
-    // locally and in CI); the URLs ride in meta.gifs, which both ingest paths
-    // already persist. Skipped if no service-role key (the GIF can't be stored).
+    // One animated GIF per scenario — a frame-diff-optimized replay from the
+    // recorded video (falling back to a step-screenshot slideshow). Uploaded via
+    // service-role (available locally + in CI); the URLs ride in meta.gifs, which
+    // both ingest paths persist. Skipped without a service-role key.
     if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
       const prefix = `${this.startedAtMs}-${(process.env.GITHUB_SHA || process.env.GIT_SHA || "local").slice(0, 7)}`;
       try {
-        const gifs = await buildScenarioGifs(steps, prefix);
+        const gifs = await buildReplays(this.tests, prefix);
         if (Object.keys(gifs).length) meta.gifs = gifs;
       } catch (e) {
-        console.error("[functest-reporter] gif assembly failed:", e);
+        console.error("[functest-reporter] replay assembly failed:", e);
       }
     }
 
@@ -124,63 +141,124 @@ function slug(s: string): string {
 }
 
 /**
- * Build one animated GIF per scenario from its step screenshots (a quick visual
- * summary of each workflow) and upload them to the test-screenshots bucket.
- * Returns { scenario: publicUrl }. Uses sharp's animated-join (already a dep).
+ * Build one replay GIF per scenario and upload it. Prefers a frame-diff-optimized
+ * GIF from the recorded video (smooth); falls back to a step-screenshot slideshow
+ * when no video is available. Returns { scenario: publicUrl }.
  */
-async function buildScenarioGifs(
-  steps: StepRecord[],
+async function buildReplays(
+  tests: TestRecord[],
   prefix: string,
 ): Promise<Record<string, string>> {
-  const [{ createClient }, sharpMod] = await Promise.all([
-    import("@supabase/supabase-js"),
-    import("sharp"),
-  ]);
-  const sharp = sharpMod.default;
+  const { createClient } = await import("@supabase/supabase-js");
   const admin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 
-  // Group frames by scenario, preserving step order.
-  const byScenario = new Map<string, StepRecord[]>();
-  for (const s of steps) {
-    if (!s.screenshotBase64) continue;
-    const arr = byScenario.get(s.scenario) ?? [];
-    arr.push(s);
-    byScenario.set(s.scenario, arr);
-  }
-
   const out: Record<string, string> = {};
-  for (const [scenario, scSteps] of byScenario) {
-    if (scSteps.length === 0) continue;
-    try {
-      // Resize each frame to a uniform width first (smaller GIF, and join needs
-      // matching dimensions). Hold each frame ~1.5s so the summary is readable.
-      const frames = await Promise.all(
-        scSteps.map((s) =>
-          sharp(Buffer.from(s.screenshotBase64!, "base64"))
-            .resize({ width: 900 })
-            .png()
-            .toBuffer(),
-        ),
-      );
-      const gif = await sharp(frames, { join: { animated: true } })
-        .gif({ delay: scSteps.map(() => 1500), loop: 0 })
-        .toBuffer();
-      const key = `gifs/${prefix}-${slug(scenario)}.gif`;
-      const { error } = await admin.storage
-        .from("test-screenshots")
-        .upload(key, gif, { contentType: "image/gif", upsert: true });
-      if (!error) {
-        out[scenario] = admin.storage.from("test-screenshots").getPublicUrl(key).data.publicUrl;
-      }
-    } catch (e) {
-      console.error(`[functest-reporter] gif(${scenario}) failed:`, e instanceof Error ? e.message : e);
+  for (const t of tests) {
+    if (!t.scenario) continue;
+    let gif: Buffer | null = null;
+    if (t.videoPaths.length) {
+      gif = await videoToOptimizedGif(t.videoPaths).catch((e) => {
+        console.error(`[functest-reporter] video replay(${t.scenario}) failed:`, e?.message ?? e);
+        return null;
+      });
+    }
+    if (!gif) {
+      gif = await slideshowGif(t.steps).catch(() => null);
+    }
+    if (!gif) continue;
+    const key = `gifs/${prefix}-${slug(t.scenario)}.gif`;
+    const { error } = await admin.storage
+      .from("test-screenshots")
+      .upload(key, gif, { contentType: "image/gif", upsert: true });
+    if (!error) {
+      out[t.scenario] = admin.storage.from("test-screenshots").getPublicUrl(key).data.publicUrl;
     }
   }
   return out;
+}
+
+/** Slideshow fallback: a GIF flipping through the step screenshots (~1.5s each). */
+async function slideshowGif(steps: StepRecord[]): Promise<Buffer | null> {
+  const withShots = steps.filter((s) => s.screenshotBase64);
+  if (withShots.length === 0) return null;
+  const sharp = (await import("sharp")).default;
+  const frames = await Promise.all(
+    withShots.map((s) =>
+      sharp(Buffer.from(s.screenshotBase64!, "base64")).resize({ width: 900 }).png().toBuffer(),
+    ),
+  );
+  return sharp(frames, { join: { animated: true } })
+    .gif({ delay: withShots.map(() => 1500), loop: 0 })
+    .toBuffer();
+}
+
+/**
+ * Convert recorded webm clip(s) into a small, smooth GIF: concat multiple clips,
+ * downscale + reduce to 10fps with a 256-colour palette (ffmpeg), then frame-diff
+ * optimize (gifsicle, optional — degrades to the ffmpeg output if unavailable).
+ */
+async function videoToOptimizedGif(videoPaths: string[]): Promise<Buffer | null> {
+  if (videoPaths.length === 0) return null;
+  const { execFileSync } = await import("node:child_process");
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const ffmpegMod = (await import("ffmpeg-static")) as unknown as { default?: string };
+  const ffmpeg = ffmpegMod.default ?? (ffmpegMod as unknown as string);
+  if (!ffmpeg) return null;
+
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "functest-gif-"));
+  try {
+    // 1. Stitch multiple clips (coach → player) into one.
+    let input = videoPaths[0]!;
+    if (videoPaths.length > 1) {
+      const list = path.join(tmp, "list.txt");
+      fs.writeFileSync(
+        list,
+        videoPaths.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join("\n"),
+      );
+      const combined = path.join(tmp, "combined.webm");
+      execFileSync(ffmpeg, ["-y", "-f", "concat", "-safe", "0", "-i", list, "-c", "copy", combined], { stdio: "ignore" });
+      input = combined;
+    }
+    // 2. Video → palette-optimized GIF. diff_mode=rectangle stores only changed
+    //    regions; flat UI palettes cleanly with no dither (crisp text).
+    const rawGif = path.join(tmp, "raw.gif");
+    execFileSync(
+      ffmpeg,
+      [
+        "-y", "-i", input,
+        "-vf",
+        "fps=10,scale=820:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256:stats_mode=full[p];[s1][p]paletteuse=dither=none:diff_mode=rectangle",
+        "-loop", "0", rawGif,
+      ],
+      { stdio: "ignore" },
+    );
+    // 3. Frame-diff optimize (the screen2gif trick). Optional.
+    let finalGif = rawGif;
+    try {
+      const gifsicleMod = (await import("gifsicle")) as unknown as { default?: string };
+      const gifsicle = gifsicleMod.default ?? (gifsicleMod as unknown as string);
+      if (gifsicle) {
+        const optGif = path.join(tmp, "opt.gif");
+        execFileSync(gifsicle, ["-O3", "--lossy=30", rawGif, "-o", optGif], { stdio: "ignore" });
+        if (fs.existsSync(optGif)) finalGif = optGif;
+      }
+    } catch {
+      /* gifsicle is optional — keep the ffmpeg GIF */
+    }
+    return fs.readFileSync(finalGif);
+  } finally {
+    try {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    } catch {
+      /* temp cleanup best-effort */
+    }
+  }
 }
 
 /** Mirror of the ingest endpoint's write path, for local runs without CRON_SECRET. */

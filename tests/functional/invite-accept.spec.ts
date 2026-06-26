@@ -33,12 +33,18 @@ test("invite → accept", async ({ browser, recorder }) => {
   recorder.scenario = "invite-accept";
   const playbookName = `${FUNCTEST_PREFIX} invite ${Date.now()}`;
   let playbookId = "";
+  // Record both sessions — manual contexts aren't covered by the config's
+  // `video` setting, so the reporter stitches these two clips into one replay.
+  const videoDir = test.info().outputDir;
+  const videoSize = { width: 1000, height: 563 };
 
   // ── Coach: create a throwaway playbook + a player invite link ──────────────
   const coachCtx = await browser.newContext({
     permissions: ["clipboard-read", "clipboard-write"],
+    recordVideo: { dir: videoDir, size: videoSize },
   });
   const coach = await coachCtx.newPage();
+  const coachVideo = coach.video();
   try {
     await recorder.step("coach signs in", coach, async () => {
       await signIn(coach, accounts.coach.email, accounts.coach.password);
@@ -79,8 +85,11 @@ test("invite → accept", async ({ browser, recorder }) => {
   const inviteUrl = `/invite/${inv!.token}`;
 
   // ── Player: accept the invite via the real accept page ─────────────────────
-  const playerCtx = await browser.newContext();
+  const playerCtx = await browser.newContext({
+    recordVideo: { dir: videoDir, size: videoSize },
+  });
   const player = await playerCtx.newPage();
+  const playerVideo = player.video();
   try {
     await recorder.step("player signs in", player, async () => {
       await signIn(player, accounts.player.email, accounts.player.password);
@@ -107,5 +116,15 @@ test("invite → accept", async ({ browser, recorder }) => {
     });
   } finally {
     await playerCtx.close();
+  }
+
+  // Attach both clips (coach, then player) so the reporter stitches one replay.
+  for (const v of [coachVideo, playerVideo]) {
+    if (!v) continue;
+    try {
+      await test.info().attach("video", { path: await v.path(), contentType: "video/webm" });
+    } catch {
+      /* video is best-effort — the step screenshots still drive a fallback GIF */
+    }
   }
 });

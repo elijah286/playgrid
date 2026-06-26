@@ -27,6 +27,10 @@ export default defineConfig({
     baseURL: process.env.BASE_URL || "http://localhost:3000",
     headless: true,
     screenshot: "off", // the Recorder captures shots at meaningful steps itself
+    // Record a video of each scenario; the reporter turns it into a small
+    // frame-diff-optimized GIF replay. Recorded a touch below viewport to keep
+    // the source light (the reporter downscales further).
+    video: { mode: "on", size: { width: 1000, height: 563 } },
     trace: process.env.CI ? "retain-on-failure" : "off",
     actionTimeout: 15_000,
     navigationTimeout: 30_000,
