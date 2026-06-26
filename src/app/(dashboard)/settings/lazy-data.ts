@@ -54,6 +54,7 @@ import { listSeedFormationsAction } from "@/app/actions/formations";
 import { getBetaFeatures } from "@/lib/site/beta-features-config";
 import { getReengagementMetricsAction } from "@/app/actions/admin-reengagement";
 import { getAppMetricsSummaryAction } from "@/app/actions/admin-app-metrics";
+import { listFunctionalTestRunsAction } from "@/app/actions/admin-functional-tests";
 
 function currentMonthYM(): string {
   const d = new Date();
@@ -281,6 +282,15 @@ export async function loadAppMetricsTabData() {
   const res = await getAppMetricsSummaryAction(7);
   return {
     summary: res.ok ? res.summary : null,
+    error: res.ok ? null : res.error,
+  };
+}
+
+/** Functional Testing tab — recent headless E2E runs + their step screenshots. */
+export async function loadFunctionalTestsTabData() {
+  const res = await listFunctionalTestRunsAction(20);
+  return {
+    runs: res.ok ? res.runs : [],
     error: res.ok ? null : res.error,
   };
 }

@@ -1,0 +1,79 @@
+name: Functional tests
+
+# Drives the PRODUCTION app through core user workflows (headless Chromium) and
+# ingests screenshots + pass/fail + timing into the Site Admin "Functional
+# Testing" tab. Three triggers:
+#   - after a successful deploy (the regression gate),
+#   - nightly (catches data/state drift not tied to a deploy),
+#   - manual ("Run workflow" button).
+on:
+  workflow_run:
+    workflows: ["Deploy to Cloud Run"]
+    types: [completed]
+  schedule:
+    - cron: "0 8 * * *" # 08:00 UTC nightly
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  functional:
+    runs-on: ubuntu-latest
+    # For the post-deploy trigger, only run when the deploy actually succeeded.
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    concurrency:
+      group: functional-tests
+      cancel-in-progress: true
+    env:
+      BASE_URL: https://www.xogridmaker.com
+      INGEST_URL: https://www.xogridmaker.com/api/functional-tests/ingest
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      FUNC_TEST_COACH_EMAIL: ${{ secrets.FUNC_TEST_COACH_EMAIL }}
+      FUNC_TEST_COACH_PASSWORD: ${{ secrets.FUNC_TEST_COACH_PASSWORD }}
+      FUNC_TEST_PLAYER_EMAIL: ${{ secrets.FUNC_TEST_PLAYER_EMAIL }}
+      FUNC_TEST_PLAYER_PASSWORD: ${{ secrets.FUNC_TEST_PLAYER_PASSWORD }}
+      # Deployed commit for post-deploy; the workflow's own SHA otherwise.
+      GIT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      FUNCTEST_TRIGGER: ${{ github.event_name == 'workflow_run' && 'post_deploy' || github.event_name == 'schedule' && 'nightly' || 'manual' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      # Keep the dedicated test accounts present + passwords in sync (idempotent).
+      - name: Seed test accounts
+        run: npm run seed:functest
+
+      - name: Run functional tests
+        # Don't fail the job on a red scenario — the run is still ingested and
+        # surfaced (it also pushes admins via system_notices). The admin tab is
+        # the signal, not the GH check.
+        run: npx playwright test || true
+
+      - name: Clean up stray test data
+        # Safety net for any __functest entity a crashed run left behind (the
+        # specs clean up their own in afterAll). Only touches >1h-old rows.
+        if: always()
+        run: npm run --silent functest:cleanup || node scripts/functest-cleanup.mjs || true
+
+      - name: Upload Playwright report (debug)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+          if-no-files-found: ignore

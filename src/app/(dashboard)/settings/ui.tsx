@@ -6,6 +6,7 @@ import {
   BarChart3,
   Bell,
   Brain,
+  ClipboardCheck,
   CreditCard,
   DollarSign,
   Flag,
@@ -58,6 +59,7 @@ import { BetaFeaturesAdminClient } from "@/features/admin/BetaFeaturesAdminClien
 import { NotificationHealthAdminClient } from "@/features/admin/NotificationHealthAdminClient";
 import { OpexAdminClient } from "@/features/admin/OpexAdminClient";
 import { AppMetricsAdminClient } from "@/features/admin/AppMetricsAdminClient";
+import { FunctionalTestingAdminClient } from "@/features/admin/FunctionalTestingAdminClient";
 import type { FeedbackRow } from "@/app/actions/feedback";
 import type { CoachInvitationRow } from "@/app/actions/coach-invitations";
 import type {
@@ -87,6 +89,7 @@ import {
   loadSiteTabData,
   loadOpexTabData,
   loadAppMetricsTabData,
+  loadFunctionalTestsTabData,
   loadRevenueTabData,
   loadTokenUsageTabData,
   loadSeedsTabData,
@@ -113,6 +116,7 @@ type Tab =
   | "integrations"
   | "notif_health"
   | "beta"
+  | "functional_tests"
   | "league_organizers";
 
 const STORAGE_KEY = "site-admin-active-tab";
@@ -137,6 +141,7 @@ function isTab(value: string | null | undefined): value is Tab {
     value === "integrations" ||
     value === "notif_health" ||
     value === "beta" ||
+    value === "functional_tests" ||
     value === "league_organizers"
   );
 }
@@ -221,6 +226,10 @@ export function SettingsClient({
   const siteData = useLazyData(tab === "site", loadSiteTabData);
   const opexData = useLazyData(tab === "opex", loadOpexTabData);
   const appData = useLazyData(tab === "app", loadAppMetricsTabData);
+  const functionalTestsData = useLazyData(
+    tab === "functional_tests",
+    loadFunctionalTestsTabData,
+  );
   const revenueData = useLazyData(tab === "revenue", loadRevenueTabData);
   const tokenUsageData = useLazyData(tab === "ai_usage", loadTokenUsageTabData);
   const seedsData = useLazyData(tab === "seeds", loadSeedsTabData);
@@ -327,6 +336,16 @@ export function SettingsClient({
         { value: "reports", label: "Reports", icon: Flag },
         { value: "ai_usage", label: "Cal usage", icon: DollarSign },
         { value: "seeds", label: "Playbook seeds", icon: Sparkles },
+      ],
+    },
+    {
+      label: "Quality",
+      items: [
+        {
+          value: "functional_tests",
+          label: "Functional tests",
+          icon: ClipboardCheck,
+        },
       ],
     },
     {
@@ -703,6 +722,12 @@ export function SettingsClient({
         {tab === "app" && (
           <LazyContent state={appData}>
             {(d) => <AppMetricsAdminClient summary={d.summary} error={d.error} />}
+          </LazyContent>
+        )}
+
+        {tab === "functional_tests" && (
+          <LazyContent state={functionalTestsData}>
+            {(d) => <FunctionalTestingAdminClient runs={d.runs} error={d.error} />}
           </LazyContent>
         )}
 

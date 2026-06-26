@@ -30,7 +30,10 @@ export type AdminNoticeKind =
   | "play_milestone"
   // Coach-submitted feedback (widget, contact/support form, or cancellation
   // survey) — written by the feedback triggers in 20260626120000.
-  | "feedback_received";
+  | "feedback_received"
+  // A failed production functional-test run — written by the functional-tests
+  // ingest endpoint (20260626150000).
+  | "functional_test_failed";
 
 /** Active = visible in the default Active view + counted in the red-bang
  *  badge. Archived = visible only in the Archived view + not counted.

@@ -83,6 +83,9 @@ export const ADMIN_PUSH_NOTICE_KINDS = [
   "subscription_purchased",
   "subscription_canceled",
   "feedback_received",
+  // A failed production functional-test run — a regression in a core workflow.
+  // Pushing it is the whole point of the harness: catch it before a coach does.
+  "functional_test_failed",
 ] as const;
 
 type ClaimedNotice = {
@@ -114,6 +117,14 @@ export function adminPushMessage(n: ClaimedNotice): PushMessage {
         body: n.body,
         link: n.href ?? "/settings?tab=feedback",
         interruptionLevel: "time-sensitive",
+      };
+    case "functional_test_failed":
+      // body summarizes which scenarios failed; link to the Functional Testing
+      // tab so an admin can open the run + screenshots immediately.
+      return {
+        title: "Functional test failed ❌",
+        body: n.body,
+        link: n.href ?? "/settings?tab=functional_tests",
       };
     default:
       return { title: "Site update", body: n.body, link: n.href ?? "/admin/users" };

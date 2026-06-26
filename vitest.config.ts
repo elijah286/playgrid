@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { defineConfig, configDefaults } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import path from "path";
 
@@ -7,6 +7,11 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
+    // The Playwright functional specs (tests/functional/*.spec.ts) are a
+    // SEPARATE suite run by `playwright test` — they import @playwright/test,
+    // not vitest. Exclude that dir while keeping vitest's default discovery for
+    // every other unit/spec test (src/** and evals/**).
+    exclude: [...configDefaults.exclude, "tests/functional/**"],
   },
   resolve: {
     alias: {
