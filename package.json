@@ -17,6 +17,7 @@
     "seed:admin": "node scripts/seed-admin.mjs",
     "seed:functest": "node scripts/seed-functional-test.mjs",
     "functest:cleanup": "node scripts/functest-cleanup.mjs",
+    "functest:retention": "node scripts/functest-retention.mjs",
     "test:functional": "playwright test",
     "embed:rag": "node scripts/embed-rag.mjs",
     "cap:assets": "node scripts/build-app-assets.mjs && capacitor-assets generate",

@@ -71,6 +71,14 @@ jobs:
         if: always()
         run: npm run --silent functest:cleanup || node scripts/functest-cleanup.mjs || true
 
+      - name: Prune old runs (storage retention)
+        # Keep only the most recent FUNCTEST_RETAIN_RUNS runs; delete older run
+        # rows + their GIFs/stills so storage stays bounded for nightly.
+        if: always()
+        env:
+          FUNCTEST_RETAIN_RUNS: "14"
+        run: npm run --silent functest:retention || node scripts/functest-retention.mjs || true
+
       - name: Upload Playwright report (debug)
         if: always()
         uses: actions/upload-artifact@v4

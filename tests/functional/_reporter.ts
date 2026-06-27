@@ -109,6 +109,14 @@ export default class FunctestReporter implements Reporter {
       }
     }
 
+    // Persist per-step PNG stills only for FAILED steps — the replay GIF is the
+    // pass-case summary, so passing steps don't need a stored still (a big
+    // storage saving for nightly). The GIFs were already built from the full
+    // frames (this.tests) above, so dropping these doesn't affect the replays.
+    const persistedSteps = steps.map((s) =>
+      s.status === "failed" ? s : { ...s, screenshotBase64: undefined },
+    );
+
     const payload = {
       gitSha: process.env.GITHUB_SHA || process.env.GIT_SHA || null,
       trigger: process.env.FUNCTEST_TRIGGER || "manual",
@@ -118,7 +126,7 @@ export default class FunctestReporter implements Reporter {
       finishedAt: new Date(finishedAtMs).toISOString(),
       durationMs: finishedAtMs - this.startedAtMs,
       meta,
-      steps,
+      steps: persistedSteps,
     };
 
     // Production path (CI): POST to the authenticated ingest endpoint.
@@ -210,7 +218,7 @@ async function slideshowGif(steps: StepRecord[]): Promise<Buffer | null> {
   const sharp = (await import("sharp")).default;
   const frames = await Promise.all(
     withShots.map((s) =>
-      sharp(Buffer.from(s.screenshotBase64!, "base64")).resize({ width: 900 }).png().toBuffer(),
+      sharp(Buffer.from(s.screenshotBase64!, "base64")).resize({ width: 600 }).png().toBuffer(),
     ),
   );
   return sharp(frames, { join: { animated: true } })
@@ -255,7 +263,9 @@ async function videoToOptimizedGif(videoPaths: string[]): Promise<Buffer | null>
       [
         "-y", "-i", input,
         "-vf",
-        "fps=10,scale=820:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256:stats_mode=full[p];[s1][p]paletteuse=dither=none:diff_mode=rectangle",
+        // Kept deliberately small for nightly storage: 8fps, 600px wide, 128-colour
+        // palette, no dither (crisp UI text), rectangle diff (store only changes).
+        "fps=8,scale=600:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=128:stats_mode=full[p];[s1][p]paletteuse=dither=none:diff_mode=rectangle",
         "-loop", "0", rawGif,
       ],
       { stdio: "ignore" },
@@ -267,7 +277,7 @@ async function videoToOptimizedGif(videoPaths: string[]): Promise<Buffer | null>
       const gifsicle = gifsicleMod.default ?? (gifsicleMod as unknown as string);
       if (gifsicle) {
         const optGif = path.join(tmp, "opt.gif");
-        execFileSync(gifsicle, ["-O3", "--lossy=30", rawGif, "-o", optGif], { stdio: "ignore" });
+        execFileSync(gifsicle, ["-O3", "--lossy=90", rawGif, "-o", optGif], { stdio: "ignore" });
         if (fs.existsSync(optGif)) finalGif = optGif;
       }
     } catch {
