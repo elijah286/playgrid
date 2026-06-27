@@ -130,6 +130,18 @@ export async function signIn(page: Page, email: string, password: string): Promi
   }
 }
 
+/** Create a playbook via the real home-screen flow and return its id. Shared by
+ *  the scenarios that need a playbook to act on. Assumes already signed in. */
+export async function createPlaybook(page: Page, name: string): Promise<string> {
+  await page.goto("/home", { waitUntil: "networkidle" });
+  await page.getByRole("button").filter({ hasText: /new playbook/i }).first().click();
+  await page.getByPlaceholder(/varsity/i).waitFor();
+  await page.getByPlaceholder(/varsity/i).fill(name);
+  await page.getByRole("button", { name: /^create$/i }).click();
+  await page.waitForURL(/\/playbooks\/[0-9a-f-]+/i, { timeout: 25_000 });
+  return page.url().match(/playbooks\/([0-9a-f-]+)/i)?.[1] ?? "";
+}
+
 /** Credentials from env, with the same defaults as scripts/seed-functional-test.mjs. */
 export function testAccounts() {
   return {
