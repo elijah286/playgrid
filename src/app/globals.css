@@ -284,6 +284,50 @@ body {
   }
 }
 
+/* In-browser "get the app" banner (AppBannerShell). Slides down on mount so
+   the bar registers as new content, and the CTA gets a one-shot sheen sweep to
+   pull the eye to the install action without nagging. */
+@keyframes app-banner-pop {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.app-banner-pop {
+  animation: app-banner-pop 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.app-banner-cta {
+  position: relative;
+  overflow: hidden;
+}
+.app-banner-cta::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -150%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    100deg,
+    transparent,
+    rgba(23, 105, 255, 0.18),
+    transparent
+  );
+  transform: skewX(-20deg);
+  animation: app-banner-sheen 2.4s ease-in-out 0.6s 2;
+}
+@keyframes app-banner-sheen {
+  0% { left: -150%; }
+  60%, 100% { left: 150%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-banner-pop {
+    animation: none;
+  }
+  .app-banner-cta::after {
+    animation: none;
+    display: none;
+  }
+}
+
 /* Calendar week navigation — slides incoming view up or down so the user
    keeps their bearings as they advance/retreat through weeks. */
 @keyframes calendar-slide-up {
