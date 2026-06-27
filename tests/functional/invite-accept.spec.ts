@@ -30,7 +30,12 @@ test.afterAll(async () => {
 });
 
 test("invite → accept", async ({ browser, recorder }) => {
-  recorder.scenario = "invite-accept";
+  recorder.about({
+    scenario: "invite-accept",
+    title: "Add a player to a playbook (invite & accept)",
+    description:
+      "A coach creates a playbook, then a player-invite link via Share → Add a player → Copy link; a separate player account opens the link and accepts it. Verifies that a player can be added to a playbook and that accepting an invite succeeds with no error — this guards the regression where every invite-accept failed and players could not join.",
+  });
   const playbookName = `${FUNCTEST_PREFIX} invite ${Date.now()}`;
   let playbookId = "";
   // Record both sessions — manual contexts aren't covered by the config's

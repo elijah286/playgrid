@@ -21,7 +21,12 @@ test.afterAll(async () => {
 });
 
 test("print / export playsheet", async ({ page, recorder }) => {
-  recorder.scenario = "print-playsheet";
+  recorder.about({
+    scenario: "print-playsheet",
+    title: "Print / export a playsheet",
+    description:
+      "Creates a playbook and opens its printable playsheet view (/print). Verifies the print/export page renders without error. Read-only — also serves as a page-load performance check.",
+  });
   const name = `${FUNCTEST_PREFIX} print ${Date.now()}`;
   let playbookId = "";
 

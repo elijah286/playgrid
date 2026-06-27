@@ -25,6 +25,7 @@ type TestRecord = { scenario: string; steps: StepRecord[]; videoPaths: string[] 
 export default class FunctestReporter implements Reporter {
   private steps: StepRecord[] = [];
   private tests: TestRecord[] = [];
+  private scenarios: Record<string, { title: string; description: string }> = {};
   private startedAtMs = Date.now();
   private sawFailure = false;
 
@@ -62,6 +63,26 @@ export default class FunctestReporter implements Reporter {
     if (parsed.length || videoPaths.length) {
       this.tests.push({ scenario, steps: parsed, videoPaths });
     }
+
+    // Scenario title/description (what the test is for) for the admin page.
+    const metaAtt = result.attachments.find((a) => a.name === "functest-meta");
+    if (metaAtt) {
+      try {
+        const raw = metaAtt.body
+          ? metaAtt.body.toString("utf8")
+          : metaAtt.path
+            ? readFileSync(metaAtt.path, "utf8")
+            : null;
+        if (raw) {
+          const m = JSON.parse(raw) as { scenario?: string; title?: string; description?: string };
+          if (m.scenario && (m.title || m.description)) {
+            this.scenarios[m.scenario] = { title: m.title ?? "", description: m.description ?? "" };
+          }
+        }
+      } catch {
+        /* malformed meta shouldn't sink the report */
+      }
+    }
   }
 
   async onEnd(result: FullResult): Promise<void> {
@@ -72,6 +93,7 @@ export default class FunctestReporter implements Reporter {
       this.sawFailure || result.status !== "passed" || steps.some((s) => s.status === "failed");
 
     const meta: Record<string, unknown> = { browser: "chromium" };
+    if (Object.keys(this.scenarios).length) meta.scenarios = this.scenarios;
 
     // One animated GIF per scenario — a frame-diff-optimized replay from the
     // recorded video (falling back to a step-screenshot slideshow). Uploaded via

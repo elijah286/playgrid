@@ -34,6 +34,19 @@ export type StepRecord = {
 export class Recorder {
   steps: StepRecord[] = [];
   scenario = "unknown";
+  /** Human-readable name shown on the Site Admin Functional Testing page. */
+  title = "";
+  /** What this test is for + what it verifies — shown on the admin page so a
+   *  reviewer can tell at a glance which scenario does what. */
+  description = "";
+
+  /** Set the scenario key + the human title/description in one call (top of each
+   *  spec). The title/description surface on the Site Admin dashboard. */
+  about(opts: { scenario: string; title: string; description: string }): void {
+    this.scenario = opts.scenario;
+    this.title = opts.title;
+    this.description = opts.description;
+  }
 
   async step(name: string, page: Page, fn: () => Promise<void>): Promise<void> {
     const ordinal = this.steps.length + 1;
@@ -76,6 +89,17 @@ export const test = base.extend<{ recorder: Recorder }>({
     // Teardown runs even when the test failed, so the failed step is included.
     await testInfo.attach("functest-steps", {
       body: Buffer.from(JSON.stringify(rec.steps)),
+      contentType: "application/json",
+    });
+    // Scenario title/description for the admin page (what this test is for).
+    await testInfo.attach("functest-meta", {
+      body: Buffer.from(
+        JSON.stringify({
+          scenario: rec.scenario,
+          title: rec.title,
+          description: rec.description,
+        }),
+      ),
       contentType: "application/json",
     });
   },

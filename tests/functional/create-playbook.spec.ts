@@ -21,7 +21,12 @@ test.afterAll(async () => {
 });
 
 test("create playbook", async ({ page, recorder }) => {
-  recorder.scenario = "create-playbook";
+  recorder.about({
+    scenario: "create-playbook",
+    title: "Create a playbook",
+    description:
+      "A coach signs in, clears the Terms gate, and creates a new playbook from the home screen. Verifies the core 'start a new playbook' authoring flow works and the new playbook page renders.",
+  });
   const name = `${FUNCTEST_PREFIX} create ${Date.now()}`;
 
   await recorder.step("sign in", page, async () => {

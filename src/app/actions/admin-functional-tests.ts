@@ -18,6 +18,9 @@ export type FunctionalTestRun = {
   createdAt: string;
   /** Per-scenario animated-GIF summary URLs ({ scenario: url }), from meta.gifs. */
   gifs: Record<string, string> | null;
+  /** Per-scenario human title + description (what the test is for), from
+   *  meta.scenarios — set by recorder.about() in each spec. */
+  scenarios: Record<string, { title: string; description: string }> | null;
 };
 
 export type FunctionalTestStep = {
@@ -78,6 +81,9 @@ export async function listFunctionalTestRunsAction(
     createdAt: r.created_at as string,
     gifs:
       (r.meta as { gifs?: Record<string, string> } | null)?.gifs ?? null,
+    scenarios:
+      (r.meta as { scenarios?: Record<string, { title: string; description: string }> } | null)
+        ?.scenarios ?? null,
   }));
   return { ok: true, runs };
 }

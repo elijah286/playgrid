@@ -23,7 +23,12 @@ test.afterAll(async () => {
 });
 
 test("coach AI generates a play", async ({ page, recorder }) => {
-  recorder.scenario = "coach-ai";
+  recorder.about({
+    scenario: "coach-ai",
+    title: "Coach AI (Cal) generates a play",
+    description:
+      "Opens Coach Cal inside a playbook and asks it to generate a play, verifying Cal responds. Skips automatically when Cal isn't enabled for the test account.",
+  });
   test.setTimeout(150_000);
   const name = `${FUNCTEST_PREFIX} cal ${Date.now()}`;
 

@@ -175,9 +175,7 @@ function RunRow({ run }: { run: FunctionalTestRun }) {
       </button>
       {open && (
         <div className="border-t border-border">
-          {run.gifs && Object.keys(run.gifs).length > 0 && (
-            <ScenarioGifs gifs={run.gifs} />
-          )}
+          <ScenarioReplays gifs={run.gifs} scenarios={run.scenarios} />
           <StepGallery runId={run.id} />
         </div>
       )}
@@ -185,35 +183,60 @@ function RunRow({ run }: { run: FunctionalTestRun }) {
   );
 }
 
-/** Animated per-scenario replays — a quick visual summary of each workflow,
- *  assembled from the step screenshots by the reporter. */
-function ScenarioGifs({ gifs }: { gifs: Record<string, string> }) {
+/** Per-scenario cards: what each test is for (title + description) alongside its
+ *  animated replay, so a reviewer can tell at a glance which scenario does what. */
+function ScenarioReplays({
+  gifs,
+  scenarios,
+}: {
+  gifs: Record<string, string> | null;
+  scenarios: Record<string, { title: string; description: string }> | null;
+}) {
+  // Union of scenario keys from the descriptions and the replays.
+  const keys = Array.from(
+    new Set([...Object.keys(scenarios ?? {}), ...Object.keys(gifs ?? {})]),
+  );
+  if (keys.length === 0) return null;
   return (
     <div className="border-b border-border px-4 py-4">
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
-        Workflow replays
+      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">
+        Scenarios
       </p>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {Object.entries(gifs).map(([scenario, url]) => (
-          <figure
-            key={scenario}
-            className="overflow-hidden rounded-xl border border-border bg-surface-raised"
-          >
-            <a href={url} target="_blank" rel="noreferrer">
-              {/* Animated GIF replay of the scenario (external Supabase URL). */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={url}
-                alt={`${scenario} replay`}
-                className="w-full bg-surface-inset"
-                loading="lazy"
-              />
-            </a>
-            <figcaption className="px-2.5 py-1.5 text-xs font-medium text-foreground">
-              {scenario}
-            </figcaption>
-          </figure>
-        ))}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {keys.map((key) => {
+          const meta = scenarios?.[key];
+          const url = gifs?.[key];
+          return (
+            <figure
+              key={key}
+              className="overflow-hidden rounded-xl border border-border bg-surface-raised"
+            >
+              {url ? (
+                <a href={url} target="_blank" rel="noreferrer">
+                  {/* Animated replay of the scenario (external Supabase URL). */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={url}
+                    alt={`${meta?.title || key} replay`}
+                    className="w-full bg-surface-inset"
+                    loading="lazy"
+                  />
+                </a>
+              ) : null}
+              <figcaption className="space-y-1 p-3">
+                <p className="text-sm font-semibold text-foreground">
+                  {meta?.title || key}
+                </p>
+                {meta?.description && (
+                  <p className="text-xs leading-relaxed text-muted">{meta.description}</p>
+                )}
+                <p className="text-[10px] uppercase tracking-wide text-muted-light">
+                  {key}
+                </p>
+              </figcaption>
+            </figure>
+          );
+        })}
       </div>
     </div>
   );
