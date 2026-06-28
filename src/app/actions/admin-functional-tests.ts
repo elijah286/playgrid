@@ -18,9 +18,12 @@ export type FunctionalTestRun = {
   createdAt: string;
   /** Per-scenario animated-GIF summary URLs ({ scenario: url }), from meta.gifs. */
   gifs: Record<string, string> | null;
-  /** Per-scenario human title + description (what the test is for), from
-   *  meta.scenarios — set by recorder.about() in each spec. */
-  scenarios: Record<string, { title: string; description: string }> | null;
+  /** Per-scenario human title + description + pass/fail (what the test is for and
+   *  whether it passed), from meta.scenarios — set by recorder.about() in each spec. */
+  scenarios: Record<
+    string,
+    { title: string; description: string; status?: "passed" | "failed" }
+  > | null;
 };
 
 export type FunctionalTestStep = {

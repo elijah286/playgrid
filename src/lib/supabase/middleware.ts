@@ -45,6 +45,12 @@ const PUBLIC_PREFIXES = [
   // landing from search. Pages enforce their own per-feature gates.
   "/learn/",
   "/invite/", // invite landing page (pre-login preview)
+  "/copy/", // playbook copy-link landing — anon recipients must see the "X sent
+  //   you a copy of Y / Sign up to claim it" preview, not a login wall. The page
+  //   handles anon itself (PreviewCard + AuthFlow). Was missing → every copy link
+  //   shared with a non-user bounced to /login with zero context.
+  "/v/", // public shared-play viewer (social/share links, OG card). Same class:
+  //   the page renders for anon + shows "no longer available" for bad tokens.
   "/register/", // public league registration (parent intake). Page enforces its own "registration open" gate.
   "/auth/", // OAuth/PKCE callback — runs before a session exists
   "/api/contact",

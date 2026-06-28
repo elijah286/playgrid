@@ -25,7 +25,10 @@ type TestRecord = { scenario: string; steps: StepRecord[]; videoPaths: string[] 
 export default class FunctestReporter implements Reporter {
   private steps: StepRecord[] = [];
   private tests: TestRecord[] = [];
-  private scenarios: Record<string, { title: string; description: string }> = {};
+  private scenarios: Record<
+    string,
+    { title: string; description: string; status?: "passed" | "failed" }
+  > = {};
   private startedAtMs = Date.now();
   private sawFailure = false;
 
@@ -64,8 +67,15 @@ export default class FunctestReporter implements Reporter {
       this.tests.push({ scenario, steps: parsed, videoPaths });
     }
 
-    // Scenario title/description (what the test is for) for the admin page.
+    // Per-scenario status, so the admin page can flag which scenarios failed
+    // (and surface the error) without re-deriving it from steps.
+    const scenarioFailed =
+      result.status !== "passed" || parsed.some((s) => s.status === "failed");
+
+    // Scenario title/description (what the test is for) + status for the admin page.
     const metaAtt = result.attachments.find((a) => a.name === "functest-meta");
+    let title = "";
+    let description = "";
     if (metaAtt) {
       try {
         const raw = metaAtt.body
@@ -74,15 +84,21 @@ export default class FunctestReporter implements Reporter {
             ? readFileSync(metaAtt.path, "utf8")
             : null;
         if (raw) {
-          const m = JSON.parse(raw) as { scenario?: string; title?: string; description?: string };
-          if (m.scenario && (m.title || m.description)) {
-            this.scenarios[m.scenario] = { title: m.title ?? "", description: m.description ?? "" };
-          }
+          const m = JSON.parse(raw) as { title?: string; description?: string };
+          title = m.title ?? "";
+          description = m.description ?? "";
         }
       } catch {
         /* malformed meta shouldn't sink the report */
       }
     }
+    const prev = this.scenarios[scenario];
+    this.scenarios[scenario] = {
+      title: title || prev?.title || "",
+      description: description || prev?.description || "",
+      // A scenario is failed if any of its tests failed (a spec can have >1 test).
+      status: prev?.status === "failed" || scenarioFailed ? "failed" : "passed",
+    };
   }
 
   async onEnd(result: FullResult): Promise<void> {

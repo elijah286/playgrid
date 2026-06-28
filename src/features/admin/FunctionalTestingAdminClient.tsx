@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, FlaskConical, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui";
 import {
@@ -57,43 +57,22 @@ const TRIGGER_LABEL: Record<string, string> = {
   manual: "manual",
 };
 
-function StepGallery({ runId }: { runId: string }) {
-  const [state, setState] = useState<
-    | { kind: "idle" }
-    | { kind: "loading" }
-    | { kind: "error"; message: string }
-    | { kind: "ready"; steps: FunctionalTestStep[] }
-  >({ kind: "idle" });
-
-  // Fetch once on first render.
-  if (state.kind === "idle") {
-    setState({ kind: "loading" });
-    void getFunctionalTestRunStepsAction(runId).then((res) => {
-      if (res.ok) setState({ kind: "ready", steps: res.steps });
-      else setState({ kind: "error", message: res.error });
-    });
-  }
-
-  if (state.kind === "loading" || state.kind === "idle") {
-    return (
-      <div className="flex items-center gap-2 px-4 py-6 text-xs text-muted">
-        <Loader2 className="size-4 animate-spin" /> Loading steps…
-      </div>
-    );
-  }
-  if (state.kind === "error") {
-    return <div className="px-4 py-4 text-xs text-danger">Couldn&rsquo;t load steps: {state.message}</div>;
-  }
-  if (state.steps.length === 0) {
+function StepGallery({ steps }: { steps: FunctionalTestStep[] }) {
+  if (steps.length === 0) {
     return <div className="px-4 py-4 text-xs text-muted">No steps recorded for this run.</div>;
   }
 
+  // Stills are stored only for FAILED steps now, so this is a compact step
+  // timeline: passing steps show as text rows; failed steps surface their
+  // error + still inline so the nature of the failure is obvious.
   return (
     <div className="grid grid-cols-1 gap-3 px-4 py-4 sm:grid-cols-2 lg:grid-cols-3">
-      {state.steps.map((s) => (
+      {steps.map((s) => (
         <div
           key={s.id}
-          className="overflow-hidden rounded-xl border border-border bg-surface-raised"
+          className={`overflow-hidden rounded-xl border bg-surface-raised ${
+            s.status === "failed" ? "border-danger/60" : "border-border"
+          }`}
         >
           {s.screenshotUrl ? (
             <a href={s.screenshotUrl} target="_blank" rel="noreferrer">
@@ -108,11 +87,7 @@ function StepGallery({ runId }: { runId: string }) {
                 loading="lazy"
               />
             </a>
-          ) : (
-            <div className="flex aspect-video w-full items-center justify-center bg-surface-inset text-[10px] text-muted">
-              no screenshot
-            </div>
-          )}
+          ) : null}
           <div className="space-y-1 p-2.5">
             <div className="flex items-center justify-between gap-2">
               <span className="truncate text-xs font-semibold text-foreground">
@@ -147,9 +122,37 @@ function StepGallery({ runId }: { runId: string }) {
 
 function RunRow({ run }: { run: FunctionalTestRun }) {
   const [open, setOpen] = useState(false);
+  const [steps, setSteps] = useState<FunctionalTestStep[] | null>(null);
+  const [stepsError, setStepsError] = useState<string | null>(null);
+  const fetchedRef = useRef(false);
+
+  // Fetch steps the first time the run is expanded (setState only in the async
+  // callback, so we don't trip the set-state-in-effect lint rule).
+  useEffect(() => {
+    if (!open || fetchedRef.current) return;
+    fetchedRef.current = true;
+    getFunctionalTestRunStepsAction(run.id).then((res) => {
+      if (res.ok) setSteps(res.steps);
+      else setStepsError(res.error);
+    });
+  }, [open, run.id]);
+
   const failed = run.status === "failed";
+  const failedScenarios = Object.entries(run.scenarios ?? {}).filter(
+    ([, v]) => v.status === "failed",
+  );
+  // First failing step's error per scenario (for the scenario cards).
+  const errorByScenario: Record<string, string> = {};
+  for (const s of steps ?? []) {
+    if (s.status === "failed" && s.errorMessage && !errorByScenario[s.scenario]) {
+      errorByScenario[s.scenario] = s.errorMessage;
+    }
+  }
+
   return (
-    <div className="rounded-2xl border border-border bg-surface">
+    <div
+      className={`rounded-2xl border bg-surface ${failed ? "border-danger/50" : "border-border"}`}
+    >
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -165,18 +168,53 @@ function RunRow({ run }: { run: FunctionalTestRun }) {
           {TRIGGER_LABEL[run.trigger] ?? run.trigger}
           {run.gitSha ? ` · ${run.gitSha.slice(0, 7)}` : ""}
         </span>
-        <span className="hidden text-xs text-muted sm:inline">
-          {failed ? `${run.failedSteps}/${run.totalSteps} steps failed` : `${run.totalSteps} steps`}
+        <span
+          className={`hidden text-xs sm:inline ${failed ? "font-semibold text-danger" : "text-muted"}`}
+        >
+          {failed
+            ? `${failedScenarios.length || run.failedSteps} failed`
+            : `${run.totalSteps} steps`}
         </span>
         <span className="text-xs text-muted">{fmtDuration(run.durationMs)}</span>
         <span className="w-20 shrink-0 text-right text-xs text-muted">
           {fmtWhen(run.createdAt)}
         </span>
       </button>
+
+      {/* Failed scenario names — visible even when collapsed, so a reviewer can
+          scan the run list and immediately see WHAT broke. */}
+      {failed && failedScenarios.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 px-4 pb-2.5">
+          <span className="text-[11px] font-medium text-danger">Failed:</span>
+          {failedScenarios.map(([k, v]) => (
+            <span
+              key={k}
+              className="rounded bg-danger-light px-2 py-0.5 text-[11px] font-medium text-danger"
+            >
+              {v.title || k}
+            </span>
+          ))}
+        </div>
+      )}
+
       {open && (
         <div className="border-t border-border">
-          <ScenarioReplays gifs={run.gifs} scenarios={run.scenarios} />
-          <StepGallery runId={run.id} />
+          <ScenarioReplays
+            gifs={run.gifs}
+            scenarios={run.scenarios}
+            errorByScenario={errorByScenario}
+          />
+          {steps === null && stepsError === null && (
+            <div className="flex items-center gap-2 px-4 py-4 text-xs text-muted">
+              <Loader2 className="size-4 animate-spin" /> Loading steps…
+            </div>
+          )}
+          {stepsError && (
+            <div className="px-4 py-4 text-xs text-danger">
+              Couldn&rsquo;t load steps: {stepsError}
+            </div>
+          )}
+          {steps && <StepGallery steps={steps} />}
         </div>
       )}
     </div>
@@ -188,14 +226,24 @@ function RunRow({ run }: { run: FunctionalTestRun }) {
 function ScenarioReplays({
   gifs,
   scenarios,
+  errorByScenario,
 }: {
   gifs: Record<string, string> | null;
-  scenarios: Record<string, { title: string; description: string }> | null;
+  scenarios: Record<
+    string,
+    { title: string; description: string; status?: "passed" | "failed" }
+  > | null;
+  errorByScenario: Record<string, string>;
 }) {
-  // Union of scenario keys from the descriptions and the replays.
+  // Union of scenario keys from the descriptions and the replays; show failed
+  // scenarios first so a reviewer's eye lands on them.
   const keys = Array.from(
     new Set([...Object.keys(scenarios ?? {}), ...Object.keys(gifs ?? {})]),
-  );
+  ).sort((a, b) => {
+    const af = scenarios?.[a]?.status === "failed" ? 0 : 1;
+    const bf = scenarios?.[b]?.status === "failed" ? 0 : 1;
+    return af - bf;
+  });
   if (keys.length === 0) return null;
   return (
     <div className="border-b border-border px-4 py-4">
@@ -206,10 +254,14 @@ function ScenarioReplays({
         {keys.map((key) => {
           const meta = scenarios?.[key];
           const url = gifs?.[key];
+          const scenarioFailed = meta?.status === "failed";
+          const err = errorByScenario[key];
           return (
             <figure
               key={key}
-              className="overflow-hidden rounded-xl border border-border bg-surface-raised"
+              className={`overflow-hidden rounded-xl border bg-surface-raised ${
+                scenarioFailed ? "border-danger/60" : "border-border"
+              }`}
             >
               {url ? (
                 <a href={url} target="_blank" rel="noreferrer">
@@ -223,12 +275,20 @@ function ScenarioReplays({
                   />
                 </a>
               ) : null}
-              <figcaption className="space-y-1 p-3">
-                <p className="text-sm font-semibold text-foreground">
-                  {meta?.title || key}
-                </p>
+              <figcaption className="space-y-1.5 p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-semibold text-foreground">
+                    {meta?.title || key}
+                  </p>
+                  {meta?.status && <StatusPill status={meta.status} />}
+                </div>
                 {meta?.description && (
                   <p className="text-xs leading-relaxed text-muted">{meta.description}</p>
+                )}
+                {scenarioFailed && err && (
+                  <p className="whitespace-pre-wrap rounded bg-danger-light px-2 py-1 text-[11px] text-danger">
+                    {err}
+                  </p>
                 )}
                 <p className="text-[10px] uppercase tracking-wide text-muted-light">
                   {key}
