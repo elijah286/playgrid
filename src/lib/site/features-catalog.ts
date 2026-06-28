@@ -711,6 +711,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "coach-cal-matchup-grade",
+    name: "Ask Coach Cal if a play beats a defense",
+    description:
+      "Ask Coach Cal \"is this play any good against Cover 3?\", \"how does my mesh hold up against Tampa 2?\", or \"what beats this defense?\" and Cal grades the matchup — a clear verdict (good / contested / tough), exactly where that coverage is soft so you know where to attack, how the defense is built to take your concept away, and concrete alternative concepts that beat it. Right after Cal overlays a defense onto one of your plays, it offers the same read so you can see where the play wins and loses. The analysis is grounded in Playgrid's coverage and matchup knowledge, not guessed.",
+    category: "Coach AI",
+    status: "beta",
+    addedDate: "2026-06-28",
+  },
+  {
     id: "coach-cal-flip-play",
     name: "Flip a play with Coach Cal",
     description:

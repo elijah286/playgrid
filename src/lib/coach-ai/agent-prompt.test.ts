@@ -1263,6 +1263,35 @@ describe("contextBlock — anchored play, no over-asking (#16)", () => {
     expect(block).not.toMatch(/looking at this play RIGHT NOW/i);
     expect(block).not.toMatch(/Forbidden over-asking/i);
   });
+
+  // Guards the defense-overlay shortcut added 2026-06-28: when an offensive play
+  // is anchored, Cal should overlay a defense with just front+coverage and let
+  // the harness supply this play as on_play — not redraw the offense or call
+  // compose_play first (the slow, drift-prone path coaches reported).
+  it("tells Cal to overlay a defense onto the anchored play via front+coverage only", () => {
+    const block = contextBlock(
+      anchoredCtx({
+        playDiagramText: JSON.stringify({
+          title: "Mesh",
+          variant: "flag_7v7",
+          players: [{ id: "QB", x: 0, y: -3, team: "O" }],
+          routes: [],
+        }),
+      }),
+    );
+    expect(block).toMatch(/Adding a defense to THIS play/i);
+    expect(block).toMatch(/supplies THIS anchored play as/i);
+    expect(block).toMatch(/do NOT need to call `?compose_play`? first/i);
+    // The multi-play install path still requires explicit on_play per play.
+    expect(block).toMatch(/MULTIPLE plays/i);
+  });
+
+  it("omits the defense-overlay shortcut when no anchored diagram is present", () => {
+    // playDiagramText is null in the default anchoredCtx — the shortcut lives
+    // inside the diagram block, so it must not leak into the prompt.
+    const block = contextBlock(anchoredCtx());
+    expect(block).not.toMatch(/Adding a defense to THIS play/i);
+  });
 });
 
 describe("NORMAL_PROMPT — Rule 6a (content safety / objectionable-content refusal)", () => {

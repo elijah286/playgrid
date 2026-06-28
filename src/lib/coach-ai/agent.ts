@@ -38,7 +38,7 @@ You help coaches with:
 - Explaining schemes, formations, route concepts, and coverages.
 - Strategic Q&A grounded in the user's playbook when possible.
 
-**Be eager — coaches rarely know the half of what you can do.** You can diagram any concept on demand, overlay a defense onto one of their existing plays, number the QB's progression reads, save a single play or a whole install to their playbook, and build a practice plan around whatever you just discussed. So lead with the answer, then proactively offer the next thing you could SHOW or BUILD — tuned to what they asked, never a generic menu. Examples: after "what beats Cover 3?" → "Want me to overlay a Cover 3 shell on these so you can see exactly where the holes open up?"; after "how do I teach the mesh?" → "I can build a 15-minute practice block to install it — want that?"; after a pure rules question → "Want me to draw up a couple of plays that fit that situation?" Make ONE concrete offer, never let it bury or delay the actual answer, and only offer what your tools can actually do. Spatial answers still get their diagram by default — the offer is the NEXT illustrative or constructive step, not a substitute for drawing.
+**Be eager — coaches rarely know the half of what you can do.** You can diagram any concept on demand, overlay a defense onto one of their existing plays, grade whether a play beats a given coverage and suggest a better call, number the QB's progression reads, save a single play or a whole install to their playbook, and build a practice plan around whatever you just discussed. So lead with the answer, then proactively offer the next thing you could SHOW or BUILD — tuned to what they asked, never a generic menu. Examples: after "what beats Cover 3?" → "Want me to overlay a Cover 3 shell on these so you can see exactly where the holes open up?"; after "how do I teach the mesh?" → "I can build a 15-minute practice block to install it — want that?"; after a pure rules question → "Want me to draw up a couple of plays that fit that situation?" Make ONE concrete offer, never let it bury or delay the actual answer, and only offer what your tools can actually do. Spatial answers still get their diagram by default — the offer is the NEXT illustrative or constructive step, not a substitute for drawing.
 
 Behavior rules — follow these strictly:
 1. **Ground rules-and-penalties answers in the knowledge base.** When the user asks about a rule, penalty, sanctioning-body specific (NFL Flag / Pop Warner / NFHS) detail, or anything where the wrong answer could cost a coach a game — call \`search_kb\` first and answer from what you find. Do not invent rules. For general football concepts (route names, formation shapes, coverage descriptions, drills, fundamentals, terminology), still call \`search_kb\` to surface any seeded depth, but if it doesn't return a strong hit you should STILL ANSWER from your football knowledge and draw the diagram. **NEVER tell the user "the KB doesn't have this" or "I don't have a specific entry on X" or anything that erodes their confidence in the answer — just answer.** The single exception is actual rule/penalty questions where the official wording matters and you'd otherwise be guessing — there a "double-check against your league's rulebook" disclaimer is appropriate. **Whenever you fall back to general knowledge instead of KB hits, FIRST call \`flag_outside_kb\` (silent — the user never sees it) so the admin can see which topics still need to be seeded.** Call it once per turn, before composing your reply.
@@ -184,6 +184,8 @@ Behavior rules — follow these strictly:
    **Why this is a key capability — coaches install defenses to teach the read.** A standalone defense diagram on a play card is just a static look. The matchup view (defense overlaid on a specific offense) is where the coaching happens — the coach can point at @MLB's drop and say "see how he carries the over-drag here? That's the read." Without the overlay, the defensive install is half a play. Make the second half easy.
 
    **Don't conflate this with the OVERLAY case (Rule 322 / "how should defense cover this play").** Rule 322 is when an offense is anchored and the coach asks how defense plays IT — Cal overlays defense on the anchored offense (visual answer, optional save). This rule is the SYMMETRIC mirror: after a defense is installed, Cal offers to overlay it onto each existing offense. Both pass through \`compose_defense({ on_play })\` — the difference is the trigger direction (defense install → offer overlays vs N offenses; vs. anchored offense → overlay defense on the one offense).
+
+7h-eval. **Grade the matchup with \`evaluate_matchup\` — never freelance "this beats that".** When the coach asks whether a play holds up against a coverage ("is this good vs Cover 3?", "how does my mesh do against Tampa 2?", "what beats this defense?", "give me a better call vs man"), call \`evaluate_matchup({ coverage })\`. The harness supplies the anchored / most-recent offense as \`on_play\`, so you usually pass ONLY the coverage. It returns a grounded verdict, the coverage's soft spots, the hand-authored read for that exact concept × coverage, and concrete alternative concepts. Relay that in your coaching voice — **NEVER assert a matchup claim the tool did not return** (matchup "beats/loses" claims freelanced from memory are how Cal gets football wrong). If the verdict is contested or tough, offer to draw one of the returned alternatives (\`compose_play\`) or overlay the coverage (\`compose_defense\`) so the coach can see it. **After you overlay a defense onto an offense, proactively offer the grade:** "Want me to tell you where this play wins and loses against that Cover 3?"
 
 7b. **You CAN help the coach "switch" between playbooks — call \`list_my_playbooks\`** (but ONLY when the coach EXPLICITLY asked to switch, OR no playbook is anchored yet). If the coach wants to work in a different playbook than the currently-anchored one (or there's no anchor yet), call \`list_my_playbooks\` and the chip buttons will render above your reply. **NEVER tell the coach "I can't switch playbooks for you" or send them to navigate manually** — surfacing the chips IS how you switch. After the coach taps a chip, the page navigates and the chat anchors to the new playbook on the next turn.
 
@@ -1009,6 +1011,18 @@ export function contextBlock(ctx: ToolContext): string {
         `to draw or describe the current play, use these exact players and routes — do not ` +
         `substitute a generic 11-personnel example. You only need to call \`get_play\` if you ` +
         `need fresher data (e.g. after an edit was just made).`,
+      );
+      lines.push("");
+      lines.push(
+        `**Adding a defense to THIS play:** when the coach asks to overlay / install / add / ` +
+        `show a defense (a front + coverage) against the play above, call \`compose_defense\` ` +
+        `with just \`front\` and \`coverage\` (and optional \`strength\`). The harness supplies ` +
+        `THIS anchored play as \`on_play\` automatically and preserves the offense byte-for-` +
+        `byte — you do NOT need to pass \`on_play\` and you do NOT need to call \`compose_play\` ` +
+        `first. Hand-building the offense JSON or redrawing the offense is slow and risks ` +
+        `drifting from the real play. Pass \`on_play\` yourself ONLY when overlaying onto a ` +
+        `DIFFERENT play, or onto MULTIPLE plays (e.g. "install Cover 3 vs all my plays") — ` +
+        `then it's one \`compose_defense\` call per play with that play's prior \`\`\`play fence.`,
       );
       lines.push("");
       lines.push(
@@ -2518,6 +2532,12 @@ export async function runAgent(
    *  Falls back to `priorAssistantFenceJson` when no offense fence exists at
    *  all — preserving the existing behavior for pure-defense conversations. */
   const priorAssistantOffenseFenceJson = findPriorOffenseFenceJson(history);
+  /** The anchored play (the one the coach has open) as a compose_defense
+   *  overlay baseline, when it carries offense. See resolveDefenseOverlayBaseline:
+   *  this is what fixes "open an offensive play, ask for a defense" — the
+   *  offense is in ctx.playDiagramText, not the chat history, so without this
+   *  the overlay had no offense to preserve. */
+  const anchoredOffenseFenceJson = extractAnchoredOffenseFence(ctx.playDiagramText);
   /** Every play fence in the most-recent fence-bearing assistant turn —
    *  not just the first. Cal sometimes emits 3 plays in one reply and
    *  the coach says one "yes" meaning "save all three." Walks back the
@@ -2898,8 +2918,12 @@ export async function runAgent(
       // fence — defense-only fences leave the overlay branch with no offense
       // to preserve (see priorAssistantOffenseFenceJson docstring above).
       const priorFenceForTool =
-        tu.name === "compose_defense"
-          ? (priorAssistantOffenseFenceJson ?? priorAssistantFenceJson)
+        OFFENSE_BASELINE_TOOLS.has(tu.name)
+          ? resolveDefenseOverlayBaseline({
+              historyOffenseFence: priorAssistantOffenseFenceJson,
+              anchoredOffenseFence: anchoredOffenseFenceJson,
+              anyHistoryFence: priorAssistantFenceJson,
+            })
           : priorAssistantFenceJson;
       const correctedInput = autoCorrectPriorFence(tu.name, tu.input as Record<string, unknown>, priorFenceForTool);
       const r = await runTool(tu.name, correctedInput, ctx);
@@ -3950,6 +3974,56 @@ export function findPriorOffenseFenceJson(
   return null;
 }
 
+/** The anchored play (the one the coach has OPEN) as a compose_defense overlay
+ *  baseline — but only when it actually contains offense to preserve.
+ *
+ *  When a coach opens an offensive play and asks "add a Cover 3", the offense
+ *  they want the defense overlaid onto is NOT in the chat history as a ```play
+ *  fence — it was pre-fetched into the system prompt as `ctx.playDiagramText`
+ *  (see contextBlock). Without surfacing it here, compose_defense's auto-correct
+ *  had nothing to fall back to and produced an offense-less overlay (the
+ *  2026-06-28 "added a defense to my offensive play and it didn't respond well"
+ *  report). The byte-preservation failures that follow also drive the validator
+ *  retry loop — the user-visible slowness.
+ *
+ *  Returns the diagram JSON string verbatim, or null when the anchored diagram
+ *  is absent, unparseable, or defense-only (a defense play is what's open — no
+ *  offense to preserve). Mirrors findPriorOffenseFenceJson's `team !== "D"`
+ *  offense test so untagged players count as offense. */
+export function extractAnchoredOffenseFence(playDiagramText: string | null): string | null {
+  if (!playDiagramText) return null;
+  const trimmed = playDiagramText.trim();
+  try {
+    const parsed = JSON.parse(trimmed) as { players?: Array<{ team?: string }> };
+    if (!Array.isArray(parsed.players)) return null;
+    const hasOffense = parsed.players.some((p) => p && p.team !== "D");
+    return hasOffense ? trimmed : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Pick the offense baseline compose_defense overlays the defense onto.
+ *  Precedence (highest first):
+ *    1. The most-recent OFFENSE fence emitted in this chat — captures edits the
+ *       coach made this conversation (e.g. Cal revised a route, then "add D"),
+ *       which are fresher than the pre-edit anchored diagram.
+ *    2. The anchored offense play the coach has open — the ground-truth offense
+ *       when nothing offense-bearing has been drawn in the chat yet (the common
+ *       "open a play, ask for a defense" path that was broken).
+ *    3. Any most-recent history fence — legacy fallback so pure-defense chats
+ *       (no offense anywhere) still resolve a baseline.
+ *  This is strictly additive over the prior `historyOffense ?? anyHistory`
+ *  chain: it only changes the result when history has no offense fence but an
+ *  anchored offense play exists — exactly the broken case. */
+export function resolveDefenseOverlayBaseline(opts: {
+  historyOffenseFence: string | null;
+  anchoredOffenseFence: string | null;
+  anyHistoryFence: string | null;
+}): string | null {
+  return opts.historyOffenseFence ?? opts.anchoredOffenseFence ?? opts.anyHistoryFence;
+}
+
 /** Tool names that accept a prior play fence as a string input. Their
  *  parameter names differ slightly — modify/revise use
  *  `prior_play_fence`, compose_defense uses `on_play` — so we map them
@@ -3960,7 +4034,16 @@ const PRIOR_FENCE_TOOLS: Readonly<Record<string, string>> = {
   flip_play:                "prior_play_fence",
   set_defender_assignment:  "prior_play_fence",
   compose_defense:          "on_play",
+  evaluate_matchup:         "on_play",
 };
+
+/** Tools that grade / overlay a defense AGAINST an offense — they need the
+ *  offense baseline (most-recent in-chat offense, else the anchored play),
+ *  not just any prior fence. See resolveDefenseOverlayBaseline. */
+const OFFENSE_BASELINE_TOOLS: ReadonlySet<string> = new Set([
+  "compose_defense",
+  "evaluate_matchup",
+]);
 
 /** Quick fingerprint of an offense roster for "did Cal pass us a
  *  fabricated fence?" detection. We compare the fingerprints — if

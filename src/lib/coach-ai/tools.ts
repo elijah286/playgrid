@@ -32,6 +32,7 @@ import {
   detectConceptFromTitle,
   type ReactorAssignment,
 } from "@/domain/play/defensiveReactors";
+import { evaluateMatchup } from "@/domain/play/coverageProfiles";
 import { validatePlaySpecVsRules } from "@/domain/playbook/playSpecRules";
 import { loadPlaybookSettings, formatRouteAssignmentErrors } from "./play-tools";
 
@@ -175,13 +176,16 @@ async function computeDefenseAlignment(
   // ronous catalog lookup when no override exists.
   const catalogMatch = await resolveDefensiveAlignment(variant, front, coverage);
   if (catalogMatch) {
+    // Resolve assignments once — used for both the players list and the
+    // zone-owner map below (was computed twice on every alignment).
+    const assigned = alignmentWithAssignments(catalogMatch, strength);
     return {
       ok: true,
       front: catalogMatch.front,
       coverage: catalogMatch.coverage,
       variant: catalogMatch.variant,
       description: catalogMatch.description,
-      players: alignmentWithAssignments(catalogMatch, strength).map((p) => ({
+      players: assigned.map((p) => ({
         id: p.id,
         x: p.x,
         y: p.y,
@@ -191,7 +195,7 @@ async function computeDefenseAlignment(
         // Pair each zone with the FIRST defender that drops into it so
         // the chat fence can tint zones to match their triangle.
         const owners = new Map<string, string>();
-        for (const p of alignmentWithAssignments(catalogMatch, strength)) {
+        for (const p of assigned) {
           if (p.assignment.kind === "zone" && !owners.has(p.assignment.zoneId)) {
             owners.set(p.assignment.zoneId, p.id);
           }
@@ -1726,9 +1730,10 @@ const compose_defense: CoachAiTool = {
     let reactorCues: string[] = [];
     let reactorPatternName: string | null = null;
     if (onPlayRaw) {
-      const priorTitle = typeof (JSON.parse(onPlayRaw) as { title?: unknown }).title === "string"
-        ? (JSON.parse(onPlayRaw) as { title: string }).title
-        : undefined;
+      // `fence` is the overlay fence; its title is the prior play's title
+      // (preserved by the spread above). Reuse it instead of re-parsing
+      // onPlayRaw a second and third time on every overlay.
+      const priorTitle = typeof fence.title === "string" ? fence.title : undefined;
       const concept = detectConceptFromTitle(priorTitle);
       if (concept) {
         const pattern = findReactorPattern(variant, alignment.coverage, concept);
@@ -1805,6 +1810,91 @@ const compose_defense: CoachAiTool = {
         `**PLAY FENCE — drop VERBATIM into your reply between \`\`\`play and \`\`\`:**\n` +
         `\`\`\`play\n${fenceJson}\n\`\`\``,
     };
+  },
+};
+
+const evaluate_matchup: CoachAiTool = {
+  def: {
+    name: "evaluate_matchup",
+    description:
+      "Evaluate whether an offensive play is GOOD against a coverage, and suggest alternatives that beat it. READ-ONLY — produces grounded analysis, never a diagram. Use this whenever the coach asks 'is this play good vs Cover 3?', 'how does this hold up against Tampa 2?', 'what beats this defense?', or 'give me a better call vs man'. After you overlay a defense with compose_defense, you can call this to tell the coach whether their play actually attacks that coverage. " +
+      "Inputs: " +
+      "(1) `coverage` — the coverage to grade against ('Cover 3', 'Tampa 2', 'Cover 1', 'Cover 0', 'Cover 2', 'quarters'). " +
+      "(2) `on_play` — optional. The offense ```play fence (verbatim). When the coach has a play open the harness supplies it automatically; you normally don't pass it. " +
+      "Output is grounded in the coverage catalog (soft spots, beaters) plus the hand-authored reactor read for the exact coverage×concept pair. Relay the verdict, the reasons, the soft spots to attack, and the suggested alternatives in your own voice. NEVER invent matchup claims beyond what this returns.",
+    input_schema: {
+      type: "object",
+      properties: {
+        coverage: { type: "string" },
+        on_play: { type: "string", description: "Optional. The offense ```play fence JSON (verbatim). Harness-supplied when a play is anchored." },
+        front: { type: "string", description: "Optional. Defensive front, for context only." },
+      },
+      required: ["coverage"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    const coverage = typeof input.coverage === "string" ? input.coverage.trim() : "";
+    if (!coverage) return { ok: false, error: "coverage is required (e.g. 'Cover 3', 'Tampa 2')." };
+    const onPlayRaw = typeof input.on_play === "string" ? input.on_play.trim() : "";
+    const variant = (ctx.sportVariant as import("@/domain/play/types").SportVariant) ?? "flag_7v7";
+
+    // Derive the offensive concept from the play title (same detector the
+    // overlay path uses). The fence is optional — without it we still grade
+    // the coverage's soft spots + beaters.
+    let conceptName: string | null = null;
+    let playTitle: string | undefined;
+    if (onPlayRaw) {
+      try {
+        const fence = JSON.parse(onPlayRaw) as { title?: unknown };
+        playTitle = typeof fence.title === "string" ? fence.title : undefined;
+      } catch {
+        // Unparseable fence — fall back to coverage-only analysis.
+      }
+      conceptName = detectConceptFromTitle(playTitle);
+    }
+
+    // Pull the hand-authored reactor read for this exact coverage×concept pair,
+    // if one exists (defensiveReactors.ts — the same source compose_defense uses).
+    const reactor = conceptName ? findReactorPattern(variant, coverage, conceptName) : null;
+    const reactorRead = reactor?.description ?? null;
+    const reactorCues = reactor ? reactor.reactors.map((r) => r.cue) : [];
+
+    const evaln = evaluateMatchup({ coverageInput: coverage, conceptName, reactorRead, reactorCues });
+
+    const VERDICT_LABEL: Record<typeof evaln.verdict, string> = {
+      favors_offense: "Good matchup — this play attacks where the coverage is soft",
+      contested: "Contested — winnable, but the read has to be right",
+      favors_defense: "Tough matchup — the coverage is built to take this away",
+      unknown: "Unclear — not enough to grade confidently",
+    };
+
+    const lines: string[] = [];
+    lines.push(`MATCHUP: ${conceptName ?? playTitle ?? "this play"} vs ${evaln.coverage}`);
+    lines.push(`VERDICT: ${VERDICT_LABEL[evaln.verdict]}`);
+    lines.push(evaln.headline);
+    if (evaln.reasons.length > 0) {
+      lines.push("", "WHY:", ...evaln.reasons.map((r) => `  • ${r}`));
+    }
+    if (evaln.softSpots.length > 0) {
+      lines.push("", `WHERE ${evaln.coverage} IS SOFT (attack here):`, ...evaln.softSpots.map((s) => `  • ${s}`));
+    }
+    if (evaln.strongSpots.length > 0) {
+      lines.push("", `WHERE ${evaln.coverage} IS STRONG (avoid):`, ...evaln.strongSpots.map((s) => `  • ${s}`));
+    }
+    if (evaln.reactorRead) {
+      lines.push("", `HOW ${evaln.coverage} DEFENDS ${conceptName}:`, `  ${evaln.reactorRead}`);
+      if (evaln.reactorCues.length > 0) lines.push(...evaln.reactorCues.map((c) => `  • ${c}`));
+    }
+    if (evaln.alternatives.length > 0) {
+      lines.push("", `ALTERNATIVES THAT BEAT ${evaln.coverage}:`, `  ${evaln.alternatives.join(", ")}`);
+    }
+    lines.push(
+      "",
+      "Relay this in your own coaching voice. You may offer to draw an alternative (compose_play) or overlay this coverage (compose_defense) so the coach can see it. Do not add matchup claims beyond the above.",
+    );
+
+    return { ok: true, result: lines.join("\n") };
   },
 };
 
@@ -3477,7 +3567,7 @@ const update_plan_step: CoachAiTool = {
 // Lazy import to avoid a circular dependency through the propose tool
 // (which imports CoachAiTool from this file).
 import { propose_save_defense_play } from "./save-defense-tools";
-export const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, get_concept_skeleton, compose_play, revise_play, flip_play, compose_defense, place_defense, place_offense, modify_play_route, set_defender_assignment, propose_save_defense_play, flag_outside_kb, flag_refusal, propose_plan, update_plan_step];
+export const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, get_concept_skeleton, compose_play, revise_play, flip_play, compose_defense, evaluate_matchup, place_defense, place_offense, modify_play_route, set_defender_assignment, propose_save_defense_play, flag_outside_kb, flag_refusal, propose_plan, update_plan_step];
 
 // Loaded lazily to avoid a circular import (user-preferences imports CoachAiTool).
 function userPreferenceTools(): CoachAiTool[] {
