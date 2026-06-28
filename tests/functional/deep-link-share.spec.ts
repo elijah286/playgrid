@@ -66,17 +66,20 @@ test("share a deep link to a playbook", async ({ browser, recorder }) => {
   const visitorCtx = await browser.newContext();
   const visitor = await visitorCtx.newPage();
   try {
-    await recorder.step("a fresh visitor opens the deep link", visitor, async () => {
+    await recorder.step("a fresh visitor sees the shared playbook + claim CTA", visitor, async () => {
       const path = copyUrl.replace(/^https?:\/\/[^/]+/, "");
-      // The /copy landing streams, so it never reaches "networkidle". We assert
-      // it RESOLVES (loads, no hard error) rather than pinning exact copy — the
-      // GIF replay shows what the recipient actually sees, for visual review.
+      // The /copy landing streams, so it never reaches "networkidle".
       await visitor.goto(path, { waitUntil: "domcontentloaded" });
       await visitor.waitForTimeout(2500);
-      await expect(visitor.locator("body")).toBeVisible();
       await expect(
         visitor.getByText(/not found|expired|invalid link|something went wrong/i),
       ).toHaveCount(0);
+      // The recipient must see the contextual copy preview ("X sent you a copy
+      // of …" / "Sign up to claim it") — NOT a bare login wall. This guards the
+      // middleware fix that made /copy public to anon recipients.
+      await expect(
+        visitor.getByText(/sent you a copy|sign up to claim/i).first(),
+      ).toBeVisible({ timeout: 15_000 });
     });
   } finally {
     await visitorCtx.close();
