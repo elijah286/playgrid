@@ -1180,17 +1180,58 @@ type UserDirectory = {
   displayNameById: Map<string, string | null>;
 };
 
+const PAGE_SIZE = 1000;
+
+/**
+ * Fetch every row from a PostgREST select, paging past the per-request row cap
+ * (PostgREST returns at most ~1000 rows per request). Stops when a short page
+ * comes back. Keeps the revenue dashboard correct as the user base grows past
+ * a single page.
+ */
+async function selectAllRows<T>(
+  page: (from: number, to: number) => PromiseLike<{ data: unknown }>,
+  pageSize = PAGE_SIZE,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data } = await page(from, from + pageSize - 1);
+    const rows = (data as T[] | null) ?? [];
+    out.push(...rows);
+    if (rows.length < pageSize) break;
+  }
+  return out;
+}
+
+/** List every auth user, paging past the per-request cap. */
+async function listAllAuthUsers(
+  admin: ReturnType<typeof createServiceRoleClient>,
+): Promise<Array<{ id: string; email: string | null }>> {
+  const users: Array<{ id: string; email: string | null }> = [];
+  for (let page = 1; ; page += 1) {
+    const { data } = await admin.auth.admin.listUsers({
+      perPage: PAGE_SIZE,
+      page,
+    });
+    const batch = data?.users ?? [];
+    for (const u of batch) users.push({ id: u.id, email: u.email ?? null });
+    if (batch.length < PAGE_SIZE) break;
+  }
+  return users;
+}
+
 /** Load the auth ↔ profile directory used to join Stripe data to app users. */
 async function loadUserDirectory(
   admin: ReturnType<typeof createServiceRoleClient>,
 ): Promise<UserDirectory> {
-  const [{ data: authData }, { data: profileRows }] = await Promise.all([
-    admin.auth.admin.listUsers({ perPage: 1000, page: 1 }),
-    admin.from("profiles").select("id, display_name"),
+  const [authUsers, profileRows] = await Promise.all([
+    listAllAuthUsers(admin),
+    selectAllRows<{ id: string; display_name: string | null }>((from, to) =>
+      admin.from("profiles").select("id, display_name").range(from, to),
+    ),
   ]);
   const emailToUserId = new Map<string, string>();
   const uidToEmail = new Map<string, string | null>();
-  for (const u of authData?.users ?? []) {
+  for (const u of authUsers) {
     if (u.email) {
       const email = u.email.toLowerCase();
       emailToUserId.set(email, u.id);
@@ -1198,12 +1239,7 @@ async function loadUserDirectory(
     }
   }
   const displayNameById = new Map<string, string | null>();
-  for (const p of profileRows ?? []) {
-    displayNameById.set(
-      p.id as string,
-      (p as { display_name: string | null }).display_name,
-    );
-  }
+  for (const p of profileRows) displayNameById.set(p.id, p.display_name);
   return { emailToUserId, uidToEmail, displayNameById };
 }
 
@@ -1273,26 +1309,37 @@ export async function getRevenueBreakdownAction(): Promise<
       await loadUserDirectory(admin);
 
     // Pull the full subscription history (every status) and the referral graph
-    // in parallel. The subscriptions table is the spine of "who has ever paid"
-    // — unlike the old charges-only list, a cancelled subscriber still has a
-    // row here, so they can't silently drop off the dashboard.
-    const [{ data: subRows }, { data: referralRows }] = await Promise.all([
-      admin
-        .from("subscriptions")
-        .select(
-          "user_id, tier, status, current_period_end, cancel_at, cancel_at_period_end, billing_interval, updated_at, stripe_customer_id",
-        ),
-      admin.from("referral_awards").select("sender_id, recipient_id"),
+    // in parallel, paging past the 1000-row cap. The subscriptions table is the
+    // spine of "who has ever paid" — unlike the old charges-only list, a
+    // cancelled subscriber still has a row here, so they can't silently drop
+    // off the dashboard.
+    type SubSelectRow = PayerSubscriptionRow & {
+      stripe_customer_id: string | null;
+    };
+    type ReferralSelectRow = {
+      sender_id: string | null;
+      recipient_id: string | null;
+    };
+    const [subRows, referralRows] = await Promise.all([
+      selectAllRows<SubSelectRow>((from, to) =>
+        admin
+          .from("subscriptions")
+          .select(
+            "user_id, tier, status, current_period_end, cancel_at, cancel_at_period_end, billing_interval, updated_at, stripe_customer_id",
+          )
+          .range(from, to),
+      ),
+      selectAllRows<ReferralSelectRow>((from, to) =>
+        admin
+          .from("referral_awards")
+          .select("sender_id, recipient_id")
+          .range(from, to),
+      ),
     ]);
 
-    const statusByUser = buildPayerStatusMap(
-      (subRows ?? []) as PayerSubscriptionRow[],
-    );
+    const statusByUser = buildPayerStatusMap(subRows);
     const customerIdByUser = new Map<string, string>();
-    for (const r of (subRows ?? []) as Array<{
-      user_id: string | null;
-      stripe_customer_id: string | null;
-    }>) {
+    for (const r of subRows) {
       if (r.user_id && r.stripe_customer_id && !customerIdByUser.has(r.user_id)) {
         customerIdByUser.set(r.user_id, r.stripe_customer_id);
       }
@@ -1300,10 +1347,7 @@ export async function getRevenueBreakdownAction(): Promise<
 
     const spendByUserCents = buildSpendByUserCents(agg, emailToUserId);
     const childMap = buildChildMap(
-      ((referralRows ?? []) as Array<{
-        sender_id: string | null;
-        recipient_id: string | null;
-      }>)
+      referralRows
         .filter(
           (r): r is { sender_id: string; recipient_id: string } =>
             !!r.sender_id && !!r.recipient_id,
