@@ -72,6 +72,15 @@ export const FEATURES: FeatureEntry[] = [
   },
   // ── Billing & accounts ───────────────────────────────────────────
   {
+    id: "coach-plan-welcome-email",
+    name: "Welcome email from the founder",
+    description:
+      "Every coach who buys the Team Coach plan gets a personal welcome email from the founder — thanking them for the purchase, framing XO Gridmaker as a new product we're building fast, and inviting their questions, concerns, and feedback. Replies go straight to the founder's inbox. Sent automatically on purchase and once per coach.",
+    category: "Billing & accounts",
+    status: "ga",
+    addedDate: "2026-06-29",
+  },
+  {
     id: "ios-in-app-purchase",
     name: "Subscribe on iPhone (App Store)",
     description:

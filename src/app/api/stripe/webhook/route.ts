@@ -6,6 +6,7 @@ import { getStripeConfig } from "@/lib/site/stripe-config";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
 import { COACH_CAL_PACK_BUDGET_MICROS } from "@/lib/billing/coach-cal-cost-cap";
 import { sendCancellationFeedbackEmail } from "@/lib/notifications/cancellation-feedback-email";
+import { sendWelcomeCoachEmail } from "@/lib/notifications/welcome-coach-email";
 import { projectSystemNoticesToAdmins } from "@/lib/notifications/inbox-dispatch";
 
 export const runtime = "nodejs";
@@ -225,6 +226,64 @@ async function maybeFireCancellationFeedback(
   }
 }
 
+/**
+ * Send the welcome email exactly once per coach subscription, gated on an
+ * atomic UPDATE-with-guard so Stripe webhook retries / duplicate events can't
+ * double-send. Only fires for an active/trialing `coach` subscription that
+ * hasn't already received the email — so it lands on a real purchase, never on
+ * a routine subscription update. Best-effort: any error is logged but never
+ * propagates back to Stripe — the subscription state sync already succeeded,
+ * and the email is supplementary. Call AFTER upsertSubscriptionFromStripe, and
+ * only on initial-purchase signals (checkout.session.completed /
+ * customer.subscription.created), never on .updated.
+ */
+async function maybeFireWelcomeEmail(stripeSubscriptionId: string): Promise<void> {
+  try {
+    const admin = createServiceRoleClient();
+    // Claim the slot atomically. Only succeeds for an active/trialing coach
+    // subscription that hasn't already received the welcome email.
+    const { data: claimed, error: claimErr } = await admin
+      .from("subscriptions")
+      .update({ welcome_email_sent_at: new Date().toISOString() })
+      .eq("stripe_subscription_id", stripeSubscriptionId)
+      .is("welcome_email_sent_at", null)
+      .eq("tier", "coach")
+      .in("status", ["active", "trialing"])
+      .select("user_id")
+      .maybeSingle();
+    if (claimErr) {
+      console.error("[stripe webhook] welcome-email claim failed", claimErr.message);
+      return;
+    }
+    if (!claimed?.user_id) return; // already sent or not eligible — quiet no-op
+
+    const { data: authUser } = await admin.auth.admin.getUserById(claimed.user_id);
+    const email = authUser?.user?.email ?? null;
+    if (!email) {
+      console.error("[stripe webhook] welcome-email: no email on auth user", claimed.user_id);
+      return;
+    }
+    const { data: prof } = await admin
+      .from("profiles")
+      .select("display_name")
+      .eq("id", claimed.user_id)
+      .maybeSingle();
+    const displayName = (prof?.display_name as string | null) ?? null;
+    const firstName = displayName ? displayName.trim().split(/\s+/)[0] || null : null;
+
+    const send = await sendWelcomeCoachEmail({ toEmail: email, firstName });
+    if (!send.ok) {
+      console.error("[stripe webhook] welcome-email send failed", send.error);
+      // We intentionally do NOT unset the claim — avoids double-sends on retry
+      // at the cost of losing this email on transient Resend failure.
+      return;
+    }
+    console.log(`[stripe webhook] welcome-email sent to ${email} (id=${send.messageId})`);
+  } catch (e) {
+    console.error("[stripe webhook] welcome-email unexpected error", (e as Error).message);
+  }
+}
+
 /** Extract the subscription id a schedule manages, handling released
  *  schedules (where `subscription` is null but `released_subscription`
  *  holds the original id). */
@@ -384,6 +443,7 @@ export async function POST(req: Request): Promise<NextResponse> {
           const sub = await stripe.subscriptions.retrieve(subId);
           const uid = await upsertSubscriptionFromStripe(sub);
           await pushAdminSubscriptionNotice(uid);
+          await maybeFireWelcomeEmail(subId);
         } else if (
           session.mode === "payment" &&
           session.metadata?.pack_kind === "coach_cal_messages"
@@ -409,7 +469,16 @@ export async function POST(req: Request): Promise<NextResponse> {
           .eq("stripe_account_id", account.id);
         break;
       }
-      case "customer.subscription.created":
+      case "customer.subscription.created": {
+        // Initial-purchase signal (e.g. subscriptions created directly via the
+        // Stripe API rather than Checkout). Fire the welcome email here — but
+        // NOT on .updated, so routine subscription changes never re-welcome an
+        // existing coach. The sent-at guard keeps it to once per subscription.
+        const uid = await upsertSubscriptionFromStripe(event.data.object);
+        await pushAdminSubscriptionNotice(uid);
+        await maybeFireWelcomeEmail(event.data.object.id);
+        break;
+      }
       case "customer.subscription.updated":
       case "customer.subscription.deleted": {
         const uid = await upsertSubscriptionFromStripe(event.data.object);
