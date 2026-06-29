@@ -1,13 +1,24 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { ChevronDown, ChevronRight, FlaskConical, Loader2, Sparkles } from "lucide-react";
-import { Button, Card } from "@/components/ui";
+import {
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+  FlaskConical,
+  Loader2,
+  Sparkles,
+} from "lucide-react";
+import { Button, Card, Input } from "@/components/ui";
 import {
   getFunctionalTestRunStepsAction,
+  getGithubDispatchTokenStatusAction,
   runCoachCalFunctionalTestsAction,
+  saveGithubDispatchTokenAction,
+  clearGithubDispatchTokenAction,
   type FunctionalTestRun,
   type FunctionalTestStep,
+  type GithubDispatchTokenStatus,
 } from "@/app/actions/admin-functional-tests";
 
 /** A single workflow step slower than this reads as a perf regression worth a
@@ -57,6 +68,12 @@ const TRIGGER_LABEL: Record<string, string> = {
   nightly: "nightly",
   manual: "manual",
 };
+
+// Fallback for the "create a token" deep link if the token-status action hasn't
+// resolved yet (it also returns this URL as status.createUrl). Classic PAT page
+// with repo+workflow scopes + a description preselected.
+const GITHUB_TOKEN_CREATE_URL_FALLBACK =
+  "https://github.com/settings/tokens/new?description=XO+Gridmaker+functional+tests&scopes=repo,workflow";
 
 function StepGallery({ steps }: { steps: FunctionalTestStep[] }) {
   if (steps.length === 0) {
@@ -309,6 +326,197 @@ function ScenarioReplays({
 }
 
 /**
+ * Coach Cal on-demand run controls + GitHub token setup.
+ *
+ * The Cal scenarios run only in GitHub Actions, so triggering them needs a
+ * GitHub token (dispatch permission). When one is configured we show the
+ * "Run Coach Cal tests" button; when it's missing we replace it with a field
+ * to paste a token, alongside a one-click link that opens GitHub's new-token
+ * page with the right scopes preselected.
+ */
+function CalRunControls() {
+  const [status, setStatus] = useState<GithubDispatchTokenStatus | null>(null);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
+  // Show the token field when no token is configured, or when the admin clicks
+  // "Change". Null until status loads so we don't flash the wrong UI.
+  const [editing, setEditing] = useState(false);
+  const [tokenInput, setTokenInput] = useState("");
+  const [msg, setMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const [pending, start] = useTransition();
+
+  function refreshStatus() {
+    getGithubDispatchTokenStatusAction().then((res) => {
+      if (res.ok) setStatus(res.status);
+      else setLoadErr(res.error);
+    });
+  }
+
+  // Load token status once on mount.
+  useEffect(() => {
+    refreshStatus();
+  }, []);
+
+  function runCalTests() {
+    setMsg(null);
+    start(async () => {
+      const res = await runCoachCalFunctionalTestsAction();
+      if (res.ok) {
+        setMsg({
+          kind: "ok",
+          text: "Triggered. The run executes on GitHub against production and appears below in a few minutes — refresh to see it.",
+        });
+      } else if (res.needsToken) {
+        setEditing(true);
+        refreshStatus();
+        setMsg({ kind: "error", text: res.error });
+      } else {
+        setMsg({ kind: "error", text: res.error });
+      }
+    });
+  }
+
+  function saveToken() {
+    setMsg(null);
+    start(async () => {
+      const res = await saveGithubDispatchTokenAction(tokenInput);
+      if (res.ok) {
+        setTokenInput("");
+        setEditing(false);
+        setMsg({ kind: "ok", text: "Token saved. You can run Coach Cal tests now." });
+        refreshStatus();
+      } else {
+        setMsg({ kind: "error", text: res.error });
+      }
+    });
+  }
+
+  function removeToken() {
+    setMsg(null);
+    start(async () => {
+      const res = await clearGithubDispatchTokenAction();
+      if (res.ok) {
+        setMsg({ kind: "ok", text: "Token removed." });
+        refreshStatus();
+      } else {
+        setMsg({ kind: "error", text: res.error });
+      }
+    });
+  }
+
+  const createUrl = status?.createUrl ?? GITHUB_TOKEN_CREATE_URL_FALLBACK;
+  // Field is shown when there's no configured token or the admin chose to edit.
+  const showField = status !== null && (!status.configured || editing);
+
+  return (
+    <div className="flex w-full max-w-md shrink-0 flex-col items-end gap-2 sm:w-auto">
+      {status === null && loadErr === null ? (
+        <div className="flex items-center gap-2 text-xs text-muted">
+          <Loader2 className="size-4 animate-spin" /> Checking GitHub setup…
+        </div>
+      ) : showField ? (
+        <div className="w-full rounded-xl border border-border bg-surface-raised p-3 text-left sm:w-80">
+          <p className="text-xs font-semibold text-foreground">
+            Connect a GitHub token to run Coach Cal tests
+          </p>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-muted">
+            The Cal scenarios run in GitHub Actions, so a token with workflow
+            dispatch permission is needed.{" "}
+            <a
+              href={createUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-0.5 font-medium text-accent underline-offset-2 hover:underline"
+            >
+              Create one <ExternalLink className="size-3" aria-hidden />
+            </a>{" "}
+            (scopes are preselected), then paste it here.
+          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <Input
+              type="password"
+              value={tokenInput}
+              onChange={(e) => setTokenInput(e.target.value)}
+              placeholder="ghp_… or github_pat_…"
+              autoComplete="off"
+              className="font-mono text-xs"
+            />
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={saveToken}
+              loading={pending}
+              disabled={!tokenInput.trim()}
+            >
+              Save
+            </Button>
+          </div>
+          {status?.configured && (
+            <button
+              type="button"
+              onClick={() => {
+                setEditing(false);
+                setTokenInput("");
+              }}
+              className="mt-1.5 text-[11px] text-muted underline-offset-2 hover:underline"
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+      ) : (
+        <Button
+          variant="secondary"
+          leftIcon={Sparkles}
+          onClick={runCalTests}
+          loading={pending}
+          className="shrink-0"
+        >
+          Run Coach Cal tests
+        </Button>
+      )}
+
+      {loadErr && <p className="text-[11px] text-danger">{loadErr}</p>}
+
+      {/* Once configured (and not editing), show a tiny status + manage line. */}
+      {status?.configured && !showField && (
+        <p className="text-[11px] text-muted">
+          {status.statusLabel}{" "}
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="underline-offset-2 hover:underline"
+          >
+            Change
+          </button>
+          {status.source === "db" && (
+            <>
+              {" · "}
+              <button
+                type="button"
+                onClick={removeToken}
+                className="underline-offset-2 hover:underline"
+              >
+                Remove
+              </button>
+            </>
+          )}
+        </p>
+      )}
+
+      {msg && (
+        <p
+          className={`max-w-md text-right text-[11px] ${
+            msg.kind === "ok" ? "text-success" : "text-danger"
+          }`}
+        >
+          {msg.text}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
  * Functional Testing — results from the headless production workflows
  * (tests/functional/*.spec.ts) that GitHub Actions runs post-deploy + nightly.
  * Each run lists its captured steps with screenshots, status, and timing so a
@@ -321,26 +529,6 @@ export function FunctionalTestingAdminClient({
   runs: FunctionalTestRun[];
   error: string | null;
 }) {
-  const [pending, start] = useTransition();
-  const [calMsg, setCalMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(
-    null,
-  );
-
-  function runCalTests() {
-    setCalMsg(null);
-    start(async () => {
-      const res = await runCoachCalFunctionalTestsAction();
-      if (res.ok) {
-        setCalMsg({
-          kind: "ok",
-          text: "Coach Cal tests triggered. They run on GitHub against production and appear here in a few minutes — refresh the tab to see the new run.",
-        });
-      } else {
-        setCalMsg({ kind: "error", text: res.error });
-      }
-    });
-  }
-
   if (error) {
     return (
       <Card className="p-4">
@@ -365,28 +553,8 @@ export function FunctionalTestingAdminClient({
             to see each step&rsquo;s screenshot, status, and timing.
           </p>
         </div>
-        <Button
-          variant="secondary"
-          leftIcon={Sparkles}
-          onClick={runCalTests}
-          loading={pending}
-          className="shrink-0"
-        >
-          Run Coach Cal tests
-        </Button>
+        <CalRunControls />
       </div>
-
-      {calMsg && (
-        <div
-          className={`rounded-lg px-3 py-2 text-sm ${
-            calMsg.kind === "ok"
-              ? "bg-success-light text-success"
-              : "bg-danger-light text-danger"
-          }`}
-        >
-          {calMsg.text}
-        </div>
-      )}
 
       {runs.length === 0 ? (
         <Card className="p-6 text-center text-sm text-muted">
