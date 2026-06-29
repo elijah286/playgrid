@@ -2,7 +2,16 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Sparkles } from "lucide-react";
+import Link from "next/link";
+import {
+  Check,
+  Sparkles,
+  Trophy,
+  ClipboardList,
+  Layers,
+  Megaphone,
+  ArrowRight,
+} from "lucide-react";
 import {
   createBillingPortalSessionAction,
   previewSubscriptionChangeAction,
@@ -584,6 +593,8 @@ export function PricingClient({
         </p>
       ) : null}
 
+      <LeagueOperatorCallout />
+
       <AddOnsDisclosure showCoachAi={showCoachAi} />
 
       <p className="text-center text-xs text-muted">
@@ -798,6 +809,86 @@ function UpgradePreviewModal({
         </div>
       ) : null}
     </Modal>
+  );
+}
+
+// Lead-gen callout for the league-operator platform. Sits below the
+// self-serve coach tiers as a third option whose pricing is "contact us".
+// The CTA deep-links to /contact?topic=league, which posts to /api/contact
+// — the same path as the feedback widget — so each inquiry lands in the
+// admin Feedback tab AND fires an immediate in-production admin
+// notification. Web-only by virtue of living inside PricingClient, which
+// renders nothing on native.
+function LeagueOperatorCallout() {
+  const features = [
+    {
+      icon: ClipboardList,
+      title: "Player registration",
+      body: "Online signups and rosters across every team in your league.",
+    },
+    {
+      icon: Layers,
+      title: "Multi-sport management",
+      body: "Run multiple sports and seasons side by side from one account.",
+    },
+    {
+      icon: Megaphone,
+      title: "League-wide announcements",
+      body: "Reach every coach, player, and parent with a single message.",
+    },
+  ];
+  return (
+    <div className="rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/[0.06] to-transparent p-6 sm:p-8">
+      <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+        <div className="max-w-2xl">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-primary ring-1 ring-primary/30">
+              <Trophy className="size-3" />
+              For leagues &amp; organizations
+            </span>
+          </div>
+          <h2 className="mt-3 text-xl font-bold tracking-tight text-foreground">
+            Running a whole league?
+          </h2>
+          <p className="mt-1.5 text-sm text-muted">
+            XO Gridmaker for league operators brings every team, sport, and
+            season onto one platform. Contact us for pricing and more
+            information.
+          </p>
+          <ul className="mt-5 grid gap-4 sm:grid-cols-3">
+            {features.map((f) => (
+              <li key={f.title} className="flex flex-col gap-1.5">
+                <f.icon className="size-5 text-primary" />
+                <span className="text-sm font-semibold text-foreground">
+                  {f.title}
+                </span>
+                <span className="text-xs text-muted">{f.body}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="shrink-0 md:text-right">
+          <p className="text-2xl font-extrabold tracking-tight text-foreground">
+            Custom pricing
+          </p>
+          <p className="mb-4 text-xs text-muted">Tailored to your league&rsquo;s size</p>
+          <Link
+            href="/contact?topic=league"
+            onClick={() =>
+              track({
+                event: "checkout_started",
+                target: "league_ops",
+                metadata: { flow: "league_interest" },
+              })
+            }
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white hover:bg-primary-hover md:w-auto"
+          >
+            Contact us for pricing
+            <ArrowRight className="size-4" />
+          </Link>
+        </div>
+      </div>
+    </div>
   );
 }
 

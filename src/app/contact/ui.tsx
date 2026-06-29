@@ -3,11 +3,25 @@
 import { useState } from "react";
 import { Button, Input, useToast } from "@/components/ui";
 
+// Topic-specific message prefills. The /pricing league callout deep-links
+// here with `?topic=league` so the form arrives framed as a league inquiry
+// instead of a blank box — lowers the bar to actually hitting send.
+const TOPIC_PREFILLS: Record<string, string> = {
+  league:
+    "I'm interested in XO Gridmaker for leagues. I run a league/organization with the following sport(s) and number of teams:\n\n",
+};
+
 export function ContactForm() {
   const { toast } = useToast();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [message, setMessage] = useState("");
+  // Read the topic param once on mount (lazy initializer keeps this
+  // client-only — no useSearchParams Suspense boundary needed).
+  const [message, setMessage] = useState(() => {
+    if (typeof window === "undefined") return "";
+    const topic = new URLSearchParams(window.location.search).get("topic");
+    return (topic && TOPIC_PREFILLS[topic]) || "";
+  });
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
 
