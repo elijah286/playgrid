@@ -42,6 +42,15 @@ export function describeProposal(
       const n = ids.length;
       return `Set ${n} registration${n === 1 ? "" : "s"} to ${status}.`;
     }
+    case "create_teams": {
+      const names = Array.isArray(input.names) ? input.names.map((x) => String(x).trim()).filter(Boolean) : [];
+      const n = names.length;
+      return `Create ${n} team${n === 1 ? "" : "s"}: ${names.join(", ")}.`;
+    }
+    case "assign_team_coach": {
+      const coach = s("coachName") || s("coachEmail");
+      return coach ? `Set the team's head coach to ${coach}.` : "Clear the team's head coach.";
+    }
     default:
       return `Run ${toolName}.`;
   }

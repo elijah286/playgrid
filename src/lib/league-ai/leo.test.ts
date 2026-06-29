@@ -113,6 +113,8 @@ describe("consequential tool set + proposal previews", () => {
     expect(LEAGUE_CONSEQUENTIAL_TOOL_NAMES.has("send_announcement")).toBe(true);
     expect(LEAGUE_CONSEQUENTIAL_TOOL_NAMES.has("rename_league")).toBe(true);
     expect(LEAGUE_CONSEQUENTIAL_TOOL_NAMES.has("set_registration_link")).toBe(true);
+    expect(LEAGUE_CONSEQUENTIAL_TOOL_NAMES.has("create_teams")).toBe(true);
+    expect(LEAGUE_CONSEQUENTIAL_TOOL_NAMES.has("assign_team_coach")).toBe(true);
     for (const name of LEAGUE_CONSEQUENTIAL_TOOL_NAMES) {
       expect(LEAGUE_READ_TOOL_NAMES.has(name)).toBe(false);
     }
@@ -136,5 +138,11 @@ describe("consequential tool set + proposal previews", () => {
     expect(
       describeProposal("set_registration_status", { registrationIds: ["a"], status: "waitlisted" }),
     ).toBe("Set 1 registration to waitlisted.");
+    expect(describeProposal("create_teams", { names: ["U8 Red", "U8 Blue"] })).toBe(
+      "Create 2 teams: U8 Red, U8 Blue.",
+    );
+    expect(
+      describeProposal("assign_team_coach", { teamId: "t1", coachName: "Coach Smith" }),
+    ).toContain("Coach Smith");
   });
 });

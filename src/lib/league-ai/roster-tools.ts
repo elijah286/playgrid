@@ -73,16 +73,99 @@ const listTeams: LeagueTool = {
     const admin = createServiceRoleClient();
     const { data } = await admin
       .from("teams")
-      .select("name, head_coach_name, head_coach_email")
+      .select("id, name, head_coach_name, head_coach_email")
       .eq("league_id", ctx.leagueId)
       .order("name", { ascending: true });
     const rows = data ?? [];
     if (rows.length === 0) return { ok: true, result: "No teams yet." };
     const lines = rows.map((t) => {
       const coach = (t.head_coach_name as string | null) || (t.head_coach_email as string | null);
-      return `${t.name} — ${coach ? `coach ${coach}` : "no coach yet"}`;
+      return `${t.name} [id:${t.id}] — ${coach ? `coach ${coach}` : "no coach yet"}`;
     });
     return { ok: true, result: `${rows.length} team(s): ${lines.join("; ")}.` };
+  },
+};
+
+const createTeams: LeagueTool = {
+  kind: "consequential",
+  def: {
+    name: "create_teams",
+    description:
+      "Create one or more teams in this league by name (divisions and coaches can be set afterward). CONSEQUENTIAL — requires approval.",
+    input_schema: {
+      type: "object",
+      properties: { names: { type: "array", items: { type: "string" } } },
+      required: ["names"],
+    },
+  },
+  handler: async (input, ctx): Promise<LeagueToolResult> => {
+    if (!ctx.isLeagueAdmin) return { ok: false, error: "Only a league admin can create teams." };
+    const names = Array.isArray(input.names)
+      ? input.names.map((x) => String(x).trim()).filter(Boolean).slice(0, 50)
+      : [];
+    if (names.length === 0) return { ok: false, error: "Provide at least one team name." };
+
+    const admin = createServiceRoleClient();
+    // Teams need the operator's workspace (org). The operator owns one already
+    // (they created the league); we resolve it rather than create one here.
+    const { data: org } = await admin
+      .from("organizations")
+      .select("id")
+      .eq("owner_id", ctx.userId)
+      .limit(1)
+      .maybeSingle();
+    if (!org) return { ok: false, error: "No workspace found for your account." };
+
+    const rows = names.map((name) => ({
+      org_id: org.id as string,
+      league_id: ctx.leagueId,
+      name,
+    }));
+    const { data, error } = await admin.from("teams").insert(rows).select("id");
+    if (error) return { ok: false, error: error.message };
+    return { ok: true, result: `Created ${(data ?? []).length} team(s): ${names.join(", ")}.` };
+  },
+};
+
+const assignTeamCoach: LeagueTool = {
+  kind: "consequential",
+  def: {
+    name: "assign_team_coach",
+    description:
+      "Set (or clear) a team's head coach. Provide the team id (from list_teams) and the coach's name and/or email. CONSEQUENTIAL — requires approval.",
+    input_schema: {
+      type: "object",
+      properties: {
+        teamId: { type: "string" },
+        coachName: { type: "string" },
+        coachEmail: { type: "string" },
+      },
+      required: ["teamId"],
+    },
+  },
+  handler: async (input, ctx): Promise<LeagueToolResult> => {
+    if (!ctx.isLeagueAdmin) return { ok: false, error: "Only a league admin can assign coaches." };
+    const teamId = String(input.teamId ?? "").trim();
+    if (!teamId) return { ok: false, error: "Provide the team id." };
+    const coachName = input.coachName ? String(input.coachName).trim() : null;
+    const coachEmail = input.coachEmail ? String(input.coachEmail).trim() : null;
+
+    const admin = createServiceRoleClient();
+    const { data, error } = await admin
+      .from("teams")
+      .update({ head_coach_name: coachName, head_coach_email: coachEmail })
+      .eq("id", teamId)
+      .eq("league_id", ctx.leagueId)
+      .select("name");
+    if (error) return { ok: false, error: error.message };
+    if ((data ?? []).length === 0) return { ok: false, error: "Team not found in this league." };
+    const coach = coachName || coachEmail;
+    return {
+      ok: true,
+      result: coach
+        ? `Set the head coach for ${data![0].name} to ${coach}.`
+        : `Cleared the head coach for ${data![0].name}.`,
+    };
   },
 };
 
@@ -127,4 +210,10 @@ const setRegistrationStatus: LeagueTool = {
   },
 };
 
-export const ROSTER_TOOLS: LeagueTool[] = [listRegistrations, listTeams, setRegistrationStatus];
+export const ROSTER_TOOLS: LeagueTool[] = [
+  listRegistrations,
+  listTeams,
+  setRegistrationStatus,
+  createTeams,
+  assignTeamCoach,
+];

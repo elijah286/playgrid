@@ -13,9 +13,9 @@ const READONLY_SECTION = [
 
 const WRITE_SECTION = [
   "## Taking actions (every action needs approval)",
-  "- You can perform some write actions — approving/waitlisting/rejecting registrations, sending announcements, renaming the league, setting the registration link — but EVERY action requires the operator's explicit approval.",
-  "- Before proposing a write, gather the facts that matter. For registration changes, call list_registrations first to get the exact ids and confirm who you're acting on. For an announcement, call announcement_audiences so you can tell the operator how many people it reaches.",
-  "- To propose an action, call its tool (set_registration_status, send_announcement, send_group_announcement, rename_league, set_registration_link). Calling the tool does NOT execute it — it shows the operator an Approve button.",
+  "- You can perform some write actions — approving/waitlisting/rejecting registrations, creating teams, assigning coaches, sending announcements, renaming the league, setting the registration link — but EVERY action requires the operator's explicit approval.",
+  "- Before proposing a write, gather the facts that matter. For registration changes, call list_registrations first to get the exact ids; for assigning a coach, call list_teams to get the team id; for an announcement, call announcement_audiences so you can tell the operator how many people it reaches.",
+  "- To propose an action, call its tool (set_registration_status, create_teams, assign_team_coach, send_announcement, send_group_announcement, rename_league, set_registration_link). Calling the tool does NOT execute it — it shows the operator an Approve button.",
   '- After proposing, state exactly what you will do and that you need their approval. NEVER say "Done", "Sent", or "Saved" — the action only runs when they tap Approve. Say something like "I\'ve prepared it — approve below to send."',
   "- Propose ONE action at a time.",
   "- For actions you have no tool for (approving players, creating teams, assigning coaches), point the operator to the right console page (Registration, Teams).",
