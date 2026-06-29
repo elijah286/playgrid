@@ -25,6 +25,16 @@ The site has real users. The default workflow optimizes for not breaking product
 ### Pull requests
 - Don't open PRs unless asked. Branch-and-review happens locally; PR machinery isn't part of this workflow.
 
+### Multi-agent collaboration (CRITICAL — several agents work this repo concurrently)
+This repository is routinely worked by **multiple agents at the same time**, often in the **same working tree**. A shared checkout is where work gets destroyed (an agent ran `git reset --hard` in a dirty tree and wiped another agent's ~17 uncommitted files). These rules are mandatory whenever other agents may be active — assume they are.
+
+1. **Isolate: one working tree per agent.** Do significant or long-running work in your **own `git worktree`** (or clone) on your **own branch** — not the shared main checkout. Launch parallel sub-agents with **`isolation: "worktree"`**. Never assume the working tree is yours alone.
+2. **NEVER run destructive git in a tree you don't solely own.** No `git reset --hard`, `git checkout -- <path>` / `git checkout .`, `git clean -fd`, `git stash drop/clear`, or a branch switch that would discard changes — when the tree has **any** uncommitted work. It may be another agent's, and it is **not recoverable** (it never entered git's object store). Need a clean state to test? Spin up a throwaway worktree, never the live tree.
+3. **Commit early and often, to your own branch.** Uncommitted work is the *only* thing a destructive command can vaporize, so minimize that surface. Stage **explicitly** — `git add <specific paths>`, **never** `git add -A` / `git add .` / `git commit -a` — so you can't sweep up another agent's in-progress edits.
+4. **Integrate by pushing, not by overwriting the shared tree.** `git fetch` before every push. Push from your own branch/worktree. If `origin` moved, rebase **your branch** onto it — never `reset` the shared tree to force it. (To push an isolated commit without touching a dirty shared tree: `git worktree add <tmp> origin/main && git -C <tmp> cherry-pick <sha> && git -C <tmp> push origin HEAD:main`.)
+5. **Distinct, monotonic migration timestamps.** Before naming a new migration, list existing `supabase/migrations/` filenames; pick a timestamp after all of them. On a number collision, renumber yours — don't reuse.
+6. **The working tree is shared, untrusted state.** Always `git status` before committing and stage only your files. If you find uncommitted changes you didn't make, leave them — they're someone's WIP.
+
 ## Production safety
 
 ### Database migrations
