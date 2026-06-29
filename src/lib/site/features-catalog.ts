@@ -84,7 +84,7 @@ export const FEATURES: FeatureEntry[] = [
     id: "revenue-customer-value-dashboard",
     name: "Customer value & referral-network dashboard",
     description:
-      "The admin Revenue tab lists every customer who has ever paid — active, cancelled, or one-time — with a status badge (a red 'Cancelled' flag for churned subscribers and an amber 'Canceling' flag with the end date for those set to lapse). Clicking a customer opens a detail panel showing their time on site, when they were last active, when a cancelling subscription ends, and their full referral network: the people who signed up because of them, the people those people referred, and the total dollar spend across that entire downstream tree — so the most influential, highest-value users are easy to spot.",
+      "The admin Revenue tab lists every customer who has ever paid — active, cancelled, or one-time — with a status badge (a red 'Cancelled' flag for churned subscribers and an amber 'Canceling' flag with the end date for those set to lapse). The list sorts by lifetime spend, network value, referral count, or join date. Clicking a customer opens a detail panel showing their time on site, when they were last active, when a cancelling subscription ends, and their full referral network: the people who signed up because of them, the people those people referred, and the total dollar spend across that entire downstream tree — so the most influential, highest-value users are easy to spot. Referrals count both copy-link signups and players who joined a coach's playbook via invite.",
     category: "Billing & accounts",
     status: "internal",
     addedDate: "2026-06-29",

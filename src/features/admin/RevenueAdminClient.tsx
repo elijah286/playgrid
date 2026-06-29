@@ -33,7 +33,7 @@ const TIER_LABEL: Record<RevenueTierKey, string> = {
   other: "Other",
 };
 
-type SortKey = "lifetime" | "network" | "influenced";
+type SortKey = "lifetime" | "network" | "referred" | "joined";
 
 function formatCurrency(n: number, opts?: { compact?: boolean }): string {
   if (!Number.isFinite(n)) return "$0";
@@ -163,7 +163,13 @@ export function RevenueAdminClient({ breakdown, error }: Props) {
 
   const sortedPayers = [...payers].sort((a, b) => {
     if (sortKey === "network") return b.networkSpend - a.networkSpend;
-    if (sortKey === "influenced") return b.networkSize - a.networkSize;
+    if (sortKey === "referred") return b.directReferrals - a.directReferrals;
+    if (sortKey === "joined") {
+      // Newest signups first; accounts with no known join date sort last.
+      const at = a.joinedAt ? Date.parse(a.joinedAt) : -Infinity;
+      const bt = b.joinedAt ? Date.parse(b.joinedAt) : -Infinity;
+      return bt - at;
+    }
     return b.lifetimeSpend - a.lifetimeSpend;
   });
 
@@ -445,6 +451,13 @@ function PayersTable({
             <tr>
               <th className="px-4 py-3">Customer</th>
               <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">
+                <SortHeader
+                  label="Joined"
+                  active={sortKey === "joined"}
+                  onClick={() => onSort("joined")}
+                />
+              </th>
               <th className="px-4 py-3 text-right">
                 <SortHeader
                   label="Lifetime"
@@ -462,8 +475,8 @@ function PayersTable({
               <th className="px-4 py-3 text-right">
                 <SortHeader
                   label="Referred"
-                  active={sortKey === "influenced"}
-                  onClick={() => onSort("influenced")}
+                  active={sortKey === "referred"}
+                  onClick={() => onSort("referred")}
                 />
               </th>
             </tr>
@@ -499,6 +512,9 @@ function PayersTable({
                     ) : null}
                   </div>
                 </td>
+                <td className="px-4 py-3 align-middle text-sm tabular-nums text-muted">
+                  {r.joinedAt ? formatDate(r.joinedAt) : "—"}
+                </td>
                 <td className="px-4 py-3 align-middle text-right text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
                   {formatCurrency(r.lifetimeSpend)}
                 </td>
@@ -510,7 +526,7 @@ function PayersTable({
                   )}
                 </td>
                 <td className="px-4 py-3 align-middle text-right text-sm tabular-nums text-muted">
-                  {r.networkSize > 0 ? formatInt(r.networkSize) : "—"}
+                  {r.directReferrals > 0 ? formatInt(r.directReferrals) : "—"}
                 </td>
               </tr>
             ))}
@@ -535,8 +551,13 @@ function PayersTable({
                 {r.email && r.displayName ? (
                   <span className="truncate text-xs text-muted">{r.email}</span>
                 ) : null}
-                <div className="mt-1">
+                <div className="mt-1 flex items-center gap-2">
                   <StatusBadge badge={r.badge} />
+                  {r.joinedAt ? (
+                    <span className="text-[10px] text-muted">
+                      joined {formatDate(r.joinedAt)}
+                    </span>
+                  ) : null}
                 </div>
               </div>
               <div className="shrink-0 text-right">

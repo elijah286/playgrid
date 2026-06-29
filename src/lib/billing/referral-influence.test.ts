@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   buildChildMap,
+  buildMembershipEdges,
   computeInfluence,
+  type MemberRow,
   type ReferralEdge,
 } from "./referral-influence";
 
@@ -107,5 +109,88 @@ describe("computeInfluence", () => {
     // B is reached once; A is the root and never re-counted.
     expect(inf.networkSize).toBe(1);
     expect(inf.networkSpendCents).toBe(500);
+  });
+});
+
+describe("buildMembershipEdges", () => {
+  function m(p: Partial<MemberRow>): MemberRow {
+    return { playbook_id: "pb1", user_id: "u", role: "viewer", ...p };
+  }
+
+  it("emits owner→member edges for non-owner joiners", () => {
+    const edges = buildMembershipEdges([
+      m({ user_id: "coach", role: "owner" }),
+      m({ user_id: "p1", role: "viewer" }),
+      m({ user_id: "p2", role: "editor" }),
+    ]);
+    expect(edges).toEqual([
+      { senderId: "coach", recipientId: "p1" },
+      { senderId: "coach", recipientId: "p2" },
+    ]);
+  });
+
+  it("never makes the owner refer themselves", () => {
+    const edges = buildMembershipEdges([
+      m({ user_id: "coach", role: "owner" }),
+    ]);
+    expect(edges).toEqual([]);
+  });
+
+  it("skips name-only roster rows (no user account)", () => {
+    const edges = buildMembershipEdges([
+      m({ user_id: "coach", role: "owner" }),
+      m({ user_id: null, role: "viewer" }),
+    ]);
+    expect(edges).toEqual([]);
+  });
+
+  it("credits each owner when a playbook has co-owners", () => {
+    const edges = buildMembershipEdges([
+      m({ user_id: "coachA", role: "owner" }),
+      m({ user_id: "coachB", role: "owner" }),
+      m({ user_id: "p1", role: "viewer" }),
+    ]);
+    expect(edges).toEqual([
+      { senderId: "coachA", recipientId: "p1" },
+      { senderId: "coachB", recipientId: "p1" },
+    ]);
+  });
+
+  it("ignores members of playbooks with no recorded owner", () => {
+    const edges = buildMembershipEdges([
+      m({ playbook_id: "pbX", user_id: "p1", role: "viewer" }),
+    ]);
+    expect(edges).toEqual([]);
+  });
+});
+
+describe("membership joins count toward a coach's referral network", () => {
+  it("a joined player shows up as a direct referral, deduped across playbooks", () => {
+    // Coach owns two playbooks; player p1 joined both, p2 joined one.
+    const memberEdges = buildMembershipEdges([
+      { playbook_id: "pb1", user_id: "coach", role: "owner" },
+      { playbook_id: "pb1", user_id: "p1", role: "viewer" },
+      { playbook_id: "pb2", user_id: "coach", role: "owner" },
+      { playbook_id: "pb2", user_id: "p1", role: "viewer" },
+      { playbook_id: "pb2", user_id: "p2", role: "viewer" },
+    ]);
+    // Plus a copy-link referral edge from the same coach.
+    const linkEdges: ReferralEdge[] = [
+      { senderId: "coach", recipientId: "p3" },
+    ];
+    const children = buildChildMap([...memberEdges, ...linkEdges]);
+    const inf = computeInfluence(
+      "coach",
+      children,
+      new Map([
+        ["p1", 999],
+        ["p2", 0],
+        ["p3", 1999],
+      ]),
+    );
+    // p1 counted once despite joining two playbooks; p2 and p3 each once.
+    expect(inf.directReferrals).toBe(3);
+    expect(inf.networkSize).toBe(3);
+    expect(inf.networkSpendCents).toBe(999 + 0 + 1999);
   });
 });

@@ -20,6 +20,49 @@ export type ReferralEdge = {
   recipientId: string;
 };
 
+/** Minimal `playbook_members` row shape needed to derive coach→player edges. */
+export type MemberRow = {
+  playbook_id: string | null;
+  user_id: string | null;
+  role: string | null;
+};
+
+/**
+ * Derive referral edges from playbook membership: a coach who owns a playbook
+ * "referred" every player who joined it. Edge = owner → each non-owner member
+ * (with a real account). A player who joined several coaches' playbooks yields
+ * an edge per owner — the graph stops being a strict forest, which is fine:
+ * computeInfluence dedupes downstream nodes via its visited set, so each coach
+ * still gets credit and no one is double-counted within a single traversal.
+ *
+ * Combined with the copy-link `referral_awards` edges, this makes "players a
+ * coach invited and who joined" count toward that coach's referral network.
+ */
+export function buildMembershipEdges(
+  rows: readonly MemberRow[],
+): ReferralEdge[] {
+  const ownersByPlaybook = new Map<string, string[]>();
+  for (const r of rows) {
+    if (!r.playbook_id || !r.user_id || r.role !== "owner") continue;
+    const list = ownersByPlaybook.get(r.playbook_id);
+    if (list) list.push(r.user_id);
+    else ownersByPlaybook.set(r.playbook_id, [r.user_id]);
+  }
+
+  const edges: ReferralEdge[] = [];
+  for (const r of rows) {
+    if (!r.playbook_id || !r.user_id || r.role === "owner") continue;
+    const owners = ownersByPlaybook.get(r.playbook_id);
+    if (!owners) continue;
+    for (const owner of owners) {
+      if (owner !== r.user_id) {
+        edges.push({ senderId: owner, recipientId: r.user_id });
+      }
+    }
+  }
+  return edges;
+}
+
 export type NetworkLevel = {
   /** Distance from the root: 1 = direct referral, 2 = referral-of-referral, … */
   level: number;

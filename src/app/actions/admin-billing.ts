@@ -19,7 +19,9 @@ import {
 } from "@/lib/billing/payer-status";
 import {
   buildChildMap,
+  buildMembershipEdges,
   computeInfluence,
+  type MemberRow,
   type ReferralEdge,
 } from "@/lib/billing/referral-influence";
 
@@ -886,6 +888,8 @@ export type PayerRow = {
   email: string | null;
   displayName: string | null;
   tier: RevenueTierKey | null;
+  /** Account signup date (ISO), if this customer has a linked account. */
+  joinedAt: string | null;
   /** This customer's own lifetime spend, net of refunds (dollars). */
   lifetimeSpend: number;
   /** Account status badge — see PayerBadge. Null for pure one-time buyers. */
@@ -1178,6 +1182,7 @@ type UserDirectory = {
   emailToUserId: Map<string, string>;
   uidToEmail: Map<string, string | null>;
   displayNameById: Map<string, string | null>;
+  joinedAtById: Map<string, string | null>;
 };
 
 const PAGE_SIZE = 1000;
@@ -1205,15 +1210,20 @@ async function selectAllRows<T>(
 /** List every auth user, paging past the per-request cap. */
 async function listAllAuthUsers(
   admin: ReturnType<typeof createServiceRoleClient>,
-): Promise<Array<{ id: string; email: string | null }>> {
-  const users: Array<{ id: string; email: string | null }> = [];
+): Promise<Array<{ id: string; email: string | null; createdAt: string | null }>> {
+  const users: Array<{ id: string; email: string | null; createdAt: string | null }> = [];
   for (let page = 1; ; page += 1) {
     const { data } = await admin.auth.admin.listUsers({
       perPage: PAGE_SIZE,
       page,
     });
     const batch = data?.users ?? [];
-    for (const u of batch) users.push({ id: u.id, email: u.email ?? null });
+    for (const u of batch)
+      users.push({
+        id: u.id,
+        email: u.email ?? null,
+        createdAt: u.created_at ?? null,
+      });
     if (batch.length < PAGE_SIZE) break;
   }
   return users;
@@ -1231,7 +1241,9 @@ async function loadUserDirectory(
   ]);
   const emailToUserId = new Map<string, string>();
   const uidToEmail = new Map<string, string | null>();
+  const joinedAtById = new Map<string, string | null>();
   for (const u of authUsers) {
+    joinedAtById.set(u.id, u.createdAt);
     if (u.email) {
       const email = u.email.toLowerCase();
       emailToUserId.set(email, u.id);
@@ -1240,7 +1252,7 @@ async function loadUserDirectory(
   }
   const displayNameById = new Map<string, string | null>();
   for (const p of profileRows) displayNameById.set(p.id, p.display_name);
-  return { emailToUserId, uidToEmail, displayNameById };
+  return { emailToUserId, uidToEmail, displayNameById, joinedAtById };
 }
 
 /** userId → lifetime spend (cents) across all charges we can attribute by email. */
@@ -1305,7 +1317,7 @@ export async function getRevenueBreakdownAction(): Promise<
     });
 
     const admin = createServiceRoleClient();
-    const { emailToUserId, uidToEmail, displayNameById } =
+    const { emailToUserId, uidToEmail, displayNameById, joinedAtById } =
       await loadUserDirectory(admin);
 
     // Pull the full subscription history (every status) and the referral graph
@@ -1320,7 +1332,7 @@ export async function getRevenueBreakdownAction(): Promise<
       sender_id: string | null;
       recipient_id: string | null;
     };
-    const [subRows, referralRows] = await Promise.all([
+    const [subRows, referralRows, memberRows] = await Promise.all([
       selectAllRows<SubSelectRow>((from, to) =>
         admin
           .from("subscriptions")
@@ -1335,6 +1347,14 @@ export async function getRevenueBreakdownAction(): Promise<
           .select("sender_id, recipient_id")
           .range(from, to),
       ),
+      // Playbook membership → coach-invited-player referral edges (Rule: a
+      // coach who owns a playbook "referred" every player who joined it).
+      selectAllRows<MemberRow>((from, to) =>
+        admin
+          .from("playbook_members")
+          .select("playbook_id, user_id, role")
+          .range(from, to),
+      ),
     ]);
 
     const statusByUser = buildPayerStatusMap(subRows);
@@ -1346,19 +1366,18 @@ export async function getRevenueBreakdownAction(): Promise<
     }
 
     const spendByUserCents = buildSpendByUserCents(agg, emailToUserId);
-    const childMap = buildChildMap(
-      referralRows
-        .filter(
-          (r): r is { sender_id: string; recipient_id: string } =>
-            !!r.sender_id && !!r.recipient_id,
-        )
-        .map(
-          (r): ReferralEdge => ({
-            senderId: r.sender_id,
-            recipientId: r.recipient_id,
-          }),
-        ),
-    );
+    // Combine both referral signals: copy-link reward awards AND players who
+    // joined a coach's playbook. Both feed one influence graph.
+    const referralEdges: ReferralEdge[] = referralRows
+      .filter(
+        (r): r is { sender_id: string; recipient_id: string } =>
+          !!r.sender_id && !!r.recipient_id,
+      )
+      .map((r) => ({ senderId: r.sender_id, recipientId: r.recipient_id }));
+    const childMap = buildChildMap([
+      ...referralEdges,
+      ...buildMembershipEdges(memberRows),
+    ]);
 
     const toLevels = (
       levels: ReturnType<typeof computeInfluence>["levels"],
@@ -1395,6 +1414,7 @@ export async function getRevenueBreakdownAction(): Promise<
         email: uidToEmail.get(userId) ?? null,
         displayName: displayNameById.get(userId) ?? null,
         tier: tierKeyFromSubTier(state.tier),
+        joinedAt: joinedAtById.get(userId) ?? null,
         lifetimeSpend: lifetimeCents / 100,
         badge: state.badge,
         subscriptionEndsAt,
@@ -1428,6 +1448,7 @@ export async function getRevenueBreakdownAction(): Promise<
         email,
         displayName: uid ? displayNameById.get(uid) ?? null : null,
         tier,
+        joinedAt: uid ? joinedAtById.get(uid) ?? null : null,
         lifetimeSpend: info.totalCents / 100,
         badge: "one_time",
         subscriptionEndsAt: null,
