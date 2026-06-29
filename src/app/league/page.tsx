@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 
 import { getMyLeagues, loadLeagueDashboard } from "@/lib/league/console";
@@ -11,12 +10,11 @@ export const metadata: Metadata = {
   title: "League Operations · XO Gridmaker",
 };
 
-/** Portfolio of the operator's leagues. One league → skip straight to it;
- *  none → a first-run prompt over a preview of the dashboard. */
+/** Portfolio home: the operator's leagues. Always shown (even for a single
+ *  league) so operators can see, navigate, and add leagues; none → a first-run
+ *  prompt over a preview of the dashboard. */
 export default async function LeagueHomePage() {
   const leagues = await getMyLeagues();
-
-  if (leagues.length === 1) redirect(`/league/${leagues[0].id}`);
 
   if (leagues.length === 0) {
     return (

@@ -17,8 +17,9 @@ import {
 } from "lucide-react";
 
 import { getCurrentLeagueMemberships } from "@/lib/league/access";
-import { loadLeagueDashboard } from "@/lib/league/console";
+import { loadLeagueDashboard, getMyLeagues } from "@/lib/league/console";
 import { leagueHasPlaybooks } from "@/lib/league/sportConfig";
+import { LeagueSwitcher } from "@/features/league/LeagueSwitcher";
 
 export const metadata: Metadata = {
   title: "League console · XO Gridmaker",
@@ -116,7 +117,9 @@ export default async function LeagueDashboardPage({
 
   const memberships = await getCurrentLeagueMemberships();
   if (!memberships.some((m) => m.leagueId === leagueId)) notFound();
-  const hasMultipleLeagues = new Set(memberships.map((m) => m.leagueId)).size > 1;
+
+  const myLeagues = await getMyLeagues();
+  const hasMultipleLeagues = myLeagues.length > 1;
 
   const dash = await loadLeagueDashboard(leagueId);
   if (!dash) notFound();
@@ -138,14 +141,13 @@ export default async function LeagueDashboardPage({
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
           {hasMultipleLeagues ? (
-            <>
-              <Link href="/league" className="hover:underline">
-                Leagues
-              </Link>
-              <ChevronRight className="size-3.5" />
-            </>
-          ) : null}
-          <span className="font-medium text-foreground">{dash.league.name}</span>
+            <LeagueSwitcher
+              leagues={myLeagues.map((l) => ({ id: l.id, name: l.name }))}
+              currentId={leagueId}
+            />
+          ) : (
+            <span className="font-medium text-foreground">{dash.league.name}</span>
+          )}
         </div>
         {hasPlaybooks ? (
           <Link
