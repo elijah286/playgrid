@@ -47,6 +47,7 @@ export default async function PublicRegisterPage({
           leagueName={data.leagueName}
           feeCents={data.feeCents}
           storeItems={data.storeItems}
+          sportFields={data.sportFields}
           paymentsEnabled={data.paymentsEnabled}
         />
       ) : (

@@ -125,6 +125,13 @@ export function RegistrationsReview({
                     Add-ons: {it.purchases.map((p) => p.name).join(", ")} ({money(addOns)})
                   </div>
                 ) : null}
+                {Object.keys(it.sportDetails).length > 0 ? (
+                  <div className="mt-1 text-xs text-muted">
+                    {Object.entries(it.sportDetails)
+                      .map(([k, v]) => `${k}: ${v}`)
+                      .join(" · ")}
+                  </div>
+                ) : null}
                 {it.notes ? (
                   <div className="mt-1 text-xs italic text-muted">“{it.notes}”</div>
                 ) : null}

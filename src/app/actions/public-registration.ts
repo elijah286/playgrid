@@ -15,6 +15,8 @@ export type RegistrationSubmission = {
   divisionPreference: string;
   notes: string;
   itemIds: string[];
+  /** Sport-specific answers, keyed by sportConfig field key. */
+  sportDetails?: Record<string, string>;
 };
 
 function isEmail(s: string): boolean {
@@ -66,10 +68,19 @@ export async function submitPublicRegistrationAction(
   const chosen = data.storeItems.filter((i) => i.required || selected.has(i.id));
 
   const admin = createServiceRoleClient();
+  // Sport-specific answers: keep only keys valid for this league's sport.
+  const validKeys = new Set(data.sportFields.map((f) => f.key));
+  const sportDetails: Record<string, string> = {};
+  for (const [k, v] of Object.entries(input.sportDetails ?? {})) {
+    if (validKeys.has(k) && typeof v === "string" && v.trim()) {
+      sportDetails[k] = cap(v.trim(), 80);
+    }
+  }
   const applicant = {
     player: { firstName: first, lastName: last, dob: input.playerDob || null },
     guardian: { name: guardian, email, phone: phone || null },
     divisionPreference: divisionPreference || null,
+    sportDetails,
   };
 
   // Idempotency: a double-submit / action retry should reuse the existing

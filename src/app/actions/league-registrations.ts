@@ -23,6 +23,7 @@ export type RegistrationListItem = {
   player: { firstName: string; lastName: string; dob: string | null };
   guardian: { name: string; email: string; phone: string | null };
   divisionPreference: string | null;
+  sportDetails: Record<string, string>;
   purchases: { name: string; priceCents: number }[];
 };
 
@@ -43,6 +44,14 @@ function readApplicant(applicant: unknown) {
     },
     divisionPreference:
       typeof a.divisionPreference === "string" ? a.divisionPreference : null,
+    sportDetails:
+      a.sportDetails && typeof a.sportDetails === "object"
+        ? Object.fromEntries(
+            Object.entries(a.sportDetails as Record<string, unknown>).filter(
+              ([, v]) => typeof v === "string" && v,
+            ) as [string, string][],
+          )
+        : {},
   };
 }
 
@@ -97,6 +106,7 @@ export async function listRegistrationsAction(leagueId: string) {
       player: a.player,
       guardian: a.guardian,
       divisionPreference: a.divisionPreference,
+      sportDetails: a.sportDetails,
       purchases: purchasesByReg.get(r.id as string) ?? [],
     };
   });

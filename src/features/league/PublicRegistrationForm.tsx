@@ -7,6 +7,7 @@ import {
   type RegistrationSubmission,
 } from "@/app/actions/public-registration";
 import type { PublicStoreItem } from "@/lib/league/public-registration";
+import type { SportRegistrationField } from "@/lib/league/sportConfig";
 
 function money(cents: number) {
   return `$${(cents / 100).toFixed(2)}`;
@@ -21,12 +22,14 @@ export function PublicRegistrationForm({
   feeCents,
   storeItems,
   paymentsEnabled,
+  sportFields,
 }: {
   leagueId: string;
   leagueName: string;
   feeCents: number;
   storeItems: PublicStoreItem[];
   paymentsEnabled: boolean;
+  sportFields: SportRegistrationField[];
 }) {
   const [f, setF] = useState({
     playerFirstName: "",
@@ -41,6 +44,7 @@ export function PublicRegistrationForm({
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(storeItems.filter((i) => i.required).map((i) => i.id)),
   );
+  const [sportDetails, setSportDetails] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -74,6 +78,7 @@ export function PublicRegistrationForm({
       ...f,
       playerDob: f.playerDob || null,
       itemIds: [...selected],
+      sportDetails,
     };
     startTransition(async () => {
       const r = await submitPublicRegistrationAction(leagueId, payload);
@@ -126,6 +131,41 @@ export function PublicRegistrationForm({
           </label>
         </div>
       </section>
+
+      {sportFields.length > 0 ? (
+        <section>
+          <h2 className="text-sm font-semibold text-foreground">Sport details</h2>
+          <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {sportFields.map((fld) => (
+              <label key={fld.key} className="block text-sm">
+                <span className="font-medium text-foreground">
+                  {fld.label} <span className="text-muted">(optional)</span>
+                </span>
+                {fld.type === "select" ? (
+                  <select
+                    value={sportDetails[fld.key] ?? ""}
+                    onChange={(e) => setSportDetails((p) => ({ ...p, [fld.key]: e.target.value }))}
+                    className={inputCls}
+                  >
+                    <option value="">Select…</option>
+                    {(fld.options ?? []).map((o) => (
+                      <option key={o} value={o}>
+                        {o}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    value={sportDetails[fld.key] ?? ""}
+                    onChange={(e) => setSportDetails((p) => ({ ...p, [fld.key]: e.target.value }))}
+                    className={inputCls}
+                  />
+                )}
+              </label>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section>
         <h2 className="text-sm font-semibold text-foreground">Parent / guardian</h2>

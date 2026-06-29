@@ -1,6 +1,7 @@
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { leagueOpsEnabled } from "@/lib/league/access";
 import { getLeagueStripeAccount } from "@/lib/league/payments";
+import { sportRegistrationFields, type SportRegistrationField } from "@/lib/league/sportConfig";
 
 export type PublicStoreItem = {
   id: string;
@@ -18,6 +19,7 @@ export type PublicRegistrationData = {
   feeCents: number;
   storeItems: PublicStoreItem[];
   paymentsEnabled: boolean;
+  sportFields: SportRegistrationField[];
 };
 
 export function computeOpen(
@@ -53,7 +55,7 @@ export async function getPublicRegistration(
 
   const { data: league } = await admin
     .from("leagues")
-    .select("id, name")
+    .select("id, name, sport")
     .eq("id", leagueId)
     .maybeSingle();
   if (!league) return null;
@@ -91,6 +93,7 @@ export async function getPublicRegistration(
     closedReason: reason,
     feeCents: (win?.fee_cents as number) ?? 0,
     paymentsEnabled: account.chargesEnabled && !!account.accountId,
+    sportFields: sportRegistrationFields(league.sport as string),
     storeItems: (items ?? []).map((r) => ({
       id: r.id as string,
       name: r.name as string,
