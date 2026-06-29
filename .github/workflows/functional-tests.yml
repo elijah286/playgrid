@@ -5,7 +5,12 @@ name: Functional tests
 # Testing" tab. Three triggers:
 #   - after a successful deploy (the regression gate),
 #   - nightly (catches data/state drift not tied to a deploy),
-#   - manual ("Run workflow" button).
+#   - manual ("Run workflow" button, or the Site Admin "Run Coach Cal tests"
+#     button which dispatches this with suite=cal).
+#
+# Suite: post-deploy + nightly always run "core" (every spec EXCEPT Coach Cal).
+# The Coach Cal specs drive the live LLM on prod and spend real tokens, so they
+# only run when dispatched with suite=cal.
 on:
   workflow_run:
     workflows: ["Deploy to Cloud Run"]
@@ -13,6 +18,14 @@ on:
   schedule:
     - cron: "0 8 * * *" # 08:00 UTC nightly
   workflow_dispatch:
+    inputs:
+      suite:
+        description: "Which suite to run"
+        type: choice
+        options:
+          - core
+          - cal
+        default: core
 
 permissions:
   contents: read
@@ -43,6 +56,9 @@ jobs:
       # Deployed commit for post-deploy; the workflow's own SHA otherwise.
       GIT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
       FUNCTEST_TRIGGER: ${{ github.event_name == 'workflow_run' && 'post_deploy' || github.event_name == 'schedule' && 'nightly' || 'manual' }}
+      # Only a manual dispatch can select a suite; post-deploy + nightly are
+      # always "core" (no Coach Cal → no token spend).
+      FUNCTEST_SUITE: ${{ github.event.inputs.suite || 'core' }}
     steps:
       - uses: actions/checkout@v4
 

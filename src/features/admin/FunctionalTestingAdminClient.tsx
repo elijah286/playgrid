@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, FlaskConical, Loader2 } from "lucide-react";
-import { Card } from "@/components/ui";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { ChevronDown, ChevronRight, FlaskConical, Loader2, Sparkles } from "lucide-react";
+import { Button, Card } from "@/components/ui";
 import {
   getFunctionalTestRunStepsAction,
+  runCoachCalFunctionalTestsAction,
   type FunctionalTestRun,
   type FunctionalTestStep,
 } from "@/app/actions/admin-functional-tests";
@@ -164,6 +165,11 @@ function RunRow({ run }: { run: FunctionalTestRun }) {
           <ChevronRight className="size-4 shrink-0 text-muted" />
         )}
         <StatusPill status={run.status} />
+        {run.suite === "cal" && (
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
+            <Sparkles className="size-3" aria-hidden /> Coach Cal
+          </span>
+        )}
         <span className="flex-1 truncate text-sm font-medium text-foreground">
           {TRIGGER_LABEL[run.trigger] ?? run.trigger}
           {run.gitSha ? ` · ${run.gitSha.slice(0, 7)}` : ""}
@@ -315,6 +321,26 @@ export function FunctionalTestingAdminClient({
   runs: FunctionalTestRun[];
   error: string | null;
 }) {
+  const [pending, start] = useTransition();
+  const [calMsg, setCalMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(
+    null,
+  );
+
+  function runCalTests() {
+    setCalMsg(null);
+    start(async () => {
+      const res = await runCoachCalFunctionalTestsAction();
+      if (res.ok) {
+        setCalMsg({
+          kind: "ok",
+          text: "Coach Cal tests triggered. They run on GitHub against production and appear here in a few minutes — refresh the tab to see the new run.",
+        });
+      } else {
+        setCalMsg({ kind: "error", text: res.error });
+      }
+    });
+  }
+
   if (error) {
     return (
       <Card className="p-4">
@@ -325,17 +351,42 @@ export function FunctionalTestingAdminClient({
 
   return (
     <div className="space-y-4">
-      <div>
-        <div className="flex items-center gap-2">
-          <FlaskConical className="h-5 w-5 text-muted" aria-hidden />
-          <h2 className="text-lg font-semibold">Functional tests</h2>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <FlaskConical className="h-5 w-5 text-muted" aria-hidden />
+            <h2 className="text-lg font-semibold">Functional tests</h2>
+          </div>
+          <p className="mt-1 text-sm text-muted">
+            Headless runs of core user workflows (invite→accept, create playbook,
+            print) against production — post-deploy and nightly. The Coach Cal
+            scenarios spend real LLM tokens, so they&rsquo;re excluded from those
+            automatic runs — trigger them on demand with the button. Expand a run
+            to see each step&rsquo;s screenshot, status, and timing.
+          </p>
         </div>
-        <p className="mt-1 text-sm text-muted">
-          Headless runs of core user workflows (invite→accept, create playbook,
-          Coach AI, print) against production — post-deploy and nightly. Expand a
-          run to see each step&rsquo;s screenshot, status, and timing.
-        </p>
+        <Button
+          variant="secondary"
+          leftIcon={Sparkles}
+          onClick={runCalTests}
+          loading={pending}
+          className="shrink-0"
+        >
+          Run Coach Cal tests
+        </Button>
       </div>
+
+      {calMsg && (
+        <div
+          className={`rounded-lg px-3 py-2 text-sm ${
+            calMsg.kind === "ok"
+              ? "bg-success-light text-success"
+              : "bg-danger-light text-danger"
+          }`}
+        >
+          {calMsg.text}
+        </div>
+      )}
 
       {runs.length === 0 ? (
         <Card className="p-6 text-center text-sm text-muted">

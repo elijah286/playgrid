@@ -1369,6 +1369,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-02",
   },
   {
+    id: "admin-coach-cal-functional-tests",
+    name: "On-demand Coach Cal functional tests",
+    description:
+      "Site Admin → Functional Testing has a 'Run Coach Cal tests' button that triggers the headless Coach Cal scenarios against production on demand. These spend real LLM tokens, so they're excluded from the automatic post-deploy and nightly runs and only fire when an admin asks; results land in the same tab a few minutes later, badged 'Coach Cal'.",
+    category: "Admin tools",
+    status: "internal",
+    addedDate: "2026-06-29",
+  },
+  {
     id: "admin-users",
     name: "User administration",
     description:

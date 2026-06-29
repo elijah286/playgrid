@@ -16,6 +16,9 @@ export type FunctionalTestRun = {
   totalSteps: number;
   failedSteps: number;
   createdAt: string;
+  /** Which suite produced the run ("core" | "cal"), from meta.suite. Older runs
+   *  predate the field and read as "core". */
+  suite: "core" | "cal";
   /** Per-scenario animated-GIF summary URLs ({ scenario: url }), from meta.gifs. */
   gifs: Record<string, string> | null;
   /** Per-scenario human title + description + pass/fail (what the test is for and
@@ -82,6 +85,8 @@ export async function listFunctionalTestRunsAction(
     totalSteps: (r.total_steps as number) ?? 0,
     failedSteps: (r.failed_steps as number) ?? 0,
     createdAt: r.created_at as string,
+    suite:
+      (r.meta as { suite?: string } | null)?.suite === "cal" ? "cal" : "core",
     gifs:
       (r.meta as { gifs?: Record<string, string> } | null)?.gifs ?? null,
     scenarios:
@@ -119,4 +124,76 @@ export async function getFunctionalTestRunStepsAction(
     errorMessage: (s.error_message as string | null) ?? null,
   }));
   return { ok: true, steps };
+}
+
+/**
+ * Trigger the Coach Cal functional tests on demand.
+ *
+ * The specs run headless Playwright + Chromium, which can't run inside the
+ * Next.js server — they only run in GitHub Actions. So this dispatches the
+ * "Functional tests" workflow (.github/workflows/functional-tests.yml) with
+ * `suite=cal`, which runs ONLY the token-spending Coach Cal scenarios against
+ * production and ingests the results back into this tab a few minutes later.
+ *
+ * Config (Cloud Run env):
+ *   - GITHUB_DISPATCH_TOKEN — a GitHub token with `actions: write` on the repo
+ *     (fine-grained PAT scoped to this repo, or a classic PAT with `repo`).
+ *   - GITHUB_REPO           — "owner/name" (defaults to elijah286/playgrid).
+ *   - GITHUB_DISPATCH_REF   — branch to run from (defaults to "main").
+ *
+ * Returns a friendly error (not a throw) when the token isn't configured so the
+ * admin UI can explain the one-time setup step instead of 500-ing.
+ */
+export async function runCoachCalFunctionalTestsAction(): Promise<
+  { ok: true } | { ok: false; error: string }
+> {
+  const guard = await requireAdmin();
+  if (!guard.ok) return { ok: false, error: guard.error };
+
+  const token = process.env.GITHUB_DISPATCH_TOKEN;
+  if (!token) {
+    return {
+      ok: false,
+      error:
+        "GitHub dispatch isn't configured. Add a GITHUB_DISPATCH_TOKEN (a token with actions:write on the repo) to the Cloud Run service, then try again.",
+    };
+  }
+  const repo = process.env.GITHUB_REPO || "elijah286/playgrid";
+  const ref = process.env.GITHUB_DISPATCH_REF || "main";
+  const workflow = "functional-tests.yml";
+
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${repo}/actions/workflows/${workflow}/dispatches`,
+      {
+        method: "POST",
+        headers: {
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${token}`,
+          "X-GitHub-Api-Version": "2022-11-28",
+          "Content-Type": "application/json",
+          "User-Agent": "xogridmaker-admin",
+        },
+        body: JSON.stringify({ ref, inputs: { suite: "cal" } }),
+      },
+    );
+    // A successful dispatch is 204 No Content.
+    if (res.status === 204) return { ok: true };
+    let detail = "";
+    try {
+      const body = (await res.json()) as { message?: string };
+      detail = body?.message ? ` — ${body.message}` : "";
+    } catch {
+      /* non-JSON body */
+    }
+    return {
+      ok: false,
+      error: `GitHub returned ${res.status}${detail}. Check the token's permissions (actions:write) and that the workflow exists on "${ref}".`,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not reach GitHub.",
+    };
+  }
 }

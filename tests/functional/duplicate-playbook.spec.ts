@@ -68,6 +68,11 @@ test("duplicate a playbook", async ({ page, recorder }) => {
     // "Duplicate" is a role=menuitem (not a plain button); it opens a small
     // duplicate form whose confirm button is "Create copy".
     await page.getByRole("menuitem", { name: /^duplicate$/i }).first().click();
+    // Name the copy with the __functest prefix so the sweep reclaims it. The
+    // suggested name is "{Coach}'s {Variant} Playbook" (un-prefixed), which the
+    // cleanup never matched — so every run leaked an orphan copy into the
+    // coach's account. The dialog's name field is autofocused.
+    await page.locator("input:focus").fill(`${baseName} copy`);
     await page.getByRole("button", { name: /create copy/i }).first().click();
     await page.waitForTimeout(3000);
   });

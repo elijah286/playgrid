@@ -109,6 +109,10 @@ export default class FunctestReporter implements Reporter {
       this.sawFailure || result.status !== "passed" || steps.some((s) => s.status === "failed");
 
     const meta: Record<string, unknown> = { browser: "chromium" };
+    // Which suite produced this run ("core" | "cal"). The trigger column has a
+    // fixed CHECK set (post_deploy/nightly/manual), so the suite rides in meta
+    // instead — the admin tab badges Cal runs from it.
+    meta.suite = process.env.FUNCTEST_SUITE === "cal" ? "cal" : "core";
     if (Object.keys(this.scenarios).length) meta.scenarios = this.scenarios;
 
     // One animated GIF per scenario — a frame-diff-optimized replay from the
