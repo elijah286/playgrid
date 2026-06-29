@@ -115,6 +115,8 @@ describe("consequential tool set + proposal previews", () => {
     expect(LEAGUE_CONSEQUENTIAL_TOOL_NAMES.has("set_registration_link")).toBe(true);
     expect(LEAGUE_CONSEQUENTIAL_TOOL_NAMES.has("create_teams")).toBe(true);
     expect(LEAGUE_CONSEQUENTIAL_TOOL_NAMES.has("assign_team_coach")).toBe(true);
+    expect(LEAGUE_CONSEQUENTIAL_TOOL_NAMES.has("place_players_on_team")).toBe(true);
+    expect(LEAGUE_CONSEQUENTIAL_TOOL_NAMES.has("unassign_player")).toBe(true);
     for (const name of LEAGUE_CONSEQUENTIAL_TOOL_NAMES) {
       expect(LEAGUE_READ_TOOL_NAMES.has(name)).toBe(false);
     }
@@ -144,5 +146,9 @@ describe("consequential tool set + proposal previews", () => {
     expect(
       describeProposal("assign_team_coach", { teamId: "t1", coachName: "Coach Smith" }),
     ).toContain("Coach Smith");
+    expect(
+      describeProposal("place_players_on_team", { registrationIds: ["a", "b", "c"], teamId: "t1" }),
+    ).toBe("Roster 3 players onto the team.");
+    expect(describeProposal("unassign_player", { registrationId: "a" })).toMatch(/remove/i);
   });
 });

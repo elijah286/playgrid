@@ -210,10 +210,98 @@ const setRegistrationStatus: LeagueTool = {
   },
 };
 
+const placePlayersOnTeam: LeagueTool = {
+  kind: "consequential",
+  def: {
+    name: "place_players_on_team",
+    description:
+      "Roster one or more APPROVED players onto a team. Provide the registration ids (from list_registrations) and the team id (from list_teams). Only approved players can be rostered. CONSEQUENTIAL — requires approval.",
+    input_schema: {
+      type: "object",
+      properties: {
+        registrationIds: { type: "array", items: { type: "string" } },
+        teamId: { type: "string" },
+      },
+      required: ["registrationIds", "teamId"],
+    },
+  },
+  handler: async (input, ctx): Promise<LeagueToolResult> => {
+    if (!ctx.isLeagueAdmin) return { ok: false, error: "Only a league admin can roster players." };
+    const teamId = String(input.teamId ?? "").trim();
+    const ids = Array.isArray(input.registrationIds)
+      ? input.registrationIds.map((x) => String(x)).filter(Boolean).slice(0, 200)
+      : [];
+    if (!teamId || ids.length === 0) {
+      return { ok: false, error: "Provide a teamId and at least one registrationId." };
+    }
+
+    const admin = createServiceRoleClient();
+    const { data: team } = await admin
+      .from("teams")
+      .select("id, name")
+      .eq("id", teamId)
+      .eq("league_id", ctx.leagueId)
+      .maybeSingle();
+    if (!team) return { ok: false, error: "That team isn't in this league." };
+
+    // Mirror assignRegistrationToTeamAction's state machine: only an approved
+    // player (or an orphaned rostered one with no team) may become rostered.
+    const { data, error } = await admin
+      .from("player_registrations")
+      .update({ team_id: teamId, status: "rostered", decided_at: new Date().toISOString() })
+      .eq("league_id", ctx.leagueId)
+      .in("id", ids)
+      .or("status.eq.approved,and(status.eq.rostered,team_id.is.null)")
+      .select("id");
+    if (error) return { ok: false, error: error.message };
+    const n = (data ?? []).length;
+    if (n === 0) {
+      return {
+        ok: false,
+        error: "None of those players could be rostered — they must be approved first.",
+      };
+    }
+    return { ok: true, result: `Placed ${n} player(s) on ${team.name}.` };
+  },
+};
+
+const unassignPlayer: LeagueTool = {
+  kind: "consequential",
+  def: {
+    name: "unassign_player",
+    description:
+      "Remove a rostered player from their team, returning them to the approved pool. Provide the registration id. CONSEQUENTIAL — requires approval.",
+    input_schema: {
+      type: "object",
+      properties: { registrationId: { type: "string" } },
+      required: ["registrationId"],
+    },
+  },
+  handler: async (input, ctx): Promise<LeagueToolResult> => {
+    if (!ctx.isLeagueAdmin) return { ok: false, error: "Only a league admin can unassign players." };
+    const registrationId = String(input.registrationId ?? "").trim();
+    if (!registrationId) return { ok: false, error: "Provide the registration id." };
+
+    const admin = createServiceRoleClient();
+    const { data, error } = await admin
+      .from("player_registrations")
+      .update({ team_id: null, status: "approved" })
+      .eq("id", registrationId)
+      .eq("league_id", ctx.leagueId)
+      .eq("status", "rostered")
+      .select("id");
+    if (error) return { ok: false, error: error.message };
+    if ((data ?? []).length === 0) return { ok: false, error: "That player isn't rostered." };
+    return { ok: true, result: "Removed the player from their team (back to the approved pool)." };
+  },
+};
+
 export const ROSTER_TOOLS: LeagueTool[] = [
   listRegistrations,
   listTeams,
   setRegistrationStatus,
   createTeams,
   assignTeamCoach,
+  placePlayersOnTeam,
+  unassignPlayer,
 ];

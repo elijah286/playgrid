@@ -51,6 +51,13 @@ export function describeProposal(
       const coach = s("coachName") || s("coachEmail");
       return coach ? `Set the team's head coach to ${coach}.` : "Clear the team's head coach.";
     }
+    case "place_players_on_team": {
+      const ids = Array.isArray(input.registrationIds) ? input.registrationIds : [];
+      const n = ids.length;
+      return `Roster ${n} player${n === 1 ? "" : "s"} onto the team.`;
+    }
+    case "unassign_player":
+      return "Remove the player from their team (back to the approved pool).";
     default:
       return `Run ${toolName}.`;
   }
