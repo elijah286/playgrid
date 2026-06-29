@@ -3,7 +3,9 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 
 import { getMyLeagues, loadLeagueDashboard } from "@/lib/league/console";
+import { listLeagueGroupsAction } from "@/app/actions/league-groups";
 import { CreateLeagueForm } from "@/features/league/CreateLeagueForm";
+import { LeagueGroupsManager } from "@/features/league/LeagueGroupsManager";
 import { LeagueDashboardSkeleton } from "@/features/league/LeagueDashboardSkeleton";
 
 export const metadata: Metadata = {
@@ -40,7 +42,10 @@ export default async function LeagueHomePage() {
     );
   }
 
-  const summaries = await Promise.all(leagues.map((l) => loadLeagueDashboard(l.id)));
+  const [summaries, groups] = await Promise.all([
+    Promise.all(leagues.map((l) => loadLeagueDashboard(l.id))),
+    listLeagueGroupsAction(),
+  ]);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 text-foreground sm:px-6">
@@ -76,6 +81,17 @@ export default async function LeagueHomePage() {
           );
         })}
       </ul>
+
+      <div className="mt-8 border-t border-border pt-6">
+        <h2 className="text-sm font-semibold text-foreground">Groups</h2>
+        <p className="mb-3 mt-0.5 text-xs text-muted">
+          Group leagues (e.g. by city) to message every league in a group at once.
+        </p>
+        <LeagueGroupsManager
+          leagues={leagues.map((l) => ({ id: l.id, name: l.name }))}
+          initialGroups={groups}
+        />
+      </div>
 
       <div className="mt-8 max-w-md border-t border-border pt-6">
         <p className="mb-3 text-sm font-medium text-foreground">Add another league</p>

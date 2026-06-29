@@ -12,6 +12,7 @@ import type { ToolDef } from "@/lib/coach-ai/llm";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import type { LeagueTool, LeagueToolContext, LeagueToolResult } from "./types";
 import { COMMS_TOOLS } from "./comms-tools";
+import { GROUP_TOOLS } from "./group-tools";
 
 function playerName(applicant: unknown): string {
   const a = (applicant ?? {}) as { player?: { firstName?: unknown; lastName?: unknown } };
@@ -95,6 +96,8 @@ export const LEAGUE_TOOLS: LeagueTool[] = [
   listUnrosteredTool,
   // Communications (first workflow registered under the AI-readiness convention).
   ...COMMS_TOOLS,
+  // League groups + cross-league messaging.
+  ...GROUP_TOOLS,
 ];
 
 /** Tools available for this context. Consequential tools (added later) gate on
