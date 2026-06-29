@@ -1,7 +1,13 @@
 import { describe, it, expect, afterEach } from "vitest";
 
-import { leagueReadToolDefs, LEAGUE_READ_TOOL_NAMES, LEAGUE_TOOLS } from "./tools";
-import { leagueAiEnabled } from "@/lib/league/access";
+import {
+  leagueReadToolDefs,
+  LEAGUE_READ_TOOL_NAMES,
+  LEAGUE_CONSEQUENTIAL_TOOL_NAMES,
+  LEAGUE_TOOLS,
+} from "./tools";
+import { describeProposal } from "./propose";
+import { leagueAiEnabled, leagueAiWritesEnabled } from "@/lib/league/access";
 
 describe("Leo read-only tool surface (v1 safety invariant)", () => {
   it("offers only read tools — no consequential tool leaks to the model", () => {
@@ -60,5 +66,58 @@ describe("leagueAiEnabled — Leo beta gate", () => {
     process.env.LEAGUE_AI_ENABLED = "on";
     process.env.LEAGUE_OPS_ENABLED = "off";
     expect(leagueAiEnabled()).toBe(false);
+  });
+});
+
+describe("leagueAiWritesEnabled — Leo write gate (staged)", () => {
+  const prev = {
+    ai: process.env.LEAGUE_AI_ENABLED,
+    writes: process.env.LEAGUE_AI_WRITES,
+    ops: process.env.LEAGUE_OPS_ENABLED,
+  };
+  afterEach(() => {
+    process.env.LEAGUE_AI_ENABLED = prev.ai;
+    process.env.LEAGUE_AI_WRITES = prev.writes;
+    process.env.LEAGUE_OPS_ENABLED = prev.ops;
+  });
+
+  it("is OFF by default", () => {
+    delete process.env.LEAGUE_OPS_ENABLED;
+    delete process.env.LEAGUE_AI_ENABLED;
+    delete process.env.LEAGUE_AI_WRITES;
+    expect(leagueAiWritesEnabled()).toBe(false);
+  });
+
+  it("requires BOTH Leo enabled AND writes enabled", () => {
+    delete process.env.LEAGUE_OPS_ENABLED;
+    // writes on but Leo off → still off
+    process.env.LEAGUE_AI_WRITES = "on";
+    delete process.env.LEAGUE_AI_ENABLED;
+    expect(leagueAiWritesEnabled()).toBe(false);
+    // both on → on
+    process.env.LEAGUE_AI_ENABLED = "on";
+    expect(leagueAiWritesEnabled()).toBe(true);
+  });
+});
+
+describe("consequential tool set + proposal previews", () => {
+  it("the consequential set is exactly the write tools (no read overlap)", () => {
+    expect(LEAGUE_CONSEQUENTIAL_TOOL_NAMES.has("send_announcement")).toBe(true);
+    expect(LEAGUE_CONSEQUENTIAL_TOOL_NAMES.has("rename_league")).toBe(true);
+    expect(LEAGUE_CONSEQUENTIAL_TOOL_NAMES.has("set_registration_link")).toBe(true);
+    for (const name of LEAGUE_CONSEQUENTIAL_TOOL_NAMES) {
+      expect(LEAGUE_READ_TOOL_NAMES.has(name)).toBe(false);
+    }
+  });
+
+  it("describeProposal renders a human preview for each write tool", () => {
+    expect(describeProposal("rename_league", { name: "Waco Spring" })).toContain("Waco Spring");
+    expect(describeProposal("set_registration_link", { slug: "waco-2027" })).toContain(
+      "/register/waco-2027",
+    );
+    expect(describeProposal("set_registration_link", { slug: "" })).toMatch(/clear/i);
+    expect(
+      describeProposal("send_announcement", { subject: "Picture Day", audience: "families" }),
+    ).toContain("Picture Day");
   });
 });

@@ -13,6 +13,7 @@ import {
   getCurrentLeagueMemberships,
   isLeagueAdminRole,
   leagueAiEnabled,
+  leagueAiWritesEnabled,
 } from "@/lib/league/access";
 import { runLeagueAgent, type LeoTurn } from "@/lib/league-ai/runner";
 
@@ -78,12 +79,18 @@ export async function POST(req: Request): Promise<Response> {
     : [];
 
   try {
-    const result = await runLeagueAgent(history, userMessage, {
-      leagueId,
-      userId: user.id,
-      isLeagueAdmin: true,
+    const result = await runLeagueAgent(
+      history,
+      userMessage,
+      { leagueId, userId: user.id, isLeagueAdmin: true },
+      { allowWrites: leagueAiWritesEnabled() },
+    );
+    return NextResponse.json({
+      ok: true,
+      text: result.text,
+      toolCalls: result.toolCalls,
+      proposal: result.proposal ?? null,
     });
-    return NextResponse.json({ ok: true, text: result.text, toolCalls: result.toolCalls });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Leo had a problem.";
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });

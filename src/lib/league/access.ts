@@ -52,6 +52,16 @@ export function leagueAiEnabled(): boolean {
   return leagueOpsEnabled() && process.env.LEAGUE_AI_ENABLED === "on";
 }
 
+/**
+ * Second-stage gate for Leo WRITES (the propose/approve flow). Default OFF and
+ * requires Leo itself to be enabled, so we can ship the write plumbing dark and
+ * keep Leo read-only until `LEAGUE_AI_WRITES=on` is set. Even with writes on,
+ * every consequential action still needs explicit operator approval per action.
+ */
+export function leagueAiWritesEnabled(): boolean {
+  return leagueAiEnabled() && process.env.LEAGUE_AI_WRITES === "on";
+}
+
 export function isLeagueAdminRole(role: LeagueMemberRole): boolean {
   return LEAGUE_ADMIN_ROLES.includes(role);
 }

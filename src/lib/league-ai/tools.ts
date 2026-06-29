@@ -128,6 +128,13 @@ export const LEAGUE_READ_TOOL_NAMES: ReadonlySet<string> = new Set(
   LEAGUE_TOOLS.filter((t) => t.kind === "read").map((t) => t.def.name),
 );
 
+/** Names of the consequential (write) tools. The runner captures a call to one
+ *  of these as a PROPOSAL (preview shown to the operator) rather than executing
+ *  it — the write only runs after explicit approval. */
+export const LEAGUE_CONSEQUENTIAL_TOOL_NAMES: ReadonlySet<string> = new Set(
+  LEAGUE_TOOLS.filter((t) => t.kind === "consequential").map((t) => t.def.name),
+);
+
 export async function runLeagueTool(
   name: string,
   input: Record<string, unknown>,

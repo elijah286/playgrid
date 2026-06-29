@@ -2,7 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 
-type Turn = { role: "user" | "assistant"; text: string; toolCalls?: string[] };
+type Proposal = { toolName: string; input: Record<string, unknown>; preview: string };
+
+type Turn = {
+  role: "user" | "assistant";
+  text: string;
+  toolCalls?: string[];
+  proposal?: Proposal;
+  proposalState?: "pending" | "approved" | "dismissed";
+  proposalResult?: string;
+};
 
 const SUGGESTIONS = [
   "What's the state of my league?",
@@ -32,11 +41,18 @@ function Bubble({ turn }: { turn: Turn }) {
   );
 }
 
-export function LeoChat({ leagueId }: { leagueId: string }) {
+export function LeoChat({
+  leagueId,
+  writesEnabled,
+}: {
+  leagueId: string;
+  writesEnabled: boolean;
+}) {
   const storageKey = `leo:chat:v1:${leagueId}`;
   const [messages, setMessages] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
+  const [busyIdx, setBusyIdx] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -76,6 +92,7 @@ export function LeoChat({ leagueId }: { leagueId: string }) {
         ok?: boolean;
         text?: string;
         toolCalls?: string[];
+        proposal?: Proposal | null;
         error?: string;
       };
       if (!res.ok || !data.ok) {
@@ -83,13 +100,58 @@ export function LeoChat({ leagueId }: { leagueId: string }) {
       } else {
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", text: data.text ?? "…", toolCalls: data.toolCalls },
+          {
+            role: "assistant",
+            text: data.text ?? "…",
+            toolCalls: data.toolCalls,
+            proposal: data.proposal ?? undefined,
+            proposalState: data.proposal ? "pending" : undefined,
+          },
         ]);
       }
     } catch {
       setError("Network error — try again.");
     }
     setPending(false);
+  }
+
+  async function approve(idx: number) {
+    const turn = messages[idx];
+    if (!turn?.proposal || busyIdx !== null) return;
+    setError(null);
+    setBusyIdx(idx);
+    try {
+      const res = await fetch("/api/league-ai/approve", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          leagueId,
+          toolName: turn.proposal.toolName,
+          input: turn.proposal.input,
+        }),
+      });
+      const data = (await res.json()) as { ok?: boolean; result?: string; error?: string };
+      if (!res.ok || !data.ok) {
+        setError(data?.error || "Couldn't complete that action.");
+      } else {
+        setMessages((prev) =>
+          prev.map((m, i) =>
+            i === idx
+              ? { ...m, proposalState: "approved", proposalResult: data.result ?? "Done." }
+              : m,
+          ),
+        );
+      }
+    } catch {
+      setError("Network error — try again.");
+    }
+    setBusyIdx(null);
+  }
+
+  function dismiss(idx: number) {
+    setMessages((prev) =>
+      prev.map((m, i) => (i === idx ? { ...m, proposalState: "dismissed" } : m)),
+    );
   }
 
   function clearChat() {
@@ -124,8 +186,9 @@ export function LeoChat({ leagueId }: { leagueId: string }) {
               Ask about registrations, rosters, teams, or communications.
             </p>
             <p className="mt-1 text-xs text-muted">
-              Leo can look things up and draft messages — it can&apos;t send or change
-              anything yet.
+              {writesEnabled
+                ? "Leo looks things up for you. Anything it would change, it asks you to approve first."
+                : "Leo can look things up and draft messages — it can't send or change anything yet."}
             </p>
             <div className="mt-4 flex flex-col gap-2">
               {SUGGESTIONS.map((s) => (
@@ -141,7 +204,46 @@ export function LeoChat({ leagueId }: { leagueId: string }) {
             </div>
           </div>
         ) : (
-          messages.map((m, i) => <Bubble key={i} turn={m} />)
+          messages.map((m, i) => (
+            <div key={i} className="space-y-2">
+              <Bubble turn={m} />
+              {m.proposal ? (
+                <div className="flex justify-start">
+                  <div className="max-w-[85%] rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-sm dark:border-amber-800 dark:bg-amber-950/40">
+                    <div className="font-medium text-amber-900 dark:text-amber-100">
+                      {m.proposal.preview}
+                    </div>
+                    {m.proposalState === "approved" ? (
+                      <div className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
+                        ✓ {m.proposalResult}
+                      </div>
+                    ) : m.proposalState === "dismissed" ? (
+                      <div className="mt-1 text-xs text-muted">Dismissed.</div>
+                    ) : (
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          type="button"
+                          disabled={busyIdx !== null}
+                          onClick={() => approve(i)}
+                          className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-hover disabled:opacity-50"
+                        >
+                          {busyIdx === i ? "Working…" : "Approve"}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busyIdx !== null}
+                          onClick={() => dismiss(i)}
+                          className="rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-foreground hover:bg-foreground/5 disabled:opacity-50"
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ))
         )}
         {pending ? <div className="text-sm text-muted">Leo is thinking…</div> : null}
         {error ? <div className="text-sm text-amber-700 dark:text-amber-300">{error}</div> : null}

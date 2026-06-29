@@ -6,6 +6,7 @@ import {
   getCurrentLeagueMemberships,
   isLeagueAdminRole,
   leagueAiEnabled,
+  leagueAiWritesEnabled,
 } from "@/lib/league/access";
 import { LeoChat } from "@/features/league/LeoChat";
 
@@ -26,6 +27,8 @@ export default async function LeoPage({
   const membership = memberships.find((m) => m.leagueId === leagueId);
   if (!membership || !isLeagueAdminRole(membership.role)) notFound();
 
+  const writesEnabled = leagueAiWritesEnabled();
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-8 text-foreground sm:px-6">
       <Link href={`/league/${leagueId}`} className="text-xs text-muted hover:underline">
@@ -38,12 +41,13 @@ export default async function LeoPage({
         </span>
       </div>
       <p className="mt-1 text-sm text-muted">
-        Your league assistant. Read-only for now — it can look things up and draft
-        messages, but can&apos;t send or change anything yet.
+        {writesEnabled
+          ? "Your league assistant. It looks things up, and asks you to approve anything it would change."
+          : "Your league assistant. Read-only for now — it can look things up and draft messages, but can't send or change anything yet."}
       </p>
 
       <div className="mt-5">
-        <LeoChat leagueId={leagueId} />
+        <LeoChat leagueId={leagueId} writesEnabled={writesEnabled} />
       </div>
 
       <p className="mt-3 text-center text-[11px] text-muted">
