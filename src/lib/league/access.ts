@@ -42,6 +42,16 @@ export function leagueOpsEnabled(): boolean {
   return process.env.LEAGUE_OPS_ENABLED !== "off";
 }
 
+/**
+ * Beta gate for "Leo", the league-operator AI assistant. Unlike the platform
+ * kill switch, this defaults OFF so Leo ships dark — set `LEAGUE_AI_ENABLED=on`
+ * (no deploy) to enable it for operators. Composed with the platform switch, so
+ * turning the platform off also turns Leo off.
+ */
+export function leagueAiEnabled(): boolean {
+  return leagueOpsEnabled() && process.env.LEAGUE_AI_ENABLED === "on";
+}
+
 export function isLeagueAdminRole(role: LeagueMemberRole): boolean {
   return LEAGUE_ADMIN_ROLES.includes(role);
 }

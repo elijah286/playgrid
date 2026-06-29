@@ -113,6 +113,21 @@ export function leagueToolDefs(ctx: LeagueToolContext): ToolDef[] {
   return leagueToolsFor(ctx).map((t) => t.def);
 }
 
+/**
+ * Read-only tool defs — Leo v1 exposes ONLY these, so the assistant can never
+ * call a write tool. Consequential tools stay in the registry for the v2
+ * approval-chip flow; they're simply never offered to the model in v1.
+ */
+export function leagueReadToolDefs(): ToolDef[] {
+  return LEAGUE_TOOLS.filter((t) => t.kind === "read").map((t) => t.def);
+}
+
+/** Names of the read tools — the runner refuses any tool_use not in this set
+ *  (defense in depth alongside leagueReadToolDefs). */
+export const LEAGUE_READ_TOOL_NAMES: ReadonlySet<string> = new Set(
+  LEAGUE_TOOLS.filter((t) => t.kind === "read").map((t) => t.def.name),
+);
+
 export async function runLeagueTool(
   name: string,
   input: Record<string, unknown>,

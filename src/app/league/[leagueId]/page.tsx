@@ -12,11 +12,16 @@ import {
   Settings,
   ShoppingBag,
   BookOpen,
+  Sparkles,
   Trophy,
   Users,
 } from "lucide-react";
 
-import { getCurrentLeagueMemberships, isLeagueAdminRole } from "@/lib/league/access";
+import {
+  getCurrentLeagueMemberships,
+  isLeagueAdminRole,
+  leagueAiEnabled,
+} from "@/lib/league/access";
 import { loadLeagueDashboard, getMyLeagues } from "@/lib/league/console";
 import { leagueHasPlaybooks } from "@/lib/league/sportConfig";
 import { LeagueSwitcher } from "@/features/league/LeagueSwitcher";
@@ -120,6 +125,7 @@ export default async function LeagueDashboardPage({
   const isAdmin = memberships.some(
     (m) => m.leagueId === leagueId && isLeagueAdminRole(m.role),
   );
+  const showLeo = isAdmin && leagueAiEnabled();
 
   const myLeagues = await getMyLeagues();
   const hasMultipleLeagues = myLeagues.length > 1;
@@ -287,6 +293,13 @@ export default async function LeagueDashboardPage({
       {/* more */}
       <div className="mb-2 mt-8 text-xs font-medium text-muted">More</div>
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        {showLeo ? (
+          <MoreItem
+            icon={<Sparkles className="size-4" />}
+            label="Leo (assistant)"
+            href={`/league/${leagueId}/assistant`}
+          />
+        ) : null}
         {hasPlaybooks ? (
           <MoreItem
             icon={<BookOpen className="size-4" />}
