@@ -3,9 +3,11 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { isLeagueAdmin } from "@/lib/league/access";
 import { sendLeagueBroadcast } from "@/lib/notifications/league-broadcast-email";
+import { sendPushToUsers } from "@/lib/notifications/push";
 import {
   audienceLabel,
   familyEmailsFromRegistrations,
@@ -162,4 +164,54 @@ export async function sendBroadcastAction(
   });
   revalidatePath(`/league/${leagueId}/communications`);
   return { ok: true as const, sent: res.sent };
+}
+
+/**
+ * Preview: send the composed announcement to the operator THEMSELVES — by email
+ * and as a push to their own devices — so they see exactly what a recipient
+ * gets before sending for real. Not recorded in history (it's a test).
+ */
+export async function sendBroadcastTestAction(
+  leagueId: string,
+  input: { title: string; body: string },
+) {
+  const gate = await gateAdmin(leagueId);
+  if (!gate.ok) return gate;
+  const t = input.title.trim();
+  const b = input.body.trim();
+  if (!t || !b) return { ok: false as const, error: "Add a subject and message first." };
+
+  const {
+    data: { user },
+  } = await gate.supabase.auth.getUser();
+  const email = user?.email ?? null;
+
+  const { data: league } = await gate.supabase
+    .from("leagues")
+    .select("name")
+    .eq("id", leagueId)
+    .maybeSingle();
+  const leagueName = (league?.name as string) ?? "Your league";
+
+  let emailed = false;
+  if (email) {
+    const res = await sendLeagueBroadcast({ recipients: [email], leagueName, title: t, body: b });
+    emailed = !res.error && res.sent > 0;
+  }
+
+  const admin = createServiceRoleClient();
+  const push = await sendPushToUsers({
+    admin,
+    userIds: [gate.userId],
+    category: "team",
+    message: { title: `[${leagueName}] ${t}`, body: b, link: `/league/${leagueId}/communications` },
+  });
+
+  return {
+    ok: true as const,
+    email,
+    emailed,
+    pushDelivered: push.delivered,
+    pushConfigured: push.configured,
+  };
 }

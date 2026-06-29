@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import {
   listBroadcastsAction,
   sendBroadcastAction,
+  sendBroadcastTestAction,
   type BroadcastRow,
   type BroadcastAudiences,
 } from "@/app/actions/league-broadcasts";
@@ -79,6 +80,28 @@ export function BroadcastsManager({
     });
   }
 
+  function sendTest() {
+    if (!title.trim() || !body.trim()) return;
+    setMsg(null);
+    startTransition(async () => {
+      const r = await sendBroadcastTestAction(leagueId, { title, body });
+      if (!r.ok) {
+        setMsg({ kind: "error", text: r.error });
+        return;
+      }
+      const emailPart = r.emailed
+        ? `Test sent to ${r.email}`
+        : "Couldn't email you (no address on file)";
+      const pushPart =
+        r.pushDelivered > 0
+          ? " and pushed to your device"
+          : r.pushConfigured
+            ? " (no registered device to push to)"
+            : " (push not set up here)";
+      setMsg({ kind: "success", text: `${emailPart}${pushPart}.` });
+    });
+  }
+
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border border-border p-4">
@@ -132,7 +155,17 @@ export function BroadcastsManager({
           >
             {pending ? "Sending…" : `Send to ${count} ${count === 1 ? "recipient" : "recipients"}`}
           </button>
-          <span className="text-xs text-muted">Sent by email from your league.</span>
+          <button
+            type="button"
+            disabled={pending || !title.trim() || !body.trim()}
+            onClick={sendTest}
+            className="rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-foreground/5 disabled:opacity-50"
+          >
+            Send a test to myself
+          </button>
+          <span className="text-xs text-muted">
+            Preview lands in your own email &amp; as a push to your device.
+          </span>
         </div>
         {count === 0 ? (
           <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
