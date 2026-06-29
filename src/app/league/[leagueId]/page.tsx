@@ -16,7 +16,7 @@ import {
   Users,
 } from "lucide-react";
 
-import { getCurrentLeagueMemberships } from "@/lib/league/access";
+import { getCurrentLeagueMemberships, isLeagueAdminRole } from "@/lib/league/access";
 import { loadLeagueDashboard, getMyLeagues } from "@/lib/league/console";
 import { leagueHasPlaybooks } from "@/lib/league/sportConfig";
 import { LeagueSwitcher } from "@/features/league/LeagueSwitcher";
@@ -117,6 +117,9 @@ export default async function LeagueDashboardPage({
 
   const memberships = await getCurrentLeagueMemberships();
   if (!memberships.some((m) => m.leagueId === leagueId)) notFound();
+  const isAdmin = memberships.some(
+    (m) => m.leagueId === leagueId && isLeagueAdminRole(m.role),
+  );
 
   const myLeagues = await getMyLeagues();
   const hasMultipleLeagues = myLeagues.length > 1;
@@ -293,7 +296,11 @@ export default async function LeagueDashboardPage({
         ) : null}
         <MoreItem icon={<Palette className="size-4" />} label="Branding" />
         <MoreItem icon={<ShoppingBag className="size-4" />} label="Store" />
-        <MoreItem icon={<Settings className="size-4" />} label="Settings" />
+        <MoreItem
+          icon={<Settings className="size-4" />}
+          label="Settings"
+          href={isAdmin ? `/league/${leagueId}/settings` : undefined}
+        />
       </div>
     </div>
   );

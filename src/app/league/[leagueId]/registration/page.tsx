@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import QRCode from "qrcode";
 
 import { getCurrentLeagueMemberships } from "@/lib/league/access";
+import { createClient } from "@/lib/supabase/server";
 import { getRegistrationConfigAction } from "@/app/actions/league-registration-config";
 import { listStoreItemsAction } from "@/app/actions/league-store";
 import { listRegistrationsAction } from "@/app/actions/league-registrations";
@@ -30,7 +31,15 @@ export default async function RegistrationPage({
   const memberships = await getCurrentLeagueMemberships();
   if (!memberships.some((m) => m.leagueId === leagueId)) notFound();
 
-  const registerUrl = `${SITE_URL}/register/${leagueId}`;
+  // Prefer the custom slug (set in Settings) for a short, shareable link.
+  const supabase = await createClient();
+  const { data: leagueRow } = await supabase
+    .from("leagues")
+    .select("slug")
+    .eq("id", leagueId)
+    .maybeSingle();
+  const slug = (leagueRow?.slug as string | null) ?? null;
+  const registerUrl = `${SITE_URL}/register/${slug ?? leagueId}`;
   const [config, store, registrations, paymentStatus, qrDataUrl] = await Promise.all([
     getRegistrationConfigAction(leagueId),
     listStoreItemsAction(leagueId),

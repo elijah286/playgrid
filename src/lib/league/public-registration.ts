@@ -46,19 +46,22 @@ export function computeOpen(
  * league doesn't exist.
  */
 export async function getPublicRegistration(
-  leagueId: string,
+  idOrSlug: string,
 ): Promise<PublicRegistrationData | null> {
   // Honor the platform kill switch on the public surface too.
   if (!leagueOpsEnabled()) return null;
 
   const admin = createServiceRoleClient();
 
-  const { data: league } = await admin
-    .from("leagues")
-    .select("id, name, sport")
-    .eq("id", leagueId)
-    .maybeSingle();
+  // The public link param may be the league id (uuid) or a custom slug.
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
+  const lookup = admin.from("leagues").select("id, name, sport");
+  const { data: league } = await (isUuid
+    ? lookup.eq("id", idOrSlug)
+    : lookup.eq("slug", idOrSlug)
+  ).maybeSingle();
   if (!league) return null;
+  const leagueId = league.id as string;
 
   const { data: win } = await admin
     .from("registration_windows")
