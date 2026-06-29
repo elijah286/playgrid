@@ -6,6 +6,13 @@ import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { isLeagueAdmin } from "@/lib/league/access";
 import { sendLeagueBroadcast } from "@/lib/notifications/league-broadcast-email";
+import {
+  audienceLabel,
+  familyEmailsFromRegistrations,
+  resolveBroadcastRecipients,
+  type BroadcastAudience,
+  type BroadcastAudienceKind,
+} from "@/lib/league/broadcast-recipients";
 
 export type BroadcastRow = {
   id: string;
@@ -30,20 +37,55 @@ async function gateAdmin(leagueId: string) {
   return { ok: true as const, supabase, userId: user.id };
 }
 
-/** How many coaches currently have an email (the reachable audience today). */
-export async function leagueCoachEmailCountAction(leagueId: string): Promise<number> {
-  if (!hasSupabaseEnv()) return 0;
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("teams")
-    .select("head_coach_email")
-    .eq("league_id", leagueId);
-  const emails = new Set(
-    (data ?? [])
-      .map((t) => (t.head_coach_email as string | null)?.trim().toLowerCase())
-      .filter((e): e is string => !!e),
-  );
-  return emails.size;
+export type BroadcastAudiences = {
+  families: number;
+  coaches: number;
+  everyone: number;
+  teams: { id: string; name: string; count: number }[];
+};
+
+function coachEmail(t: { head_coach_email?: unknown }): string | null {
+  const e = typeof t.head_coach_email === "string" ? t.head_coach_email.trim().toLowerCase() : "";
+  return e || null;
+}
+
+/** Reach counts per audience, for the compose-screen selector. */
+export async function getBroadcastAudiencesAction(leagueId: string) {
+  const gate = await gateAdmin(leagueId);
+  if (!gate.ok) return { ok: false as const, error: gate.error, audiences: null };
+
+  const [regsR, teamsR] = await Promise.all([
+    gate.supabase
+      .from("player_registrations")
+      .select("applicant, status, team_id")
+      .eq("league_id", leagueId)
+      .limit(10000),
+    gate.supabase
+      .from("teams")
+      .select("id, name, head_coach_email")
+      .eq("league_id", leagueId)
+      .order("name", { ascending: true }),
+  ]);
+  const regs = (regsR.data ?? []) as { applicant: unknown; status: string; team_id?: string | null }[];
+  const teams = teamsR.data ?? [];
+
+  const families = new Set(familyEmailsFromRegistrations(regs));
+  const coaches = new Set(teams.map((t) => coachEmail(t)).filter((e): e is string => !!e));
+  const everyone = new Set([...families, ...coaches]);
+  const teamRows = teams.map((t) => {
+    const fam = new Set(familyEmailsFromRegistrations(regs, t.id as string));
+    const ce = coachEmail(t);
+    if (ce) fam.add(ce);
+    return { id: t.id as string, name: t.name as string, count: fam.size };
+  });
+
+  const audiences: BroadcastAudiences = {
+    families: families.size,
+    coaches: coaches.size,
+    everyone: everyone.size,
+    teams: teamRows,
+  };
+  return { ok: true as const, audiences };
 }
 
 export async function listBroadcastsAction(leagueId: string) {
@@ -68,30 +110,24 @@ export async function listBroadcastsAction(leagueId: string) {
   return { ok: true as const, items };
 }
 
-export async function sendBroadcastAction(leagueId: string, title: string, body: string) {
+export async function sendBroadcastAction(
+  leagueId: string,
+  input: { title: string; body: string; audience: BroadcastAudienceKind; teamId?: string },
+) {
   const gate = await gateAdmin(leagueId);
   if (!gate.ok) return gate;
-  const t = title.trim();
-  const b = body.trim();
+  const t = input.title.trim();
+  const b = input.body.trim();
   if (!t) return { ok: false as const, error: "Add a subject." };
   if (!b) return { ok: false as const, error: "Write a message." };
+  if (input.audience === "team" && !input.teamId) {
+    return { ok: false as const, error: "Pick a team." };
+  }
+  const audience: BroadcastAudience = { kind: input.audience, teamId: input.teamId };
 
-  const { data: teams } = await gate.supabase
-    .from("teams")
-    .select("head_coach_email")
-    .eq("league_id", leagueId);
-  const emails = [
-    ...new Set(
-      (teams ?? [])
-        .map((x) => (x.head_coach_email as string | null)?.trim().toLowerCase())
-        .filter((e): e is string => !!e),
-    ),
-  ];
-  if (emails.length === 0) {
-    return {
-      ok: false as const,
-      error: "No coaches have an email yet. Add coach emails on the Teams page first.",
-    };
+  const recipients = await resolveBroadcastRecipients(gate.supabase, leagueId, audience);
+  if (recipients.length === 0) {
+    return { ok: false as const, error: "No one to send to for that audience yet." };
   }
 
   const { data: league } = await gate.supabase
@@ -101,12 +137,23 @@ export async function sendBroadcastAction(leagueId: string, title: string, body:
     .maybeSingle();
   const leagueName = (league?.name as string) ?? "Your league";
 
-  const res = await sendLeagueBroadcast({ recipients: emails, leagueName, title: t, body: b });
+  let teamName: string | null = null;
+  if (audience.kind === "team" && audience.teamId) {
+    const { data: team } = await gate.supabase
+      .from("teams")
+      .select("name")
+      .eq("id", audience.teamId)
+      .eq("league_id", leagueId)
+      .maybeSingle();
+    teamName = (team?.name as string | null) ?? null;
+  }
+
+  const res = await sendLeagueBroadcast({ recipients, leagueName, title: t, body: b });
   if (res.error) return { ok: false as const, error: res.error };
 
   await gate.supabase.from("league_broadcasts").insert({
     league_id: leagueId,
-    audience: "coaches",
+    audience: audienceLabel(audience, teamName),
     title: t,
     body: b,
     recipient_count: res.sent,

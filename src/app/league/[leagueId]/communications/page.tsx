@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 
 import { getCurrentLeagueMemberships } from "@/lib/league/access";
 import {
-  leagueCoachEmailCountAction,
+  getBroadcastAudiencesAction,
   listBroadcastsAction,
 } from "@/app/actions/league-broadcasts";
 import { BroadcastsManager } from "@/features/league/BroadcastsManager";
@@ -23,10 +23,13 @@ export default async function CommunicationsPage({
   const memberships = await getCurrentLeagueMemberships();
   if (!memberships.some((m) => m.leagueId === leagueId)) notFound();
 
-  const [broadcasts, coachCount] = await Promise.all([
+  const [broadcasts, audiencesRes] = await Promise.all([
     listBroadcastsAction(leagueId),
-    leagueCoachEmailCountAction(leagueId),
+    getBroadcastAudiencesAction(leagueId),
   ]);
+  const audiences = audiencesRes.ok && audiencesRes.audiences
+    ? audiencesRes.audiences
+    : { families: 0, coaches: 0, everyone: 0, teams: [] };
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-12 text-foreground sm:px-6">
@@ -35,14 +38,14 @@ export default async function CommunicationsPage({
       </Link>
       <h1 className="mt-2 text-2xl font-extrabold tracking-tight">Communications</h1>
       <p className="mt-1 text-sm text-muted">
-        Send announcements to your league. Today this reaches coaches by email.
+        Send announcements by email — to everyone, all families, a single team, or your coaches.
       </p>
 
       <div className="mt-6">
         <BroadcastsManager
           leagueId={leagueId}
           initialBroadcasts={broadcasts.ok ? broadcasts.items : []}
-          coachCount={coachCount}
+          audiences={audiences}
         />
       </div>
     </div>

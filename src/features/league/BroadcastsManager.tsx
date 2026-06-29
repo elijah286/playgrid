@@ -6,7 +6,9 @@ import {
   listBroadcastsAction,
   sendBroadcastAction,
   type BroadcastRow,
+  type BroadcastAudiences,
 } from "@/app/actions/league-broadcasts";
+import type { BroadcastAudienceKind } from "@/lib/league/broadcast-recipients";
 
 type Msg = { kind: "error" | "success"; text: string } | null;
 
@@ -20,17 +22,36 @@ function fmtDate(iso: string | null) {
 export function BroadcastsManager({
   leagueId,
   initialBroadcasts,
-  coachCount,
+  audiences,
 }: {
   leagueId: string;
   initialBroadcasts: BroadcastRow[];
-  coachCount: number;
+  audiences: BroadcastAudiences;
 }) {
   const [items, setItems] = useState(initialBroadcasts);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [audienceKey, setAudienceKey] = useState("everyone");
   const [msg, setMsg] = useState<Msg>(null);
   const [pending, startTransition] = useTransition();
+
+  function countFor(key: string): number {
+    if (key === "everyone") return audiences.everyone;
+    if (key === "families") return audiences.families;
+    if (key === "coaches") return audiences.coaches;
+    if (key.startsWith("team:")) {
+      const id = key.slice(5);
+      return audiences.teams.find((t) => t.id === id)?.count ?? 0;
+    }
+    return 0;
+  }
+
+  function parseAudience(key: string): { audience: BroadcastAudienceKind; teamId?: string } {
+    if (key.startsWith("team:")) return { audience: "team", teamId: key.slice(5) };
+    return { audience: key as BroadcastAudienceKind };
+  }
+
+  const count = countFor(audienceKey);
 
   function refresh() {
     startTransition(async () => {
@@ -41,17 +62,19 @@ export function BroadcastsManager({
 
   function send() {
     if (!title.trim() || !body.trim()) return;
-    if (!globalThis.confirm(`Send this to ${coachCount} coach${coachCount === 1 ? "" : "es"}?`)) return;
+    const noun = count === 1 ? "recipient" : "recipients";
+    if (!globalThis.confirm(`Send this to ${count} ${noun}?`)) return;
     setMsg(null);
+    const { audience, teamId } = parseAudience(audienceKey);
     startTransition(async () => {
-      const r = await sendBroadcastAction(leagueId, title, body);
+      const r = await sendBroadcastAction(leagueId, { title, body, audience, teamId });
       if (!r.ok) {
         setMsg({ kind: "error", text: r.error });
         return;
       }
       setTitle("");
       setBody("");
-      setMsg({ kind: "success", text: `Sent to ${r.sent} coach${r.sent === 1 ? "" : "es"}.` });
+      setMsg({ kind: "success", text: `Sent to ${r.sent} ${r.sent === 1 ? "recipient" : "recipients"}.` });
       refresh();
     });
   }
@@ -60,6 +83,28 @@ export function BroadcastsManager({
     <div className="space-y-5">
       <div className="rounded-2xl border border-border p-4">
         <label className="block text-sm">
+          <span className="font-medium text-foreground">Audience</span>
+          <select
+            value={audienceKey}
+            onChange={(e) => setAudienceKey(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          >
+            <option value="everyone">Everyone — families &amp; coaches ({audiences.everyone})</option>
+            <option value="families">All families ({audiences.families})</option>
+            <option value="coaches">Coaches ({audiences.coaches})</option>
+            {audiences.teams.length > 0 ? (
+              <optgroup label="A team's families + coach">
+                {audiences.teams.map((t) => (
+                  <option key={t.id} value={`team:${t.id}`}>
+                    {t.name} ({t.count})
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
+          </select>
+        </label>
+
+        <label className="mt-3 block text-sm">
           <span className="font-medium text-foreground">Subject</span>
           <input
             value={title}
@@ -81,19 +126,18 @@ export function BroadcastsManager({
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <button
             type="button"
-            disabled={pending || !title.trim() || !body.trim() || coachCount === 0}
+            disabled={pending || !title.trim() || !body.trim() || count === 0}
             onClick={send}
             className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
           >
-            {pending ? "Sending…" : `Send to ${coachCount} coach${coachCount === 1 ? "" : "es"}`}
+            {pending ? "Sending…" : `Send to ${count} ${count === 1 ? "recipient" : "recipients"}`}
           </button>
-          <span className="text-xs text-muted">
-            Goes by email to coaches with an address. Parent announcements arrive with registration.
-          </span>
+          <span className="text-xs text-muted">Sent by email from your league.</span>
         </div>
-        {coachCount === 0 ? (
+        {count === 0 ? (
           <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-            No coaches have an email yet — add coach emails on the Teams page.
+            No reachable emails for that audience yet — families appear once they register; coaches
+            once you add their email on the Teams page.
           </p>
         ) : null}
         {msg ? (
@@ -125,7 +169,7 @@ export function BroadcastsManager({
                 </div>
                 <p className="mt-1 whitespace-pre-wrap text-sm text-muted">{b.body}</p>
                 <div className="mt-2 text-xs text-muted">
-                  Sent to {b.recipientCount} {b.recipientCount === 1 ? "coach" : "coaches"}
+                  {b.audience} · {b.recipientCount} {b.recipientCount === 1 ? "recipient" : "recipients"}
                 </div>
               </li>
             ))}
