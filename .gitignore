@@ -12,6 +12,11 @@
 
 # testing
 /coverage
+# Playwright functional-test artifacts (videos, traces, GIFs) — regenerated per run.
+/test-results/
+/playwright-report/
+/blob-report/
+/.playwright/
 
 # next.js
 /.next/
