@@ -12,6 +12,16 @@ import {
   tierForPriceId,
   type BillingInterval,
 } from "@/lib/billing/stripe";
+import {
+  buildPayerStatusMap,
+  type PayerBadge,
+  type PayerSubscriptionRow,
+} from "@/lib/billing/payer-status";
+import {
+  buildChildMap,
+  computeInfluence,
+  type ReferralEdge,
+} from "@/lib/billing/referral-influence";
 
 const SITE_ROW_ID = "default";
 
@@ -869,6 +879,29 @@ export type BillingSummary = {
 
 export type RevenueTierKey = "coach" | "coach_ai" | "pack" | "other";
 
+/** One paying (or formerly-paying) customer in the revenue dashboard list. */
+export type PayerRow = {
+  customerId: string;
+  userId: string | null;
+  email: string | null;
+  displayName: string | null;
+  tier: RevenueTierKey | null;
+  /** This customer's own lifetime spend, net of refunds (dollars). */
+  lifetimeSpend: number;
+  /** Account status badge — see PayerBadge. Null for pure one-time buyers. */
+  badge: PayerBadge | null;
+  /** When a canceling/cancelled subscription ends or ended (ISO). */
+  subscriptionEndsAt: string | null;
+  /** People who signed up directly because of this customer. */
+  directReferrals: number;
+  /** Everyone downstream across the full referral tree (all levels). */
+  networkSize: number;
+  /** Lifetime spend (dollars) of the entire downstream referral network. */
+  networkSpend: number;
+  /** Per-level downstream breakdown (level 1..N). */
+  networkLevels: Array<{ level: number; count: number; spend: number }>;
+};
+
 export type RevenueBreakdown = {
   asOf: string;
   byTier: Array<{ tier: RevenueTierKey; count: number; mrr: number }>;
@@ -876,15 +909,27 @@ export type RevenueBreakdown = {
     month: string;
     total: number;
   }>;
-  topCustomers: Array<{
-    customerId: string;
-    userId: string | null;
-    email: string | null;
+  /** Every customer who has ever paid — active, canceling, cancelled, or one-time. */
+  payers: PayerRow[];
+  summary: BillingSummary;
+};
+
+/** Per-customer drill-down detail, loaded on demand when a row is opened. */
+export type CustomerActivityDetail = {
+  userId: string | null;
+  email: string | null;
+  displayName: string | null;
+  /** Total seconds the user has spent on the site. */
+  totalSecondsOnSite: number;
+  /** Last time the user was active (ISO), if known. */
+  lastActiveAt: string | null;
+  /** Direct (level-1) referrals, with their own lifetime spend (dollars). */
+  directReferrals: Array<{
+    userId: string;
     displayName: string | null;
-    tier: RevenueTierKey | null;
+    email: string | null;
     lifetimeSpend: number;
   }>;
-  summary: BillingSummary;
 };
 
 type StripeAggregate = {
@@ -1129,6 +1174,60 @@ export async function getBillingSummaryForOverviewAction(): Promise<
   }
 }
 
+type UserDirectory = {
+  emailToUserId: Map<string, string>;
+  uidToEmail: Map<string, string | null>;
+  displayNameById: Map<string, string | null>;
+};
+
+/** Load the auth ↔ profile directory used to join Stripe data to app users. */
+async function loadUserDirectory(
+  admin: ReturnType<typeof createServiceRoleClient>,
+): Promise<UserDirectory> {
+  const [{ data: authData }, { data: profileRows }] = await Promise.all([
+    admin.auth.admin.listUsers({ perPage: 1000, page: 1 }),
+    admin.from("profiles").select("id, display_name"),
+  ]);
+  const emailToUserId = new Map<string, string>();
+  const uidToEmail = new Map<string, string | null>();
+  for (const u of authData?.users ?? []) {
+    if (u.email) {
+      const email = u.email.toLowerCase();
+      emailToUserId.set(email, u.id);
+      uidToEmail.set(u.id, email);
+    }
+  }
+  const displayNameById = new Map<string, string | null>();
+  for (const p of profileRows ?? []) {
+    displayNameById.set(
+      p.id as string,
+      (p as { display_name: string | null }).display_name,
+    );
+  }
+  return { emailToUserId, uidToEmail, displayNameById };
+}
+
+/** userId → lifetime spend (cents) across all charges we can attribute by email. */
+function buildSpendByUserCents(
+  agg: StripeAggregate,
+  emailToUserId: Map<string, string>,
+): Map<string, number> {
+  const spend = new Map<string, number>();
+  for (const info of Object.values(agg.byCustomer)) {
+    if (info.totalCents <= 0) continue;
+    const uid = info.email
+      ? emailToUserId.get(info.email.toLowerCase()) ?? null
+      : null;
+    if (!uid) continue;
+    spend.set(uid, (spend.get(uid) ?? 0) + info.totalCents);
+  }
+  return spend;
+}
+
+function tierKeyFromSubTier(tier: SubscriptionTier): RevenueTierKey {
+  return tier === "coach_ai" ? "coach_ai" : "coach";
+}
+
 export async function getRevenueBreakdownAction(): Promise<
   | { ok: true; breakdown: RevenueBreakdown; cached: boolean }
   | { ok: false; error: string }
@@ -1169,54 +1268,133 @@ export async function getRevenueBreakdownAction(): Promise<
       return { month, total: bucket.totalCents / 100 };
     });
 
-    const customerEntries = Object.entries(agg.byCustomer)
-      .map(([key, info]) => ({ key, ...info }))
-      .filter((c) => c.totalCents > 0)
-      .sort((a, b) => b.totalCents - a.totalCents)
-      .slice(0, 20);
-
     const admin = createServiceRoleClient();
-    const [{ data: authData }, { data: profileRows }] = await Promise.all([
-      admin.auth.admin.listUsers({ perPage: 1000, page: 1 }),
-      admin.from("profiles").select("id, display_name"),
+    const { emailToUserId, uidToEmail, displayNameById } =
+      await loadUserDirectory(admin);
+
+    // Pull the full subscription history (every status) and the referral graph
+    // in parallel. The subscriptions table is the spine of "who has ever paid"
+    // — unlike the old charges-only list, a cancelled subscriber still has a
+    // row here, so they can't silently drop off the dashboard.
+    const [{ data: subRows }, { data: referralRows }] = await Promise.all([
+      admin
+        .from("subscriptions")
+        .select(
+          "user_id, tier, status, current_period_end, cancel_at, cancel_at_period_end, billing_interval, updated_at, stripe_customer_id",
+        ),
+      admin.from("referral_awards").select("sender_id, recipient_id"),
     ]);
-    const emailToUserId = new Map<string, string>();
-    for (const u of authData?.users ?? []) {
-      if (u.email) emailToUserId.set(u.email.toLowerCase(), u.id);
-    }
-    const displayNameById = new Map<string, string | null>();
-    for (const p of profileRows ?? []) {
-      displayNameById.set(
-        p.id as string,
-        (p as { display_name: string | null }).display_name,
-      );
+
+    const statusByUser = buildPayerStatusMap(
+      (subRows ?? []) as PayerSubscriptionRow[],
+    );
+    const customerIdByUser = new Map<string, string>();
+    for (const r of (subRows ?? []) as Array<{
+      user_id: string | null;
+      stripe_customer_id: string | null;
+    }>) {
+      if (r.user_id && r.stripe_customer_id && !customerIdByUser.has(r.user_id)) {
+        customerIdByUser.set(r.user_id, r.stripe_customer_id);
+      }
     }
 
-    const topCustomers: RevenueBreakdown["topCustomers"] = customerEntries.map(
-      (c) => {
-        const email = c.email ?? null;
-        const userId = email
-          ? emailToUserId.get(email.toLowerCase()) ?? null
-          : null;
-        // Tier resolution: by email first (covers pack buyers who match a
-        // subscriber), then by customer ID, else label as "pack" when we
-        // have at least an email (i.e. one-time pack buyer), else null.
-        const tierByEmail = email ? agg.tierByCustomer[email] : undefined;
-        const tierByCust = c.customerId
-          ? agg.tierByCustomer[`cust:${c.customerId}`]
-          : undefined;
-        const tier =
-          tierByEmail ?? tierByCust ?? (email ? "pack" : null);
-        return {
-          customerId: c.customerId ?? "",
-          userId,
-          email,
-          displayName: userId ? displayNameById.get(userId) ?? null : null,
-          tier,
-          lifetimeSpend: c.totalCents / 100,
-        };
-      },
+    const spendByUserCents = buildSpendByUserCents(agg, emailToUserId);
+    const childMap = buildChildMap(
+      ((referralRows ?? []) as Array<{
+        sender_id: string | null;
+        recipient_id: string | null;
+      }>)
+        .filter(
+          (r): r is { sender_id: string; recipient_id: string } =>
+            !!r.sender_id && !!r.recipient_id,
+        )
+        .map(
+          (r): ReferralEdge => ({
+            senderId: r.sender_id,
+            recipientId: r.recipient_id,
+          }),
+        ),
     );
+
+    const toLevels = (
+      levels: ReturnType<typeof computeInfluence>["levels"],
+    ): PayerRow["networkLevels"] =>
+      levels.map((l) => ({
+        level: l.level,
+        count: l.count,
+        spend: l.spendCents / 100,
+      }));
+
+    const payers: PayerRow[] = [];
+
+    // 1. Subscription-based payers — anyone currently paying OR who has paid
+    //    in the past. A trialed-then-cancelled user who never spent a cent is
+    //    excluded; a paid-then-cancelled user is kept (and badged cancelled).
+    for (const [userId, state] of statusByUser) {
+      const lifetimeCents = spendByUserCents.get(userId) ?? 0;
+      const current =
+        state.badge === "active" ||
+        state.badge === "trialing" ||
+        state.badge === "past_due" ||
+        state.badge === "canceling";
+      if (!current && lifetimeCents <= 0) continue;
+      const inf = computeInfluence(userId, childMap, spendByUserCents);
+      const subscriptionEndsAt =
+        state.badge === "canceling"
+          ? state.cancelAt ?? state.currentPeriodEnd
+          : state.badge === "cancelled"
+          ? state.endedAt
+          : null;
+      payers.push({
+        customerId: customerIdByUser.get(userId) ?? "",
+        userId,
+        email: uidToEmail.get(userId) ?? null,
+        displayName: displayNameById.get(userId) ?? null,
+        tier: tierKeyFromSubTier(state.tier),
+        lifetimeSpend: lifetimeCents / 100,
+        badge: state.badge,
+        subscriptionEndsAt,
+        directReferrals: inf.directReferrals,
+        networkSize: inf.networkSize,
+        networkSpend: inf.networkSpendCents / 100,
+        networkLevels: toLevels(inf.levels),
+      });
+    }
+
+    // 2. One-time buyers with no subscription row (Coach Cal packs, or legacy
+    //    charges). Surfaced from the charge aggregate so they appear too.
+    for (const info of Object.values(agg.byCustomer)) {
+      if (info.totalCents <= 0) continue;
+      const email = info.email ?? null;
+      const uid = email
+        ? emailToUserId.get(email.toLowerCase()) ?? null
+        : null;
+      if (uid && statusByUser.has(uid)) continue; // already in step 1
+      const inf = uid
+        ? computeInfluence(uid, childMap, spendByUserCents)
+        : null;
+      const tierByEmail = email ? agg.tierByCustomer[email] : undefined;
+      const tierByCust = info.customerId
+        ? agg.tierByCustomer[`cust:${info.customerId}`]
+        : undefined;
+      const tier = tierByEmail ?? tierByCust ?? (email ? "pack" : null);
+      payers.push({
+        customerId: info.customerId ?? "",
+        userId: uid,
+        email,
+        displayName: uid ? displayNameById.get(uid) ?? null : null,
+        tier,
+        lifetimeSpend: info.totalCents / 100,
+        badge: "one_time",
+        subscriptionEndsAt: null,
+        directReferrals: inf?.directReferrals ?? 0,
+        networkSize: inf?.networkSize ?? 0,
+        networkSpend: (inf?.networkSpendCents ?? 0) / 100,
+        networkLevels: inf ? toLevels(inf.levels) : [],
+      });
+    }
+
+    payers.sort((a, b) => b.lifetimeSpend - a.lifetimeSpend);
 
     return {
       ok: true,
@@ -1224,10 +1402,87 @@ export async function getRevenueBreakdownAction(): Promise<
         asOf: agg.asOf,
         byTier,
         monthly,
-        topCustomers,
+        payers,
         summary: summaryFromAggregate(agg),
       },
       cached: !!cacheHit,
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return { ok: false, error: msg };
+  }
+}
+
+/**
+ * Per-customer drill-down loaded when an admin opens a payer row: engagement
+ * (time on site, last seen) plus the people they directly referred and what
+ * those people have spent. The transitive network totals already live on the
+ * payer row; this fills in the human-readable "who" behind that number.
+ */
+export async function getCustomerActivityAction(
+  userId: string,
+): Promise<
+  | { ok: true; detail: CustomerActivityDetail }
+  | { ok: false; error: string }
+> {
+  const gate = await assertAdmin();
+  if (!gate.ok) return { ok: false, error: gate.error };
+  if (!userId) return { ok: false, error: "Missing user id." };
+
+  try {
+    const admin = createServiceRoleClient();
+    const [{ data: profile }, userRes, { data: referralRows }] =
+      await Promise.all([
+        admin
+          .from("profiles")
+          .select("display_name, total_seconds_on_site, last_active_at")
+          .eq("id", userId)
+          .maybeSingle(),
+        admin.auth.admin.getUserById(userId),
+        admin
+          .from("referral_awards")
+          .select("recipient_id")
+          .eq("sender_id", userId),
+      ]);
+
+    const recipientIds = (
+      (referralRows ?? []) as Array<{ recipient_id: string | null }>
+    )
+      .map((r) => r.recipient_id)
+      .filter((id): id is string => !!id);
+
+    let directReferrals: CustomerActivityDetail["directReferrals"] = [];
+    if (recipientIds.length > 0) {
+      const agg = await getStripeAggregate();
+      const { emailToUserId, uidToEmail, displayNameById } =
+        await loadUserDirectory(admin);
+      const spendByUserCents = buildSpendByUserCents(agg, emailToUserId);
+      directReferrals = recipientIds
+        .map((rid) => ({
+          userId: rid,
+          displayName: displayNameById.get(rid) ?? null,
+          email: uidToEmail.get(rid) ?? null,
+          lifetimeSpend: (spendByUserCents.get(rid) ?? 0) / 100,
+        }))
+        .sort((a, b) => b.lifetimeSpend - a.lifetimeSpend);
+    }
+
+    const p = profile as {
+      display_name: string | null;
+      total_seconds_on_site: number | null;
+      last_active_at: string | null;
+    } | null;
+
+    return {
+      ok: true,
+      detail: {
+        userId,
+        email: userRes.data?.user?.email ?? null,
+        displayName: p?.display_name ?? null,
+        totalSecondsOnSite: p?.total_seconds_on_site ?? 0,
+        lastActiveAt: p?.last_active_at ?? null,
+        directReferrals,
+      },
     };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
