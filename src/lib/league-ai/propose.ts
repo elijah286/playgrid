@@ -58,6 +58,8 @@ export function describeProposal(
     }
     case "unassign_player":
       return "Remove the player from their team (back to the approved pool).";
+    case "distribute_practice_plan":
+      return "Share this practice plan with every team's coach in the league.";
     default:
       return `Run ${toolName}.`;
   }

@@ -15,6 +15,7 @@ import { COMMS_TOOLS } from "./comms-tools";
 import { GROUP_TOOLS } from "./group-tools";
 import { SETTINGS_TOOLS } from "./settings-tools";
 import { ROSTER_TOOLS } from "./roster-tools";
+import { CURRICULUM_TOOLS } from "./curriculum-tools";
 
 function playerName(applicant: unknown): string {
   const a = (applicant ?? {}) as { player?: { firstName?: unknown; lastName?: unknown } };
@@ -104,6 +105,8 @@ export const LEAGUE_TOOLS: LeagueTool[] = [
   ...SETTINGS_TOOLS,
   // Registration triage + team visibility (the operator's daily work).
   ...ROSTER_TOOLS,
+  // Practice-plan curriculum (list + distribute to coaches).
+  ...CURRICULUM_TOOLS,
 ];
 
 /** Tools available for this context. Consequential tools (added later) gate on
