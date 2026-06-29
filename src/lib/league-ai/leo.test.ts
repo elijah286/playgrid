@@ -37,6 +37,14 @@ describe("Leo read-only tool surface (v1 safety invariant)", () => {
     expect(readNames.has("league_overview")).toBe(true);
     expect(readNames.has("list_unrostered_players")).toBe(true);
     expect(readNames.has("get_league_settings")).toBe(true);
+    expect(readNames.has("list_registrations")).toBe(true);
+    expect(readNames.has("list_teams")).toBe(true);
+  });
+
+  it("registration triage write is consequential, not a read", () => {
+    const readNames = new Set(leagueReadToolDefs().map((d) => d.name));
+    expect(LEAGUE_CONSEQUENTIAL_TOOL_NAMES.has("set_registration_status")).toBe(true);
+    expect(readNames.has("set_registration_status")).toBe(false);
   });
 });
 
@@ -119,5 +127,14 @@ describe("consequential tool set + proposal previews", () => {
     expect(
       describeProposal("send_announcement", { subject: "Picture Day", audience: "families" }),
     ).toContain("Picture Day");
+    expect(
+      describeProposal("set_registration_status", {
+        registrationIds: ["a", "b"],
+        status: "approved",
+      }),
+    ).toBe("Set 2 registrations to approved.");
+    expect(
+      describeProposal("set_registration_status", { registrationIds: ["a"], status: "waitlisted" }),
+    ).toBe("Set 1 registration to waitlisted.");
   });
 });

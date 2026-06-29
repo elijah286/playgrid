@@ -36,6 +36,12 @@ export function describeProposal(
         ? `Set the registration link to /register/${slug}.`
         : "Clear the custom registration link.";
     }
+    case "set_registration_status": {
+      const ids = Array.isArray(input.registrationIds) ? input.registrationIds : [];
+      const status = s("status") || "updated";
+      const n = ids.length;
+      return `Set ${n} registration${n === 1 ? "" : "s"} to ${status}.`;
+    }
     default:
       return `Run ${toolName}.`;
   }

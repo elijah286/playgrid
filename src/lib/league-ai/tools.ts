@@ -14,6 +14,7 @@ import type { LeagueTool, LeagueToolContext, LeagueToolResult } from "./types";
 import { COMMS_TOOLS } from "./comms-tools";
 import { GROUP_TOOLS } from "./group-tools";
 import { SETTINGS_TOOLS } from "./settings-tools";
+import { ROSTER_TOOLS } from "./roster-tools";
 
 function playerName(applicant: unknown): string {
   const a = (applicant ?? {}) as { player?: { firstName?: unknown; lastName?: unknown } };
@@ -101,6 +102,8 @@ export const LEAGUE_TOOLS: LeagueTool[] = [
   ...GROUP_TOOLS,
   // Per-league settings (rename + registration-link slug).
   ...SETTINGS_TOOLS,
+  // Registration triage + team visibility (the operator's daily work).
+  ...ROSTER_TOOLS,
 ];
 
 /** Tools available for this context. Consequential tools (added later) gate on
