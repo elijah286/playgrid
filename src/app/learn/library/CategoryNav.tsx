@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
@@ -49,7 +50,37 @@ function normaliseVariantSlug(raw: string | null): string | null {
   return VARIANT_HYPHEN.has(hyphenated) ? hyphenated : null;
 }
 
+// useSearchParams() triggers a client-side-rendering bailout, so the library
+// index pages can't be statically prerendered unless the hook sits under a
+// Suspense boundary (Next's missing-suspense-with-csr-bailout). Self-wrap so
+// every render site is covered, not just today's.
 export function CategoryNav() {
+  return (
+    <Suspense fallback={<CategoryNavFallback />}>
+      <CategoryNavInner />
+    </Suspense>
+  );
+}
+
+function CategoryNavFallback() {
+  return (
+    <nav
+      aria-label="Football Library categories"
+      className="mb-4 inline-flex flex-wrap gap-1 rounded-xl border border-border bg-surface-inset p-1"
+    >
+      {CATEGORIES.map((c) => (
+        <span
+          key={c.key}
+          className="whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-medium text-muted"
+        >
+          {c.label}
+        </span>
+      ))}
+    </nav>
+  );
+}
+
+function CategoryNavInner() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 

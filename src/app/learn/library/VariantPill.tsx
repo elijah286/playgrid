@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { Suspense, useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 // Library variants — kept in lockstep with LIBRARY_VARIANTS in
@@ -55,7 +55,62 @@ import { setLibraryVariantCookieClient } from "@/lib/learn/variant-preference";
  *  a 5v5 Flag option that 404s). Defaults to all four library
  *  variants (used by the landing + category index pages).
  */
-export function VariantPill({
+// useSearchParams() forces a CSR bailout — wrap it in Suspense so library
+// pages that render the variant filter can still be statically prerendered.
+export function VariantPill(props: {
+  supportedVariants?: readonly VariantValue[];
+} = {}) {
+  return (
+    <Suspense fallback={<VariantPillFallback {...props} />}>
+      <VariantPillInner {...props} />
+    </Suspense>
+  );
+}
+
+function VariantPillFallback({
+  supportedVariants,
+}: {
+  supportedVariants?: readonly VariantValue[];
+} = {}) {
+  const visibleVariants =
+    supportedVariants && supportedVariants.length > 0
+      ? VARIANTS.filter((v) => supportedVariants.includes(v.value))
+      : VARIANTS;
+  if (visibleVariants.length === 1) {
+    const only = visibleVariants[0];
+    return (
+      <div
+        className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface-inset px-3 py-1.5 text-xs font-medium text-muted"
+        aria-label="Football variant"
+      >
+        <span className="text-foreground font-semibold">{only.label}</span>
+        <span className="text-muted">only</span>
+      </div>
+    );
+  }
+  return (
+    <div
+      role="tablist"
+      aria-label="Filter by football variant"
+      className="inline-flex gap-0.5 rounded-xl border border-border bg-surface-inset p-1"
+    >
+      {visibleVariants.map((v) => (
+        <span
+          key={v.value}
+          className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-medium ${
+            v.value === DEFAULT_LIBRARY_VARIANT
+              ? "bg-surface-raised text-foreground shadow-sm font-semibold"
+              : "text-muted"
+          }`}
+        >
+          {v.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function VariantPillInner({
   supportedVariants,
 }: {
   supportedVariants?: readonly VariantValue[];

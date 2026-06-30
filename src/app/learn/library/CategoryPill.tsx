@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useTransition } from "react";
+import { Suspense, useTransition } from "react";
 import {
   DEFAULT_LIBRARY_CATEGORY,
   LIBRARY_CATEGORIES,
@@ -20,7 +20,39 @@ import {
  * `CategoryNav` jumper).
  */
 
+// useSearchParams() forces a CSR bailout — wrap in Suspense so the library
+// landing page can be statically prerendered.
 export function CategoryPill() {
+  return (
+    <Suspense fallback={<CategoryPillFallback />}>
+      <CategoryPillInner />
+    </Suspense>
+  );
+}
+
+function CategoryPillFallback() {
+  return (
+    <nav
+      aria-label="Football Library category"
+      className="inline-flex flex-wrap gap-1 rounded-xl border border-border bg-surface-inset p-1"
+    >
+      {LIBRARY_CATEGORIES.map((c) => (
+        <span
+          key={c.value}
+          className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-medium ${
+            c.value === DEFAULT_LIBRARY_CATEGORY
+              ? "bg-surface-raised text-foreground shadow-sm font-semibold"
+              : "text-muted"
+          }`}
+        >
+          {c.label}
+        </span>
+      ))}
+    </nav>
+  );
+}
+
+function CategoryPillInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
