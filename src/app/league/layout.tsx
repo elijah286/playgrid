@@ -6,6 +6,7 @@ import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { hasLeagueAccess, leagueOpsEnabled, leagueAiEnabled } from "@/lib/league/access";
 import { getMyLeagues } from "@/lib/league/console";
 import { LeagueRail } from "@/features/league/LeagueRail";
+import { LeagueMobileNav } from "@/features/league/LeagueMobileNav";
 
 // Always evaluate the gate per-request; never statically render the surface.
 export const dynamic = "force-dynamic";
@@ -40,11 +41,14 @@ export default async function LeagueLayout({
   const railLeagues = leagues
     .map((l) => ({ id: l.id, name: l.name, sport: l.sport, location: l.location }))
     .sort((a, b) => a.name.localeCompare(b.name));
+  const leoOn = leagueAiEnabled();
 
   return (
     <div className="md:flex">
-      <LeagueRail leagues={railLeagues} leoEnabled={leagueAiEnabled()} />
-      <div className="min-w-0 flex-1">{children}</div>
+      <LeagueRail leagues={railLeagues} leoEnabled={leoOn} />
+      {/* pb on mobile clears the fixed league bottom bar */}
+      <div className="min-w-0 flex-1 pb-16 md:pb-0">{children}</div>
+      <LeagueMobileNav leagues={railLeagues} leoEnabled={leoOn} />
     </div>
   );
 }

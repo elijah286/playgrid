@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Search } from "lucide-react";
 
-import type { RailLeague } from "./LeagueRail";
+import type { RailLeague } from "./useLeagueNav";
 
 function sportLabel(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);

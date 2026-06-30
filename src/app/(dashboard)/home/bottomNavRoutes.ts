@@ -17,7 +17,7 @@
  * so a coach never lands on an in-app page with no way back.
  */
 const OWN_BOTTOM_BAR_RE =
-  /^\/(playbooks\/[^/]+|plays\/|practice-plans\/[^/]+|m\/play\/|v\/[^/]+|coach-cal\/chat)/;
+  /^\/(playbooks\/[^/]+|plays\/|practice-plans\/[^/]+|m\/play\/|v\/[^/]+|coach-cal\/chat|league(?:\/|$))/;
 
 /**
  * Exception: the playbook *print* sub-route renders no bottom toolbar of its
