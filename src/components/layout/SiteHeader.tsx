@@ -1,6 +1,6 @@
-import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { getRequestUser } from "@/lib/supabase/request-user";
 import { getCachedUserRole } from "@/lib/auth/profile-cache";
 import { SiteHeaderShell } from "@/components/layout/SiteHeaderShell";
 import { getCurrentEntitlement, hasUsedCoachProTrial, type SubscriptionTier } from "@/lib/billing/entitlement";
@@ -29,10 +29,8 @@ export async function SiteHeader() {
 
   if (hasSupabaseEnv()) {
     try {
-      const supabase = await createClient();
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser();
+      const authResult = await getRequestUser();
+      const authUser = authResult.kind === "ok" ? authResult.user : null;
       if (authUser) {
         user = { id: authUser.id, email: authUser.email ?? null };
         const role = await getCachedUserRole(authUser.id);
