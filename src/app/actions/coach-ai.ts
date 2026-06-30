@@ -28,11 +28,18 @@ export type SaveDefenseProposalState =
   | { status: "dismissed" };
 
 export type CoachAiTurn =
-  | { role: "user"; text: string }
+  | { role: "user"; text: string; playId?: string | null }
   | {
       role: "assistant";
       text: string;
       toolCalls: string[];
+      /** The play anchored in the editor when this turn was created (null when
+       *  none — e.g. lobby mode). Lets the harness scope fence walk-backs to the
+       *  play the coach is on now, so a ```play fence authored while viewing a
+       *  DIFFERENT play can't become the edit/overlay baseline. Optional for
+       *  back-compat: turns persisted before this field shipped have it
+       *  undefined and the harness treats them as "unknown play" (not excluded). */
+      playId?: string | null;
       playbookChips?: PlaybookChip[] | null;
       noteProposals?: NoteProposal[] | null;
       /** Map from NoteProposal.proposalId → save/dismiss state. */

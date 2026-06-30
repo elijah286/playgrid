@@ -2256,8 +2256,22 @@ export async function runAgent(
   history: ChatMessage[],
   ctx: ToolContext,
   onEvent?: (e: AgentStreamEvent) => void,
+  opts?: {
+    /** Per-message play scope, index-aligned with `history`. Each entry is the
+     *  play anchored when that turn was authored (null = lobby, undefined =
+     *  legacy turn from before this shipped). Used to scope fence walk-backs to
+     *  the play the coach is on now, so a ```play fence authored while viewing a
+     *  DIFFERENT play can't become this turn's edit/overlay baseline. */
+    historyPlayIds?: ReadonlyArray<string | null>;
+  },
 ): Promise<AgentResult> {
   const messages = [...history];
+  // Play-scope predicate for history fence walk-backs. When a play is anchored,
+  // a turn authored under a DIFFERENT non-null play is out of scope; turns with
+  // an unknown (undefined/legacy) or lobby (null) scope are never excluded, so
+  // behavior degrades gracefully to the old "walk back everything" when the
+  // per-turn play id is absent. When no play is anchored, nothing is scoped.
+  const inCurrentPlayScope = makePlayScopeFilter(ctx.playId ?? null, opts?.historyPlayIds);
   // Whether THIS coach turn attached an image. Computed once from the
   // initial history — stays stable across agent-loop iterations of this
   // turn (the image is in the original user message and never moves).
@@ -2507,6 +2521,7 @@ export async function runAgent(
     for (let i = history.length - 1; i >= 0; i--) {
       const m = history[i];
       if (m.role !== "assistant") continue;
+      if (!inCurrentPlayScope(i)) continue; // skip fences authored on another play
       const text = extractAssistantText(m);
       const match = /```play\s*\n([\s\S]*?)\n```/.exec(text);
       if (match) return match[1].trim();
@@ -2531,13 +2546,21 @@ export async function runAgent(
    *
    *  Falls back to `priorAssistantFenceJson` when no offense fence exists at
    *  all — preserving the existing behavior for pure-defense conversations. */
-  const priorAssistantOffenseFenceJson = findPriorOffenseFenceJson(history);
+  const priorAssistantOffenseFenceJson = findPriorOffenseFenceJson(history, inCurrentPlayScope);
   /** The anchored play (the one the coach has open) as a compose_defense
    *  overlay baseline, when it carries offense. See resolveDefenseOverlayBaseline:
    *  this is what fixes "open an offensive play, ask for a defense" — the
    *  offense is in ctx.playDiagramText, not the chat history, so without this
    *  the overlay had no offense to preserve. */
   const anchoredOffenseFenceJson = extractAnchoredOffenseFence(ctx.playDiagramText);
+  /** The anchored play's FULL diagram (offense + any defenders) as an edit
+   *  baseline. Unlike anchoredOffenseFenceJson (offense-only, used for overlay
+   *  preservation), edit tools (revise_play, modify_play_route, flip_play,
+   *  set_defender_assignment) operate on the whole play — so when play-scoping
+   *  leaves no same-play fence in chat history (e.g. the coach just navigated to
+   *  this play and hasn't discussed it yet), they fall back to the full anchored
+   *  diagram rather than reaching for a fence authored on a different play. */
+  const anchoredPlayFence = ctx.playDiagramText?.trim() || null;
   /** Every play fence in the most-recent fence-bearing assistant turn —
    *  not just the first. Cal sometimes emits 3 plays in one reply and
    *  the coach says one "yes" meaning "save all three." Walks back the
@@ -2924,7 +2947,11 @@ export async function runAgent(
               anchoredOffenseFence: anchoredOffenseFenceJson,
               anyHistoryFence: priorAssistantFenceJson,
             })
-          : priorAssistantFenceJson;
+          : // Edit tools: a same-play in-chat fence (play-scoped above) wins as
+            // the freshest version; otherwise fall back to the anchored play's
+            // diagram so the edit targets the play on screen, never a fence
+            // authored on a different play.
+            (priorAssistantFenceJson ?? anchoredPlayFence);
       // For overlay/grade tools, an explicitly-passed fence is legitimate if it
       // matches the anchored play OR a history offense fence — not just the
       // resolved baseline. Pass both so the fabrication guard doesn't clobber a
@@ -3963,12 +3990,37 @@ export function stripBrokenFences(text: string, errors: string[]): string {
  *  Returns null when no offense-containing fence exists in history — caller
  *  falls back to the broader `priorAssistantFenceJson` (any fence) so pure-
  *  defense conversations still work. */
+/** Build the play-scope predicate for history fence walk-backs. When a play is
+ *  anchored (`currentPlayId` set), a turn authored under a DIFFERENT non-null
+ *  play is out of scope, so its ```play fence can't become this turn's
+ *  edit/overlay baseline. Turns with an unknown (undefined/legacy) or lobby
+ *  (null) scope are never excluded — behavior degrades gracefully to the old
+ *  "walk back everything" when the per-turn play id is absent. When no play is
+ *  anchored, nothing is scoped. `historyPlayIds` is index-aligned with the
+ *  history array the predicate is used against. */
+export function makePlayScopeFilter(
+  currentPlayId: string | null,
+  historyPlayIds: ReadonlyArray<string | null> | undefined,
+): (index: number) => boolean {
+  return (index: number): boolean => {
+    if (!currentPlayId) return true;
+    const pid = historyPlayIds?.[index];
+    if (pid == null) return true; // undefined (legacy) or null (lobby)
+    return pid === currentPlayId;
+  };
+}
+
 export function findPriorOffenseFenceJson(
   history: ReadonlyArray<ChatMessage>,
+  /** Optional play-scope filter — return false for a history index whose turn
+   *  was authored on a DIFFERENT play, so its fence is skipped. Defaults to
+   *  "include everything" (no scoping) for callers that don't pass it. */
+  inScope: (index: number) => boolean = () => true,
 ): string | null {
   for (let i = history.length - 1; i >= 0; i--) {
     const m = history[i];
     if (m.role !== "assistant") continue;
+    if (!inScope(i)) continue;
     const text = extractAssistantText(m);
     const matches = [...text.matchAll(/```play\s*\n([\s\S]*?)\n```/g)];
     for (const match of matches) {

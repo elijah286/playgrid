@@ -825,7 +825,7 @@ export function CoachAiChat({
       : imageName
         ? `📎 ${imageName}`
         : "[image attached]";
-    const userTurn: CoachAiTurn = { role: "user", text: bubbleText };
+    const userTurn: CoachAiTurn = { role: "user", text: bubbleText, playId: playId ?? null };
     const prior = turns;
     nextFreshIdxRef.current = turns.length;
     setTurns((cur) => [...cur, userTurn]);
@@ -992,6 +992,7 @@ export function CoachAiChat({
               noteProposalState: null,
               saveDefenseProposals: defenseProposals,
               saveDefenseProposalState: null,
+              playId: playId ?? null,
             },
           ]);
           savedFinalTurn = true;
@@ -1087,6 +1088,7 @@ export function CoachAiChat({
             playbookChips: null,
             noteProposals: null,
             noteProposalState: null,
+            playId: playId ?? null,
           },
         ]);
       }

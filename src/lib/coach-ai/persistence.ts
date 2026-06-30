@@ -296,7 +296,7 @@ export async function loadThreadTurns(
 export function toClientTurn(turn: ServerCoachAiTurn): CoachAiTurn | null {
   if (turn.status !== "done") return null;
   if (turn.role === "user") {
-    return { role: "user", text: turn.text };
+    return { role: "user", text: turn.text, playId: turn.playId };
   }
   return {
     role: "assistant",
@@ -305,6 +305,7 @@ export function toClientTurn(turn: ServerCoachAiTurn): CoachAiTurn | null {
     playbookChips: turn.playbookChips,
     noteProposals: turn.noteProposals,
     noteProposalState: turn.noteProposalState,
+    playId: turn.playId,
   };
 }
 

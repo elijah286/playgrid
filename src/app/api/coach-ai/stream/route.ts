@@ -24,7 +24,7 @@ import {
 import { createChannel, disposeChannel } from "@/lib/coach-ai/running-turns";
 
 type StreamRequest = {
-  history: { role: "user" | "assistant"; text: string; toolCalls?: string[] }[];
+  history: { role: "user" | "assistant"; text: string; toolCalls?: string[]; playId?: string | null }[];
   userMessage: string;
   playbookId?: string | null;
   /** Set by the chat when the launcher is open from within the play editor. */
@@ -367,6 +367,16 @@ export async function POST(req: Request): Promise<Response> {
     ...turnsToHistory(body.history),
     { role: "user", content: currentUserContent },
   ];
+  // Per-message play scope, index-aligned with `history`. Each prior turn
+  // carries the play it was authored under (undefined for turns persisted
+  // before this shipped → treated as "unknown play", never excluded). The
+  // current user turn is scoped to the play on screen now (ctx.playId). The
+  // harness uses this to keep a ```play fence authored while viewing a DIFFERENT
+  // play from becoming this turn's edit/overlay baseline.
+  const historyPlayIds: (string | null)[] = [
+    ...body.history.map((t) => t.playId ?? null),
+    ctx.playId ?? null,
+  ];
 
   // What we persist to coach_ai_turns. The image bytes never touch the DB —
   // a "📎 <name>" suffix stands in so coaches can see in history which
@@ -442,7 +452,7 @@ export async function POST(req: Request): Promise<Response> {
           if (e.type === "status")     channel.publish({ kind: "event", event: "status",     data: { text: e.text } });
           if (e.type === "tool_call")  channel.publish({ kind: "event", event: "tool_call",  data: { name: e.name } });
           if (e.type === "text_delta") channel.publish({ kind: "event", event: "text_delta", data: { text: e.text } });
-        }),
+        }, { historyPlayIds }),
         new Promise<never>((_, reject) =>
           setTimeout(
             () => reject(new Error(`coach-ai agent timed out after ${AGENT_TIMEOUT_MS / 1000}s`)),
