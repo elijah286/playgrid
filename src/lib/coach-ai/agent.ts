@@ -2925,7 +2925,19 @@ export async function runAgent(
               anyHistoryFence: priorAssistantFenceJson,
             })
           : priorAssistantFenceJson;
-      const correctedInput = autoCorrectPriorFence(tu.name, tu.input as Record<string, unknown>, priorFenceForTool);
+      // For overlay/grade tools, an explicitly-passed fence is legitimate if it
+      // matches the anchored play OR a history offense fence — not just the
+      // resolved baseline. Pass both so the fabrication guard doesn't clobber a
+      // real-but-different play the coach is targeting.
+      const otherRealFences = OFFENSE_BASELINE_TOOLS.has(tu.name)
+        ? [anchoredOffenseFenceJson, priorAssistantOffenseFenceJson]
+        : [];
+      const correctedInput = autoCorrectPriorFence(
+        tu.name,
+        tu.input as Record<string, unknown>,
+        priorFenceForTool,
+        otherRealFences,
+      );
       const r = await runTool(tu.name, correctedInput, ctx);
       const resultText = r.ok ? r.result : r.error;
       // Capture the LAST fence emitted by any fence-producing tool
@@ -4021,7 +4033,44 @@ export function resolveDefenseOverlayBaseline(opts: {
   anchoredOffenseFence: string | null;
   anyHistoryFence: string | null;
 }): string | null {
-  return opts.historyOffenseFence ?? opts.anchoredOffenseFence ?? opts.anyHistoryFence;
+  const { historyOffenseFence, anchoredOffenseFence, anyHistoryFence } = opts;
+  // No play on screen → the only offense signal is chat history (lobby mode, or
+  // a defense-install flow with no anchored play). Preserve the original
+  // history-first behavior.
+  if (!anchoredOffenseFence) {
+    return historyOffenseFence ?? anyHistoryFence;
+  }
+  // A play IS on screen. The anchored play is the authoritative "what the coach
+  // means" signal — it's the play they are literally looking at, and the system
+  // prompt already promises the harness overlays THIS play. We let an in-chat
+  // offense fence win ONLY when it's the SAME play as the anchored one (a fresher
+  // edit made this chat). When the in-chat fence is a DIFFERENT play — the coach
+  // built play A earlier, then navigated to play B and asked "add a defense to
+  // this" — the on-screen play wins. Overlaying onto an off-screen play the
+  // coach can't see is the silent wrong-play failure this guards against.
+  //
+  // Surfaced 2026-06-30: a coach viewing "Tesla" asked to overlay a defense and
+  // got "Stick Right" (a play built earlier in the same playbook-scoped thread)
+  // because Stick Right was the most-recent offense fence in history. The
+  // narration was about Tesla; the geometry was Stick Right. history-first
+  // precedence was the bug.
+  if (historyOffenseFence && sameOffenseRoster(historyOffenseFence, anchoredOffenseFence)) {
+    return historyOffenseFence;
+  }
+  return anchoredOffenseFence;
+}
+
+/** True when two fences carry the same offense roster (same player count and
+ *  id-set). Used by resolveDefenseOverlayBaseline to tell "an edit of the
+ *  anchored play" (same roster → fresher version wins) apart from "a different
+ *  play built earlier in the thread" (different roster → the on-screen play
+ *  wins). Route/position edits don't change the roster, so an edited version of
+ *  the anchored play still matches; a genuinely different play does not. */
+function sameOffenseRoster(a: string, b: string): boolean {
+  const fa = offenseFingerprint(a);
+  const fb = offenseFingerprint(b);
+  if (!fa || !fb) return false;
+  return fa.count === fb.count && fa.ids === fb.ids;
 }
 
 /** Tool names that accept a prior play fence as a string input. Their
@@ -4067,30 +4116,42 @@ function offenseFingerprint(fenceJson: string): { count: number; ids: string } |
  *  replace it with the real one. Preserves Cal's other inputs (the
  *  mods, defender, action — what to change) so only the BASELINE is
  *  corrected. */
-function autoCorrectPriorFence(
+export function autoCorrectPriorFence(
   toolName: string,
   input: Record<string, unknown>,
   priorAssistantFenceJson: string | null,
+  otherRealFences: ReadonlyArray<string | null> = [],
 ): Record<string, unknown> {
   const paramName = PRIOR_FENCE_TOOLS[toolName];
   if (!paramName || !priorAssistantFenceJson) return input;
   const provided = typeof input[paramName] === "string" ? (input[paramName] as string) : "";
   if (!provided.trim()) {
-    // Cal didn't pass anything — inject the real prior. Reduces the
+    // Cal didn't pass anything — inject the resolved baseline. Reduces the
     // chance of "I'm not sure what to edit" defaults inside the tool.
     return { ...input, [paramName]: priorAssistantFenceJson };
   }
   const providedFp = offenseFingerprint(provided);
-  const actualFp = offenseFingerprint(priorAssistantFenceJson);
-  if (!providedFp || !actualFp) return input;
-  // Drift detector: same player count AND same id-set = same baseline,
-  // accept Cal's input verbatim (it's probably the right fence with
-  // some incidental whitespace differences). Different count or ids
-  // = Cal fabricated the input; replace it.
-  if (providedFp.count === actualFp.count && providedFp.ids === actualFp.ids) {
-    return input;
+  if (!providedFp) return input;
+  // FABRICATION GUARD (not a baseline-enforcer): accept Cal's fence verbatim if
+  // its roster matches the baseline OR any other known-real fence in play this
+  // turn (the anchored play, a history offense fence). We only overwrite when
+  // Cal's fence matches NONE of them — i.e. it was invented from memory.
+  //
+  // Earlier this compared ONLY against the single resolved baseline, so a
+  // legitimately-different-but-real play (e.g. one the coach composed in chat
+  // and is overlaying onto without navigating) got clobbered with the baseline.
+  // Matching against every real fence keeps the anti-fabrication protection
+  // while letting Cal target any play the coach actually has in flight.
+  const realFences = [priorAssistantFenceJson, ...otherRealFences].filter(
+    (f): f is string => typeof f === "string" && f.trim().length > 0,
+  );
+  for (const real of realFences) {
+    const fp = offenseFingerprint(real);
+    if (fp && fp.count === providedFp.count && fp.ids === providedFp.ids) {
+      return input; // matches a real fence — accept verbatim
+    }
   }
-  // Cal's fence drifted — overwrite with the real one. The tool will
-  // edit the correct baseline; coach sees the right play.
+  // Matches nothing real — Cal fabricated it. Overwrite with the baseline so
+  // the tool edits the correct play; the coach sees the right geometry.
   return { ...input, [paramName]: priorAssistantFenceJson };
 }

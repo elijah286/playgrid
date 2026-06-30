@@ -21,10 +21,23 @@
  * and resolveDefenseOverlayBaseline() slots it AFTER history-offense (so
  * edits made this chat still win) but BEFORE the any-fence fallback (so a
  * defense-only exploration never becomes the overlay target).
+ *
+ * Refined 2026-06-30 (coach feedback): the "history-offense always wins"
+ * precedence broke when the in-chat offense fence was a DIFFERENT play than the
+ * anchored one. A coach viewing "Tesla" asked to overlay a defense and got
+ * "Stick Right" (a play built earlier in the same playbook-scoped thread)
+ * because Stick Right was the most-recent offense fence in history. The
+ * precedence is now roster-aware: an in-chat fence wins over the anchored play
+ * ONLY when it carries the same offense roster (an edit of the same play);
+ * a different play in history loses to the play actually on screen.
  */
 
 import { describe, expect, it } from "vitest";
-import { extractAnchoredOffenseFence, resolveDefenseOverlayBaseline } from "./agent";
+import {
+  autoCorrectPriorFence,
+  extractAnchoredOffenseFence,
+  resolveDefenseOverlayBaseline,
+} from "./agent";
 
 const OFFENSE_DIAGRAM = JSON.stringify({
   title: "Mesh Right",
@@ -94,15 +107,44 @@ describe("resolveDefenseOverlayBaseline", () => {
     expect(baseline).toBe(OFFENSE_DIAGRAM);
   });
 
-  it("prefers an in-chat offense fence over the anchored play (edits this chat must win)", () => {
+  it("prefers a SAME-ROSTER in-chat offense fence over the anchored play (edits this chat must win)", () => {
     // Cal edited a route this chat (fresher than the pre-edit anchored diagram).
-    const editedInChat = OFFENSE_DIAGRAM.replace("Mesh Right", "Mesh Right (edited)");
+    // Same players/ids — only the route changed — so it's the same play, edited.
+    const editedInChat = OFFENSE_DIAGRAM.replace(
+      '"route_kind":"drag"',
+      '"route_kind":"corner"',
+    ).replace("Mesh Right", "Mesh Right (edited)");
     const baseline = resolveDefenseOverlayBaseline({
       historyOffenseFence: editedInChat,
       anchoredOffenseFence: OFFENSE_DIAGRAM,
       anyHistoryFence: editedInChat,
     });
     expect(baseline).toBe(editedInChat);
+  });
+
+  it("BUG REPRO (Tesla, 2026-06-30): a DIFFERENT play in history loses to the anchored play", () => {
+    // Coach is viewing "Tesla" (anchored). Earlier in the same playbook-scoped
+    // thread they built "Stick Right", which is the most-recent offense fence.
+    // The overlay must land on Tesla — the play on screen — not Stick Right.
+    const stickRight = JSON.stringify({
+      title: "Stick Right",
+      variant: "flag_5v5",
+      players: [
+        { id: "C", x: 0, y: 0, team: "O" },
+        { id: "QB", x: 0, y: -5, team: "O" },
+        { id: "Y", x: 4, y: -5, team: "O" },
+        { id: "X", x: -10, y: 0, team: "O" },
+        { id: "Z", x: 10, y: 0, team: "O" },
+      ],
+      routes: [],
+    });
+    const baseline = resolveDefenseOverlayBaseline({
+      historyOffenseFence: stickRight, // a DIFFERENT play than the anchored one
+      anchoredOffenseFence: OFFENSE_DIAGRAM, // the play on screen
+      anyHistoryFence: stickRight,
+    });
+    // Before the fix this resolved to stickRight — the wrong-play overlay.
+    expect(baseline).toBe(OFFENSE_DIAGRAM);
   });
 
   it("falls back to any history fence when neither offense source exists", () => {
@@ -122,5 +164,68 @@ describe("resolveDefenseOverlayBaseline", () => {
         anyHistoryFence: null,
       }),
     ).toBeNull();
+  });
+});
+
+describe("autoCorrectPriorFence — fabrication guard, not baseline-enforcer", () => {
+  const ANCHORED = OFFENSE_DIAGRAM; // Tesla, on screen
+  const HISTORY_DIFFERENT = JSON.stringify({
+    title: "Stick Right",
+    players: [
+      { id: "C", x: 0, y: 0, team: "O" },
+      { id: "QB", x: 0, y: -5, team: "O" },
+      { id: "Y", x: 4, y: -5, team: "O" },
+      { id: "X", x: -10, y: 0, team: "O" },
+      { id: "Z", x: 10, y: 0, team: "O" },
+    ],
+    routes: [],
+  });
+
+  it("injects the baseline when Cal omits on_play", () => {
+    const out = autoCorrectPriorFence("compose_defense", { front: "4-3", coverage: "Cover 1" }, ANCHORED, [
+      HISTORY_DIFFERENT,
+    ]);
+    expect(out.on_play).toBe(ANCHORED);
+  });
+
+  it("keeps Cal's on_play when it matches the baseline roster (the anchored play)", () => {
+    const out = autoCorrectPriorFence(
+      "compose_defense",
+      { on_play: ANCHORED, coverage: "Cover 1" },
+      ANCHORED,
+      [HISTORY_DIFFERENT],
+    );
+    expect(out.on_play).toBe(ANCHORED);
+  });
+
+  it("keeps Cal's on_play when it matches a real-but-different play (compose-then-overlay without navigating)", () => {
+    // Baseline resolved to the anchored play, but Cal legitimately targets a
+    // different real play it composed in chat. The guard must NOT clobber it.
+    const out = autoCorrectPriorFence(
+      "compose_defense",
+      { on_play: HISTORY_DIFFERENT, coverage: "Cover 1" },
+      ANCHORED, // baseline = anchored
+      [HISTORY_DIFFERENT], // but this is also a known-real fence
+    );
+    expect(out.on_play).toBe(HISTORY_DIFFERENT);
+  });
+
+  it("overwrites a fabricated on_play that matches no real fence", () => {
+    const fabricated = JSON.stringify({
+      title: "Made Up",
+      players: [
+        { id: "A", x: 0, y: 0, team: "O" },
+        { id: "B", x: 1, y: 0, team: "O" },
+        { id: "QB", x: 0, y: -5, team: "O" },
+      ],
+      routes: [],
+    });
+    const out = autoCorrectPriorFence(
+      "compose_defense",
+      { on_play: fabricated, coverage: "Cover 1" },
+      ANCHORED,
+      [HISTORY_DIFFERENT],
+    );
+    expect(out.on_play).toBe(ANCHORED);
   });
 });
