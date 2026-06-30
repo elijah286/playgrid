@@ -19,6 +19,7 @@ import {
   Trophy,
   UserPlus,
   Users,
+  UsersRound,
 } from "lucide-react";
 
 import { leagueHasPlaybooks } from "@/lib/league/sportConfig";
@@ -74,7 +75,10 @@ export function LeagueRail({
 
   const sections: Section[] = activeLeague
     ? leagueSections(activeLeague.id, activeLeague.sport, leoEnabled)
-    : [{ href: "/league", label: "Overview", icon: LayoutDashboard, exact: true }];
+    : [
+        { href: "/league", label: "Overview", icon: LayoutDashboard, exact: true },
+        { href: "/league/people", label: "People & access", icon: UsersRound, exact: true },
+      ];
 
   const isActive = (s: Section) =>
     s.exact ? pathname === s.href : pathname === s.href || pathname.startsWith(`${s.href}/`);
