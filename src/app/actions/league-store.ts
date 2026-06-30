@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { isLeagueAdmin } from "@/lib/league/access";
+import { gateLeagueCapability } from "@/lib/league/authorize";
 
 export type StoreItemRow = {
   id: string;
@@ -95,17 +95,9 @@ export async function uploadStoreImageAction(formData: FormData) {
   return { ok: true as const, url: pub.publicUrl };
 }
 
-async function gateAdmin(leagueId: string) {
-  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false as const, error: "Not signed in." };
-  if (!(await isLeagueAdmin(leagueId))) {
-    return { ok: false as const, error: "You don't administer this league." };
-  }
-  return { ok: true as const, supabase };
+// Store writes require the manage_store capability (owners always have it).
+function gateAdmin(leagueId: string) {
+  return gateLeagueCapability(leagueId, "manage_store");
 }
 
 function fields(input: StoreItemInput) {

@@ -86,6 +86,38 @@ export function scopeIncludesLeague(
   }
 }
 
+/** Rebuild an AccessScope from DB columns (shared by the actions + the resolver). */
+export function scopeFromColumns(c: {
+  scope_kind: string;
+  scope_leagues?: string[] | null;
+  scope_sport?: string | null;
+  scope_group_id?: string | null;
+}): AccessScope {
+  switch (c.scope_kind) {
+    case "leagues":
+      return { kind: "leagues", leagueIds: c.scope_leagues ?? [] };
+    case "sport":
+      return { kind: "sport", sport: c.scope_sport ?? "" };
+    case "group":
+      return { kind: "group", groupId: c.scope_group_id ?? "" };
+    default:
+      return { kind: "portfolio" };
+  }
+}
+
+/** Do any of these grants confer `capability` on this league? The pure heart of
+ *  the `can()` resolver — a grant counts when it includes the capability AND its
+ *  scope covers the league. */
+export function grantsCover(
+  grants: { capabilities: string[]; scope: AccessScope }[],
+  capability: Capability,
+  league: { id: string; sport: string; groupIds: string[] },
+): boolean {
+  return grants.some(
+    (g) => g.capabilities.includes(capability) && scopeIncludesLeague(g.scope, league),
+  );
+}
+
 export function scopeLabel(scope: AccessScope, leagueCount?: number): string {
   switch (scope.kind) {
     case "portfolio":

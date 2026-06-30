@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { isLeagueAdmin } from "@/lib/league/access";
+import { gateLeagueCapability } from "@/lib/league/authorize";
 
 export type RegistrationStatus =
   | "submitted"
@@ -55,17 +55,9 @@ function readApplicant(applicant: unknown) {
   };
 }
 
-async function gateAdmin(leagueId: string) {
-  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false as const, error: "Not signed in." };
-  if (!(await isLeagueAdmin(leagueId))) {
-    return { ok: false as const, error: "You don't administer this league." };
-  }
-  return { ok: true as const, supabase };
+// Registration review requires manage_registration (owners always have it).
+function gateAdmin(leagueId: string) {
+  return gateLeagueCapability(leagueId, "manage_registration");
 }
 
 export async function listRegistrationsAction(leagueId: string) {

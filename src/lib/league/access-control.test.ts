@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   ALL_CAPABILITIES,
   capabilitiesForRole,
+  grantsCover,
   roleForCapabilities,
   scopeIncludesLeague,
   isCapability,
@@ -64,5 +65,42 @@ describe("scopeIncludesLeague", () => {
       { kind: "group", groupId: "x" },
     ];
     for (const s of scopes) expect(typeof scopeIncludesLeague(s, league)).toBe("boolean");
+  });
+});
+
+describe("grantsCover (the can() decision)", () => {
+  const baseball = { id: "L1", sport: "baseball", groupIds: ["G-waco"] };
+  const soccer = { id: "L2", sport: "soccer", groupIds: [] };
+
+  it("portfolio grant covers the capability anywhere", () => {
+    const grants = [{ capabilities: ["manage_store"], scope: { kind: "portfolio" } as AccessScope }];
+    expect(grantsCover(grants, "manage_store", baseball)).toBe(true);
+    expect(grantsCover(grants, "manage_store", soccer)).toBe(true);
+  });
+
+  it("denies a capability the grant doesn't include", () => {
+    const grants = [{ capabilities: ["manage_store"], scope: { kind: "portfolio" } as AccessScope }];
+    expect(grantsCover(grants, "manage_rosters", baseball)).toBe(false);
+  });
+
+  it("sport scope only covers matching-sport leagues (baseball everywhere)", () => {
+    const grants = [{ capabilities: ["manage_rosters"], scope: { kind: "sport", sport: "baseball" } as AccessScope }];
+    expect(grantsCover(grants, "manage_rosters", baseball)).toBe(true);
+    expect(grantsCover(grants, "manage_rosters", soccer)).toBe(false);
+  });
+
+  it("league/group scopes gate by membership", () => {
+    expect(grantsCover([{ capabilities: ["manage_schedule"], scope: { kind: "leagues", leagueIds: ["L1"] } }], "manage_schedule", baseball)).toBe(true);
+    expect(grantsCover([{ capabilities: ["manage_schedule"], scope: { kind: "leagues", leagueIds: ["L9"] } }], "manage_schedule", baseball)).toBe(false);
+    expect(grantsCover([{ capabilities: ["manage_store"], scope: { kind: "group", groupId: "G-waco" } }], "manage_store", baseball)).toBe(true);
+  });
+
+  it("any covering grant among several is enough", () => {
+    const grants = [
+      { capabilities: ["manage_store"], scope: { kind: "leagues", leagueIds: ["L9"] } as AccessScope },
+      { capabilities: ["manage_rosters"], scope: { kind: "sport", sport: "baseball" } as AccessScope },
+    ];
+    expect(grantsCover(grants, "manage_rosters", baseball)).toBe(true);
+    expect(grantsCover(grants, "manage_store", baseball)).toBe(false);
   });
 });

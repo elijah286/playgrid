@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { isLeagueAdmin } from "@/lib/league/access";
+import { gateLeagueCapability } from "@/lib/league/authorize";
 import { ensureDefaultWorkspace } from "@/lib/data/workspace";
 
 export type LeagueTeamRow = {
@@ -28,17 +28,9 @@ async function operatorOrgId(supabase: Client, userId: string): Promise<string |
   return (data?.id as string | undefined) ?? undefined;
 }
 
-async function gateAdmin(leagueId: string) {
-  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false as const, error: "Not signed in." };
-  if (!(await isLeagueAdmin(leagueId))) {
-    return { ok: false as const, error: "You don't administer this league." };
-  }
-  return { ok: true as const, supabase, userId: user.id };
+// Team + coach writes require manage_teams (owners always have it).
+function gateAdmin(leagueId: string) {
+  return gateLeagueCapability(leagueId, "manage_teams");
 }
 
 export async function listLeagueTeamsAction(leagueId: string) {
