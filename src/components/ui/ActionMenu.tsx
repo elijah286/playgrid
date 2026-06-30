@@ -43,28 +43,67 @@ export function ActionMenu({
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const [pos, setPos] = useState<{
+    top: number;
+    right: number;
+    maxHeight: number;
+  } | null>(null);
 
   useLayoutEffect(() => {
     if (!open) {
       setPos(null);
       return;
     }
+    // Position the portaled menu in viewport coords, kept fully on-screen.
+    // Open below the trigger, but flip ABOVE when there isn't room below —
+    // the case that cropped the menu on lower rows in the native app, where
+    // the bottom nav + safe area eat vertical space. Clamp to the visual
+    // viewport and cap the height with a scroll fallback so it can never be
+    // cut off. Two passes (a rAF after mount) so we can measure the menu's
+    // real height before deciding to flip.
     function place() {
       const btn = buttonRef.current;
       if (!btn) return;
       const r = btn.getBoundingClientRect();
+      const gap = 4;
+      const margin = 8;
+      const vv = window.visualViewport;
+      const viewTop = vv?.offsetTop ?? 0;
+      const viewHeight = vv?.height ?? window.innerHeight;
+      const viewBottom = viewTop + viewHeight;
+      const menuH = popoverRef.current?.offsetHeight ?? 0;
+      const spaceBelow = viewBottom - r.bottom - gap - margin;
+      const spaceAbove = r.top - viewTop - gap - margin;
+      const openUp = menuH > spaceBelow && spaceAbove > spaceBelow;
+      const maxHeight = Math.max(
+        96,
+        Math.round(openUp ? spaceAbove : spaceBelow),
+      );
+      const top = openUp
+        ? Math.max(
+            viewTop + margin,
+            Math.round(r.top - gap - Math.min(menuH, maxHeight)),
+          )
+        : Math.round(r.bottom + gap);
       setPos({
-        top: Math.round(r.bottom + 4),
-        right: Math.round(window.innerWidth - r.right),
+        top,
+        right: Math.max(margin, Math.round(window.innerWidth - r.right)),
+        maxHeight,
       });
     }
     place();
+    // Re-place after the menu mounts so its measured height drives the flip.
+    const raf = requestAnimationFrame(place);
     window.addEventListener("scroll", place, true);
     window.addEventListener("resize", place);
+    window.visualViewport?.addEventListener("resize", place);
+    window.visualViewport?.addEventListener("scroll", place);
     return () => {
+      cancelAnimationFrame(raf);
       window.removeEventListener("scroll", place, true);
       window.removeEventListener("resize", place);
+      window.visualViewport?.removeEventListener("resize", place);
+      window.visualViewport?.removeEventListener("scroll", place);
     };
   }, [open]);
 
@@ -109,8 +148,13 @@ export function ActionMenu({
           <div
             ref={popoverRef}
             role="menu"
-            style={{ position: "fixed", top: pos.top, right: pos.right }}
-            className="z-50 min-w-[160px] overflow-hidden rounded-lg border border-border bg-surface-raised py-1 shadow-elevated"
+            style={{
+              position: "fixed",
+              top: pos.top,
+              right: pos.right,
+              maxHeight: pos.maxHeight,
+            }}
+            className="z-50 min-w-[160px] overflow-y-auto overscroll-contain rounded-lg border border-border bg-surface-raised py-1 shadow-elevated"
           >
             {items.map((item, i) => {
               const Icon = item.icon;
