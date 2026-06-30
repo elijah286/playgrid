@@ -19,12 +19,14 @@ Registration · store · divisions (birthdate-window, gender×age) · teams + co
 
 ## What needs building
 
-### Tier 1 — make it real (small; unlocks non-football leagues end-to-end except playbooks)
+**Status (2026-06-30):** Tier 1 ✅ · Tier 2 ✅ · Tier 3 🟡 — terminology shipped; brand wordmark deferred (with branding); adult-participant registration still open. Leo (the league AI) reads `list_standings` and is sport-correct for free.
+
+### Tier 1 — make it real ✅ DONE — non-football leagues work end-to-end except playbooks
 1. **Sport picker at creation.** `CreateLeagueForm` gets a sport dropdown → `createLeagueAction` → the RPC's existing `p_sport`. (Today every league silently defaults to football because there's no input.)
 2. **Gate the football-only playbook bridge by `league.sport`.** Playbook seeding is inherently football (it copies football example playbooks; the coach product is football). For `sport !== 'football'`, hide: the "Playbooks & drills" tile, the `/playbooks` page (server-side `notFound`), the "Coach view → /playbooks" link, and add a server-action guard in `league-playbooks.ts` (defense-in-depth). Clean rule: **football-only capability, hidden elsewhere** — no non-football play types are ever added.
 
-### Tier 2 — make it correct (the only real per-sport *logic*)
-3. **Per-sport standings.** Today: W-L-T + points-for/against + diff, ranked wins→diff. That's a fine *default* but wrong for several sports. Introduce a `SPORT_STANDINGS_CONFIG` keyed by sport:
+### Tier 2 — make it correct ✅ DONE (2026-06-30) — the only real per-sport *logic*
+3. ✅ **Per-sport standings.** Sport-keyed config in `standings.ts` (`sportStandingsConfig`): soccer ranks by table points (3-1-0) → goal diff; basketball/baseball/volleyball by win %; football unchanged (default). Rows carry `tablePoints` + `winPct`; `setGameScoreAction` rejects a tie for no-tie sports; `StandingsTable` renders Pts / Pct / score-noun columns. Golden tests in `standings.test.ts`. The original target:
 
    | Sport | Ranking | Ties? | Score noun | Table points |
    |---|---|---|---|---|
@@ -36,8 +38,8 @@ Registration · store · divisions (birthdate-window, gender×age) · teams + co
 
    Changes: thread `sport` into `computeStandings(teams, games, config)`; add a `tablePoints` field; switch the sort comparator on `config.rankingRule`; **reject equal scores at write time when `!allowsTies`** (basketball/baseball); make `StandingsTable` render the right columns/labels. Per-sport golden tests (the repo already has `standings.test.ts`). Volleyball alone needs a richer score model (per-set) — defer it.
 
-### Tier 3 — polish (cosmetic / data-driven)
-4. **Sport terminology resolver** (`sportTerms.ts`, keyed by sport): game↔match↔meet, score↔result, coach↔manager, event-kind labels. Fed into the games/standings/events/roster UI. No schema change.
+### Tier 3 — polish 🟡 PARTIAL
+4. ✅ **Sport terminology resolver** (`sportTerms()` in `sportConfig.ts`): game↔match↔meet, coach↔manager, score noun — with correct pluralization (match→matches). Threaded through the games surface (page + `GamesAndStandings`), the console, and the teams page (2026-06-30). Remaining: events/registration coach labels.
 5. **Brand wordmark on public + operator surfaces.** "Powered by XO Gridmaker" on the public registration page (every parent sees it) reads oddly for a soccer league. Decide: neutral wordmark, or per-league branding (`leagues.branding` jsonb already exists).
 6. **Registration applicant shape.** Currently youth-player + guardian. Adult leagues want participant-only — drive "guardian required" off the division age band (`divisionCatalog` already knows `adult`) or a league flag. Minor.
 
