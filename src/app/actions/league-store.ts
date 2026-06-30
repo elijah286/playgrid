@@ -13,6 +13,8 @@ export type StoreItemRow = {
   priceCents: number;
   required: boolean;
   active: boolean;
+  /** Size/variant options a family chooses from (e.g. ["Youth M", "Adult L"]). */
+  sizes: string[];
 };
 
 export type StoreItemInput = {
@@ -21,7 +23,30 @@ export type StoreItemInput = {
   priceCents: number;
   required?: boolean;
   active?: boolean;
+  sizes?: string[];
 };
+
+/** Clean a size list: trim, drop blanks, dedupe (case-insensitive), cap. */
+function cleanSizes(sizes: string[] | undefined): string[] {
+  if (!Array.isArray(sizes)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of sizes) {
+    const s = String(raw).trim().slice(0, 24);
+    const key = s.toLowerCase();
+    if (s && !seen.has(key)) {
+      seen.add(key);
+      out.push(s);
+    }
+    if (out.length >= 20) break;
+  }
+  return out;
+}
+
+function sizesFromOptions(options: unknown): string[] {
+  const o = (options ?? {}) as { sizes?: unknown };
+  return Array.isArray(o.sizes) ? o.sizes.map((s) => String(s)).filter(Boolean) : [];
+}
 
 async function gateAdmin(leagueId: string) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
@@ -43,6 +68,7 @@ function fields(input: StoreItemInput) {
     price_cents: Math.max(0, Math.trunc(input.priceCents || 0)),
     required: !!input.required,
     active: input.active === undefined ? true : !!input.active,
+    options: { sizes: cleanSizes(input.sizes) },
   };
 }
 
@@ -51,7 +77,7 @@ export async function listStoreItemsAction(leagueId: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("league_store_items")
-    .select("id, name, description, price_cents, required, active")
+    .select("id, name, description, price_cents, required, active, options")
     .eq("league_id", leagueId)
     .order("sort_order", { ascending: true })
     .order("name", { ascending: true });
@@ -63,6 +89,7 @@ export async function listStoreItemsAction(leagueId: string) {
     priceCents: (r.price_cents as number) ?? 0,
     required: !!r.required,
     active: !!r.active,
+    sizes: sizesFromOptions(r.options),
   }));
   return { ok: true as const, items };
 }

@@ -44,6 +44,13 @@ export function PublicRegistrationForm({
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(storeItems.filter((i) => i.required).map((i) => i.id)),
   );
+  const [variants, setVariants] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    for (const i of storeItems) {
+      if (i.required && i.sizes.length > 0) init[i.id] = i.sizes[0];
+    }
+    return init;
+  });
   const [sportDetails, setSportDetails] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -64,20 +71,33 @@ export function PublicRegistrationForm({
 
   function toggle(item: PublicStoreItem) {
     if (item.required) return;
+    const adding = !selected.has(item.id);
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(item.id)) next.delete(item.id);
       else next.add(item.id);
       return next;
     });
+    // Default a size when an item with sizes is first selected.
+    if (adding && item.sizes.length > 0) {
+      setVariants((prev) => (prev[item.id] ? prev : { ...prev, [item.id]: item.sizes[0] }));
+    }
   }
 
   function submit() {
     setError(null);
+    // One chosen size per selected item that has sizes (default to the first).
+    const chosenVariants: Record<string, string> = {};
+    for (const i of storeItems) {
+      if ((i.required || selected.has(i.id)) && i.sizes.length > 0) {
+        chosenVariants[i.id] = variants[i.id] ?? i.sizes[0];
+      }
+    }
     const payload: RegistrationSubmission = {
       ...f,
       playerDob: f.playerDob || null,
       itemIds: [...selected],
+      variants: chosenVariants,
       sportDetails,
     };
     startTransition(async () => {
@@ -190,27 +210,44 @@ export function PublicRegistrationForm({
           <h2 className="text-sm font-semibold text-foreground">Add-ons</h2>
           <ul className="mt-2 space-y-2">
             {storeItems.map((i) => (
-              <li
-                key={i.id}
-                className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface px-3 py-2.5"
-              >
-                <label className="flex items-center gap-2.5 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={i.required || selected.has(i.id)}
-                    disabled={i.required}
-                    onChange={() => toggle(i)}
-                    className="size-4"
-                  />
-                  <span>
-                    <span className="font-medium text-foreground">{i.name}</span>
-                    {i.required ? <span className="ml-2 text-xs text-muted">Required</span> : null}
-                    {i.description ? (
-                      <span className="block text-xs text-muted">{i.description}</span>
-                    ) : null}
-                  </span>
-                </label>
-                <span className="shrink-0 text-sm text-muted">{money(i.priceCents)}</span>
+              <li key={i.id} className="rounded-lg border border-border bg-surface px-3 py-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <label className="flex items-center gap-2.5 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={i.required || selected.has(i.id)}
+                      disabled={i.required}
+                      onChange={() => toggle(i)}
+                      className="size-4"
+                    />
+                    <span>
+                      <span className="font-medium text-foreground">{i.name}</span>
+                      {i.required ? <span className="ml-2 text-xs text-muted">Required</span> : null}
+                      {i.description ? (
+                        <span className="block text-xs text-muted">{i.description}</span>
+                      ) : null}
+                    </span>
+                  </label>
+                  <span className="shrink-0 text-sm text-muted">{money(i.priceCents)}</span>
+                </div>
+                {(i.required || selected.has(i.id)) && i.sizes.length > 0 ? (
+                  <div className="mt-2 flex items-center gap-2 pl-[26px]">
+                    <span className="text-xs text-muted">Size</span>
+                    <select
+                      value={variants[i.id] ?? i.sizes[0]}
+                      onChange={(e) =>
+                        setVariants((prev) => ({ ...prev, [i.id]: e.target.value }))
+                      }
+                      className="rounded-lg border border-border bg-surface px-2 py-1 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    >
+                      {i.sizes.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>

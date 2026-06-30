@@ -9,6 +9,7 @@ export type PublicStoreItem = {
   description: string | null;
   priceCents: number;
   required: boolean;
+  sizes: string[];
 };
 
 export type PublicRegistrationData = {
@@ -77,7 +78,7 @@ export async function getPublicRegistration(
 
   const { data: items } = await admin
     .from("league_store_items")
-    .select("id, name, description, price_cents, required")
+    .select("id, name, description, price_cents, required, options")
     .eq("league_id", leagueId)
     .eq("active", true)
     .order("sort_order", { ascending: true })
@@ -97,12 +98,16 @@ export async function getPublicRegistration(
     feeCents: (win?.fee_cents as number) ?? 0,
     paymentsEnabled: account.chargesEnabled && !!account.accountId,
     sportFields: sportRegistrationFields(league.sport as string),
-    storeItems: (items ?? []).map((r) => ({
-      id: r.id as string,
-      name: r.name as string,
-      description: (r.description as string | null) ?? null,
-      priceCents: (r.price_cents as number) ?? 0,
-      required: !!r.required,
-    })),
+    storeItems: (items ?? []).map((r) => {
+      const opts = (r.options ?? {}) as { sizes?: unknown };
+      return {
+        id: r.id as string,
+        name: r.name as string,
+        description: (r.description as string | null) ?? null,
+        priceCents: (r.price_cents as number) ?? 0,
+        required: !!r.required,
+        sizes: Array.isArray(opts.sizes) ? opts.sizes.map((s) => String(s)).filter(Boolean) : [],
+      };
+    }),
   };
 }

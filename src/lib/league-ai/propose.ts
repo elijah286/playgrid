@@ -60,6 +60,11 @@ export function describeProposal(
       return "Remove the player from their team (back to the approved pool).";
     case "distribute_practice_plan":
       return "Share this practice plan with every team's coach in the league.";
+    case "add_store_item": {
+      const name = s("name");
+      const price = Number(input.priceDollars) || 0;
+      return `Add "${name}" ($${price.toFixed(2)}) to the registration store.`;
+    }
     default:
       return `Run ${toolName}.`;
   }

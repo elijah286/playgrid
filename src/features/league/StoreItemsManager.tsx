@@ -12,7 +12,7 @@ import {
 
 type Msg = { kind: "error" | "success"; text: string } | null;
 
-const EMPTY = { name: "", price: "", description: "", required: false };
+const EMPTY = { name: "", price: "", description: "", required: false, sizes: "" };
 
 function money(cents: number) {
   return `$${(cents / 100).toFixed(2)}`;
@@ -43,6 +43,7 @@ export function StoreItemsManager({
       price: (it.priceCents / 100).toFixed(2),
       description: it.description ?? "",
       required: it.required,
+      sizes: it.sizes.join(", "),
     });
     setMsg(null);
   }
@@ -62,6 +63,10 @@ export function StoreItemsManager({
       description: form.description || null,
       priceCents: Math.round((Number.parseFloat(form.price || "0") || 0) * 100),
       required: form.required,
+      sizes: form.sizes
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
     };
     startTransition(async () => {
       const r = editingId
@@ -129,6 +134,20 @@ export function StoreItemsManager({
             />
           </label>
         </div>
+        <label className="mt-3 block text-sm">
+          <span className="font-medium text-foreground">
+            Sizes <span className="font-normal text-muted">(optional)</span>
+          </span>
+          <input
+            value={form.sizes}
+            onChange={(e) => setForm({ ...form, sizes: e.target.value })}
+            placeholder="e.g. Youth S, Youth M, Youth L, Adult M"
+            className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+          <span className="mt-1 block text-xs text-muted">
+            Comma-separated. Families pick one when they buy.
+          </span>
+        </label>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <button
             type="button"
@@ -192,6 +211,11 @@ export function StoreItemsManager({
                     <span className="font-medium text-foreground">{it.name}</span>
                     {it.description ? (
                       <span className="ml-2 text-xs text-muted">{it.description}</span>
+                    ) : null}
+                    {it.sizes.length > 0 ? (
+                      <span className="mt-0.5 block text-xs text-muted">
+                        Sizes: {it.sizes.join(", ")}
+                      </span>
                     ) : null}
                   </td>
                   <td className="px-4 py-3 text-muted">{money(it.priceCents)}</td>

@@ -41,6 +41,7 @@ describe("Leo read-only tool surface (v1 safety invariant)", () => {
     expect(readNames.has("list_teams")).toBe(true);
     expect(readNames.has("list_standings")).toBe(true);
     expect(readNames.has("list_curriculum_plans")).toBe(true);
+    expect(readNames.has("list_store_items")).toBe(true);
   });
 
   it("registration triage write is consequential, not a read", () => {
@@ -119,6 +120,7 @@ describe("consequential tool set + proposal previews", () => {
     expect(LEAGUE_CONSEQUENTIAL_TOOL_NAMES.has("assign_team_coach")).toBe(true);
     expect(LEAGUE_CONSEQUENTIAL_TOOL_NAMES.has("place_players_on_team")).toBe(true);
     expect(LEAGUE_CONSEQUENTIAL_TOOL_NAMES.has("unassign_player")).toBe(true);
+    expect(LEAGUE_CONSEQUENTIAL_TOOL_NAMES.has("add_store_item")).toBe(true);
     expect(LEAGUE_CONSEQUENTIAL_TOOL_NAMES.has("distribute_practice_plan")).toBe(true);
     for (const name of LEAGUE_CONSEQUENTIAL_TOOL_NAMES) {
       expect(LEAGUE_READ_TOOL_NAMES.has(name)).toBe(false);
@@ -154,5 +156,8 @@ describe("consequential tool set + proposal previews", () => {
     ).toBe("Roster 3 players onto the team.");
     expect(describeProposal("unassign_player", { registrationId: "a" })).toMatch(/remove/i);
     expect(describeProposal("distribute_practice_plan", { planId: "p1" })).toMatch(/share/i);
+    expect(describeProposal("add_store_item", { name: "Team Jersey", priceDollars: 35 })).toBe(
+      'Add "Team Jersey" ($35.00) to the registration store.',
+    );
   });
 });

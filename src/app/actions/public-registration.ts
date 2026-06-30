@@ -15,6 +15,8 @@ export type RegistrationSubmission = {
   divisionPreference: string;
   notes: string;
   itemIds: string[];
+  /** Chosen size per store-item id (for items that have sizes). */
+  variants?: Record<string, string>;
   /** Sport-specific answers, keyed by sportConfig field key. */
   sportDetails?: Record<string, string>;
 };
@@ -66,6 +68,13 @@ export async function submitPublicRegistrationAction(
   // Required items are always included; optional items only if selected.
   const selected = new Set(input.itemIds ?? []);
   const chosen = data.storeItems.filter((i) => i.required || selected.has(i.id));
+  // Validate the chosen size against the item's own sizes (default to the first).
+  const variants = input.variants ?? {};
+  const sizeFor = (item: (typeof chosen)[number]): string | null => {
+    if (!item.sizes || item.sizes.length === 0) return null;
+    const v = variants[item.id];
+    return v && item.sizes.includes(v) ? v : item.sizes[0];
+  };
 
   const admin = createServiceRoleClient();
   // Sport-specific answers: keep only keys valid for this league's sport.
@@ -138,13 +147,16 @@ export async function submitPublicRegistrationAction(
   // error is surfaced — purchases must not silently diverge from the charge.
   await admin.from("league_registration_purchases").delete().eq("registration_id", registrationId);
   if (chosen.length > 0) {
-    const rows = chosen.map((i) => ({
-      registration_id: registrationId,
-      store_item_id: i.id,
-      item_name: i.name,
-      unit_price_cents: i.priceCents,
-      quantity: 1,
-    }));
+    const rows = chosen.map((i) => {
+      const size = sizeFor(i);
+      return {
+        registration_id: registrationId,
+        store_item_id: i.id,
+        item_name: size ? `${i.name} — ${size}` : i.name,
+        unit_price_cents: i.priceCents,
+        quantity: 1,
+      };
+    });
     const { error: purchaseErr } = await admin
       .from("league_registration_purchases")
       .insert(rows);
