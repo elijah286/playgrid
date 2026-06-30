@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { hasLeagueAccess } from "@/lib/league/access";
-import { getMyLeagues } from "@/lib/league/console";
+import { ownOrgLeagues } from "@/lib/league/console";
 import {
   capabilitiesForRole,
   isCapability,
@@ -91,7 +91,9 @@ export async function listAccessGrantsAction(): Promise<
   if (!g.ok) return g;
   const admin = createServiceRoleClient();
 
-  const myLeagues = await getMyLeagues();
+  // Always your OWN org's leagues — you grant access to leagues you own, never
+  // to a delegated org's leagues, so this ignores the active-org selection.
+  const myLeagues = await ownOrgLeagues();
   const leagueIds = myLeagues.map((l) => l.id);
 
   let leagues: AccessLeague[] = [];

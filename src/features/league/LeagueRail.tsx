@@ -6,12 +6,23 @@ import { ChevronsUpDown, LayoutDashboard, UsersRound } from "lucide-react";
 
 import { useLeagueNav, type RailLeague } from "./useLeagueNav";
 import { LeagueSwitcherPalette } from "./LeagueSwitcherPalette";
+import { OrgSwitcher, type SwitcherOrg } from "./OrgSwitcher";
 
 export type { RailLeague };
 
 /** Desktop app-wide rail for the operator area (md+). The mobile counterpart is
  *  LeagueMobileNav; both share useLeagueNav. */
-export function LeagueRail({ leagues, leoEnabled }: { leagues: RailLeague[]; leoEnabled: boolean }) {
+export function LeagueRail({
+  leagues,
+  leoEnabled,
+  orgs,
+  activeOrgId,
+}: {
+  leagues: RailLeague[];
+  leoEnabled: boolean;
+  orgs: SwitcherOrg[];
+  activeOrgId: string | null;
+}) {
   const { pathname, activeLeague, activeLeagueId, sections, hrefFor, isActive, switchLeague } =
     useLeagueNav(leagues, leoEnabled);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -35,6 +46,12 @@ export function LeagueRail({ leagues, leoEnabled }: { leagues: RailLeague[]; leo
 
   return (
     <aside className="sticky top-14 hidden h-[calc(100vh-3.5rem)] w-60 shrink-0 flex-col border-r border-border bg-surface md:flex">
+      {orgs.length > 1 ? (
+        <div className="border-b border-border p-2">
+          <OrgSwitcher orgs={orgs} activeOrgId={activeOrgId} />
+        </div>
+      ) : null}
+
       <div className="border-b border-border p-2">
         <Link href="/league" className={linkCls(portfolioActive)}>
           <LayoutDashboard className="size-4 shrink-0" />

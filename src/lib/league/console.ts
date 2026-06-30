@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cookies } from "next/headers";
+
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { scopeFromColumns, scopeIncludesLeague } from "./access-control";
@@ -66,77 +68,220 @@ export function summarizeRegistrations(
 }
 
 /**
- * League ids the user can access — direct memberships UNION the leagues their
- * active access grants scope to (delegated access). Returns the id set + the
- * membership roles (grant-only leagues have no role). Uses service-role because
- * a delegate isn't a league_member, so their own RLS can't read those leagues.
+ * ORGANIZATION CONTEXT
+ *
+ * An "organization" is a portfolio root, identified by its owner (the user who
+ * created the leagues — `leagues.created_by`). A user can act in:
+ *   - their OWN org (the leagues they created), and/or
+ *   - any DELEGATED org they hold an active access grant in (a different owner).
+ *
+ * Everything portfolio-level (the dashboard rollup, the rail's league list) is
+ * scoped to exactly ONE active org at a time, so figures from two different
+ * organizations never blend — most importantly revenue. The active org is
+ * cookie-driven; the org switcher sets it. Default = own org, else the first
+ * delegated org. This is the same multi-tenancy metaphor as Slack/Stripe/GitHub.
+ */
+export type LeagueOrg = { ownerId: string; label: string; isOwn: boolean };
+
+/** Cookie holding the active org's owner id. Read here; written by the switcher
+ *  action (`setActiveOrgAction`). */
+export const ACTIVE_ORG_COOKIE = "league_active_org";
+
+/** Pure: choose the active org from the cookie's wanted id, falling back to the
+ *  user's own org, then the first available. Separated out so it's unit-tested. */
+export function pickActiveOrg(orgs: LeagueOrg[], wanted: string | null): LeagueOrg | null {
+  if (orgs.length === 0) return null;
+  return (
+    (wanted ? orgs.find((o) => o.ownerId === wanted) : undefined) ??
+    orgs.find((o) => o.isOwn) ??
+    orgs[0]
+  );
+}
+
+/**
+ * Every organization the user can act in: their own (only if they actually own
+ * leagues) plus one entry per distinct grantor of an active access grant.
+ */
+export async function getAccessibleOrgs(
+  userId: string,
+  email: string | null,
+): Promise<LeagueOrg[]> {
+  const admin = createServiceRoleClient();
+  const orgs: LeagueOrg[] = [];
+
+  // Own org — present only if the user has created at least one league.
+  const { data: own } = await admin
+    .from("leagues")
+    .select("id")
+    .eq("created_by", userId)
+    .limit(1);
+  if ((own?.length ?? 0) > 0) {
+    const { data: org } = await admin
+      .from("organizations")
+      .select("name")
+      .eq("owner_id", userId)
+      .maybeSingle();
+    orgs.push({ ownerId: userId, label: (org?.name as string) || "My organization", isOwn: true });
+  }
+
+  // Delegated orgs — one per distinct grantor (owner) of an active grant.
+  const e = email?.trim().toLowerCase();
+  if (e) {
+    const { data: grants } = await admin
+      .from("league_access_grants")
+      .select("owner_id")
+      .eq("member_email", e)
+      .eq("status", "active");
+    const grantorIds = [
+      ...new Set((grants ?? []).map((g) => g.owner_id as string)),
+    ].filter((id) => id !== userId);
+    if (grantorIds.length > 0) {
+      const [{ data: gOrgs }, { data: profiles }] = await Promise.all([
+        admin.from("organizations").select("owner_id, name").in("owner_id", grantorIds),
+        admin.from("profiles").select("id, display_name").in("id", grantorIds),
+      ]);
+      const orgName = new Map((gOrgs ?? []).map((o) => [o.owner_id as string, o.name as string]));
+      const profName = new Map(
+        (profiles ?? []).map((p) => [p.id as string, p.display_name as string | null]),
+      );
+      for (const gid of grantorIds) {
+        const nm = profName.get(gid);
+        const on = orgName.get(gid);
+        const label = nm
+          ? `${nm}'s organization`
+          : on && on !== "My organization"
+            ? on
+            : "Delegated organization";
+        orgs.push({ ownerId: gid, label, isOwn: false });
+      }
+    }
+  }
+
+  return orgs;
+}
+
+/** Resolve the active org from the cookie (+ defaults), alongside the full list. */
+export async function resolveActiveOrg(
+  userId: string,
+  email: string | null,
+): Promise<{ activeOrgId: string | null; orgs: LeagueOrg[] }> {
+  const orgs = await getAccessibleOrgs(userId, email);
+  const cookieStore = await cookies();
+  const wanted = cookieStore.get(ACTIVE_ORG_COOKIE)?.value ?? null;
+  const active = pickActiveOrg(orgs, wanted);
+  return { activeOrgId: active?.ownerId ?? null, orgs };
+}
+
+/**
+ * League ids the user can access WITHIN one organization. For the user's own org
+ * that's every league they created; for a delegated org it's the leagues that
+ * owner's leagues which the user's grants from that owner scope to. Service-role
+ * because a delegate isn't a league_member and can't RLS-read those leagues.
+ */
+export async function accessibleLeaguesInOrg(
+  userId: string,
+  email: string | null,
+  orgOwnerId: string | null,
+): Promise<{ leagueIds: string[]; rolesByLeague: Map<string, string[]> }> {
+  const rolesByLeague = new Map<string, string[]>();
+  if (!orgOwnerId) return { leagueIds: [], rolesByLeague };
+
+  const admin = createServiceRoleClient();
+  const { data: orgLeagues } = await admin
+    .from("leagues")
+    .select("id, sport")
+    .eq("created_by", orgOwnerId);
+  if (!orgLeagues || orgLeagues.length === 0) return { leagueIds: [], rolesByLeague };
+
+  // Own org: full access to every league you created (roles from memberships).
+  if (orgOwnerId === userId) {
+    const ids = orgLeagues.map((l) => l.id as string);
+    const { data: members } = await admin
+      .from("league_members")
+      .select("league_id, role")
+      .eq("user_id", userId)
+      .in("league_id", ids);
+    for (const m of members ?? []) {
+      const id = m.league_id as string;
+      rolesByLeague.set(id, [...(rolesByLeague.get(id) ?? []), m.role as string]);
+    }
+    return { leagueIds: ids, rolesByLeague };
+  }
+
+  // Delegated org: only the leagues this user's grants from this owner cover.
+  const e = email?.trim().toLowerCase();
+  if (!e) return { leagueIds: [], rolesByLeague };
+  const { data: grants } = await admin
+    .from("league_access_grants")
+    .select("scope_kind, scope_leagues, scope_sport, scope_group_id")
+    .eq("member_email", e)
+    .eq("owner_id", orgOwnerId)
+    .eq("status", "active");
+  if (!grants || grants.length === 0) return { leagueIds: [], rolesByLeague };
+
+  const lgIds = orgLeagues.map((l) => l.id as string);
+  const groupsByLeague = new Map<string, string[]>();
+  const { data: gms } = await admin
+    .from("league_group_members")
+    .select("league_id, group_id")
+    .in("league_id", lgIds);
+  for (const gm of gms ?? []) {
+    const a = groupsByLeague.get(gm.league_id as string) ?? [];
+    a.push(gm.group_id as string);
+    groupsByLeague.set(gm.league_id as string, a);
+  }
+
+  const ids: string[] = [];
+  for (const l of orgLeagues) {
+    const lg = {
+      id: l.id as string,
+      sport: l.sport as string,
+      groupIds: groupsByLeague.get(l.id as string) ?? [],
+    };
+    if (
+      grants.some((g) =>
+        scopeIncludesLeague(scopeFromColumns(g as Parameters<typeof scopeFromColumns>[0]), lg),
+      )
+    ) {
+      ids.push(l.id as string);
+    }
+  }
+  return { leagueIds: ids, rolesByLeague };
+}
+
+/**
+ * League ids the user can access in the ACTIVE org (cookie-resolved). This is the
+ * portfolio-scoped set every rollup uses, so two orgs' figures never blend.
  */
 export async function accessibleLeagues(
   userId: string,
   email: string | null,
 ): Promise<{ leagueIds: string[]; rolesByLeague: Map<string, string[]> }> {
-  const admin = createServiceRoleClient();
-  const rolesByLeague = new Map<string, string[]>();
-  const ids = new Set<string>();
-
-  const { data: members } = await admin
-    .from("league_members")
-    .select("league_id, role")
-    .eq("user_id", userId);
-  for (const m of members ?? []) {
-    const id = m.league_id as string;
-    ids.add(id);
-    rolesByLeague.set(id, [...(rolesByLeague.get(id) ?? []), m.role as string]);
-  }
-
-  const e = email?.trim().toLowerCase();
-  if (e) {
-    const { data: grants } = await admin
-      .from("league_access_grants")
-      .select("owner_id, scope_kind, scope_leagues, scope_sport, scope_group_id")
-      .eq("member_email", e)
-      .eq("status", "active");
-    if (grants && grants.length > 0) {
-      const ownerIds = [...new Set(grants.map((g) => g.owner_id as string))];
-      const { data: ownerLeagues } = await admin
-        .from("leagues")
-        .select("id, sport, created_by")
-        .in("created_by", ownerIds);
-      const lgIds = (ownerLeagues ?? []).map((l) => l.id as string);
-      const groupsByLeague = new Map<string, string[]>();
-      if (lgIds.length > 0) {
-        const { data: gms } = await admin
-          .from("league_group_members")
-          .select("league_id, group_id")
-          .in("league_id", lgIds);
-        for (const gm of gms ?? []) {
-          const a = groupsByLeague.get(gm.league_id as string) ?? [];
-          a.push(gm.group_id as string);
-          groupsByLeague.set(gm.league_id as string, a);
-        }
-      }
-      for (const g of grants) {
-        const scope = scopeFromColumns(g as Parameters<typeof scopeFromColumns>[0]);
-        for (const l of ownerLeagues ?? []) {
-          if ((l.created_by as string) !== (g.owner_id as string)) continue;
-          if (
-            scopeIncludesLeague(scope, {
-              id: l.id as string,
-              sport: l.sport as string,
-              groupIds: groupsByLeague.get(l.id as string) ?? [],
-            })
-          ) {
-            ids.add(l.id as string);
-          }
-        }
-      }
-    }
-  }
-
-  return { leagueIds: [...ids], rolesByLeague };
+  const { activeOrgId } = await resolveActiveOrg(userId, email);
+  return accessibleLeaguesInOrg(userId, email, activeOrgId);
 }
 
-/** Leagues the current user can access (memberships + grants), with their roles. */
+/** Hydrate a set of league ids into list items (service-role; delegate-safe). */
+async function hydrateLeagues(
+  leagueIds: string[],
+  rolesByLeague: Map<string, string[]>,
+): Promise<LeagueListItem[]> {
+  if (leagueIds.length === 0) return [];
+  const admin = createServiceRoleClient();
+  const { data: leagues } = await admin
+    .from("leagues")
+    .select("id, name, sport, settings")
+    .in("id", leagueIds);
+  return (leagues ?? []).map((l) => ({
+    id: l.id as string,
+    name: l.name as string,
+    sport: l.sport as string,
+    location: ((l.settings ?? {}) as { location?: string }).location ?? null,
+    roles: rolesByLeague.get(l.id as string) ?? [],
+  }));
+}
+
+/** Leagues the current user can access in the ACTIVE org, with their roles. */
 export async function getMyLeagues(): Promise<LeagueListItem[]> {
   const supabase = await createClient();
   const {
@@ -145,20 +290,58 @@ export async function getMyLeagues(): Promise<LeagueListItem[]> {
   if (!user) return [];
 
   const { leagueIds, rolesByLeague } = await accessibleLeagues(user.id, user.email ?? null);
-  if (leagueIds.length === 0) return [];
+  return hydrateLeagues(leagueIds, rolesByLeague);
+}
+
+/**
+ * One-shot nav payload for the league layout: the org list (for the switcher),
+ * the active org, and the active org's leagues (for the rail). Resolves the
+ * active org once and reuses it, so the layout doesn't pay for it twice.
+ */
+export async function getLeagueNavData(): Promise<{
+  orgs: LeagueOrg[];
+  activeOrgId: string | null;
+  leagues: LeagueListItem[];
+}> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { orgs: [], activeOrgId: null, leagues: [] };
+
+  const { activeOrgId, orgs } = await resolveActiveOrg(user.id, user.email ?? null);
+  const { leagueIds, rolesByLeague } = await accessibleLeaguesInOrg(
+    user.id,
+    user.email ?? null,
+    activeOrgId,
+  );
+  const leagues = await hydrateLeagues(leagueIds, rolesByLeague);
+  return { orgs, activeOrgId, leagues };
+}
+
+/**
+ * Leagues in the user's OWN organization (those they created), regardless of the
+ * active-org selection. The People & access page uses this: you grant access to
+ * the leagues you own, never to a delegated org's leagues.
+ */
+export async function ownOrgLeagues(): Promise<LeagueListItem[]> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
 
   const admin = createServiceRoleClient();
   const { data: leagues } = await admin
     .from("leagues")
     .select("id, name, sport, settings")
-    .in("id", leagueIds);
-
+    .eq("created_by", user.id);
   return (leagues ?? []).map((l) => ({
     id: l.id as string,
     name: l.name as string,
     sport: l.sport as string,
     location: ((l.settings ?? {}) as { location?: string }).location ?? null,
-    roles: rolesByLeague.get(l.id as string) ?? [],
+    roles: ["operator"],
   }));
 }
 
@@ -327,8 +510,9 @@ export function buildPortfolioSummary(input: PortfolioInput, nowMs: number): Por
 }
 
 /**
- * Portfolio rollup across every league the operator belongs to. Bounded by
- * design: 4 grouped fetches total (leagues + teams + registrations + windows),
+ * Portfolio rollup across the ACTIVE organization's leagues (cookie-resolved via
+ * accessibleLeagues), so two orgs' figures — revenue especially — never blend.
+ * Bounded by design: 4 grouped fetches total (leagues + teams + registrations + windows),
  * aggregated in memory — cost scales with the operator's data, not the league
  * count, so 5 leagues and 500 cost the same shape. (If one operator ever holds
  * enough leagues that loading raw registration rows is too heavy, push the
@@ -341,9 +525,9 @@ export async function getPortfolioSummary(): Promise<PortfolioSummary> {
   } = await supabase.auth.getUser();
   if (!user) return { leagues: [], totals: emptyTotals() };
 
-  // Accessible leagues = memberships + grant-scoped. Service-role for the data
-  // fetches because grant-only (delegated) leagues aren't readable under the
-  // delegate's own RLS — the id set from accessibleLeagues() IS the authority.
+  // Accessible leagues in the ACTIVE org. Service-role for the data fetches
+  // because grant-only (delegated) leagues aren't readable under the delegate's
+  // own RLS — the id set from accessibleLeagues() IS the authority.
   const { leagueIds: ids } = await accessibleLeagues(user.id, user.email ?? null);
   if (ids.length === 0) return { leagues: [], totals: emptyTotals() };
 

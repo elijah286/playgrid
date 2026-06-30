@@ -3,8 +3,14 @@ import { describe, it, expect, vi } from "vitest";
 // console.ts is server-only; vitest stubs `server-only`. We only exercise the
 // pure aggregator here — the Supabase fetches are integration-tested manually.
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
+vi.mock("next/headers", () => ({ cookies: vi.fn() }));
 
-import { summarizeRegistrations, buildPortfolioSummary } from "./console";
+import {
+  summarizeRegistrations,
+  buildPortfolioSummary,
+  pickActiveOrg,
+  type LeagueOrg,
+} from "./console";
 import type { RegistrationStatus } from "./registration";
 
 const rows = (...statuses: RegistrationStatus[]) => statuses.map((status) => ({ status }));
@@ -107,5 +113,27 @@ describe("buildPortfolioSummary", () => {
 
   it("sorts leagues by registrations desc", () => {
     expect(s.leagues.map((l) => l.id)).toEqual(["C", "A", "B"]);
+  });
+});
+
+describe("pickActiveOrg (organization context)", () => {
+  const own: LeagueOrg = { ownerId: "me", label: "My organization", isOwn: true };
+  const delegated: LeagueOrg = { ownerId: "buddy", label: "Buddy's organization", isOwn: false };
+
+  it("returns null when there are no orgs", () => {
+    expect(pickActiveOrg([], "anything")).toBeNull();
+  });
+
+  it("honors a valid wanted (cookie) org", () => {
+    expect(pickActiveOrg([own, delegated], "buddy")?.ownerId).toBe("buddy");
+  });
+
+  it("falls back to the OWN org when the wanted id is unknown", () => {
+    expect(pickActiveOrg([own, delegated], "ghost")?.ownerId).toBe("me");
+    expect(pickActiveOrg([own, delegated], null)?.ownerId).toBe("me");
+  });
+
+  it("falls back to the first org when there is no own org (pure delegate)", () => {
+    expect(pickActiveOrg([delegated], null)?.ownerId).toBe("buddy");
   });
 });

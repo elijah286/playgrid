@@ -15,6 +15,7 @@ import {
 
 import { useLeagueNav, type LeagueSection, type RailLeague } from "./useLeagueNav";
 import { LeagueSwitcherPalette } from "./LeagueSwitcherPalette";
+import { OrgSwitcher, type SwitcherOrg } from "./OrgSwitcher";
 
 // The four primary sections that live in the bottom bar; everything else is in
 // the "More" sheet. Mirrors the iOS tab-bar-plus-More metaphor — scales to any
@@ -33,7 +34,17 @@ const tabCls = (active: boolean) =>
 
 /** Mobile (<md) bottom bar for the operator area — replaces the coach bottom nav
  *  on /league (HomeBottomNav bails there via isOwnBottomBarRoute). */
-export function LeagueMobileNav({ leagues, leoEnabled }: { leagues: RailLeague[]; leoEnabled: boolean }) {
+export function LeagueMobileNav({
+  leagues,
+  leoEnabled,
+  orgs,
+  activeOrgId,
+}: {
+  leagues: RailLeague[];
+  leoEnabled: boolean;
+  orgs: SwitcherOrg[];
+  activeOrgId: string | null;
+}) {
   const { pathname, activeLeague, activeLeagueId, sections, hrefFor, isActive, switchLeague } =
     useLeagueNav(leagues, leoEnabled);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -88,6 +99,8 @@ export function LeagueMobileNav({ leagues, leoEnabled }: { leagues: RailLeague[]
           sections={sections}
           hrefFor={hrefFor}
           isActive={isActive}
+          orgs={orgs}
+          activeOrgId={activeOrgId}
           onClose={() => setSheetOpen(false)}
           onSwitch={() => {
             setSheetOpen(false);
@@ -115,6 +128,8 @@ function MoreSheet({
   sections,
   hrefFor,
   isActive,
+  orgs,
+  activeOrgId,
   onClose,
   onSwitch,
 }: {
@@ -122,6 +137,8 @@ function MoreSheet({
   sections: LeagueSection[];
   hrefFor: (s: LeagueSection) => string;
   isActive: (s: LeagueSection) => boolean;
+  orgs: SwitcherOrg[];
+  activeOrgId: string | null;
   onClose: () => void;
   onSwitch: () => void;
 }) {
@@ -131,6 +148,16 @@ function MoreSheet({
       <div
         className="absolute inset-x-0 bottom-0 max-h-[80vh] overflow-y-auto rounded-t-2xl border-t border-border bg-surface-raised pb-[env(safe-area-inset-bottom,0px)]"
       >
+        {/* org switcher (only when the user belongs to more than one org) */}
+        {orgs.length > 1 ? (
+          <div className="border-b border-border p-3">
+            <div className="px-1 pb-1.5 text-[11px] uppercase tracking-wide text-muted">
+              Organization
+            </div>
+            <OrgSwitcher orgs={orgs} activeOrgId={activeOrgId} />
+          </div>
+        ) : null}
+
         {/* league switcher */}
         <div className="flex items-center gap-2 border-b border-border p-3">
           <div className="min-w-0 flex-1">

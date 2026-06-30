@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { hasLeagueAccess, leagueOpsEnabled, leagueAiEnabled } from "@/lib/league/access";
-import { getMyLeagues } from "@/lib/league/console";
+import { getLeagueNavData } from "@/lib/league/console";
 import { LeagueRail } from "@/features/league/LeagueRail";
 import { LeagueMobileNav } from "@/features/league/LeagueMobileNav";
 
@@ -34,8 +34,8 @@ export default async function LeagueLayout({
 
   if (!(await hasLeagueAccess())) notFound();
 
-  const leagues = await getMyLeagues();
-  // No leagues yet → the first-run prompt renders clean, no rail.
+  const { leagues, orgs, activeOrgId } = await getLeagueNavData();
+  // No leagues in the active org → the first-run prompt renders clean, no rail.
   if (leagues.length === 0) return <div className="min-h-full">{children}</div>;
 
   const railLeagues = leagues
@@ -45,10 +45,10 @@ export default async function LeagueLayout({
 
   return (
     <div className="md:flex">
-      <LeagueRail leagues={railLeagues} leoEnabled={leoOn} />
+      <LeagueRail leagues={railLeagues} leoEnabled={leoOn} orgs={orgs} activeOrgId={activeOrgId} />
       {/* pb on mobile clears the fixed league bottom bar */}
       <div className="min-w-0 flex-1 pb-16 md:pb-0">{children}</div>
-      <LeagueMobileNav leagues={railLeagues} leoEnabled={leoOn} />
+      <LeagueMobileNav leagues={railLeagues} leoEnabled={leoOn} orgs={orgs} activeOrgId={activeOrgId} />
     </div>
   );
 }
