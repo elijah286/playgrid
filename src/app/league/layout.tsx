@@ -3,7 +3,9 @@ import { notFound, redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { hasLeagueAccess, leagueOpsEnabled } from "@/lib/league/access";
+import { hasLeagueAccess, leagueOpsEnabled, leagueAiEnabled } from "@/lib/league/access";
+import { getMyLeagues } from "@/lib/league/console";
+import { LeagueRail } from "@/features/league/LeagueRail";
 
 // Always evaluate the gate per-request; never statically render the surface.
 export const dynamic = "force-dynamic";
@@ -31,5 +33,19 @@ export default async function LeagueLayout({
 
   if (!(await hasLeagueAccess())) notFound();
 
-  return <div className="min-h-full">{children}</div>;
+  const leagues = await getMyLeagues();
+  // No leagues yet → the first-run prompt renders clean, no rail.
+  if (leagues.length === 0) return <div className="min-h-full">{children}</div>;
+
+  const railLeagues = leagues
+    .map((l) => ({ id: l.id, name: l.name, sport: l.sport }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  return (
+    <div className="md:flex">
+      <LeagueRail leagues={railLeagues} leoEnabled={leagueAiEnabled()} />
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
+  );
 }
+
