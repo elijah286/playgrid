@@ -220,6 +220,14 @@ export function PublicRegistrationForm({
                       onChange={() => toggle(i)}
                       className="size-4"
                     />
+                    {i.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={i.imageUrl}
+                        alt=""
+                        className="size-10 shrink-0 rounded border border-border object-cover"
+                      />
+                    ) : null}
                     <span>
                       <span className="font-medium text-foreground">{i.name}</span>
                       {i.required ? <span className="ml-2 text-xs text-muted">Required</span> : null}

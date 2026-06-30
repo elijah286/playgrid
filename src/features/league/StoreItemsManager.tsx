@@ -7,12 +7,20 @@ import {
   deleteStoreItemAction,
   listStoreItemsAction,
   updateStoreItemAction,
+  uploadStoreImageAction,
   type StoreItemRow,
 } from "@/app/actions/league-store";
 
 type Msg = { kind: "error" | "success"; text: string } | null;
 
-const EMPTY = { name: "", price: "", description: "", required: false, sizes: "" };
+const EMPTY = {
+  name: "",
+  price: "",
+  description: "",
+  required: false,
+  sizes: "",
+  imageUrl: null as string | null,
+};
 
 function money(cents: number) {
   return `$${(cents / 100).toFixed(2)}`;
@@ -29,7 +37,20 @@ export function StoreItemsManager({
   const [form, setForm] = useState(EMPTY);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [msg, setMsg] = useState<Msg>(null);
+  const [uploading, setUploading] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  async function handleUpload(file: File | null) {
+    if (!file) return;
+    setMsg(null);
+    setUploading(true);
+    const fd = new FormData();
+    fd.set("file", file);
+    const r = await uploadStoreImageAction(fd);
+    setUploading(false);
+    if (!r.ok) setMsg({ kind: "error", text: r.error });
+    else setForm((prev) => ({ ...prev, imageUrl: r.url }));
+  }
 
   function reset() {
     setForm(EMPTY);
@@ -44,6 +65,7 @@ export function StoreItemsManager({
       description: it.description ?? "",
       required: it.required,
       sizes: it.sizes.join(", "),
+      imageUrl: it.imageUrl,
     });
     setMsg(null);
   }
@@ -67,6 +89,7 @@ export function StoreItemsManager({
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean),
+      imageUrl: form.imageUrl,
     };
     startTransition(async () => {
       const r = editingId
@@ -148,6 +171,44 @@ export function StoreItemsManager({
             Comma-separated. Families pick one when they buy.
           </span>
         </label>
+        <div className="mt-3">
+          <span className="block text-sm font-medium text-foreground">
+            Photo <span className="font-normal text-muted">(optional)</span>
+          </span>
+          <div className="mt-1 flex items-center gap-3">
+            {form.imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={form.imageUrl}
+                alt=""
+                className="size-14 rounded-lg border border-border object-cover"
+              />
+            ) : (
+              <div className="flex size-14 items-center justify-center rounded-lg border border-dashed border-border text-[10px] text-muted">
+                No photo
+              </div>
+            )}
+            <label className="cursor-pointer rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-foreground/5">
+              {uploading ? "Uploading…" : form.imageUrl ? "Replace" : "Upload"}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                className="hidden"
+                disabled={uploading}
+                onChange={(e) => handleUpload(e.target.files?.[0] ?? null)}
+              />
+            </label>
+            {form.imageUrl ? (
+              <button
+                type="button"
+                onClick={() => setForm((p) => ({ ...p, imageUrl: null }))}
+                className="text-xs text-muted hover:text-foreground hover:underline"
+              >
+                Remove
+              </button>
+            ) : null}
+          </div>
+        </div>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <button
             type="button"
@@ -208,15 +269,27 @@ export function StoreItemsManager({
               items.map((it) => (
                 <tr key={it.id}>
                   <td className="px-4 py-3">
-                    <span className="font-medium text-foreground">{it.name}</span>
-                    {it.description ? (
-                      <span className="ml-2 text-xs text-muted">{it.description}</span>
-                    ) : null}
-                    {it.sizes.length > 0 ? (
-                      <span className="mt-0.5 block text-xs text-muted">
-                        Sizes: {it.sizes.join(", ")}
-                      </span>
-                    ) : null}
+                    <div className="flex items-center gap-3">
+                      {it.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={it.imageUrl}
+                          alt=""
+                          className="size-9 shrink-0 rounded border border-border object-cover"
+                        />
+                      ) : null}
+                      <div>
+                        <span className="font-medium text-foreground">{it.name}</span>
+                        {it.description ? (
+                          <span className="ml-2 text-xs text-muted">{it.description}</span>
+                        ) : null}
+                        {it.sizes.length > 0 ? (
+                          <span className="mt-0.5 block text-xs text-muted">
+                            Sizes: {it.sizes.join(", ")}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-muted">{money(it.priceCents)}</td>
                   <td className="px-4 py-3 text-muted">{it.required ? "Required" : "Optional"}</td>

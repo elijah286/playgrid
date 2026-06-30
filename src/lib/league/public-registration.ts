@@ -10,6 +10,7 @@ export type PublicStoreItem = {
   priceCents: number;
   required: boolean;
   sizes: string[];
+  imageUrl: string | null;
 };
 
 export type PublicRegistrationData = {
@@ -99,7 +100,7 @@ export async function getPublicRegistration(
     paymentsEnabled: account.chargesEnabled && !!account.accountId,
     sportFields: sportRegistrationFields(league.sport as string),
     storeItems: (items ?? []).map((r) => {
-      const opts = (r.options ?? {}) as { sizes?: unknown };
+      const opts = (r.options ?? {}) as { sizes?: unknown; imageUrl?: unknown };
       return {
         id: r.id as string,
         name: r.name as string,
@@ -107,6 +108,7 @@ export async function getPublicRegistration(
         priceCents: (r.price_cents as number) ?? 0,
         required: !!r.required,
         sizes: Array.isArray(opts.sizes) ? opts.sizes.map((s) => String(s)).filter(Boolean) : [],
+        imageUrl: typeof opts.imageUrl === "string" && opts.imageUrl ? opts.imageUrl : null,
       };
     }),
   };

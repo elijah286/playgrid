@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { isLeagueAdmin } from "@/lib/league/access";
 
@@ -15,6 +16,8 @@ export type StoreItemRow = {
   active: boolean;
   /** Size/variant options a family chooses from (e.g. ["Youth M", "Adult L"]). */
   sizes: string[];
+  /** Product photo URL, or null. Stored in options.imageUrl (no schema change). */
+  imageUrl: string | null;
 };
 
 export type StoreItemInput = {
@@ -24,6 +27,7 @@ export type StoreItemInput = {
   required?: boolean;
   active?: boolean;
   sizes?: string[];
+  imageUrl?: string | null;
 };
 
 /** Clean a size list: trim, drop blanks, dedupe (case-insensitive), cap. */
@@ -48,6 +52,49 @@ function sizesFromOptions(options: unknown): string[] {
   return Array.isArray(o.sizes) ? o.sizes.map((s) => String(s)).filter(Boolean) : [];
 }
 
+function imageUrlFromOptions(options: unknown): string | null {
+  const o = (options ?? {}) as { imageUrl?: unknown };
+  return typeof o.imageUrl === "string" && o.imageUrl ? o.imageUrl : null;
+}
+
+// Reuse the existing public image bucket (avoids a new bucket migration); store
+// images are namespaced under a league-store/ prefix.
+const STORE_IMAGE_BUCKET = "playbook-logos";
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024; // 4 MB
+const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+
+/** Upload a product photo to the public image bucket; returns its public URL.
+ *  Signed-in gate only — the URL is harmless until attached to an item (which is
+ *  league-admin-gated by create/updateStoreItemAction). */
+export async function uploadStoreImageAction(formData: FormData) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const file = formData.get("file");
+  if (!(file instanceof File)) return { ok: false as const, error: "No file provided." };
+  if (file.size === 0) return { ok: false as const, error: "File is empty." };
+  if (file.size > MAX_IMAGE_BYTES) return { ok: false as const, error: "Image must be 4 MB or smaller." };
+  if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+    return { ok: false as const, error: "Unsupported image type. Use PNG, JPG, WebP, or GIF." };
+  }
+
+  const ext = (file.name.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const key = `league-store/${user.id}/${crypto.randomUUID()}.${ext || "bin"}`;
+
+  const admin = createServiceRoleClient();
+  const { error: upErr } = await admin.storage
+    .from(STORE_IMAGE_BUCKET)
+    .upload(key, file, { contentType: file.type, upsert: false, cacheControl: "31536000" });
+  if (upErr) return { ok: false as const, error: upErr.message };
+
+  const { data: pub } = admin.storage.from(STORE_IMAGE_BUCKET).getPublicUrl(key);
+  return { ok: true as const, url: pub.publicUrl };
+}
+
 async function gateAdmin(leagueId: string) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
   const supabase = await createClient();
@@ -68,7 +115,7 @@ function fields(input: StoreItemInput) {
     price_cents: Math.max(0, Math.trunc(input.priceCents || 0)),
     required: !!input.required,
     active: input.active === undefined ? true : !!input.active,
-    options: { sizes: cleanSizes(input.sizes) },
+    options: { sizes: cleanSizes(input.sizes), imageUrl: input.imageUrl?.trim() || null },
   };
 }
 
@@ -90,6 +137,7 @@ export async function listStoreItemsAction(leagueId: string) {
     required: !!r.required,
     active: !!r.active,
     sizes: sizesFromOptions(r.options),
+    imageUrl: imageUrlFromOptions(r.options),
   }));
   return { ok: true as const, items };
 }
