@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { isLeagueAdmin } from "@/lib/league/access";
+import { gateLeagueCapability } from "@/lib/league/authorize";
 
 export type RegistrationConfig = {
   isOpen: boolean;
@@ -45,15 +45,9 @@ export async function upsertRegistrationConfigAction(
   leagueId: string,
   input: { isOpen: boolean; opensAt?: string | null; closesAt?: string | null; feeCents: number },
 ) {
-  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false as const, error: "Not signed in." };
-  if (!(await isLeagueAdmin(leagueId))) {
-    return { ok: false as const, error: "You don't administer this league." };
-  }
+  const gate = await gateLeagueCapability(leagueId, "manage_registration");
+  if (!gate.ok) return gate;
+  const supabase = gate.supabase;
 
   const fields = {
     is_open: input.isOpen,

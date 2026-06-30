@@ -1,8 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
-import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { isLeagueAdmin } from "@/lib/league/access";
+import { gateLeagueCapability } from "@/lib/league/authorize";
 import { getLeagueStripeAccount } from "@/lib/league/payments";
 
 export type Financials = {
@@ -32,12 +30,9 @@ const EMPTY: Financials = {
 };
 
 export async function getFinancialsAction(leagueId: string): Promise<Financials> {
-  if (!hasSupabaseEnv()) return EMPTY;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user || !(await isLeagueAdmin(leagueId))) return EMPTY;
+  const gate = await gateLeagueCapability(leagueId, "view_financials");
+  if (!gate.ok) return EMPTY;
+  const supabase = gate.supabase;
 
   // Current league-wide fee — fallback for registrations that predate the
   // fee snapshot (fee_cents is null).

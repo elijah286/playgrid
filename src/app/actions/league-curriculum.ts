@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { isLeagueAdmin } from "@/lib/league/access";
+import { gateLeagueCapability } from "@/lib/league/authorize";
 import {
   distributePracticePlan,
   listOperatorPracticePlans,
@@ -12,17 +12,9 @@ import {
 
 export type { CurriculumPlan, CurriculumOverview } from "@/lib/league/curriculum-distribute";
 
-async function gate(leagueId: string) {
-  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false as const, error: "Not signed in." };
-  if (!(await isLeagueAdmin(leagueId))) {
-    return { ok: false as const, error: "You don't administer this league." };
-  }
-  return { ok: true as const, userId: user.id };
+// Sharing practice plans requires manage_curriculum (owners always have it).
+function gate(leagueId: string) {
+  return gateLeagueCapability(leagueId, "manage_curriculum");
 }
 
 export async function listLeagueCurriculumAction(

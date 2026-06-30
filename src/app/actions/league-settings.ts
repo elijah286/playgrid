@@ -2,25 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 
-import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
-import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { isLeagueAdmin } from "@/lib/league/access";
+import { gateLeagueCapability } from "@/lib/league/authorize";
 import { normalizeLeagueSlug } from "@/lib/league/slug";
 
 export type LeagueSettings = { name: string; slug: string | null; sport: string };
 
-async function gateAdmin(leagueId: string) {
-  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false as const, error: "Not signed in." };
-  if (!(await isLeagueAdmin(leagueId))) {
-    return { ok: false as const, error: "You don't administer this league." };
-  }
-  return { ok: true as const, supabase };
+// Settings edits require manage_settings (owners always have it).
+function gateAdmin(leagueId: string) {
+  return gateLeagueCapability(leagueId, "manage_settings");
 }
 
 export async function getLeagueSettingsAction(leagueId: string): Promise<LeagueSettings | null> {
@@ -81,6 +72,10 @@ export async function setLeagueSlugAction(leagueId: string, slug: string) {
 export async function deleteLeagueAction(leagueId: string, confirmName: string) {
   const gate = await gateAdmin(leagueId);
   if (!gate.ok) return gate;
+  // Deleting a league is owner-only — never a delegated capability.
+  if (!(await isLeagueAdmin(leagueId))) {
+    return { ok: false as const, error: "Only a league owner can delete a league." };
+  }
   const { data: league } = await gate.supabase
     .from("leagues")
     .select("name")

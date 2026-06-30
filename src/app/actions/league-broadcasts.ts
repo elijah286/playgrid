@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { isLeagueAdmin } from "@/lib/league/access";
+import { gateLeagueCapability } from "@/lib/league/authorize";
 import { sendLeagueBroadcast } from "@/lib/notifications/league-broadcast-email";
 import { sendPushToUsers } from "@/lib/notifications/push";
 import {
@@ -26,17 +26,9 @@ export type BroadcastRow = {
   createdAt: string;
 };
 
-async function gateAdmin(leagueId: string) {
-  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false as const, error: "Not signed in." };
-  if (!(await isLeagueAdmin(leagueId))) {
-    return { ok: false as const, error: "You don't administer this league." };
-  }
-  return { ok: true as const, supabase, userId: user.id };
+// Announcements require manage_communications (owners always have it).
+function gateAdmin(leagueId: string) {
+  return gateLeagueCapability(leagueId, "manage_communications");
 }
 
 export type BroadcastAudiences = {
