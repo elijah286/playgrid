@@ -13,8 +13,9 @@ import { standardSeedDivisions } from "./divisionCatalog";
  */
 export async function seedStandardDivisions(
   leagueId: string,
+  client?: Awaited<ReturnType<typeof createClient>>,
 ): Promise<{ inserted: number; error?: string }> {
-  const supabase = await createClient();
+  const supabase = client ?? (await createClient());
 
   const { data: existing } = await supabase
     .from("league_divisions")

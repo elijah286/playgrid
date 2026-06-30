@@ -2,9 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { createClient } from "@/lib/supabase/server";
-import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { isLeagueAdmin } from "@/lib/league/access";
+import { gateLeagueCapability } from "@/lib/league/authorize";
 import { seedStandardDivisions } from "@/lib/league/divisions";
 import {
   type DivisionAgeGroup,
@@ -38,14 +36,11 @@ export type DivisionInput = {
   maxRosterSize?: number | null;
 };
 
-// Writes are additionally guarded by RLS (is_league_admin); this gives a clean
-// error before the round-trip and keeps non-admins out.
-async function gateAdmin(leagueId: string) {
-  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
-  if (!(await isLeagueAdmin(leagueId))) {
-    return { ok: false as const, error: "You don't administer this league." };
-  }
-  return { ok: true as const };
+// Division reads + edits require manage_teams (owners always have it). The gate
+// returns the right client — cookie (RLS) for owners, service-role for
+// grant-authorized members — so the actions act through gate.supabase.
+function gateAdmin(leagueId: string) {
+  return gateLeagueCapability(leagueId, "manage_teams");
 }
 
 function clean(input: DivisionInput) {
@@ -66,8 +61,9 @@ function clean(input: DivisionInput) {
 }
 
 export async function listDivisionsAction(leagueId: string) {
-  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured.", items: [] as DivisionRow[] };
-  const supabase = await createClient();
+  const gate = await gateAdmin(leagueId);
+  if (!gate.ok) return { ok: false as const, error: gate.error, items: [] as DivisionRow[] };
+  const supabase = gate.supabase;
   const { data, error } = await supabase
     .from("league_divisions")
     .select("id, name, gender, age_group, active, min_birthdate, max_birthdate, max_roster_size, sort_order")
@@ -99,7 +95,7 @@ export async function createDivisionAction(leagueId: string, input: DivisionInpu
     return { ok: false as const, error: "Earliest birthdate must be on or before the latest birthdate." };
   }
 
-  const supabase = await createClient();
+  const supabase = gate.supabase;
   // Append to the end of the current ordering.
   const { data: last } = await supabase
     .from("league_divisions")
@@ -127,7 +123,7 @@ export async function updateDivisionAction(leagueId: string, id: string, input: 
     return { ok: false as const, error: "Earliest birthdate must be on or before the latest birthdate." };
   }
 
-  const supabase = await createClient();
+  const supabase = gate.supabase;
   const { error } = await supabase
     .from("league_divisions")
     .update(fields)
@@ -141,7 +137,7 @@ export async function updateDivisionAction(leagueId: string, id: string, input: 
 export async function archiveDivisionAction(leagueId: string, id: string) {
   const gate = await gateAdmin(leagueId);
   if (!gate.ok) return gate;
-  const supabase = await createClient();
+  const supabase = gate.supabase;
   const { error } = await supabase
     .from("league_divisions")
     .update({ archived_at: new Date().toISOString() })
@@ -156,7 +152,7 @@ export async function archiveDivisionAction(leagueId: string, id: string) {
 export async function setDivisionActiveAction(leagueId: string, id: string, active: boolean) {
   const gate = await gateAdmin(leagueId);
   if (!gate.ok) return gate;
-  const supabase = await createClient();
+  const supabase = gate.supabase;
   const { error } = await supabase
     .from("league_divisions")
     .update({ active })
@@ -171,7 +167,7 @@ export async function setDivisionActiveAction(leagueId: string, id: string, acti
 export async function seedStandardDivisionsAction(leagueId: string) {
   const gate = await gateAdmin(leagueId);
   if (!gate.ok) return gate;
-  const { error, inserted } = await seedStandardDivisions(leagueId);
+  const { error, inserted } = await seedStandardDivisions(leagueId, gate.supabase);
   if (error) return { ok: false as const, error };
   revalidatePath(`/league/${leagueId}/divisions`);
   return { ok: true as const, inserted };
@@ -195,7 +191,7 @@ export async function setStandardDivisionAction(
   if (!isDivisionAgeGroup(ageGroup) || !isDivisionGender(gender)) {
     return { ok: false as const, error: "Unknown division segment." };
   }
-  const supabase = await createClient();
+  const supabase = gate.supabase;
 
   const { data: existing } = await supabase
     .from("league_divisions")
