@@ -24,6 +24,7 @@ export type LeagueListItem = {
   id: string;
   name: string;
   sport: string;
+  location: string | null;
   roles: string[];
 };
 
@@ -84,13 +85,14 @@ export async function getMyLeagues(): Promise<LeagueListItem[]> {
 
   const { data: leagues } = await supabase
     .from("leagues")
-    .select("id, name, sport")
+    .select("id, name, sport, settings")
     .in("id", [...rolesByLeague.keys()]);
 
   return (leagues ?? []).map((l) => ({
     id: l.id as string,
     name: l.name as string,
     sport: l.sport as string,
+    location: ((l.settings ?? {}) as { location?: string }).location ?? null,
     roles: rolesByLeague.get(l.id as string) ?? [],
   }));
 }

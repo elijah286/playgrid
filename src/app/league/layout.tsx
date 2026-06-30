@@ -38,7 +38,7 @@ export default async function LeagueLayout({
   if (leagues.length === 0) return <div className="min-h-full">{children}</div>;
 
   const railLeagues = leagues
-    .map((l) => ({ id: l.id, name: l.name, sport: l.sport }))
+    .map((l) => ({ id: l.id, name: l.name, sport: l.sport, location: l.location }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
