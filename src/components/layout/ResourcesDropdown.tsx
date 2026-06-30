@@ -23,9 +23,21 @@ const LIBRARY_ITEM: Item = {
   description: "Plays, drills, and coaching concepts",
 };
 
-/** Returns the items list for a given gate state; shared with [[MobileNavMenu]]. */
-export function getResourceItems(footballLibraryAvailable: boolean): Item[] {
-  return footballLibraryAvailable ? [LIBRARY_ITEM, ...APP_ITEMS] : APP_ITEMS;
+const LEAGUE_ITEM: Item = {
+  href: "/league",
+  label: "League Operations",
+  description: "Run your leagues — registration, rosters, schedule",
+};
+
+/** Returns the items list for a given gate state; shared with [[MobileNavMenu]].
+ *  League organizers get a "League Operations" entry first — their way back to
+ *  the operator area from anywhere in the classic product. */
+export function getResourceItems(
+  footballLibraryAvailable: boolean,
+  leagueAccess = false,
+): Item[] {
+  const base = footballLibraryAvailable ? [LIBRARY_ITEM, ...APP_ITEMS] : APP_ITEMS;
+  return leagueAccess ? [LEAGUE_ITEM, ...base] : base;
 }
 
 /** Header nav dropdown grouping the free educational/reference content.
@@ -33,15 +45,15 @@ export function getResourceItems(footballLibraryAvailable: boolean): Item[] {
  *  footballLibraryAvailable=true. Hidden on mobile (footer covers it). */
 export function ResourcesDropdown({
   footballLibraryAvailable = false,
+  leagueAccess = false,
 }: {
   footballLibraryAvailable?: boolean;
+  leagueAccess?: boolean;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const items = footballLibraryAvailable
-    ? [LIBRARY_ITEM, ...APP_ITEMS]
-    : APP_ITEMS;
+  const items = getResourceItems(footballLibraryAvailable, leagueAccess);
 
   // Click outside + Escape close. Standard menu pattern; using refs +
   // listeners rather than onBlur so clicks on menu items don't dismiss

@@ -162,9 +162,11 @@ export default async function LeagueDashboardPage({
         {hasPlaybooks ? (
           <Link
             href="/playbooks"
+            target="_blank"
+            rel="noopener noreferrer"
             className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-foreground/5"
           >
-            Coach view
+            Coach view ↗
           </Link>
         ) : null}
       </div>

@@ -12,6 +12,7 @@ import {
 } from "@/lib/site/beta-features-config";
 import { isFootballLibraryAvailable } from "@/lib/learn/access";
 import { getFeedbackWidgetSettings } from "@/lib/site/feedback-config";
+import { hasLeagueAccess } from "@/lib/league/access";
 
 export async function SiteHeader() {
   let user: { id: string; email: string | null } | null = null;
@@ -23,6 +24,7 @@ export async function SiteHeader() {
   let coachAiImageUploadAvailable = false;
   let userTier: SubscriptionTier | null = null;
   let coachProTrialUsed = false;
+  let leagueAccess = false; // league organizer → Resources gets a League Operations link
   // Independent config reads — fetch in parallel so the header doesn't pay
   // three sequential round-trips before it can render.
   const [coachAiEvalDays, footballLibraryAvailable, feedbackSettings] =
@@ -83,6 +85,11 @@ export async function SiteHeader() {
         } catch {
           /* best effort */
         }
+        try {
+          leagueAccess = await hasLeagueAccess();
+        } catch {
+          /* best effort — non-organizers just don't see the link */
+        }
       }
     } catch {
       /* unauthenticated — render anonymous header */
@@ -102,6 +109,7 @@ export async function SiteHeader() {
       userTier={userTier}
       coachProTrialUsed={coachProTrialUsed}
       footballLibraryAvailable={footballLibraryAvailable}
+      leagueAccess={leagueAccess}
       feedbackEnabled={feedbackEnabled}
     />
   );

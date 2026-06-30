@@ -44,6 +44,8 @@ type Props = {
   /** Beta gate for the public Football Library. When false, the
    *  Resources dropdown's "Football library" entry is hidden. */
   footballLibraryAvailable?: boolean;
+  /** League organizer — adds a "League Operations" entry to the Resources menu. */
+  leagueAccess?: boolean;
   /** When false, the "Give feedback" top-nav link and mobile menu item
    *  are hidden (admin disabled the widget). */
   feedbackEnabled?: boolean;
@@ -59,7 +61,7 @@ const PLAYBOOK_DETAIL_RE = /^\/playbooks\/[^/]+(?:\/.*)?$/;
 // the clock) and removes the header the user expects. Keep it visible.
 const PLAYBOOK_PRINT_RE = /^\/playbooks\/[^/]+\/print(?:\/|$)/;
 
-export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAiAvailable, showCoachCalPromo, coachAiEvalDays, coachAiImageUploadAvailable, userTier, coachProTrialUsed, footballLibraryAvailable, feedbackEnabled }: Props) {
+export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAiAvailable, showCoachCalPromo, coachAiEvalDays, coachAiImageUploadAvailable, userTier, coachProTrialUsed, footballLibraryAvailable, leagueAccess, feedbackEnabled }: Props) {
   const pathname = usePathname();
   const hideOnMobile =
     PLAYBOOK_DETAIL_RE.test(pathname) && !PLAYBOOK_PRINT_RE.test(pathname);
@@ -123,7 +125,10 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
             aria-label="Primary"
             className="hidden items-center gap-5 sm:flex"
           >
-            <ResourcesDropdown footballLibraryAvailable={footballLibraryAvailable ?? false} />
+            <ResourcesDropdown
+              footballLibraryAvailable={footballLibraryAvailable ?? false}
+              leagueAccess={leagueAccess ?? false}
+            />
             {!user && showPricingLink && (
               <Link
                 href="/pricing"
@@ -177,7 +182,7 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
                 isAdmin={isAdmin}
               />
             </div>
-            <MobileNavMenu authed footballLibraryAvailable={footballLibraryAvailable} feedbackEnabled={feedbackEnabled} />
+            <MobileNavMenu authed footballLibraryAvailable={footballLibraryAvailable} leagueAccess={leagueAccess} feedbackEnabled={feedbackEnabled} />
           </div>
         ) : (
           // Anonymous right cluster: just auth affordances on desktop. The

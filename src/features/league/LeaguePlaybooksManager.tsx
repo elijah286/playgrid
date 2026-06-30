@@ -136,9 +136,11 @@ export function LeaguePlaybooksManager({
                   <div className="flex items-center gap-2">
                     <Link
                       href={`/playbooks/${p.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="rounded-lg border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-foreground/5"
                     >
-                      Open
+                      Open ↗
                     </Link>
                     <button
                       type="button"

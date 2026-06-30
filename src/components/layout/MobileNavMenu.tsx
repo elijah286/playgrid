@@ -16,6 +16,7 @@ type Props = {
    *  hamburger is purely a Resources side-door for them. */
   authed: boolean;
   footballLibraryAvailable?: boolean;
+  leagueAccess?: boolean;
   feedbackEnabled?: boolean;
 };
 
@@ -31,11 +32,11 @@ type Props = {
  * creates a containing block for `position:fixed` descendants, so an
  * in-tree sheet would clip to the header height instead of the viewport.
  */
-export function MobileNavMenu({ authed, footballLibraryAvailable = false, feedbackEnabled = false }: Props) {
+export function MobileNavMenu({ authed, footballLibraryAvailable = false, leagueAccess = false, feedbackEnabled = false }: Props) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const items = getResourceItems(footballLibraryAvailable);
+  const items = getResourceItems(footballLibraryAvailable, leagueAccess);
 
   // Portal target needs to exist on the client only. Without this guard
   // the SSR pass would call `createPortal` against an undefined
