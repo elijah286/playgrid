@@ -35,6 +35,13 @@ import { readLivePlayDoc } from "@/lib/coach-ai/live-play-doc";
 import { useNativePlatform } from "@/lib/native/useIsNativeApp";
 import { COACH_CAL_IMAGE_UPLOADS_ENABLED } from "@/lib/coach-ai/image-upload";
 import { detectAutoAnchorTarget } from "./auto-anchor";
+import {
+  activeContextTurns,
+  contextDividerTurn,
+  contextStartIndex,
+  conversationCoversPlay,
+  isContextDivider,
+} from "./context-boundary";
 
 type OutOfBudgetPayload = {
   /** which window tripped — drives copy + whether the pack CTA shows */
@@ -532,34 +539,37 @@ export function CoachAiChat({
     const loaded = loadTurns(storageKey);
     const prev = prevStorageKeyRef.current;
     const playbookSwitched = prev != null && prev !== storageKey;
-    // Cross-play reopen: storageKey is the same as before, but the persisted
-    // history was last anchored to a different play. Without this check, a
-    // coach who closed Cal on Play A and re-opens on Play B sees Cal still
-    // referencing Play A's player names from history.
     const lastPlayId = loadLastPlayId(storageKey);
-    const playSwitchedAcrossSession =
-      !playbookSwitched && lastPlayId !== (playId ?? null) && loaded.length > 0;
+    const currentPlayId = playId ?? null;
 
-    let bridgeTurn: CoachAiTurn | null = null;
+    // Is the loaded conversation actually ABOUT the play now on screen? It is
+    // when some turn was authored on this play (Layer 2 per-turn playId) OR it
+    // references this play's id (a play:// link — e.g. a play built here). When
+    // neither holds, the conversation is foreign to this play — a cross-session
+    // reopen or a jump to an unrelated play — and the prior turns must not drive
+    // Cal's answer. This is stronger than comparing lastPlayId (which can be
+    // stale) and self-heals: once the coach interacts on this play, the new
+    // turns carry its id, so later opens read as continuous.
+    const loadedIsForeignToCurrentPlay =
+      currentPlayId !== null && loaded.length > 0 && !conversationCoversPlay(loaded, currentPlayId);
+    // Navigated OUT of a play to the lobby/dashboard while a play conversation
+    // was loaded — the play talk is now background.
+    const leftPlayView = currentPlayId === null && lastPlayId !== null && loaded.length > 0;
+
+    // A discontinuous open inserts a HARD context divider: the prior turns
+    // collapse behind an "Earlier conversation" divider AND are excluded from
+    // what's sent to Cal (so Cal can't keep answering about the old play).
+    let dividerLabel: string | null = null;
     if (playbookSwitched && loaded.length > 0) {
-      bridgeTurn = {
-        role: "assistant",
-        text:
-          "_[Context switch] You've moved to a different playbook. Earlier turns in this thread may have been about another team — verify rules and personnel against the current playbook before applying prior advice._",
-        toolCalls: [],
-      };
-    } else if (playSwitchedAcrossSession) {
-      bridgeTurn = {
-        role: "assistant",
-        text: playId
-          ? "_[Context switch] You're now viewing a different play. Earlier turns in this thread were about a different play — use the diagram in the system prompt for the current play as the source of truth for personnel, routes, and player names._"
-          : "_[Context switch] You've navigated away from the play view. Earlier turns in this thread were about a specific play — re-state the play if you need advice about it._",
-        toolCalls: [],
-      };
+      dividerLabel = "Earlier conversation — different playbook";
+    } else if (loadedIsForeignToCurrentPlay) {
+      dividerLabel = "Earlier conversation — different play";
+    } else if (leftPlayView) {
+      dividerLabel = "Earlier conversation";
     }
 
-    if (bridgeTurn) {
-      const merged = [...loaded, bridgeTurn];
+    if (dividerLabel) {
+      const merged = [...loaded, contextDividerTurn(dividerLabel)];
       setTurns(merged);
       saveTurns(storageKey, merged);
     } else {
@@ -588,21 +598,25 @@ export function CoachAiChat({
     if (prev.storageKey !== storageKey) return;
     if (prev.playId === (playId ?? null)) return;
 
-    // Same playbook, different play. Append a bridge turn to the live state
-    // (don't reload from storage — a stream may be in flight).
+    // Same playbook, different play. Append a context divider (collapse the
+    // prior play's turns + drop them from Cal's context) — UNLESS the play just
+    // opened was built in this conversation (continuity exception), so the
+    // "build a counter to this → it opens" flow never resets mid-thought.
     setTurns((cur) => {
       if (cur.length === 0) return cur;
+      // Continuity: don't reset when the play just opened is part of this
+      // conversation — either built here (its play:// link appears) or already
+      // discussed here (a turn was authored on it). Covers "build a counter →
+      // it opens" and "hop back to a play you were just on".
+      if (conversationCoversPlay(cur, playId)) return cur;
       const last = cur[cur.length - 1];
-      // Avoid double-bridge if a context-switch is already the last turn.
-      if (last?.role === "assistant" && last.text.includes("[Context switch]")) return cur;
-      const bridge: CoachAiTurn = {
-        role: "assistant",
-        text: playId
-          ? "_[Context switch] You're now viewing a different play. Earlier turns in this thread were about a different play — use the diagram in the system prompt for the current play as the source of truth for personnel, routes, and player names._"
-          : "_[Context switch] You've navigated away from the play view. Earlier turns in this thread were about a specific play — re-state the play if you need advice about it._",
-        toolCalls: [],
-      };
-      const merged = [...cur, bridge];
+      if (last && isContextDivider(last)) return cur; // avoid a double divider
+      const merged = [
+        ...cur,
+        contextDividerTurn(
+          playId ? "Earlier conversation — different play" : "Earlier conversation",
+        ),
+      ];
       saveTurns(storageKey, merged);
       return merged;
     });
@@ -826,7 +840,11 @@ export function CoachAiChat({
         ? `📎 ${imageName}`
         : "[image attached]";
     const userTurn: CoachAiTurn = { role: "user", text: bubbleText, playId: playId ?? null };
-    const prior = turns;
+    // Send only the ACTIVE context — turns after the last context divider, with
+    // divider markers stripped. Collapsed "earlier conversation" turns (a
+    // different/older play) stay in the thread for the coach to expand, but Cal
+    // never sees them, so it can't answer about the wrong play.
+    const prior = activeContextTurns(turns);
     nextFreshIdxRef.current = turns.length;
     setTurns((cur) => [...cur, userTurn]);
     setDraft("");
@@ -1134,6 +1152,11 @@ export function CoachAiChat({
     }
   }, []);
 
+  // Start of the active context = after the last context divider. Turns before
+  // it are the collapsed "earlier conversation" (a different/older play); they
+  // render dimmed inside a <details> and are excluded from what's sent to Cal.
+  const ctxStart = contextStartIndex(turns);
+
   return (
     <div className="relative flex h-full min-h-0 flex-col">
       {feedbackOptIn === "unanswered" && (
@@ -1206,106 +1229,46 @@ export function CoachAiChat({
           />
         ) : (
           <ul className="space-y-5">
-            {turns.map((t, i) => {
-              const prevUserMessage = i > 0 ? turns[i - 1]?.text : "";
-              return (
-                <li key={i} className={t.role === "user" ? "flex justify-end" : "flex items-start gap-2.5"}>
-                  {t.role === "assistant" && (
-                    <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                      <CoachAiIcon className="size-4 text-primary" bare />
-                    </div>
-                  )}
-                  {t.role === "user" ? (
-                    <UserMessageBubble text={t.text} animate={i === nextFreshIdxRef.current} />
-                  ) : (
-                    <div className="min-w-0 flex-1">
-                      {t.role === "assistant" && t.playbookChips && t.playbookChips.length > 0 && (
-                        <div className="mb-2 flex flex-col gap-1.5">
-                          {t.playbookChips.map((pb) => (
-                            <Link
-                              key={pb.id}
-                              href={`/playbooks/${pb.id}?cal_from=1&cal_team=${encodeURIComponent(pb.name)}`}
-                              style={{ backgroundColor: pb.color ?? "#134e2a" }}
-                              className="flex items-center rounded-md px-3 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 active:opacity-75"
-                            >
-                              {[pb.name, pb.season].filter(Boolean).join(" · ")}
-                            </Link>
-                          ))}
-                        </div>
-                      )}
-                      <AssistantMessageWithFeedback
-                        text={t.text}
-                        isAdmin={isAdmin}
-                        onThumbsUp={() =>
-                          void logCoachAiPositiveFeedbackAction(t.text, prevUserMessage)
-                        }
-                        onThumbsDown={() =>
-                          void logCoachAiNegativeFeedbackAction(t.text, prevUserMessage)
-                        }
-                      />
-                      {t.role === "assistant" && t.noteProposals && t.noteProposals.length > 0 && playbookId && (
-                        <div className="mt-2 flex flex-col gap-1.5">
-                          {t.noteProposals.map((p) => (
-                            <NoteProposalChip
-                              key={p.proposalId}
-                              proposal={p}
-                              playbookId={playbookId}
-                              state={t.noteProposalState?.[p.proposalId] ?? null}
-                              onUpdate={(next) =>
-                                setTurns((cur) =>
-                                  cur.map((tt, j) =>
-                                    j === i && tt.role === "assistant"
-                                      ? {
-                                          ...tt,
-                                          noteProposalState: {
-                                            ...(tt.noteProposalState ?? {}),
-                                            [p.proposalId]: next,
-                                          },
-                                        }
-                                      : tt,
-                                  ),
-                                )
-                              }
-                            />
-                          ))}
-                        </div>
-                      )}
-                      {t.role === "assistant" && t.saveDefenseProposals && t.saveDefenseProposals.length > 0 && playbookId && (
-                        <div className="mt-2 flex flex-col gap-1.5">
-                          {t.saveDefenseProposals.map((p) => (
-                            <SaveDefensePlayChip
-                              key={p.proposalId}
-                              proposal={p}
-                              playbookId={playbookId}
-                              state={t.saveDefenseProposalState?.[p.proposalId] ?? null}
-                              onUpdate={(next) =>
-                                setTurns((cur) =>
-                                  cur.map((tt, j) =>
-                                    j === i && tt.role === "assistant"
-                                      ? {
-                                          ...tt,
-                                          saveDefenseProposalState: {
-                                            ...(tt.saveDefenseProposalState ?? {}),
-                                            [p.proposalId]: next,
-                                          },
-                                        }
-                                      : tt,
-                                  ),
-                                )
-                              }
-                            />
-                          ))}
-                        </div>
-                      )}
-                      {t.toolCalls.length > 0 && (
-                        <div className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-muted">
-                          <Wrench className="size-3" />
-                          {t.toolCalls.join(", ")}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </li>
+            {/* Collapsed "earlier conversation" — turns about a different/older
+                play, kept out of Cal's context but recoverable on tap. */}
+            {ctxStart > 0 && (
+              <li key="earlier-conversation">
+                <details className="rounded-lg border border-border/60 bg-muted/10 px-3 py-2">
+                  <summary className="cursor-pointer select-none text-[12px] font-medium text-muted">
+                    Earlier conversation · {ctxStart} {ctxStart === 1 ? "message" : "messages"}
+                  </summary>
+                  <ul className="mt-3 space-y-5 opacity-60">
+                    {turns.slice(0, ctxStart).map((t, i) =>
+                      isContextDivider(t) ? null : (
+                        <TurnItem
+                          key={i}
+                          turn={t}
+                          index={i}
+                          animate={false}
+                          prevUserMessage={i > 0 ? turns[i - 1]?.text ?? "" : ""}
+                          playbookId={playbookId}
+                          isAdmin={isAdmin}
+                          setTurns={setTurns}
+                        />
+                      ),
+                    )}
+                  </ul>
+                </details>
+              </li>
+            )}
+            {turns.slice(ctxStart).map((t, localI) => {
+              const i = localI + ctxStart;
+              return isContextDivider(t) ? null : (
+                <TurnItem
+                  key={i}
+                  turn={t}
+                  index={i}
+                  animate={i === nextFreshIdxRef.current}
+                  prevUserMessage={i > 0 ? turns[i - 1]?.text ?? "" : ""}
+                  playbookId={playbookId}
+                  isAdmin={isAdmin}
+                  setTurns={setTurns}
+                />
               );
             })}
 
@@ -1557,6 +1520,127 @@ export function CoachAiChat({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * One conversation turn's rendered row. Module-level (not a render-scope
+ * closure) so it stays out of the parent's ref-in-render analysis. `index` is
+ * the ABSOLUTE position in the parent's `turns` array, so the proposal-state
+ * updaters (which match on `j === index`) remain correct across the
+ * collapsed/active split.
+ */
+function TurnItem({
+  turn: t,
+  index: i,
+  animate,
+  prevUserMessage,
+  playbookId,
+  isAdmin,
+  setTurns,
+}: {
+  turn: CoachAiTurn;
+  index: number;
+  animate: boolean;
+  prevUserMessage: string;
+  playbookId: string | null | undefined;
+  isAdmin: boolean;
+  setTurns: React.Dispatch<React.SetStateAction<CoachAiTurn[]>>;
+}) {
+  return (
+    <li className={t.role === "user" ? "flex justify-end" : "flex items-start gap-2.5"}>
+      {t.role === "assistant" && (
+        <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <CoachAiIcon className="size-4 text-primary" bare />
+        </div>
+      )}
+      {t.role === "user" ? (
+        <UserMessageBubble text={t.text} animate={animate} />
+      ) : (
+        <div className="min-w-0 flex-1">
+          {t.role === "assistant" && t.playbookChips && t.playbookChips.length > 0 && (
+            <div className="mb-2 flex flex-col gap-1.5">
+              {t.playbookChips.map((pb) => (
+                <Link
+                  key={pb.id}
+                  href={`/playbooks/${pb.id}?cal_from=1&cal_team=${encodeURIComponent(pb.name)}`}
+                  style={{ backgroundColor: pb.color ?? "#134e2a" }}
+                  className="flex items-center rounded-md px-3 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 active:opacity-75"
+                >
+                  {[pb.name, pb.season].filter(Boolean).join(" · ")}
+                </Link>
+              ))}
+            </div>
+          )}
+          <AssistantMessageWithFeedback
+            text={t.text}
+            isAdmin={isAdmin}
+            onThumbsUp={() => void logCoachAiPositiveFeedbackAction(t.text, prevUserMessage)}
+            onThumbsDown={() => void logCoachAiNegativeFeedbackAction(t.text, prevUserMessage)}
+          />
+          {t.role === "assistant" && t.noteProposals && t.noteProposals.length > 0 && playbookId && (
+            <div className="mt-2 flex flex-col gap-1.5">
+              {t.noteProposals.map((p) => (
+                <NoteProposalChip
+                  key={p.proposalId}
+                  proposal={p}
+                  playbookId={playbookId}
+                  state={t.noteProposalState?.[p.proposalId] ?? null}
+                  onUpdate={(next) =>
+                    setTurns((cur) =>
+                      cur.map((tt, j) =>
+                        j === i && tt.role === "assistant"
+                          ? {
+                              ...tt,
+                              noteProposalState: {
+                                ...(tt.noteProposalState ?? {}),
+                                [p.proposalId]: next,
+                              },
+                            }
+                          : tt,
+                      ),
+                    )
+                  }
+                />
+              ))}
+            </div>
+          )}
+          {t.role === "assistant" && t.saveDefenseProposals && t.saveDefenseProposals.length > 0 && playbookId && (
+            <div className="mt-2 flex flex-col gap-1.5">
+              {t.saveDefenseProposals.map((p) => (
+                <SaveDefensePlayChip
+                  key={p.proposalId}
+                  proposal={p}
+                  playbookId={playbookId}
+                  state={t.saveDefenseProposalState?.[p.proposalId] ?? null}
+                  onUpdate={(next) =>
+                    setTurns((cur) =>
+                      cur.map((tt, j) =>
+                        j === i && tt.role === "assistant"
+                          ? {
+                              ...tt,
+                              saveDefenseProposalState: {
+                                ...(tt.saveDefenseProposalState ?? {}),
+                                [p.proposalId]: next,
+                              },
+                            }
+                          : tt,
+                      ),
+                    )
+                  }
+                />
+              ))}
+            </div>
+          )}
+          {t.toolCalls.length > 0 && (
+            <div className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-muted">
+              <Wrench className="size-3" />
+              {t.toolCalls.join(", ")}
+            </div>
+          )}
+        </div>
+      )}
+    </li>
   );
 }
 

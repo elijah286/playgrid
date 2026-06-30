@@ -33,6 +33,11 @@ export type CoachAiTurn =
       role: "assistant";
       text: string;
       toolCalls: string[];
+      /** Marks a UI-only context boundary (not a real Cal message). Inserted when
+       *  the coach opens/returns to a play the live conversation isn't about, so
+       *  the prior turns collapse behind an "Earlier conversation" divider and are
+       *  excluded from what's sent to the agent. See features/coach-ai/context-boundary.ts. */
+      kind?: "context-divider";
       /** The play anchored in the editor when this turn was created (null when
        *  none — e.g. lobby mode). Lets the harness scope fence walk-backs to the
        *  play the coach is on now, so a ```play fence authored while viewing a
