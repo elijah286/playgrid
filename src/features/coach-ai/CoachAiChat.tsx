@@ -258,6 +258,7 @@ export function CoachAiChat({
   isAdmin = false,
   injectedPrompt = null,
   imageUploadAvailable = false,
+  onTurnsChange,
 }: {
   playbookId?: string | null;
   playId?: string | null;
@@ -281,6 +282,12 @@ export function CoachAiChat({
    * default scope is "off", site admin sets "me" for self-only testing.
    */
   imageUploadAvailable?: boolean;
+  /**
+   * Fired whenever the in-memory turn list changes. Lets an owner (the
+   * launcher) lift the full thread for the site-admin "download thread"
+   * debug affordance without duplicating the storage/hydration plumbing.
+   */
+  onTurnsChange?: (turns: CoachAiTurn[]) => void;
 }) {
   const storageKey = storageKeyFor(mode, playbookId ?? null);
   // Initialize from localStorage synchronously so the first paint shows
@@ -604,6 +611,11 @@ export function CoachAiChat({
   useEffect(() => {
     saveTurns(storageKey, turns);
   }, [storageKey, turns]);
+
+  // Surface the live thread to the owner (launcher) for the admin download.
+  useEffect(() => {
+    onTurnsChange?.(turns);
+  }, [turns, onTurnsChange]);
 
   // Server hydration: replace any localStorage-derived state with the
   // server's source-of-truth history once available. Runs after the

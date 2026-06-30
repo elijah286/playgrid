@@ -8,6 +8,7 @@ import {
   AppWindow,
   Check,
   ChevronDown,
+  Download,
   GraduationCap,
   Maximize2,
   Minimize2,
@@ -16,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { CoachAiChat } from "./CoachAiChat";
+import type { CoachAiTurn } from "@/app/actions/coach-ai";
 import { CoachAiHeaderPreview } from "./CoachAiHeaderPreview";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { CoachAiPreviewChat } from "./CoachAiPreviewChat";
@@ -123,7 +125,6 @@ export function CoachAiLauncher({
 }) {
   const [open,          setOpen]          = useState(false);
   const [panelMode,     setPanelMode]     = useState<PanelMode>("float");
-  const [adminMode,     setAdminMode]     = useState(false);
   const [pulseSeen,     setPulseSeen]     = useState(() => {
     if (typeof window === "undefined") return false;
     const raw = window.localStorage.getItem("coach-cal:promo-seen-at");
@@ -138,6 +139,16 @@ export function CoachAiLauncher({
   const [size,       setSize]       = useState<{ w: number; h: number }>({ w: DEFAULT_W, h: DEFAULT_H });
   const [dockedWidth, setDockedWidth] = useState(DEFAULT_DOCK_W);
   const [fontSize, setFontSize] = useState<FontSize>(14);
+
+  // Live thread mirror — kept in a ref (lossless, no re-render on every turn)
+  // plus a length state so the admin "download thread" button can disable
+  // itself when there's nothing to export. Fed by CoachAiChat.onTurnsChange.
+  const threadRef = useRef<CoachAiTurn[]>([]);
+  const [threadLen, setThreadLen] = useState(0);
+  const handleTurnsChange = useCallback((next: CoachAiTurn[]) => {
+    threadRef.current = next;
+    setThreadLen(next.length);
+  }, []);
 
   // Tracks whether the viewport is narrow enough that the panel should
   // render as a CSS-controlled bottom sheet (50vh), ignoring the saved
@@ -239,7 +250,6 @@ export function CoachAiLauncher({
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      if (window.localStorage.getItem("coach-ai:adminMode") === "1") setAdminMode(true);
       try { window.localStorage.removeItem("coach-ai:playbookMode"); } catch { /* ignore */ }
       const savedSize = readStorage<{ w: number; h: number } | null>("coach-ai:window-size", null);
       if (savedSize?.w && savedSize?.h) {
@@ -399,7 +409,6 @@ export function CoachAiLauncher({
     }, 200);
   }
 
-  useEffect(() => { if (hasRestored.current) writeStorage("coach-ai:adminMode",   adminMode ? "1" : "0"); }, [adminMode]);
   useEffect(() => { if (hasRestored.current) writeStorage("coach-ai:window-size", size); },                  [size]);
   useEffect(() => { if (hasRestored.current) writeStorage("coach-ai:font-size",   fontSize); },              [fontSize]);
   useEffect(() => { if (hasRestored.current) writeStorage("coach-ai:dock-width",  dockedWidth); },           [dockedWidth]);
@@ -410,8 +419,77 @@ export function CoachAiLauncher({
     }
   }, [panelMode]);
 
-  const adminTrainingActive = isAdmin && adminMode;
+  // Admin training mode was driven by a header toggle that has been removed —
+  // Cal is trained out-of-band, not through the UI. Kept as a constant so the
+  // existing header styling resolves to its normal-mode branches.
+  const adminTrainingActive = false;
   const mode: "normal" | "admin_training" = adminTrainingActive ? "admin_training" : "normal";
+
+  // ── Admin: download the full thread for debugging bad Cal responses ───────
+  // Builds a self-contained document: a readable transcript (role, tool calls,
+  // raw message text including ```play / ```spec fences) plus a lossless JSON
+  // appendix carrying every field (proposals, chips, proposal states) so a
+  // debugging pass loses nothing the client knew about the conversation.
+  const downloadThread = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const turns = threadRef.current;
+    if (turns.length === 0) return;
+
+    const scope = mode === "normal" ? (playbookId ?? "global") : "global";
+    const exportedAt = new Date().toISOString();
+    const lines: string[] = [];
+
+    lines.push("# Coach Cal thread export");
+    lines.push("");
+    lines.push(`- Exported: ${exportedAt}`);
+    lines.push(`- Mode: ${mode}`);
+    lines.push(`- Playbook ID: ${playbookId ?? "—"}`);
+    lines.push(`- Play ID: ${playId ?? "—"}`);
+    lines.push(`- Scope: ${scope}`);
+    lines.push(`- Turns: ${turns.length}`);
+    lines.push(`- URL: ${window.location.href}`);
+    lines.push(`- User agent: ${window.navigator.userAgent}`);
+    lines.push("");
+    lines.push("---");
+    lines.push("");
+    lines.push("## Transcript");
+
+    turns.forEach((turn, i) => {
+      lines.push("");
+      lines.push(`### Turn ${i + 1} — ${turn.role.toUpperCase()}`);
+      if (turn.role === "assistant") {
+        const tools = turn.toolCalls && turn.toolCalls.length > 0 ? turn.toolCalls.join(", ") : "none";
+        lines.push(`Tool calls: ${tools}`);
+        const proposals: string[] = [];
+        if (turn.playbookChips?.length) proposals.push(`${turn.playbookChips.length} playbook chip(s)`);
+        if (turn.noteProposals?.length) proposals.push(`${turn.noteProposals.length} note proposal(s)`);
+        if (turn.saveDefenseProposals?.length) proposals.push(`${turn.saveDefenseProposals.length} defense proposal(s)`);
+        if (proposals.length) lines.push(`Proposals: ${proposals.join(", ")} (full detail in JSON appendix)`);
+      }
+      lines.push("");
+      lines.push(turn.text && turn.text.length > 0 ? turn.text : "_(empty)_");
+    });
+
+    lines.push("");
+    lines.push("---");
+    lines.push("");
+    lines.push("## Raw JSON (lossless)");
+    lines.push("");
+    lines.push("```json");
+    lines.push(JSON.stringify(turns, null, 2));
+    lines.push("```");
+    lines.push("");
+
+    const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `coach-cal-thread-${scope}-${exportedAt.replace(/[:.]/g, "-")}.md`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, [mode, playbookId, playId]);
 
   // ── Docked body class + CSS variable ──────────────────────────────────────
   // Adds padding-right to body so main content doesn't hide under the panel.
@@ -991,43 +1069,19 @@ export function CoachAiLauncher({
 
               {/* ── Toolbar ──────────────────────────────────────────────── */}
               <div className="ml-auto flex items-center gap-0.5">
-                {/* Font size A− / A+ — desktop only. Mobile uses the
-                    system font size to stay consistent with native
-                    accessibility settings (Dynamic Type / browser zoom);
-                    coaches don't have screen real estate to spare for
-                    custom sizing on a phone anyway. */}
-                <div className="mr-1 hidden items-center rounded-md bg-surface-inset px-1 py-0.5 sm:flex">
-                  <button
-                    type="button"
-                    onClick={() => setFontSize((f) => { const i = FONT_SIZES.indexOf(f); return i > 0 ? FONT_SIZES[i - 1] : f; })}
-                    disabled={fontSize === FONT_SIZES[0]}
-                    className="rounded px-1 py-0.5 text-[11px] font-semibold text-muted transition hover:text-foreground disabled:opacity-30"
-                    title="Decrease font size" aria-label="Decrease font size"
-                  >A−</button>
-                  <span className="mx-0.5 text-[10px] tabular-nums text-muted/50">{fontSize}</span>
-                  <button
-                    type="button"
-                    onClick={() => setFontSize((f) => { const i = FONT_SIZES.indexOf(f); return i < FONT_SIZES.length - 1 ? FONT_SIZES[i + 1] : f; })}
-                    disabled={fontSize === FONT_SIZES[FONT_SIZES.length - 1]}
-                    className="rounded px-1 py-0.5 text-[11px] font-semibold text-muted transition hover:text-foreground disabled:opacity-30"
-                    title="Increase font size" aria-label="Increase font size"
-                  >A+</button>
-                </div>
-
+                {/* Admin-only: download the full thread as a debugging
+                    document (transcript + lossless JSON). Replaces the old
+                    font-size / training-toggle affordances. */}
                 {isAdmin && (
                   <button
                     type="button"
-                    onClick={() => setAdminMode((v) => !v)}
-                    aria-pressed={adminTrainingActive}
-                    className={cn(
-                      "rounded-md p-1.5 transition",
-                      adminTrainingActive
-                        ? "bg-amber-500/20 text-amber-800 hover:bg-amber-500/30 dark:text-amber-200"
-                        : "text-muted hover:bg-surface-inset hover:text-foreground",
-                    )}
-                    title={adminTrainingActive ? "Exit admin training" : "Admin training"}
+                    onClick={downloadThread}
+                    disabled={threadLen === 0}
+                    className="rounded-md p-1.5 text-muted transition hover:bg-surface-inset hover:text-foreground disabled:opacity-30"
+                    title="Download thread (debug)"
+                    aria-label="Download thread for debugging"
                   >
-                    <GraduationCap className="size-4" />
+                    <Download className="size-4" />
                   </button>
                 )}
 
@@ -1126,6 +1180,7 @@ export function CoachAiLauncher({
                   isAdmin={isAdmin}
                   injectedPrompt={injectedPrompt}
                   imageUploadAvailable={imageUploadAvailable}
+                  onTurnsChange={handleTurnsChange}
                 />
               )}
             </div>
