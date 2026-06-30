@@ -23,9 +23,15 @@ export async function SiteHeader() {
   let coachAiImageUploadAvailable = false;
   let userTier: SubscriptionTier | null = null;
   let coachProTrialUsed = false;
-  const coachAiEvalDays = await getCoachAiEvalDays();
-  const footballLibraryAvailable = await isFootballLibraryAvailable();
-  const feedbackEnabled = (await getFeedbackWidgetSettings()).enabled;
+  // Independent config reads — fetch in parallel so the header doesn't pay
+  // three sequential round-trips before it can render.
+  const [coachAiEvalDays, footballLibraryAvailable, feedbackSettings] =
+    await Promise.all([
+      getCoachAiEvalDays(),
+      isFootballLibraryAvailable(),
+      getFeedbackWidgetSettings(),
+    ]);
+  const feedbackEnabled = feedbackSettings.enabled;
 
   if (hasSupabaseEnv()) {
     try {

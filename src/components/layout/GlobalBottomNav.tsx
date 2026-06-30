@@ -1,5 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
 import { getRequestUser } from "@/lib/supabase/request-user";
+import { getCachedUserRole } from "@/lib/auth/profile-cache";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { canUseAiFeatures } from "@/lib/billing/features";
 import {
@@ -32,14 +32,16 @@ export async function GlobalBottomNav() {
   const user = authResult.kind === "ok" ? authResult.user : null;
   if (!user) return null;
 
-  const supabase = await createClient();
-  const [selfRoleRow, entitlement, betaFeatures] = await Promise.all([
-    supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
+  // Role + entitlement + beta flags all hit the same request-scoped caches
+  // the SiteHeader uses (getCachedUserRole is unstable_cache-backed), so this
+  // nav adds no DB round-trips of its own.
+  const [role, entitlement, betaFeatures] = await Promise.all([
+    getCachedUserRole(user.id),
     getCurrentEntitlement(),
     getBetaFeatures(),
   ]);
 
-  const isAdmin = (selfRoleRow?.data?.role as string | null) === "admin";
+  const isAdmin = role === "admin";
   const coachAiAvailable = isAdmin || canUseAiFeatures(entitlement);
   // Authed users without Team Coach still get the Cal slot — tapping opens
   // the upgrade prompt instead of the chat. Mirrors the prior dashboard
