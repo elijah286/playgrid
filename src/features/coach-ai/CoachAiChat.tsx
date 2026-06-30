@@ -25,6 +25,7 @@ import {
 } from "@/app/actions/coach-ai-save-defense";
 import type { SaveDefenseProposalState } from "@/app/actions/coach-ai";
 import type { SaveDefenseProposal } from "@/lib/coach-ai/save-defense-tools";
+import type { ChoiceProposal } from "@/lib/coach-ai/ask-choice-tool";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { AssistantMessageWithFeedback } from "./AssistantMessageWithFeedback";
 import { AssistantMessage } from "./AssistantMessage";
@@ -998,6 +999,7 @@ export function CoachAiChat({
           const chips = (payload.playbookChips as PlaybookChip[] | null | undefined) ?? null;
           const proposals = (payload.noteProposals as NoteProposal[] | null | undefined) ?? null;
           const defenseProposals = (payload.saveDefenseProposals as SaveDefenseProposal[] | null | undefined) ?? null;
+          const choiceProps = (payload.choiceProposals as ChoiceProposal[] | null | undefined) ?? null;
           const mutated = payload.mutated === true;
           setTurns((cur) => [
             ...cur,
@@ -1010,6 +1012,7 @@ export function CoachAiChat({
               noteProposalState: null,
               saveDefenseProposals: defenseProposals,
               saveDefenseProposalState: null,
+              choiceProposals: choiceProps,
               playId: playId ?? null,
             },
           ]);
@@ -1249,6 +1252,8 @@ export function CoachAiChat({
                           playbookId={playbookId}
                           isAdmin={isAdmin}
                           setTurns={setTurns}
+                          onChoose={(text) => void send(text)}
+                          streaming={streaming}
                         />
                       ),
                     )}
@@ -1268,6 +1273,8 @@ export function CoachAiChat({
                   playbookId={playbookId}
                   isAdmin={isAdmin}
                   setTurns={setTurns}
+                  onChoose={(text) => void send(text)}
+                  streaming={streaming}
                 />
               );
             })}
@@ -1538,6 +1545,8 @@ function TurnItem({
   playbookId,
   isAdmin,
   setTurns,
+  onChoose,
+  streaming,
 }: {
   turn: CoachAiTurn;
   index: number;
@@ -1546,6 +1555,10 @@ function TurnItem({
   playbookId: string | null | undefined;
   isAdmin: boolean;
   setTurns: React.Dispatch<React.SetStateAction<CoachAiTurn[]>>;
+  /** Send the tapped option's label as the coach's next message. */
+  onChoose: (text: string) => void;
+  /** Disable choice buttons while a reply is streaming. */
+  streaming: boolean;
 }) {
   return (
     <li className={t.role === "user" ? "flex justify-end" : "flex items-start gap-2.5"}>
@@ -1632,6 +1645,18 @@ function TurnItem({
               ))}
             </div>
           )}
+          {t.role === "assistant" && t.choiceProposals && t.choiceProposals.length > 0 && (
+            <div className="mt-2 flex flex-col gap-2">
+              {t.choiceProposals.map((p) => (
+                <ChoiceQuestionCard
+                  key={p.proposalId}
+                  proposal={p}
+                  disabled={streaming}
+                  onChoose={onChoose}
+                />
+              ))}
+            </div>
+          )}
           {t.toolCalls.length > 0 && (
             <div className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-muted">
               <Wrench className="size-3" />
@@ -1641,6 +1666,39 @@ function TurnItem({
         </div>
       )}
     </li>
+  );
+}
+
+/** Cal's explicit multiple-choice question, rendered as tappable buttons.
+ *  Tapping sends the option's label as the coach's next message (via onChoose)
+ *  — the same path as typing it, so the conversation just continues. */
+function ChoiceQuestionCard({
+  proposal,
+  disabled,
+  onChoose,
+}: {
+  proposal: ChoiceProposal;
+  disabled: boolean;
+  onChoose: (text: string) => void;
+}) {
+  return (
+    <div className="rounded-lg border border-primary/30 bg-primary/5 p-2.5">
+      <div className="mb-2 text-xs font-medium text-foreground">{proposal.question}</div>
+      <div className="flex flex-col gap-1.5">
+        {proposal.options.map((opt) => (
+          <button
+            key={opt.id}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChoose(opt.label)}
+            className="flex flex-col items-start rounded-md border border-border bg-surface px-3 py-2 text-left transition-colors hover:border-primary/50 hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <span className="text-sm font-medium text-foreground">{opt.label}</span>
+            {opt.detail && <span className="mt-0.5 text-[11px] leading-snug text-muted">{opt.detail}</span>}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 

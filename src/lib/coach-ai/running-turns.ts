@@ -32,6 +32,7 @@ export type DoneData = {
   playbookChips: unknown;
   noteProposals: unknown;
   saveDefenseProposals: unknown;
+  choiceProposals: unknown;
   mutated: boolean;
 };
 

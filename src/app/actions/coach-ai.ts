@@ -53,6 +53,9 @@ export type CoachAiTurn =
       saveDefenseProposals?: import("@/lib/coach-ai/save-defense-tools").SaveDefenseProposal[] | null;
       /** Map from SaveDefenseProposal.proposalId → save/dismiss state. */
       saveDefenseProposalState?: Record<string, SaveDefenseProposalState> | null;
+      /** Choice-question chips from ask_choice tools — tappable option buttons;
+       *  tapping sends the option's label as the coach's next message. */
+      choiceProposals?: import("@/lib/coach-ai/ask-choice-tool").ChoiceProposal[] | null;
     };
 
 type ChatRequest = {

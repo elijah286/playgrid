@@ -91,6 +91,8 @@ Behavior rules — follow these strictly:
 
 7f. **You CAN propose saves to this playbook's knowledge base — use \`propose_add_playbook_note\` / \`propose_edit_playbook_note\` / \`propose_retire_playbook_note\`.** When the coach states a durable team-specific fact — schemes they run ("we're a Trips Right base"), terminology ("we call our slot 'F'"), personnel notes ("our QB has a strong arm but slow release"), opponent tendencies, situational tactics — call the relevant \`propose_*\` tool. **These tools never write directly.** They emit an inline confirmation chip the coach clicks to save. So you do NOT need to ask "should I save this?" in prose — the chip IS the ask. Just briefly mention you've proposed it ("Proposed adding that to your playbook notes — tap Save on the chip if you want it persisted") and move on. Use \`list_playbook_notes\` first to avoid duplicates. Available only when the chat is anchored to a playbook the coach can edit. Don't propose for ephemeral chatter ("we usually run this on 3rd down" without context) — only durable facts the coach is asserting as ground truth. When unsure, ask: "Want me to save that as a playbook note?" — if yes, call the propose tool.
 
+7i. **ASK WITH BUTTONS, not a prose list — use \`ask_choice\` for enumerable choices.** Whenever your reply would otherwise ask the coach to pick from a SMALL set of concrete, mutually-exclusive options — "which concept do you want? 1. Stick 2. Levels 3. Z-Cross", "which coverage should I overlay? Cover 1 / Cover 2 / Cover 3", "which formation?", a yes/no with a clear consequence — call \`ask_choice({ question, options })\` INSTEAD of listing them in prose. It renders the options as tappable buttons; the coach taps one and it arrives as their next message. **Phrase each option's \`label\` as a COMPLETE, self-contained answer** you can act on directly ("Build the Stick concept", "Overlay Cover 1 Man"), not a bare token ("Stick", "Cover 1"). Keep \`detail\` to a short clause. **Emit ONLY the tool call plus at most a one-line lead-in — do NOT also write the options out in prose** (the buttons replace the list; duplicating them is noise). Use it for 2–5 options. Do NOT use it for open-ended questions or anything where the coach must type free text (a play name, a number, a date) — ask those in prose. This is the same "chip instead of a prose question" pattern as \`propose_*\` (7f) and the defense-save chip; coaches strongly prefer the explicit buttons.
+
 7c. **SAVE BY DEFAULT — the harness auto-saves every full-roster fence you emit in an anchored editable playbook.** You do NOT need to call \`create_play\` yourself. Compose with \`compose_play\`, drop the returned \`\`\`spec block (PREFERRED — Option A) or \`\`\`play fence (Option B, legacy) verbatim into your reply, and stop. The harness scans your reply (and prior turns' fences not yet in the playbook) at end of turn, saves each fence, and appends a "Saved: '[name]' — [play://uuid]" suffix to your reply so the coach can click into the new play. See the "How to emit a play diagram" section below for the two-path constraint and why \`\`\`spec is preferred.
     - **Don't gate the save on a confirmation.** The default is to save immediately; let the coach edit, rename, or archive after. Avoid preemptive phrasings like "ready to save these 6?" / "should I add this?" / "confirm and I'll save it" — those waste a turn and leave plays only in chat, where they get lost on session reset or refresh. Save first. Coaches lose more work to "I'll save it after you confirm" than they lose to accidentally-saved drafts they can archive in 2 clicks.
     - **Honest uncertainty > false success — the one OK time to ask.** You can't directly observe whether the harness auto-commit succeeded for fences you let it handle. So:
@@ -1863,6 +1865,9 @@ export type AgentResult = {
   /** Parsed save-defense-play proposal chips from propose_save_defense_play
    *  calls this turn. Each becomes a "Save as new defensive play" chip. */
   saveDefenseProposals: import("./save-defense-tools").SaveDefenseProposal[] | null;
+  /** Parsed choice-proposal chips from ask_choice calls this turn. Each renders
+   *  a question + tappable option buttons; tapping sends the option's label. */
+  choiceProposals: import("./ask-choice-tool").ChoiceProposal[] | null;
   /** True when at least one DB-mutating tool ran successfully — caller should refresh surrounding UI. */
   mutated: boolean;
 };
@@ -1885,6 +1890,7 @@ const TOOL_STATUS: Record<string, string> = {
   modify_play_route:    "Modifying route…",
   flip_play:            "Flipping the play…",
   propose_save_defense_play: "Proposing to save the defense as a new play…",
+  ask_choice:         "Putting together your options…",
   list_plays:         "Reading plays…",
   get_play:           "Fetching play…",
   create_play:        "Creating play…",
@@ -2297,6 +2303,8 @@ export async function runAgent(
   const noteProposals: NonNullable<AgentResult["noteProposals"]> = [];
   // Save-defense-play proposal chips from propose_save_defense_play calls.
   const saveDefenseProposals: NonNullable<AgentResult["saveDefenseProposals"]> = [];
+  // Choice-question chips from ask_choice calls — tappable option buttons.
+  const choiceProposals: NonNullable<AgentResult["choiceProposals"]> = [];
   // Set true the moment a DB-mutating tool succeeds — caller refreshes UI.
   let mutated = false;
 
@@ -3064,6 +3072,16 @@ export async function runAgent(
           } catch { /* ignore — chip will simply not render */ }
         }
       }
+      // Choice-question chip from ask_choice. Same parse pattern.
+      if (r.ok && tu.name === "ask_choice") {
+        const fenceMatch = /```choice-proposal\n([\s\S]*?)\n```/.exec(resultText);
+        if (fenceMatch) {
+          try {
+            const parsed = JSON.parse(fenceMatch[1]) as import("./ask-choice-tool").ChoiceProposal;
+            choiceProposals.push(parsed);
+          } catch { /* ignore — chip will simply not render */ }
+        }
+      }
       // Capture get_route_template returns so the validator can verify
       // every named route in the diagram matches what the tool returned
       // (catches "curl drawn as a straight line" hand-authoring).
@@ -3742,6 +3760,7 @@ export async function runAgent(
     playbookChips,
     noteProposals: noteProposals.length > 0 ? noteProposals : null,
     saveDefenseProposals: saveDefenseProposals.length > 0 ? saveDefenseProposals : null,
+    choiceProposals: choiceProposals.length > 0 ? choiceProposals : null,
     mutated,
   };
 }

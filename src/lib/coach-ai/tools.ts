@@ -3567,7 +3567,8 @@ const update_plan_step: CoachAiTool = {
 // Lazy import to avoid a circular dependency through the propose tool
 // (which imports CoachAiTool from this file).
 import { propose_save_defense_play } from "./save-defense-tools";
-export const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, get_concept_skeleton, compose_play, revise_play, flip_play, compose_defense, evaluate_matchup, place_defense, place_offense, modify_play_route, set_defender_assignment, propose_save_defense_play, flag_outside_kb, flag_refusal, propose_plan, update_plan_step];
+import { ask_choice } from "./ask-choice-tool";
+export const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, get_concept_skeleton, compose_play, revise_play, flip_play, compose_defense, evaluate_matchup, place_defense, place_offense, modify_play_route, set_defender_assignment, propose_save_defense_play, ask_choice, flag_outside_kb, flag_refusal, propose_plan, update_plan_step];
 
 // Loaded lazily to avoid a circular import (user-preferences imports CoachAiTool).
 function userPreferenceTools(): CoachAiTool[] {

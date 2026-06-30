@@ -480,6 +480,7 @@ export async function POST(req: Request): Promise<Response> {
           playbookChips: result.playbookChips ?? null,
           noteProposals: result.noteProposals ?? null,
           saveDefenseProposals: result.saveDefenseProposals ?? null,
+          choiceProposals: result.choiceProposals ?? null,
           mutated: result.mutated,
         },
       });
@@ -504,6 +505,7 @@ export async function POST(req: Request): Promise<Response> {
           playbookChips: null,
           noteProposals: null,
           saveDefenseProposals: null,
+          choiceProposals: null,
           mutated: false,
         },
       });
