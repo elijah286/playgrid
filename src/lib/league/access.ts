@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 
 /**
@@ -103,11 +104,31 @@ export async function isLeagueOrganizer(): Promise<boolean> {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return false;
-  const { data } = await supabase
+
+  // 1. Site-admin-marked organizer (the original path).
+  const { data: marked } = await supabase
     .from("league_organizers")
     .select("user_id")
     .eq("user_id", user.id);
-  return (data?.length ?? 0) > 0;
+  if ((marked?.length ?? 0) > 0) return true;
+
+  // 2. Holds an active delegated-access grant (added by an operator on the
+  //    People page). Grants are keyed by email and may not yet be linked to a
+  //    user id, so the member's own RLS can't read them — use service-role.
+  //    Anyone with access is thus surfaced as an organizer (sees /league + the
+  //    home banner), exactly like a marked organizer.
+  const email = user.email?.trim().toLowerCase();
+  if (email) {
+    const admin = createServiceRoleClient();
+    const { data: grants } = await admin
+      .from("league_access_grants")
+      .select("id")
+      .eq("member_email", email)
+      .eq("status", "active")
+      .limit(1);
+    if ((grants?.length ?? 0) > 0) return true;
+  }
+  return false;
 }
 
 /**

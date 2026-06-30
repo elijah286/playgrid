@@ -1,6 +1,8 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
+import { scopeFromColumns, scopeIncludesLeague } from "./access-control";
 import { isUnrostered, type RegistrationStatus } from "./registration";
 
 /**
@@ -63,7 +65,78 @@ export function summarizeRegistrations(
   };
 }
 
-/** Leagues the current user belongs to (RLS-filtered), with their roles. */
+/**
+ * League ids the user can access — direct memberships UNION the leagues their
+ * active access grants scope to (delegated access). Returns the id set + the
+ * membership roles (grant-only leagues have no role). Uses service-role because
+ * a delegate isn't a league_member, so their own RLS can't read those leagues.
+ */
+export async function accessibleLeagues(
+  userId: string,
+  email: string | null,
+): Promise<{ leagueIds: string[]; rolesByLeague: Map<string, string[]> }> {
+  const admin = createServiceRoleClient();
+  const rolesByLeague = new Map<string, string[]>();
+  const ids = new Set<string>();
+
+  const { data: members } = await admin
+    .from("league_members")
+    .select("league_id, role")
+    .eq("user_id", userId);
+  for (const m of members ?? []) {
+    const id = m.league_id as string;
+    ids.add(id);
+    rolesByLeague.set(id, [...(rolesByLeague.get(id) ?? []), m.role as string]);
+  }
+
+  const e = email?.trim().toLowerCase();
+  if (e) {
+    const { data: grants } = await admin
+      .from("league_access_grants")
+      .select("owner_id, scope_kind, scope_leagues, scope_sport, scope_group_id")
+      .eq("member_email", e)
+      .eq("status", "active");
+    if (grants && grants.length > 0) {
+      const ownerIds = [...new Set(grants.map((g) => g.owner_id as string))];
+      const { data: ownerLeagues } = await admin
+        .from("leagues")
+        .select("id, sport, created_by")
+        .in("created_by", ownerIds);
+      const lgIds = (ownerLeagues ?? []).map((l) => l.id as string);
+      const groupsByLeague = new Map<string, string[]>();
+      if (lgIds.length > 0) {
+        const { data: gms } = await admin
+          .from("league_group_members")
+          .select("league_id, group_id")
+          .in("league_id", lgIds);
+        for (const gm of gms ?? []) {
+          const a = groupsByLeague.get(gm.league_id as string) ?? [];
+          a.push(gm.group_id as string);
+          groupsByLeague.set(gm.league_id as string, a);
+        }
+      }
+      for (const g of grants) {
+        const scope = scopeFromColumns(g as Parameters<typeof scopeFromColumns>[0]);
+        for (const l of ownerLeagues ?? []) {
+          if ((l.created_by as string) !== (g.owner_id as string)) continue;
+          if (
+            scopeIncludesLeague(scope, {
+              id: l.id as string,
+              sport: l.sport as string,
+              groupIds: groupsByLeague.get(l.id as string) ?? [],
+            })
+          ) {
+            ids.add(l.id as string);
+          }
+        }
+      }
+    }
+  }
+
+  return { leagueIds: [...ids], rolesByLeague };
+}
+
+/** Leagues the current user can access (memberships + grants), with their roles. */
 export async function getMyLeagues(): Promise<LeagueListItem[]> {
   const supabase = await createClient();
   const {
@@ -71,22 +144,14 @@ export async function getMyLeagues(): Promise<LeagueListItem[]> {
   } = await supabase.auth.getUser();
   if (!user) return [];
 
-  const { data: members } = await supabase
-    .from("league_members")
-    .select("league_id, role")
-    .eq("user_id", user.id);
-  if (!members || members.length === 0) return [];
+  const { leagueIds, rolesByLeague } = await accessibleLeagues(user.id, user.email ?? null);
+  if (leagueIds.length === 0) return [];
 
-  const rolesByLeague = new Map<string, string[]>();
-  for (const m of members) {
-    const id = m.league_id as string;
-    rolesByLeague.set(id, [...(rolesByLeague.get(id) ?? []), m.role as string]);
-  }
-
-  const { data: leagues } = await supabase
+  const admin = createServiceRoleClient();
+  const { data: leagues } = await admin
     .from("leagues")
     .select("id, name, sport, settings")
-    .in("id", [...rolesByLeague.keys()]);
+    .in("id", leagueIds);
 
   return (leagues ?? []).map((l) => ({
     id: l.id as string,
@@ -276,21 +341,21 @@ export async function getPortfolioSummary(): Promise<PortfolioSummary> {
   } = await supabase.auth.getUser();
   if (!user) return { leagues: [], totals: emptyTotals() };
 
-  const { data: members } = await supabase
-    .from("league_members")
-    .select("league_id")
-    .eq("user_id", user.id);
-  const ids = [...new Set((members ?? []).map((m) => m.league_id as string))];
+  // Accessible leagues = memberships + grant-scoped. Service-role for the data
+  // fetches because grant-only (delegated) leagues aren't readable under the
+  // delegate's own RLS — the id set from accessibleLeagues() IS the authority.
+  const { leagueIds: ids } = await accessibleLeagues(user.id, user.email ?? null);
   if (ids.length === 0) return { leagues: [], totals: emptyTotals() };
 
+  const admin = createServiceRoleClient();
   const [leaguesR, teamsR, regsR, windowsR] = await Promise.all([
-    supabase.from("leagues").select("id, name, sport, settings").in("id", ids),
-    supabase.from("teams").select("league_id, head_coach_name").in("league_id", ids),
-    supabase
+    admin.from("leagues").select("id, name, sport, settings").in("id", ids),
+    admin.from("teams").select("league_id, head_coach_name").in("league_id", ids),
+    admin
       .from("player_registrations")
       .select("league_id, status, payment_status, fee_cents")
       .in("league_id", ids),
-    supabase.from("registration_windows").select("league_id, is_open, closes_at").in("league_id", ids),
+    admin.from("registration_windows").select("league_id, is_open, closes_at").in("league_id", ids),
   ]);
 
   return buildPortfolioSummary(
