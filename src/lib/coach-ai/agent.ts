@@ -2885,19 +2885,37 @@ export async function runAgent(
         }
         if (lastFenceFromTool && textToEmit) {
           const before = textToEmit;
+          // Replace Cal's fence with the tool's (Rule 10); if Cal emitted no
+          // fence at all, APPEND the tool's so the diagram still renders. Both
+          // mirror onto messages[last] so finalText (auto-commit + next turn's
+          // prior-fence lookup) sees the same diagram the coach sees.
           textToEmit = applyAuthoritativeFenceRewrite(textToEmit, lastFenceFromTool);
+          textToEmit = ensureToolFenceRendered(textToEmit, lastFenceFromTool);
           if (textToEmit !== before) {
-            // The buffered text had a fence and we replaced it. Mirror the
-            // rewrite on the assistant message in `messages` so the next
-            // turn's prior-fence lookup finds the authoritative fence.
             const lastMsg = messages[messages.length - 1];
             if (lastMsg && lastMsg.role === "assistant") {
               if (typeof lastMsg.content === "string") {
-                lastMsg.content = applyAuthoritativeFenceRewrite(lastMsg.content, lastFenceFromTool);
+                lastMsg.content = ensureToolFenceRendered(
+                  applyAuthoritativeFenceRewrite(lastMsg.content, lastFenceFromTool),
+                  lastFenceFromTool,
+                );
               } else {
+                // Replace existing fences in every text block (idempotent)…
                 for (const block of lastMsg.content) {
                   if (block.type === "text") {
                     block.text = applyAuthoritativeFenceRewrite(block.text, lastFenceFromTool);
+                  }
+                }
+                // …then append ONCE to the first text block if the message has
+                // no fence at all, so we never duplicate across text blocks.
+                const FENCE_RE = /```play\s*\n[\s\S]*?\n```/;
+                const hasFence = lastMsg.content.some(
+                  (b) => b.type === "text" && FENCE_RE.test(b.text),
+                );
+                if (!hasFence) {
+                  const firstText = lastMsg.content.find((b) => b.type === "text");
+                  if (firstText && firstText.type === "text") {
+                    firstText.text = ensureToolFenceRendered(firstText.text, lastFenceFromTool);
                   }
                 }
               }
@@ -3740,16 +3758,6 @@ export async function runAgent(
  * an apology trigger ("apologize", "you're right") AND a validator/
  * validation reference. Never modifies content past the first blank line.
  */
-/** Replace any ```play fence in `text` with the supplied tool-returned
- *  fence body (the JSON between the ```play and ``` markers). Returns
- *  the rewritten text. If `text` has no ```play fence or `toolFenceBody`
- *  is empty/null, returns `text` unchanged.
- *
- *  This is the authoritative-tool-fence rewrite (AGENTS.md Rule 10's
- *  "Cal does prose; tools do geometry" — Cal cannot corrupt the fence
- *  because Cal's fence is replaced with the tool's verbatim output).
- *  Surfaced 2026-05-02 (Mesh): tool returned correct staggered drags
- *  but Cal post-processed them to both-at-2yd. */
 export function applyAuthoritativeFenceRewrite(
   text: string,
   toolFenceBody: string | null,
@@ -3758,6 +3766,30 @@ export function applyAuthoritativeFenceRewrite(
   const FENCE_RE = /```play\s*\n([\s\S]*?)\n```/;
   if (!FENCE_RE.test(text)) return text;
   return text.replace(FENCE_RE, "```play\n" + toolFenceBody + "\n```");
+}
+
+/** Guarantee the coach sees the tool's diagram. A fence-producing tool runs
+ *  only for the 6 diagram tools (compose_play, compose_defense, revise_play,
+ *  flip_play, modify_play_route, set_defender_assignment), so a tool fence
+ *  ALWAYS represents a diagram worth showing. When Cal's reply already has a
+ *  ```play block, `applyAuthoritativeFenceRewrite` replaces it with the tool's
+ *  output (Rule 10). But Cal sometimes answers an overlay/movement question in
+ *  prose WITHOUT a fence (surfaced 2026-06-30: "show how cover 1 lines up + how
+ *  they move" → narration only, no playable diagram). In that case APPEND the
+ *  tool fence so the preview always renders.
+ *
+ *  Returns `text` unchanged when it already contains a ```play fence (the
+ *  rewrite path owns that case) or when `toolFenceBody` is empty. Append is
+ *  safe for auto-commit: overlay fences dedupe by the offense play's title;
+ *  standalone-defense fences are gated by save-intent. */
+export function ensureToolFenceRendered(
+  text: string,
+  toolFenceBody: string | null,
+): string {
+  if (!toolFenceBody || !text) return text;
+  const FENCE_RE = /```play\s*\n([\s\S]*?)\n```/;
+  if (FENCE_RE.test(text)) return text; // already has a diagram → rewrite owns it
+  return text.trimEnd() + "\n\n```play\n" + toolFenceBody + "\n```";
 }
 
 /** Phase 4 (2026-05-25): RESCUE or STRIP a failed-validation reply.

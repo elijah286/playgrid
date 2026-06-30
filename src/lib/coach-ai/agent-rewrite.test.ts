@@ -12,7 +12,11 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { applyAuthoritativeFenceRewrite, rescueOrStripFence } from "./agent";
+import {
+  applyAuthoritativeFenceRewrite,
+  ensureToolFenceRendered,
+  rescueOrStripFence,
+} from "./agent";
 
 describe("applyAuthoritativeFenceRewrite — replace Cal's fence with the tool's", () => {
   const TOOL_FENCE = '{"title":"Mesh","routes":[{"from":"H","path":[[-8.3,1],[12.9,1]]},{"from":"S","path":[[8.4,7],[-12.8,7]]}]}';
@@ -68,6 +72,53 @@ describe("applyAuthoritativeFenceRewrite — replace Cal's fence with the tool's
     const input = "```play-ref\n{\"id\":\"abc\"}\n```";
     const out = applyAuthoritativeFenceRewrite(input, "AUTHORITATIVE");
     expect(out).toBe(input);
+  });
+});
+
+describe("ensureToolFenceRendered — guarantee the tool's diagram shows", () => {
+  const TOOL_FENCE =
+    '{"title":"Tesla Counter","focus":"O","players":[{"id":"X","team":"O"},{"id":"CB","team":"D"}],"routes":[]}';
+
+  it("appends the tool fence when Cal answered in prose with NO diagram", () => {
+    // The 2026-06-30 bug: "show how cover 1 lines up + how they move" →
+    // compose_defense ran, Cal narrated, but emitted no ```play block.
+    const proseOnly = "**Man coverage — each defender mirrors their man.** @CB collects @X around 7–8 yards.";
+    const out = ensureToolFenceRendered(proseOnly, TOOL_FENCE);
+    expect(out).toContain(proseOnly); // prose preserved
+    expect(out).toContain("```play\n" + TOOL_FENCE + "\n```"); // diagram appended
+    // Exactly one fence — no duplication.
+    expect(out.match(/```play/g)?.length).toBe(1);
+  });
+
+  it("leaves text untouched when it already has a ```play block (rewrite owns that)", () => {
+    const withFence = "Here it is.\n\n```play\n{\"title\":\"Existing\"}\n```";
+    expect(ensureToolFenceRendered(withFence, TOOL_FENCE)).toBe(withFence);
+  });
+
+  it("returns text unchanged when toolFenceBody is null/empty", () => {
+    const prose = "Just prose.";
+    expect(ensureToolFenceRendered(prose, null)).toBe(prose);
+    expect(ensureToolFenceRendered(prose, "")).toBe(prose);
+  });
+
+  it("returns empty input unchanged", () => {
+    expect(ensureToolFenceRendered("", TOOL_FENCE)).toBe("");
+  });
+
+  it("composes idempotently with the rewrite (no double fence)", () => {
+    // The emit path runs rewrite THEN ensure. Prose-only input: rewrite is a
+    // no-op, ensure appends. Re-running ensure must not append again.
+    const proseOnly = "Narration only.";
+    const once = ensureToolFenceRendered(
+      applyAuthoritativeFenceRewrite(proseOnly, TOOL_FENCE),
+      TOOL_FENCE,
+    );
+    const twice = ensureToolFenceRendered(
+      applyAuthoritativeFenceRewrite(once, TOOL_FENCE),
+      TOOL_FENCE,
+    );
+    expect(twice).toBe(once);
+    expect(twice.match(/```play/g)?.length).toBe(1);
   });
 });
 
