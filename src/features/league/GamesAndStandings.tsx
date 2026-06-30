@@ -12,6 +12,7 @@ import {
   type GameRow,
 } from "@/app/actions/league-games";
 import { StandingsTable } from "./StandingsTable";
+import { sportTerms } from "@/lib/league/sportConfig";
 
 type Msg = { kind: "error" | "success"; text: string } | null;
 type Scores = Record<string, { home: string; away: string }>;
@@ -54,6 +55,7 @@ export function GamesAndStandings({
   const [form, setForm] = useState({ homeTeamId: "", awayTeamId: "", startsAt: "", location: "" });
   const [msg, setMsg] = useState<Msg>(null);
   const [pending, startTransition] = useTransition();
+  const terms = sportTerms(board.sport);
 
   function refresh() {
     startTransition(async () => {
@@ -119,7 +121,7 @@ export function GamesAndStandings({
   }
 
   function remove(gameId: string) {
-    if (!globalThis.confirm("Delete this game?")) return;
+    if (!globalThis.confirm(`Delete this ${terms.game}?`)) return;
     setMsg(null);
     startTransition(async () => {
       const r = await deleteGameAction(leagueId, gameId);
@@ -136,7 +138,7 @@ export function GamesAndStandings({
   return (
     <div className="space-y-8">
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-foreground">Schedule a game</h2>
+        <h2 className="mb-2 text-sm font-semibold text-foreground">Schedule a {terms.game}</h2>
         {noTeams ? (
           <p className="rounded-2xl border border-border px-4 py-6 text-sm text-muted">
             Create teams first on the{" "}
@@ -205,7 +207,7 @@ export function GamesAndStandings({
               onClick={create}
               className="mt-3 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
             >
-              {pending ? "Saving…" : "Schedule game"}
+              {pending ? "Saving…" : `Schedule ${terms.game}`}
             </button>
           </div>
         )}
@@ -222,11 +224,11 @@ export function GamesAndStandings({
 
       <section>
         <h2 className="mb-2 text-sm font-semibold text-foreground">
-          Games{board.games.length > 0 ? ` (${board.games.length})` : ""}
+          {terms.Games}{board.games.length > 0 ? ` (${board.games.length})` : ""}
         </h2>
         {board.games.length === 0 ? (
           <p className="rounded-2xl border border-border px-4 py-6 text-sm text-muted">
-            No games scheduled yet.
+            No {terms.games} scheduled yet.
           </p>
         ) : (
           <ul className="space-y-2">
@@ -253,8 +255,8 @@ export function GamesAndStandings({
                     disabled={pending}
                     onClick={() => remove(gm.id)}
                     className="rounded-md px-1.5 text-xs text-muted hover:bg-foreground/5 hover:text-foreground disabled:opacity-40"
-                    aria-label="Delete game"
-                    title="Delete game"
+                    aria-label={`Delete ${terms.game}`}
+                    title={`Delete ${terms.game}`}
                   >
                     ✕
                   </button>

@@ -10,6 +10,7 @@ import {
   updateLeagueTeamAction,
   type LeagueTeamRow,
 } from "@/app/actions/league-teams";
+import { sportTerms } from "@/lib/league/sportConfig";
 
 type Division = { id: string; name: string };
 type Msg = { kind: "error" | "success"; text: string } | null;
@@ -20,11 +21,14 @@ export function TeamsManager({
   leagueId,
   initialTeams,
   divisions,
+  sport,
 }: {
   leagueId: string;
   initialTeams: LeagueTeamRow[];
   divisions: Division[];
+  sport?: string;
 }) {
+  const terms = sportTerms(sport);
   const [teams, setTeams] = useState(initialTeams);
   const [form, setForm] = useState(EMPTY);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -131,21 +135,21 @@ export function TeamsManager({
             </Link>
           </div>
           <label className="block text-sm">
-            <span className="font-medium text-foreground">Head coach</span>
+            <span className="font-medium text-foreground">{terms.Coach}</span>
             <input
               value={form.coachName}
               onChange={(e) => setForm({ ...form, coachName: e.target.value })}
-              placeholder="Coach name (optional)"
+              placeholder={`${terms.Coach} name (optional)`}
               className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </label>
           <label className="block text-sm">
-            <span className="font-medium text-foreground">Coach email</span>
+            <span className="font-medium text-foreground">{terms.Coach} email</span>
             <input
               type="email"
               value={form.coachEmail}
               onChange={(e) => setForm({ ...form, coachEmail: e.target.value })}
-              placeholder="coach@example.com (optional)"
+              placeholder={`${terms.coach}@example.com (optional)`}
               className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </label>
@@ -191,7 +195,7 @@ export function TeamsManager({
             <tr>
               <th className="px-4 py-3">Team</th>
               <th className="px-4 py-3">Division</th>
-              <th className="px-4 py-3">Head coach</th>
+              <th className="px-4 py-3">{terms.Coach}</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
@@ -211,7 +215,7 @@ export function TeamsManager({
                     {t.headCoachName ? (
                       <span className="text-foreground">{t.headCoachName}</span>
                     ) : (
-                      <span className="text-amber-600 dark:text-amber-400">Needs a coach</span>
+                      <span className="text-amber-600 dark:text-amber-400">Needs a {terms.coach}</span>
                     )}
                   </td>
                   <td className="px-4 py-3">

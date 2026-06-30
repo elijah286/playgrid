@@ -23,7 +23,7 @@ import {
   leagueAiEnabled,
 } from "@/lib/league/access";
 import { loadLeagueDashboard, getMyLeagues } from "@/lib/league/console";
-import { leagueHasPlaybooks } from "@/lib/league/sportConfig";
+import { leagueHasPlaybooks, sportTerms } from "@/lib/league/sportConfig";
 import { LeagueSwitcher } from "@/features/league/LeagueSwitcher";
 
 export const metadata: Metadata = {
@@ -135,6 +135,7 @@ export default async function LeagueDashboardPage({
 
   const r = dash.registrations;
   const hasPlaybooks = leagueHasPlaybooks(dash.league.sport);
+  const terms = sportTerms(dash.league.sport);
 
   const actions: string[] = [];
   if (r.needsReview > 0) actions.push(`Approve ${r.needsReview} registration${r.needsReview === 1 ? "" : "s"}`);
@@ -142,7 +143,7 @@ export default async function LeagueDashboardPage({
   if (dash.divisions === 0) actions.push("Add your first division");
   else if (dash.teams === 0) actions.push("Create your first team");
   if (dash.teamsWithoutCoach > 0)
-    actions.push(`Assign a coach to ${dash.teamsWithoutCoach} team${dash.teamsWithoutCoach === 1 ? "" : "s"}`);
+    actions.push(`Assign a ${terms.coach} to ${dash.teamsWithoutCoach} team${dash.teamsWithoutCoach === 1 ? "" : "s"}`);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 text-foreground sm:px-6">
@@ -208,7 +209,7 @@ export default async function LeagueDashboardPage({
           {dash.teamsWithoutCoach > 0 ? (
             <div className="mt-2 flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
               <AlertTriangle className="size-3.5" />
-              {dash.teamsWithoutCoach} {dash.teamsWithoutCoach === 1 ? "team needs" : "teams need"} a coach
+              {dash.teamsWithoutCoach} {dash.teamsWithoutCoach === 1 ? "team needs" : "teams need"} a {terms.coach}
             </div>
           ) : null}
           <div className="mt-2 text-xs text-muted">
@@ -280,12 +281,16 @@ export default async function LeagueDashboardPage({
           href={`/league/${leagueId}/schedule`}
           icon={<Calendar className="size-5" />}
           title="Schedule & events"
-          status={dash.upcoming.length > 0 ? `Next: ${dash.upcoming[0].title}` : "Add games & practices"}
+          status={
+            dash.upcoming.length > 0
+              ? `Next: ${dash.upcoming[0].title}`
+              : `Add ${terms.games} & practices`
+          }
         />
         <WorkflowTile
           href={`/league/${leagueId}/games`}
           icon={<Trophy className="size-5" />}
-          title="Games & standings"
+          title={`${terms.Games} & standings`}
           status="Scores & standings"
         />
       </div>

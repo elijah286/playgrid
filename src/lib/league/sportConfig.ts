@@ -111,3 +111,40 @@ export function sportRegistrationFields(
   return sportConfig(sport).registrationFields;
 }
 
+/** Ready-to-render noun forms (singular/plural, lower/title case) for a sport's
+ *  UI terminology — game↔match↔meet, coach↔manager. Threaded through the
+ *  games/standings/teams surfaces so a soccer league reads "Match"/"Manager". */
+export type SportTerms = {
+  game: string;
+  games: string;
+  Game: string;
+  Games: string;
+  coach: string;
+  coaches: string;
+  Coach: string;
+  Coaches: string;
+  score: string;
+};
+
+function pluralize(noun: string): string {
+  return /(ch|sh|s|x|z)$/.test(noun) ? `${noun}es` : `${noun}s`;
+}
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+export function sportTerms(sport: string | null | undefined): SportTerms {
+  const c = sportConfig(sport);
+  return {
+    game: c.gameNoun,
+    games: pluralize(c.gameNoun),
+    Game: capitalize(c.gameNoun),
+    Games: capitalize(pluralize(c.gameNoun)),
+    coach: c.coachNoun,
+    coaches: pluralize(c.coachNoun),
+    Coach: capitalize(c.coachNoun),
+    Coaches: capitalize(pluralize(c.coachNoun)),
+    score: c.scoreNoun,
+  };
+}
+

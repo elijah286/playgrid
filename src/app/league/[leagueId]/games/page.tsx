@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { getCurrentLeagueMemberships, isLeagueAdminRole } from "@/lib/league/access";
 import { getGamesBoardAction } from "@/app/actions/league-games";
+import { sportTerms } from "@/lib/league/sportConfig";
 import { GamesAndStandings } from "@/features/league/GamesAndStandings";
 
 export const metadata: Metadata = {
@@ -23,15 +24,16 @@ export default async function GamesPage({
   const res = await getGamesBoardAction(leagueId);
   const board =
     res.ok && res.board ? res.board : { teams: [], games: [], standings: [], sport: "football" };
+  const terms = sportTerms(board.sport);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-12 text-foreground sm:px-6">
       <Link href={`/league/${leagueId}`} className="text-xs text-muted hover:underline">
         ← Console
       </Link>
-      <h1 className="mt-2 text-2xl font-extrabold tracking-tight">Games &amp; Standings</h1>
+      <h1 className="mt-2 text-2xl font-extrabold tracking-tight">{terms.Games} &amp; Standings</h1>
       <p className="mt-1 text-sm text-muted">
-        Schedule games between your teams, enter scores, and standings update automatically.
+        Schedule {terms.games} between your teams, enter scores, and standings update automatically.
       </p>
 
       <div className="mt-6">
