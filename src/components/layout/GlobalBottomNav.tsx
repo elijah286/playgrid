@@ -1,5 +1,7 @@
-import { getRequestUser } from "@/lib/supabase/request-user";
-import { getCachedUserRole } from "@/lib/auth/profile-cache";
+import type { User } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/server";
+import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { getUserWithTimeout } from "@/lib/supabase/get-user-with-timeout";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { canUseAiFeatures } from "@/lib/billing/features";
 import {
@@ -25,23 +27,28 @@ import { HomeBottomNav } from "@/app/(dashboard)/home/HomeBottomNav";
  * its own copy, so there's no double-render on dashboard routes.
  */
 export async function GlobalBottomNav() {
-  // Shared request-scoped auth check (see request-user.ts) — dedupes the
-  // getUser() round-trip with the root layout + SiteHeader. On timeout or no
-  // session we render nothing (anon shell); the next request retries.
-  const authResult = await getRequestUser();
-  const user = authResult.kind === "ok" ? authResult.user : null;
+  if (!hasSupabaseEnv()) return null;
+
+  const supabase = await createClient();
+  // Time-bound the auth check — an offline Capacitor shell must not block
+  // the whole tree here. On timeout we treat the request as anonymous and
+  // render nothing; the next request retries.
+  let user: User | null = null;
+  try {
+    const result = await getUserWithTimeout(supabase);
+    if (result.kind === "ok") user = result.user;
+  } catch {
+    /* network/config failure → render nothing (anon shell) */
+  }
   if (!user) return null;
 
-  // Role + entitlement + beta flags all hit the same request-scoped caches
-  // the SiteHeader uses (getCachedUserRole is unstable_cache-backed), so this
-  // nav adds no DB round-trips of its own.
-  const [role, entitlement, betaFeatures] = await Promise.all([
-    getCachedUserRole(user.id),
+  const [selfRoleRow, entitlement, betaFeatures] = await Promise.all([
+    supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
     getCurrentEntitlement(),
     getBetaFeatures(),
   ]);
 
-  const isAdmin = role === "admin";
+  const isAdmin = (selfRoleRow?.data?.role as string | null) === "admin";
   const coachAiAvailable = isAdmin || canUseAiFeatures(entitlement);
   // Authed users without Team Coach still get the Cal slot — tapping opens
   // the upgrade prompt instead of the chat. Mirrors the prior dashboard

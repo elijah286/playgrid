@@ -51,13 +51,12 @@ const config: CapacitorConfig = {
   },
   plugins: {
     SplashScreen: {
-      // launchAutoHide:false → JS dismisses the native splash
-      // (SplashScreen.hide on the first paint after hydration, in
-      // NativeAppShell), NOT after launchShowDuration. The HTML
-      // #native-loading-overlay bridges the splash→hydrated-paint gap that
-      // Apple reviewers flag on web wrappers. launchShowDuration is therefore
-      // only a fallback for the auto-hide path we don't use — it does NOT
-      // impose a minimum splash time on our JS-driven dismissal.
+      // Hold the splash for ~1.2s, then cross-fade for 280ms. This trims
+      // the perceived flash between native splash and the first hydrated
+      // paint that Apple reviewers tend to flag on web wrappers.
+      // We hide programmatically (showSplash on first paint) instead of
+      // relying on the auto-hide so the splash never lingers if the
+      // network is slow.
       launchShowDuration: 1200,
       launchAutoHide: false,
       launchFadeOutDuration: 280,

@@ -23,7 +23,9 @@ import { ConnectionRecovery } from "@/components/system/ConnectionRecovery";
 import { withFullContext } from "@/lib/seo/ld-json";
 import { NATIVE_APP_UA_MARKER } from "@/lib/native/nativeRequest";
 import { APP_STORE_ID, appStoreConfigured } from "@/lib/native/appStore";
-import { getRequestUser } from "@/lib/supabase/request-user";
+import { createClient } from "@/lib/supabase/server";
+import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { getUserWithTimeout } from "@/lib/supabase/get-user-with-timeout";
 import { getCachedUserRole } from "@/lib/auth/profile-cache";
 import { listInboxAlertsAction } from "@/app/actions/inbox";
 import { InboxBadgeProvider } from "@/features/dashboard/InboxBadgeContext";
@@ -154,15 +156,21 @@ export default async function RootLayout({
 }>) {
   let isAuthed = false;
   let userId: string | null = null;
-  // Single request-scoped auth check, shared with SiteHeader +
-  // GlobalBottomNav via React cache() (see request-user.ts) so one
-  // navigation makes one getUser() round-trip instead of three. Time-bound
-  // inside the helper: on timeout we fall through as not-authed — the worst
-  // case is a logged-out shell flash; the next request retries and recovers.
-  const authResult = await getRequestUser();
-  if (authResult.kind === "ok" && authResult.user) {
-    isAuthed = true;
-    userId = authResult.user.id;
+  if (hasSupabaseEnv()) {
+    try {
+      const supabase = await createClient();
+      // Time-bound the auth check so a hung refresh-token round-trip can't
+      // block server rendering. On timeout we fall through as not-authed —
+      // the worst case is a logged-out shell flash; the next request
+      // retries the refresh and recovers. See get-user-with-timeout.ts.
+      const result = await getUserWithTimeout(supabase);
+      if (result.kind === "ok" && result.user) {
+        isAuthed = true;
+        userId = result.user.id;
+      }
+    } catch {
+      isAuthed = false;
+    }
   }
 
   // Server-render the initial inbox badge baseline so the bell can paint

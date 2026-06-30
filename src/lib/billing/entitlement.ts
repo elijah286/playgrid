@@ -1,7 +1,5 @@
-import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
-import { getRequestUser } from "@/lib/supabase/request-user";
 
 export type SubscriptionTier = "free" | "coach" | "coach_ai";
 // "apple" = an App Store (StoreKit) subscription (see iap_subscriptions).
@@ -41,40 +39,18 @@ function fromRow(userId: string, row: Record<string, unknown> | null): Entitleme
   };
 }
 
-/**
- * Entitlement for the currently authenticated user, time-bounded.
- *
- * Testable implementation behind {@link getCurrentEntitlement}. Resolves the
- * user via the shared request-scoped {@link getRequestUser} (no second
- * getUser() round-trip), then reads `user_entitlements` with the RLS-scoped
- * anon client. Returns null when unauthenticated (including an auth
- * timeout); otherwise an Entitlement — free when the user has no row.
- */
-export async function loadCurrentEntitlement(): Promise<Entitlement | null> {
-  const authResult = await getRequestUser();
-  const user = authResult.kind === "ok" ? authResult.user : null;
-  if (!user) return null;
+/** Entitlement for the currently authenticated user. Returns free if unauthenticated. */
+export async function getCurrentEntitlement(): Promise<Entitlement | null> {
   const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth?.user) return null;
   const { data } = await supabase
     .from("user_entitlements")
     .select("tier, source, expires_at, comp_grant_id, subscription_id, iap_subscription_id")
-    .eq("user_id", user.id)
+    .eq("user_id", auth.user.id)
     .maybeSingle();
-  return fromRow(user.id, data);
+  return fromRow(auth.user.id, data);
 }
-
-/**
- * Entitlement for the currently authenticated user. Returns null if
- * unauthenticated.
- *
- * Request-memoized: this is read on most authed SSR pages AND in the
- * SiteHeader + GlobalBottomNav that render alongside them, so a single
- * navigation used to fire it 3+ times — each doing its own getUser() +
- * entitlements query. React cache() collapses those into one per request.
- * (getBetaFeatures is already unstable_cache-backed; this closes the
- * matching gap for billing.)
- */
-export const getCurrentEntitlement = cache(loadCurrentEntitlement);
 
 /** Entitlement for any user (admin/server use). Uses service role — never call from client code paths that leak data. */
 export async function getUserEntitlement(userId: string): Promise<Entitlement> {
