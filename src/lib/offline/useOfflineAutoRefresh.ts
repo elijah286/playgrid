@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import {
   getPlaybookOfflineBundleAction,
   getPlaybookOfflineSignatureAction,
+  listOfflinePlaybookIdsAction,
 } from "@/app/actions/offline";
 import { listCachedPlaybooks, putPlaybookBundle } from "./db";
 
@@ -16,23 +17,27 @@ const INITIAL_DELAY_MS = 5_000;
 
 /**
  * Background-refresh loop for offline-cached playbooks. Mount once at the
- * dashboard layer; the hook walks every cached playbook on mount, when the
- * device comes back online, when the tab becomes visible again, and on a
- * 30-minute timer.
+ * dashboard layer; the hook runs on mount, when the device comes back online,
+ * when the tab becomes visible again, and on a 30-minute timer.
  *
- * For each cached playbook it pulls the lightweight signature first; if it
- * matches what we cached, we skip the full bundle fetch. When the signature
- * has changed we pull the full bundle and `putPlaybookBundle` rewrites
- * IndexedDB, which fires `OFFLINE_CACHE_EVENT` and lights up any UI that's
- * watching (badges, the offline pill on PlaybookHeader, etc.).
+ * Two modes:
+ *   - default (`autoCache=false`): walk every ALREADY-cached playbook and
+ *     refresh the stale ones. This is the original behavior — a coach only
+ *     has offline copies of playbooks they manually tapped "download" on.
+ *   - `autoCache=true` (Phase 2, gated + native-only): seed from the coach's
+ *     FULL playbook list (listOfflinePlaybookIdsAction) so EVERY playbook is
+ *     downloaded, not just the hand-picked ones. The dashboard layout decides
+ *     the gate (beta flag + native shell).
  *
- * No-ops when:
- *   - nothing is cached (most users on web)
- *   - the device reports offline (we'd just fail every action)
- *   - another refresh ran within `MIN_GAP_MS` (debounces visibility +
- *     online events firing in quick succession)
+ * Either mode pulls the lightweight signature first and skips the full bundle
+ * when it still matches the local copy, so steady state costs one cheap call
+ * per playbook. putPlaybookBundle rewrites IndexedDB and fires
+ * OFFLINE_CACHE_EVENT so badges / the offline pill update.
+ *
+ * No-ops when offline, when throttled (MIN_GAP_MS), or — in default mode —
+ * when nothing is cached.
  */
-export function useOfflineAutoRefresh(): void {
+export function useOfflineAutoRefresh(autoCache = false): void {
   const lastRunRef = useRef(0);
   const inFlightRef = useRef(false);
 
@@ -49,14 +54,32 @@ export function useOfflineAutoRefresh(): void {
       inFlightRef.current = true;
       try {
         const cached = await listCachedPlaybooks();
-        for (const meta of cached) {
+        const localSig = new Map(cached.map((m) => [m.id, m.signature]));
+
+        // Which playbooks to walk. In autoCache mode, the coach's full set
+        // (so never-downloaded playbooks get cached too); otherwise just
+        // what's already local. Fall back to the cached set if the server
+        // list can't be fetched (offline mid-pass, etc.).
+        let ids: string[];
+        if (autoCache) {
+          const all = await listOfflinePlaybookIdsAction();
+          ids = all.ok ? all.ids : cached.map((m) => m.id);
+        } else {
+          ids = cached.map((m) => m.id);
+        }
+
+        for (const id of ids) {
           if (!alive) return;
           if (typeof navigator !== "undefined" && !navigator.onLine) return;
           try {
-            const sig = await getPlaybookOfflineSignatureAction(meta.id);
+            const sig = await getPlaybookOfflineSignatureAction(id);
             if (!sig.ok) continue;
-            if (meta.signature && sig.signature === meta.signature) continue;
-            const full = await getPlaybookOfflineBundleAction(meta.id);
+            const have = localSig.get(id);
+            // Already cached AND unchanged → nothing to do. A missing local
+            // entry (new playbook in autoCache mode) has no signature, so it
+            // always falls through to the bundle fetch.
+            if (have && sig.signature === have) continue;
+            const full = await getPlaybookOfflineBundleAction(id);
             if (!full.ok) continue;
             await putPlaybookBundle({
               meta: full.bundle.meta,
@@ -102,5 +125,5 @@ export function useOfflineAutoRefresh(): void {
       window.removeEventListener("online", onOnline);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, []);
+  }, [autoCache]);
 }

@@ -74,6 +74,13 @@ const FEATURES: FeatureMeta[] = [
       "Public coaching library at /learn/library — concept pages for every play, formation, route, and defensive scheme in the catalog. Each play page renders in the canonical editor. When hidden, the Resources → Football library link, the home page library teaser, and every library URL all disappear or 404 for non-entitled users. Admins always see it (so the editorial pass can be reviewed in production).",
     previewHref: "/learn/library",
   },
+  {
+    key: "offline_auto_cache",
+    label: "Offline — auto-cache all playbooks",
+    description:
+      "Native app only. When on, every one of a coach's playbooks auto-downloads into the on-device cache and stays fresh in the background (vs the manual per-playbook \"Download for offline\"), so the whole library works on the sideline with no signal. Reads work offline; editing still needs a connection. Start with \"Only me\" to verify on a device before widening.",
+    disabledScopes: ["custom"],
+  },
 ];
 
 const SCOPE_OPTIONS: { value: BetaFeatureScope; label: string; hint: string }[] = [

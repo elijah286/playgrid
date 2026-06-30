@@ -42,6 +42,16 @@ export type FeatureEntry = {
 };
 
 export const FEATURES: FeatureEntry[] = [
+  // ── Playbook ─────────────────────────────────────────────────────
+  {
+    id: "offline-auto-cache",
+    name: "Automatic offline playbooks",
+    description:
+      "In the app, every one of a coach's playbooks downloads automatically and stays fresh in the background, so the whole library is available offline on the sideline — no need to tap 'download' on each one.",
+    category: "Playbook",
+    status: "beta",
+    addedDate: "2026-06-30",
+  },
   // ── Roster & sharing ─────────────────────────────────────────────
   {
     id: "join-puts-you-on-roster",

@@ -12,7 +12,8 @@ export type BetaFeatureKey =
   | "version_history"
   | "team_messaging"
   | "coach_ai_image_upload"
-  | "football_library";
+  | "football_library"
+  | "offline_auto_cache";
 export type BetaFeatureScope = "off" | "me" | "all" | "custom";
 
 export type BetaFeatures = Record<BetaFeatureKey, BetaFeatureScope>;
@@ -34,6 +35,11 @@ const DEFAULTS: BetaFeatures = {
   // under it. Public (un-gated 2026-05-26) so the catalog can be
   // crawled and indexed; flip back to "me" or "off" to hide.
   football_library: "all",
+  // Phase 2 offline: auto-download ALL of a coach's playbooks into the
+  // native app's IndexedDB cache (vs today's opt-in per-playbook download)
+  // so they're available offline without thinking about it. Native-only and
+  // gated — start "off", flip to "me" for site-admin testing, then "all".
+  offline_auto_cache: "off",
 };
 
 /** Safe "everything off" fallback for callers that need a value even when

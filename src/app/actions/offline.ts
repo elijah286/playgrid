@@ -201,3 +201,42 @@ export async function getPlaybookOfflineSignatureAction(
 
   return { ok: true, signature: computeBundleSignature(plays, versionByPlay) };
 }
+
+/**
+ * IDs of every non-archived playbook the current coach can access (owned +
+ * shared), mirroring getDashboardSummaryAction's membership read. The Phase 2
+ * auto-cache loop seeds from this so "download for offline" becomes
+ * "everything is already offline" — it walks each id, skips the ones whose
+ * signature still matches the local copy, and bundles the rest.
+ */
+export async function listOfflinePlaybookIdsAction(): Promise<
+  { ok: true; ids: string[] } | { ok: false; error: string }
+> {
+  if (!hasSupabaseEnv()) {
+    return { ok: false, error: "Supabase is not configured." };
+  }
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Sign in required." };
+
+  const { data: rows, error } = await supabase
+    .from("playbook_members")
+    .select("playbooks!inner(id, is_archived)")
+    .eq("user_id", user.id);
+  if (error) return { ok: false, error: error.message };
+
+  type Row = {
+    playbooks:
+      | { id: string; is_archived: boolean | null }
+      | { id: string; is_archived: boolean | null }[]
+      | null;
+  };
+  const ids: string[] = [];
+  for (const r of (rows ?? []) as unknown as Row[]) {
+    const b = Array.isArray(r.playbooks) ? r.playbooks[0] : r.playbooks;
+    if (b && !b.is_archived) ids.push(b.id);
+  }
+  return { ok: true, ids };
+}

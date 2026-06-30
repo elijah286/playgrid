@@ -15,6 +15,12 @@ import { OfflineAutoRefreshMount } from "@/components/offline/OfflineAutoRefresh
 import { NativeWelcomeSpotlight } from "@/components/native/NativeWelcomeSpotlight";
 import { RatingNudge } from "@/components/native/RatingNudge";
 import { userSignedInWithApple } from "@/lib/auth/provider";
+import {
+  getBetaFeatures,
+  isBetaFeatureAvailable,
+} from "@/lib/site/beta-features-config";
+import { getCachedUserRole } from "@/lib/auth/profile-cache";
+import { isNativeAppRequest } from "@/lib/native/nativeRequest";
 
 // Auth is NOT enforced here. Anon visitors may reach example-playbook
 // pages under this layout (e.g. /playbooks/[id] for a public example);
@@ -48,13 +54,32 @@ export default async function DashboardLayout({
     expirationNotice,
     nameCaptureNeeded,
     termsNeeded,
+    betaFeatures,
+    userRole,
+    isNative,
   ] = await Promise.all([
     getFeedbackWidgetSettings(),
     user ? userHasCreatedPlayAction() : Promise.resolve(false),
     user ? getExpirationNotice() : Promise.resolve(null),
     user ? checkNameCaptureNeeded(user) : Promise.resolve(false),
     user ? checkTermsAcceptanceNeeded(user) : Promise.resolve(false),
+    getBetaFeatures(),
+    user ? getCachedUserRole(user.id) : Promise.resolve(null),
+    isNativeAppRequest(),
   ]);
+
+  // Phase 2 offline auto-cache: gated + native-only. When enabled, the
+  // background refresh loop seeds from the coach's FULL playbook list so every
+  // playbook lands in IndexedDB — not just the ones they tapped "download" on.
+  // Native-only because the offline cache + viewer are native-only surfaces;
+  // there's no point bulk-caching into a web browser.
+  const offlineAutoCache =
+    !!user &&
+    isNative &&
+    isBetaFeatureAvailable(betaFeatures.offline_auto_cache, {
+      isAdmin: userRole === "admin",
+      isEntitled: true,
+    });
 
   return (
     // No `overflow-x-hidden` anywhere in this subtree — that property
@@ -86,7 +111,7 @@ export default async function DashboardLayout({
       {/* The global mobile bottom nav is mounted once in the root layout
           (GlobalBottomNav) so it persists across every route — including
           resource pages like /learn that live outside this group. */}
-      {user && <OfflineAutoRefreshMount />}
+      {user && <OfflineAutoRefreshMount autoCache={offlineAutoCache} />}
     </div>
   );
 }
