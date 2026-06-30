@@ -39,6 +39,7 @@ describe("Leo read-only tool surface (v1 safety invariant)", () => {
     expect(readNames.has("get_league_settings")).toBe(true);
     expect(readNames.has("list_registrations")).toBe(true);
     expect(readNames.has("list_teams")).toBe(true);
+    expect(readNames.has("list_standings")).toBe(true);
     expect(readNames.has("list_curriculum_plans")).toBe(true);
   });
 

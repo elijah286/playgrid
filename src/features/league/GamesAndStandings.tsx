@@ -300,7 +300,7 @@ export function GamesAndStandings({
 
       <section>
         <h2 className="mb-2 text-sm font-semibold text-foreground">Standings</h2>
-        <StandingsTable standings={board.standings} />
+        <StandingsTable standings={board.standings} sport={board.sport} />
       </section>
     </div>
   );

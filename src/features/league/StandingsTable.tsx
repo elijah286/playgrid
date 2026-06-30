@@ -1,6 +1,20 @@
 import type { DivisionStandings } from "@/lib/league/standings";
+import { sportStandingsConfig } from "@/lib/league/standings";
+import { sportConfig } from "@/lib/league/sportConfig";
 
-export function StandingsTable({ standings }: { standings: DivisionStandings[] }) {
+function fmtPct(p: number): string {
+  // Baseball/basketball convention: .750, 1.000
+  const s = p.toFixed(3);
+  return s.startsWith("0") ? s.slice(1) : s;
+}
+
+export function StandingsTable({
+  standings,
+  sport,
+}: {
+  standings: DivisionStandings[];
+  sport?: string;
+}) {
   const hasAny = standings.some((d) => d.rows.length > 0);
   if (!hasAny) {
     return (
@@ -9,6 +23,12 @@ export function StandingsTable({ standings }: { standings: DivisionStandings[] }
       </p>
     );
   }
+
+  const config = sportStandingsConfig(sport);
+  const abbr = (sportConfig(sport).scoreNoun[0] ?? "p").toUpperCase();
+  const showTies = config.allowsTies;
+  const showPct = config.rankingRule === "win_pct";
+  const showPts = config.usesTablePoints;
 
   return (
     <div className="space-y-5">
@@ -25,10 +45,12 @@ export function StandingsTable({ standings }: { standings: DivisionStandings[] }
                   <th className="px-4 py-2">Team</th>
                   <th className="px-2 py-2 text-center">W</th>
                   <th className="px-2 py-2 text-center">L</th>
-                  <th className="px-2 py-2 text-center">T</th>
-                  <th className="px-2 py-2 text-center tabular-nums">PF</th>
-                  <th className="px-2 py-2 text-center tabular-nums">PA</th>
+                  {showTies ? <th className="px-2 py-2 text-center">T</th> : null}
+                  {showPct ? <th className="px-2 py-2 text-center tabular-nums">Pct</th> : null}
+                  <th className="px-2 py-2 text-center tabular-nums">{abbr}F</th>
+                  <th className="px-2 py-2 text-center tabular-nums">{abbr}A</th>
                   <th className="px-3 py-2 text-center tabular-nums">Diff</th>
+                  {showPts ? <th className="px-3 py-2 text-center tabular-nums">Pts</th> : null}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -37,12 +59,22 @@ export function StandingsTable({ standings }: { standings: DivisionStandings[] }
                     <td className="px-4 py-2 font-medium text-foreground">{r.teamName}</td>
                     <td className="px-2 py-2 text-center tabular-nums">{r.wins}</td>
                     <td className="px-2 py-2 text-center tabular-nums">{r.losses}</td>
-                    <td className="px-2 py-2 text-center tabular-nums">{r.ties}</td>
+                    {showTies ? (
+                      <td className="px-2 py-2 text-center tabular-nums">{r.ties}</td>
+                    ) : null}
+                    {showPct ? (
+                      <td className="px-2 py-2 text-center tabular-nums">{fmtPct(r.winPct)}</td>
+                    ) : null}
                     <td className="px-2 py-2 text-center tabular-nums text-muted">{r.pointsFor}</td>
                     <td className="px-2 py-2 text-center tabular-nums text-muted">{r.pointsAgainst}</td>
                     <td className="px-3 py-2 text-center tabular-nums">
                       {r.diff > 0 ? `+${r.diff}` : r.diff}
                     </td>
+                    {showPts ? (
+                      <td className="px-3 py-2 text-center font-semibold tabular-nums">
+                        {r.tablePoints}
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>

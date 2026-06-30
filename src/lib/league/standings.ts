@@ -23,6 +23,10 @@ export type StandingsRow = {
   pointsFor: number;
   pointsAgainst: number;
   diff: number;
+  /** League-table points (soccer 3/1/0). 0 for sports that don't use a table. */
+  tablePoints: number;
+  /** (wins + ½·ties) / played, or 0 when unplayed. */
+  winPct: number;
 };
 
 export type DivisionStandings = {
@@ -31,16 +35,80 @@ export type DivisionStandings = {
   rows: StandingsRow[];
 };
 
+// How a sport ranks its table. The default (football) ranks by wins then point
+// differential; soccer uses table points; basketball/baseball use win %.
+export type StandingsRankingRule = "wins_diff" | "table_points" | "win_pct";
+
+export type SportStandingsConfig = {
+  rankingRule: StandingsRankingRule;
+  /** Whether a drawn result is legal. Basketball/baseball/volleyball: false. */
+  allowsTies: boolean;
+  /** Show a league-table points column (soccer). */
+  usesTablePoints: boolean;
+  /** Table points for a win / a draw (only meaningful when usesTablePoints). */
+  winPoints: number;
+  drawPoints: number;
+};
+
+const DEFAULT_CONFIG: SportStandingsConfig = {
+  rankingRule: "wins_diff",
+  allowsTies: true,
+  usesTablePoints: false,
+  winPoints: 0,
+  drawPoints: 0,
+};
+
+const CONFIG_BY_SPORT: Record<string, SportStandingsConfig> = {
+  football: DEFAULT_CONFIG,
+  soccer: {
+    rankingRule: "table_points",
+    allowsTies: true,
+    usesTablePoints: true,
+    winPoints: 3,
+    drawPoints: 1,
+  },
+  basketball: { rankingRule: "win_pct", allowsTies: false, usesTablePoints: false, winPoints: 0, drawPoints: 0 },
+  baseball: { rankingRule: "win_pct", allowsTies: false, usesTablePoints: false, winPoints: 0, drawPoints: 0 },
+  volleyball: { rankingRule: "win_pct", allowsTies: false, usesTablePoints: false, winPoints: 0, drawPoints: 0 },
+  other: DEFAULT_CONFIG,
+};
+
+export function sportStandingsConfig(sport: string | null | undefined): SportStandingsConfig {
+  return (sport && CONFIG_BY_SPORT[sport]) || DEFAULT_CONFIG;
+}
+
+/** Whether a tie/draw is a legal result for this sport (gate at score-write). */
+export function sportAllowsTies(sport: string | null | undefined): boolean {
+  return sportStandingsConfig(sport).allowsTies;
+}
+
+function comparator(
+  config: SportStandingsConfig,
+): (a: StandingsRow, b: StandingsRow) => number {
+  const byName = (a: StandingsRow, b: StandingsRow) => a.teamName.localeCompare(b.teamName);
+  if (config.rankingRule === "table_points") {
+    return (a, b) =>
+      b.tablePoints - a.tablePoints || b.diff - a.diff || b.pointsFor - a.pointsFor || byName(a, b);
+  }
+  if (config.rankingRule === "win_pct") {
+    return (a, b) =>
+      b.winPct - a.winPct || b.diff - a.diff || b.pointsFor - a.pointsFor || byName(a, b);
+  }
+  return (a, b) => b.wins - a.wins || b.diff - a.diff || b.pointsFor - a.pointsFor || byName(a, b);
+}
+
 /**
  * Derive standings from FINAL games. Pure + deterministic. A game only counts
  * when it's final with both scores set and both teams still exist. Teams are
- * grouped by division and ranked by wins, then point differential, then points
- * scored, then name.
+ * grouped by division and ranked by the sport's rule (default: wins → point
+ * differential → points scored → name).
  */
 export function computeStandings(
   teams: StandingsTeam[],
   games: StandingsGame[],
+  sport?: string | null,
 ): DivisionStandings[] {
+  const config = sportStandingsConfig(sport);
   const teamDiv = new Map<string, string | null>(teams.map((t) => [t.id, t.divisionId ?? null]));
 
   const byTeam = new Map<string, StandingsRow>();
@@ -55,6 +123,8 @@ export function computeStandings(
       pointsFor: 0,
       pointsAgainst: 0,
       diff: 0,
+      tablePoints: 0,
+      winPct: 0,
     });
   }
 
@@ -87,7 +157,11 @@ export function computeStandings(
     }
   }
 
-  for (const r of byTeam.values()) r.diff = r.pointsFor - r.pointsAgainst;
+  for (const r of byTeam.values()) {
+    r.diff = r.pointsFor - r.pointsAgainst;
+    r.tablePoints = r.wins * config.winPoints + r.ties * config.drawPoints;
+    r.winPct = r.played > 0 ? (r.wins + 0.5 * r.ties) / r.played : 0;
+  }
 
   const divisions = new Map<string, DivisionStandings>();
   for (const t of teams) {
@@ -103,15 +177,8 @@ export function computeStandings(
     if (row) divisions.get(key)!.rows.push(row);
   }
 
-  for (const d of divisions.values()) {
-    d.rows.sort(
-      (a, b) =>
-        b.wins - a.wins ||
-        b.diff - a.diff ||
-        b.pointsFor - a.pointsFor ||
-        a.teamName.localeCompare(b.teamName),
-    );
-  }
+  const cmp = comparator(config);
+  for (const d of divisions.values()) d.rows.sort(cmp);
 
   return [...divisions.values()].sort((a, b) => {
     if (!a.divisionName && b.divisionName) return 1; // ungrouped teams last

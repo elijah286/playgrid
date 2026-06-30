@@ -21,7 +21,8 @@ export default async function GamesPage({
   if (!memberships.some((m) => m.leagueId === leagueId && isLeagueAdminRole(m.role))) notFound();
 
   const res = await getGamesBoardAction(leagueId);
-  const board = res.ok && res.board ? res.board : { teams: [], games: [], standings: [] };
+  const board =
+    res.ok && res.board ? res.board : { teams: [], games: [], standings: [], sport: "football" };
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-12 text-foreground sm:px-6">

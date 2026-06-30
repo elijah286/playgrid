@@ -5,7 +5,11 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { isLeagueAdmin } from "@/lib/league/access";
-import { computeStandings, type DivisionStandings } from "@/lib/league/standings";
+import {
+  computeStandings,
+  sportAllowsTies,
+  type DivisionStandings,
+} from "@/lib/league/standings";
 
 export type GameRow = {
   id: string;
@@ -32,6 +36,7 @@ export type GamesBoard = {
   teams: GamesTeam[];
   games: GameRow[];
   standings: DivisionStandings[];
+  sport: string;
 };
 
 async function gateAdmin(leagueId: string) {
@@ -52,7 +57,7 @@ export async function getGamesBoardAction(leagueId: string) {
   if (!gate.ok) return { ok: false as const, error: gate.error, board: null };
   const supabase = gate.supabase;
 
-  const [teamsRes, divsRes, gamesRes] = await Promise.all([
+  const [teamsRes, divsRes, gamesRes, leagueRes] = await Promise.all([
     supabase
       .from("teams")
       .select("id, name, league_division_id")
@@ -67,7 +72,9 @@ export async function getGamesBoardAction(leagueId: string) {
       .eq("league_id", leagueId)
       .order("starts_at", { ascending: true, nullsFirst: false })
       .limit(2000),
+    supabase.from("leagues").select("sport").eq("id", leagueId).maybeSingle(),
   ]);
+  const sport = (leagueRes.data?.sport as string | null) ?? "football";
 
   const divName = new Map<string, string>(
     (divsRes.data ?? []).map((d) => [d.id as string, d.name as string]),
@@ -113,9 +120,10 @@ export async function getGamesBoardAction(leagueId: string) {
       awayScore: (gm.away_score as number | null) ?? null,
       status: gm.status as string,
     })),
+    sport,
   );
 
-  return { ok: true as const, board: { teams, games, standings } as GamesBoard };
+  return { ok: true as const, board: { teams, games, standings, sport } as GamesBoard };
 }
 
 export async function createGameAction(
@@ -171,6 +179,18 @@ export async function setGameScoreAction(
     awayScore < 0
   ) {
     return { ok: false as const, error: "Scores must be whole numbers, 0 or more." };
+  }
+  // Some sports can't end in a tie (basketball, baseball, volleyball). Only the
+  // equal-score case needs the sport lookup.
+  if (homeScore === awayScore) {
+    const { data: league } = await gate.supabase
+      .from("leagues")
+      .select("sport")
+      .eq("id", leagueId)
+      .maybeSingle();
+    if (!sportAllowsTies((league?.sport as string | null) ?? "football")) {
+      return { ok: false as const, error: "This sport can't end in a tie — enter a winner." };
+    }
   }
   const { data: updated, error } = await gate.supabase
     .from("league_games")

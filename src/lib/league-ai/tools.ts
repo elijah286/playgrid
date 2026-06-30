@@ -16,6 +16,7 @@ import { GROUP_TOOLS } from "./group-tools";
 import { SETTINGS_TOOLS } from "./settings-tools";
 import { ROSTER_TOOLS } from "./roster-tools";
 import { CURRICULUM_TOOLS } from "./curriculum-tools";
+import { STANDINGS_TOOLS } from "./standings-tools";
 
 function playerName(applicant: unknown): string {
   const a = (applicant ?? {}) as { player?: { firstName?: unknown; lastName?: unknown } };
@@ -107,6 +108,8 @@ export const LEAGUE_TOOLS: LeagueTool[] = [
   ...ROSTER_TOOLS,
   // Practice-plan curriculum (list + distribute to coaches).
   ...CURRICULUM_TOOLS,
+  // Sport-correct standings (read).
+  ...STANDINGS_TOOLS,
 ];
 
 /** Tools available for this context. Consequential tools (added later) gate on

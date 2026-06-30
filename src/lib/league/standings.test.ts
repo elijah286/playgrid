@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { computeStandings, type StandingsGame, type StandingsTeam } from "./standings";
+import {
+  computeStandings,
+  sportAllowsTies,
+  sportStandingsConfig,
+  type StandingsGame,
+  type StandingsTeam,
+} from "./standings";
 
 const teams: StandingsTeam[] = [
   { id: "a", name: "Aardvarks", divisionId: "d1", divisionName: "U10" },
@@ -71,5 +77,55 @@ describe("computeStandings", () => {
     const out = computeStandings(teams, games);
     const a = out[0].rows.find((r) => r.teamId === "a")!;
     expect(a.played).toBe(0);
+  });
+});
+
+describe("per-sport standings", () => {
+  // Same games, three ways. A: 1W 1D, B: 1W 1L, C: 1D 1L.
+  const games = [
+    g("a", "b", 2, 1), // A beats B
+    g("a", "c", 1, 1), // A draws C
+    g("b", "c", 3, 0), // B beats C
+  ];
+
+  it("soccer ranks by table points (3-1-0), not wins/diff", () => {
+    const out = computeStandings(teams, games, "soccer");
+    const u10 = out.find((d) => d.divisionId === "d1")!;
+    // A: 1W1D = 4 pts; B: 1W1L = 3 pts; C: 1D1L = 1 pt.
+    expect(u10.rows.map((r) => r.teamId)).toEqual(["a", "b", "c"]);
+    expect(u10.rows.find((r) => r.teamId === "a")!.tablePoints).toBe(4);
+    expect(u10.rows.find((r) => r.teamId === "b")!.tablePoints).toBe(3);
+  });
+
+  it("football ranks the SAME games differently (wins → diff): B's better diff wins the tie", () => {
+    const out = computeStandings(teams, games, "football");
+    const u10 = out.find((d) => d.divisionId === "d1")!;
+    // A & B both 1 win; B's diff (+2) beats A's (+1).
+    expect(u10.rows.map((r) => r.teamId)).toEqual(["b", "a", "c"]);
+    expect(u10.rows.find((r) => r.teamId === "a")!.tablePoints).toBe(0); // no table for football
+  });
+
+  it("basketball ranks by win %, so a perfect record outranks more raw wins", () => {
+    const bball = [
+      g("a", "b", 50, 40), // A beats B → A 1-0
+      g("b", "c", 60, 40), // B beats C
+      g("b", "c", 55, 45), // B beats C again → B 2-1
+    ];
+    const out = computeStandings(teams, bball, "basketball");
+    const u10 = out.find((d) => d.divisionId === "d1")!;
+    // A 1-0 (1.000) outranks B 2-1 (.667) despite fewer wins.
+    expect(u10.rows.map((r) => r.teamId)).toEqual(["a", "b", "c"]);
+    expect(u10.rows.find((r) => r.teamId === "a")!.winPct).toBe(1);
+    expect(u10.rows.find((r) => r.teamId === "b")!.winPct).toBeCloseTo(2 / 3, 5);
+  });
+
+  it("encodes which sports allow ties", () => {
+    expect(sportAllowsTies("football")).toBe(true);
+    expect(sportAllowsTies("soccer")).toBe(true);
+    expect(sportAllowsTies("basketball")).toBe(false);
+    expect(sportAllowsTies("baseball")).toBe(false);
+    expect(sportAllowsTies("volleyball")).toBe(false);
+    expect(sportStandingsConfig("soccer").usesTablePoints).toBe(true);
+    expect(sportStandingsConfig("basketball").usesTablePoints).toBe(false);
   });
 });
