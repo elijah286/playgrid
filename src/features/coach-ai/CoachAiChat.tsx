@@ -18,6 +18,7 @@ import {
   logCoachAiNegativeFeedbackAction,
 } from "@/app/actions/coach-ai-feedback";
 import { getCoachCalUpgradeBannerEnabledAction } from "@/app/actions/admin-coach-cal-banner";
+import { getCoachCalFreeTrialStatusAction } from "@/app/actions/coach-cal-free-trial";
 import { commitPlaybookNoteProposalAction } from "@/app/actions/coach-ai-playbook-notes";
 import {
   commitAttachDefenseToPlayAction,
@@ -347,6 +348,12 @@ export function CoachAiChat({
   const [feedbackOptIn, setFeedbackOptIn] = useState<"loading" | "consenting" | "declined" | "unanswered">("loading");
   const [optInPending, setOptInPending] = useState(false);
   const [upgradeBannerEnabled, setUpgradeBannerEnabled] = useState(false);
+  // Free-trial prompt counter. Non-null ONLY for genuine free (non-subscribed,
+  // non-admin) users — the server action returns null for everyone else, so the
+  // banner never shows for paid coaches or admins. Decremented locally on each
+  // successful turn and zeroed on the exhausted error; the server is the real
+  // enforcer either way.
+  const [freeTrial, setFreeTrial] = useState<{ allowance: number; remaining: number } | null>(null);
   // Set when the server reports an in-flight assistant turn for this thread
   // (typically because the coach closed the window mid-stream and reopened).
   // While set, a polling effect drives the visible "thinking" indicator and
@@ -438,6 +445,19 @@ export function CoachAiChat({
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // Fetch the free-trial prompt count on mount (admins are never on the trial,
+  // so skip the round-trip for them). Returns null for subscribed users too.
+  useEffect(() => {
+    if (isAdmin) return;
+    let cancelled = false;
+    void (async () => {
+      const status = await getCoachCalFreeTrialStatusAction();
+      if (cancelled) return;
+      setFreeTrial(status ? { allowance: status.allowance, remaining: status.remaining } : null);
+    })();
+    return () => { cancelled = true; };
+  }, [isAdmin]);
 
   async function answerOptIn(consenting: boolean) {
     setOptInPending(true);
@@ -993,6 +1013,15 @@ export function CoachAiChat({
             setError((payload.message as string | undefined) ?? "Image upload limit reached.");
             setTurns((cur) => (cur.at(-1)?.role === "user" ? cur.slice(0, -1) : cur));
             setDraft(text);
+          } else if (payload.code === "free_prompts_exhausted") {
+            // Free trial used up. Zero the banner, surface the upgrade nudge,
+            // and roll back the optimistic user turn + restore the draft (the
+            // prompt was never processed, so it must not burn or vanish).
+            blocked = true;
+            setFreeTrial((prev) => (prev ? { ...prev, remaining: 0 } : prev));
+            setError((payload.message as string | undefined) ?? "You've used your free Coach Cal prompts.");
+            setTurns((cur) => (cur.at(-1)?.role === "user" ? cur.slice(0, -1) : cur));
+            setDraft(text);
           } else {
             setError((payload.message as string | undefined) ?? "An error occurred.");
           }
@@ -1008,6 +1037,16 @@ export function CoachAiChat({
           const defenseProposals = (payload.saveDefenseProposals as SaveDefenseProposal[] | null | undefined) ?? null;
           const choiceProps = (payload.choiceProposals as ChoiceProposal[] | null | undefined) ?? null;
           const mutated = payload.mutated === true;
+          // Free-trial: a non-empty final text means the server's success
+          // branch ran and incremented the lifetime counter, so spend one
+          // prompt in the banner. An empty final text is a server-side agent
+          // error that did NOT increment — leave the count; a reopen refetches
+          // the authoritative value.
+          if (finalText.trim()) {
+            setFreeTrial((prev) =>
+              prev ? { ...prev, remaining: Math.max(0, prev.remaining - 1) } : prev,
+            );
+          }
           setTurns((cur) => [
             ...cur,
             {
@@ -1204,6 +1243,27 @@ export function CoachAiChat({
             He&rsquo;s still available, but you may notice unusual behavior
             while improvements roll out. Thanks for your patience.
           </p>
+        </div>
+      )}
+      {freeTrial && (
+        <div className="flex items-center justify-between gap-3 border-b border-border bg-surface-inset px-4 py-2 text-xs">
+          {freeTrial.remaining > 0 ? (
+            <span className="text-muted">
+              <span className="font-semibold text-foreground">Free preview</span> ·{" "}
+              {freeTrial.remaining} of {freeTrial.allowance} prompt
+              {freeTrial.allowance === 1 ? "" : "s"} left
+            </span>
+          ) : (
+            <span className="text-muted">
+              <span className="font-semibold text-foreground">Free preview used up</span> · upgrade to keep chatting with Cal
+            </span>
+          )}
+          <a
+            href="/pricing"
+            className="shrink-0 font-semibold text-primary hover:underline"
+          >
+            Upgrade
+          </a>
         </div>
       )}
       <div
