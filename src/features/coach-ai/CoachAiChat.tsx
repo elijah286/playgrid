@@ -267,6 +267,7 @@ export function CoachAiChat({
   playId,
   mode = "normal",
   isAdmin = false,
+  canDebugCal = false,
   injectedPrompt = null,
   imageUploadAvailable = false,
   onTurnsChange,
@@ -274,9 +275,13 @@ export function CoachAiChat({
   playbookId?: string | null;
   playId?: string | null;
   mode?: "normal" | "admin_training";
-  /** Site-admin flag — surfaces the "Copy JSON" debug option on assistant
-   *  messages (long-press / right-click the Copy button). */
+  /** Site-admin flag — admins skip the free-trial-prompt-count fetch below
+   *  (they're never on the trial). Not the debug-tools gate; see canDebugCal. */
   isAdmin?: boolean;
+  /** Site admin, or a non-admin account granted Cal debug tools — surfaces
+   *  the "Copy JSON" option on assistant messages (long-press / right-click
+   *  the Copy button). */
+  canDebugCal?: boolean;
   /**
    * When set (and `key` changes), populate the draft. If `autoSubmit` is
    * true, fire the request immediately. Used by in-app CTAs that open Cal
@@ -1334,7 +1339,7 @@ export function CoachAiChat({
                           animate={false}
                           prevUserMessage={i > 0 ? turns[i - 1]?.text ?? "" : ""}
                           playbookId={playbookId}
-                          isAdmin={isAdmin}
+                          canDebugCal={canDebugCal}
                           setTurns={setTurns}
                           onChoose={(text) => void send(text)}
                           streaming={streaming}
@@ -1355,7 +1360,7 @@ export function CoachAiChat({
                   animate={i === nextFreshIdxRef.current}
                   prevUserMessage={i > 0 ? turns[i - 1]?.text ?? "" : ""}
                   playbookId={playbookId}
-                  isAdmin={isAdmin}
+                  canDebugCal={canDebugCal}
                   setTurns={setTurns}
                   onChoose={(text) => void send(text)}
                   streaming={streaming}
@@ -1620,7 +1625,7 @@ function TurnItem({
   animate,
   prevUserMessage,
   playbookId,
-  isAdmin,
+  canDebugCal,
   setTurns,
   onChoose,
   streaming,
@@ -1630,7 +1635,7 @@ function TurnItem({
   animate: boolean;
   prevUserMessage: string;
   playbookId: string | null | undefined;
-  isAdmin: boolean;
+  canDebugCal: boolean;
   setTurns: React.Dispatch<React.SetStateAction<CoachAiTurn[]>>;
   /** Send the tapped option's label as the coach's next message. */
   onChoose: (text: string) => void;
@@ -1664,7 +1669,7 @@ function TurnItem({
           )}
           <AssistantMessageWithFeedback
             text={t.text}
-            isAdmin={isAdmin}
+            canDebugCal={canDebugCal}
             onThumbsUp={() => void logCoachAiPositiveFeedbackAction(t.text, prevUserMessage)}
             onThumbsDown={() => void logCoachAiNegativeFeedbackAction(t.text, prevUserMessage)}
           />

@@ -14,6 +14,9 @@ import type { SubscriptionTier } from "@/lib/billing/entitlement";
 type Props = {
   user: { id: string; email: string | null } | null;
   isAdmin: boolean;
+  /** Site admin, or a non-admin account granted Cal debug tools (download
+   *  thread / copy JSON) — passed through to the Cal launcher. */
+  canDebugCal: boolean;
   displayName: string | null;
   avatarUrl: string | null;
   coachAiAvailable?: boolean;
@@ -61,7 +64,7 @@ const PLAYBOOK_DETAIL_RE = /^\/playbooks\/[^/]+(?:\/.*)?$/;
 // the clock) and removes the header the user expects. Keep it visible.
 const PLAYBOOK_PRINT_RE = /^\/playbooks\/[^/]+\/print(?:\/|$)/;
 
-export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAiAvailable, showCoachCalPromo, coachAiEvalDays, coachAiImageUploadAvailable, userTier, coachProTrialUsed, footballLibraryAvailable, leagueAccess, feedbackEnabled }: Props) {
+export function SiteHeaderShell({ user, isAdmin, canDebugCal, displayName, avatarUrl, coachAiAvailable, showCoachCalPromo, coachAiEvalDays, coachAiImageUploadAvailable, userTier, coachProTrialUsed, footballLibraryAvailable, leagueAccess, feedbackEnabled }: Props) {
   const pathname = usePathname();
   const hideOnMobile =
     PLAYBOOK_DETAIL_RE.test(pathname) && !PLAYBOOK_PRINT_RE.test(pathname);
@@ -154,6 +157,7 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
               <div className="hidden sm:block">
                 <CoachAiLauncher
                   isAdmin={isAdmin}
+                  canDebugCal={canDebugCal}
                   entitled={coachAiAvailable ?? false}
                   acceptGlobalCommands
                   evalDays={coachAiEvalDays}

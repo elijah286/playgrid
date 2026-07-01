@@ -10,12 +10,13 @@ const LONG_PRESS_MS = 500;
 
 export function AssistantMessageWithFeedback({
   text,
-  isAdmin = false,
+  canDebugCal = false,
   onThumbsUp,
   onThumbsDown,
 }: {
   text: string;
-  isAdmin?: boolean;
+  /** Site admin, or a non-admin account a site admin granted Cal debug tools to. */
+  canDebugCal?: boolean;
   onThumbsUp: () => void;
   onThumbsDown: () => void;
 }) {
@@ -102,7 +103,7 @@ export function AssistantMessageWithFeedback({
   };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (!isAdmin) return;
+    if (!canDebugCal) return;
     if (e.button !== 0) return; // right-click takes the onContextMenu path
     cancelLongPress();
     longPressTimerRef.current = setTimeout(() => {
@@ -114,7 +115,7 @@ export function AssistantMessageWithFeedback({
     cancelLongPress();
   };
   const handleContextMenu = (e: React.MouseEvent<HTMLButtonElement>) => {
-    if (!isAdmin) return;
+    if (!canDebugCal) return;
     e.preventDefault();
     openMenu();
   };
@@ -199,7 +200,7 @@ export function AssistantMessageWithFeedback({
             title={
               copied
                 ? "Copied!"
-                : isAdmin
+                : canDebugCal
                 ? "Copy to clipboard (hold for options)"
                 : "Copy to clipboard"
             }

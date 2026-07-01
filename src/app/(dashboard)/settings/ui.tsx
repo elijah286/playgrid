@@ -6,6 +6,7 @@ import {
   BarChart3,
   Bell,
   Brain,
+  Bug,
   ClipboardCheck,
   CreditCard,
   DollarSign,
@@ -46,6 +47,7 @@ import { CoachAiTokenUsageClient } from "@/features/admin/CoachAiTokenUsageClien
 import type { KbMissRow } from "@/app/actions/coach-ai-feedback";
 import { CoachInvitationsAdminClient } from "@/features/admin/CoachInvitationsAdminClient";
 import { LeagueOrganizersAdminClient } from "@/features/admin/LeagueOrganizersAdminClient";
+import { CalDebugAccessAdminClient } from "@/features/admin/CalDebugAccessAdminClient";
 import { BillingAdminClient } from "@/features/admin/BillingAdminClient";
 import { TrafficAdminClient } from "@/features/admin/TrafficAdminClient";
 import { GeographyAdminClient } from "@/features/admin/GeographyAdminClient";
@@ -117,7 +119,8 @@ type Tab =
   | "notif_health"
   | "beta"
   | "functional_tests"
-  | "league_organizers";
+  | "league_organizers"
+  | "cal_debug_access";
 
 const STORAGE_KEY = "site-admin-active-tab";
 
@@ -142,7 +145,8 @@ function isTab(value: string | null | undefined): value is Tab {
     value === "notif_health" ||
     value === "beta" ||
     value === "functional_tests" ||
-    value === "league_organizers"
+    value === "league_organizers" ||
+    value === "cal_debug_access"
   );
 }
 
@@ -308,6 +312,11 @@ export function SettingsClient({
           value: "league_organizers",
           label: "League organizers",
           icon: Trophy,
+        },
+        {
+          value: "cal_debug_access",
+          label: "Cal debug access",
+          icon: Bug,
         },
       ],
     },
@@ -489,6 +498,8 @@ export function SettingsClient({
         )}
 
         {tab === "league_organizers" && <LeagueOrganizersAdminClient />}
+
+        {tab === "cal_debug_access" && <CalDebugAccessAdminClient />}
 
         {tab === "revenue" && (
           <LazyContent state={revenueData}>

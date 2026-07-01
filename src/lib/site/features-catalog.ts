@@ -712,6 +712,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-25",
   },
   {
+    id: "site-admin-coach-cal-debug-access",
+    name: "Site admin · Coach Cal debug-access grants",
+    description:
+      "Site admins can grant an individual account the same Coach Cal debugging tools admins get — downloading the full chat thread (transcript + lossless JSON) and copying the raw JSON of any Cal response — without making that account a site admin. Managed from Site Admin → People → Cal debug access, which lists every account with debug tools enabled, who granted it, and when. The account still needs its own Coach Cal entitlement to open Cal at all; the grant only unlocks the debug affordances once they're there.",
+    category: "Admin tools",
+    status: "internal",
+    addedDate: "2026-07-01",
+  },
+  {
     id: "play-move-to-group-from-action-menu",
     name: "Move a play between groups from the ⋮ menu",
     description:

@@ -11,9 +11,13 @@ const GRADIENT = "linear-gradient(135deg, #dbeafe 0%, #ede9fe 100%)";
 export function ChatWindow({
   playbookId,
   isAdmin,
+  canDebugCal,
 }: {
   playbookId: string | null;
   isAdmin: boolean;
+  /** Site admin, or a non-admin account granted Cal debug tools. Gates the
+   *  download-thread button below. */
+  canDebugCal: boolean;
 }) {
   const mode = "normal" as const;
 
@@ -106,7 +110,7 @@ export function ChatWindow({
         </div>
 
         <div className="flex items-center gap-0.5">
-          {isAdmin && (
+          {canDebugCal && (
             <button
               type="button"
               onClick={downloadThread}
@@ -136,6 +140,7 @@ export function ChatWindow({
           playbookId={playbookId}
           mode={mode}
           isAdmin={isAdmin}
+          canDebugCal={canDebugCal}
           onTurnsChange={handleTurnsChange}
         />
       </div>

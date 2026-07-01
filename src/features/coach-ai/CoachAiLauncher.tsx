@@ -83,6 +83,7 @@ function hexToRgba(hex: string | null | undefined, alpha: number): string | null
 export function CoachAiLauncher({
   playbookId: playbookIdProp = null,
   isAdmin = false,
+  canDebugCal = false,
   entitled = true,
   acceptGlobalCommands = false,
   evalDays,
@@ -92,6 +93,9 @@ export function CoachAiLauncher({
 }: {
   playbookId?: string | null;
   isAdmin?: boolean;
+  /** Site admin, or a non-admin account granted Cal debug tools — gates the
+   *  download-thread button and the assistant messages' "Copy JSON" option. */
+  canDebugCal?: boolean;
   entitled?: boolean;
   /**
    * When true, this launcher subscribes to the `coach-cal:open` window event
@@ -1072,7 +1076,7 @@ export function CoachAiLauncher({
                 {/* Admin-only: download the full thread as a debugging
                     document (transcript + lossless JSON). Replaces the old
                     font-size / training-toggle affordances. */}
-                {isAdmin && (
+                {canDebugCal && (
                   <button
                     type="button"
                     onClick={downloadThread}
@@ -1178,6 +1182,7 @@ export function CoachAiLauncher({
                   playId={playId}
                   mode={mode}
                   isAdmin={isAdmin}
+                  canDebugCal={canDebugCal}
                   injectedPrompt={injectedPrompt}
                   imageUploadAvailable={imageUploadAvailable}
                   onTurnsChange={handleTurnsChange}

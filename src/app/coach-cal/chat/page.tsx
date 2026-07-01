@@ -4,7 +4,7 @@ import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { canUseAiFeatures } from "@/lib/billing/features";
 import { hasFreeCalPromptsRemaining } from "@/lib/billing/coach-cal-free-prompts";
-import { getCachedUserRole } from "@/lib/auth/profile-cache";
+import { getCachedUserRole, getCachedCalDebugAccess } from "@/lib/auth/profile-cache";
 import { ChatWindow } from "./ChatWindow";
 
 export const metadata = { title: "Coach Cal", robots: { index: false } };
@@ -35,7 +35,18 @@ export default async function CoachCalChatPage({
     (await hasFreeCalPromptsRemaining(user.id));
   if (!entitled) redirect("/pricing");
 
+  // Debug tools (download thread, copy JSON) are a separate grant from
+  // entitlement — a flagged account still needs its own Cal access to reach
+  // this page at all; this only unlocks the debug affordances once they're here.
+  const canDebugCal = isAdmin || (await getCachedCalDebugAccess(user.id));
+
   const { playbook: playbookId } = await searchParams;
 
-  return <ChatWindow playbookId={playbookId ?? null} isAdmin={isAdmin} />;
+  return (
+    <ChatWindow
+      playbookId={playbookId ?? null}
+      isAdmin={isAdmin}
+      canDebugCal={canDebugCal}
+    />
+  );
 }

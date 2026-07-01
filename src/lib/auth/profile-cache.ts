@@ -15,3 +15,18 @@ export const getCachedUserRole = (userId: string) =>
     ["user-role", userId],
     { revalidate: 300, tags: [`user-role:${userId}`] },
   )();
+
+export const getCachedCalDebugAccess = (userId: string) =>
+  unstable_cache(
+    async () => {
+      const admin = createServiceRoleClient();
+      const { data } = await admin
+        .from("cal_debug_accounts")
+        .select("user_id")
+        .eq("user_id", userId)
+        .maybeSingle();
+      return data != null;
+    },
+    ["cal-debug-access", userId],
+    { revalidate: 300, tags: [`cal-debug-access:${userId}`] },
+  )();

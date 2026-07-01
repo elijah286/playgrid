@@ -1,7 +1,7 @@
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getRequestUser } from "@/lib/supabase/request-user";
-import { getCachedUserRole } from "@/lib/auth/profile-cache";
+import { getCachedUserRole, getCachedCalDebugAccess } from "@/lib/auth/profile-cache";
 import { SiteHeaderShell } from "@/components/layout/SiteHeaderShell";
 import { getCurrentEntitlement, hasUsedCoachProTrial, type SubscriptionTier } from "@/lib/billing/entitlement";
 import { canUseAiFeatures } from "@/lib/billing/features";
@@ -18,6 +18,7 @@ import { hasLeagueAccess } from "@/lib/league/access";
 export async function SiteHeader() {
   let user: { id: string; email: string | null } | null = null;
   let isAdmin = false;
+  let canDebugCal = false; // isAdmin, or a site-admin-granted Cal debug-tools account
   let displayName: string | null = null;
   let avatarUrl: string | null = null;
   let coachAiAvailable = false;
@@ -44,6 +45,11 @@ export async function SiteHeader() {
         user = { id: authUser.id, email: authUser.email ?? null };
         const role = await getCachedUserRole(authUser.id);
         isAdmin = role === "admin";
+        try {
+          canDebugCal = isAdmin || (await getCachedCalDebugAccess(authUser.id));
+        } catch {
+          /* best effort */
+        }
         try {
           const admin = createServiceRoleClient();
           const { data } = await admin
@@ -114,6 +120,7 @@ export async function SiteHeader() {
     <SiteHeaderShell
       user={user}
       isAdmin={isAdmin}
+      canDebugCal={canDebugCal}
       displayName={displayName}
       avatarUrl={avatarUrl}
       coachAiAvailable={coachAiAvailable}
