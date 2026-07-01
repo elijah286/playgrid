@@ -1894,6 +1894,15 @@ function SaveDefensePlayChip({
     setPending(null);
     if (res.ok) {
       onUpdate({ status: "saved", mode, playId: res.playId });
+      // Tell the open editor to reload so the freshly-attached defense shows
+      // WITHOUT a manual page refresh. Same signal Cal's own mutations fire;
+      // the editor's `coach-ai-mutated` listener does router.refresh() and
+      // reconciles the custom-opponent attachment from the server. Surfaced
+      // 2026-07-01: attach persisted correctly but the play didn't update until
+      // the coach reloaded the page.
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("coach-ai-mutated"));
+      }
     } else {
       setError(res.error);
     }

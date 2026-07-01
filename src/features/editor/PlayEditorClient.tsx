@@ -677,6 +677,30 @@ function PlayEditorClientInner({
     initialCustomOpponentPlayId,
   );
   const [opponentHidden, setOpponentHidden] = useState(initialOpponentHidden);
+  // Reconcile the custom-opponent ATTACHMENT from the server when these props
+  // change on a refresh — e.g. the coach clicked "Add to this play" in Coach Cal,
+  // which attaches a defense out-of-band and broadcasts `coach-ai-mutated` →
+  // router.refresh(). Without this, customOpponentPlayId/opponentHidden stay at
+  // their mount-time values (useState ignores prop changes), so the render gate
+  // `customOpponentPlayId != null` keeps the freshly-attached overlay hidden
+  // until a full page reload. The snapshot data itself already rides in on
+  // doc.metadata.vsPlaySnapshot (reconciled via the initialDocument effect);
+  // this closes the remaining gap. Safe against local edits: a local attach/
+  // clear already persists to the server, so the reconciled prop matches state.
+  // Uses React's "adjust state during render" pattern (a prev-props tracker)
+  // rather than an effect, so the overlay appears in the same commit.
+  const [syncedOppProps, setSyncedOppProps] = useState({
+    id: initialCustomOpponentPlayId,
+    hidden: initialOpponentHidden,
+  });
+  if (
+    syncedOppProps.id !== initialCustomOpponentPlayId ||
+    syncedOppProps.hidden !== initialOpponentHidden
+  ) {
+    setSyncedOppProps({ id: initialCustomOpponentPlayId, hidden: initialOpponentHidden });
+    setCustomOpponentPlayId(initialCustomOpponentPlayId);
+    setOpponentHidden(initialOpponentHidden);
+  }
 
   // Defense-side toggle: show the installed offense's route arrows behind the
   // play. Off by default so the canvas stays clean; coaches turn it on while
