@@ -934,6 +934,13 @@ export type CustomerActivityDetail = {
     email: string | null;
     lifetimeSpend: number;
   }>;
+  /** Lifetime Coach Cal API cost for this user — raw Anthropic spend, not revenue. */
+  calUsage: {
+    costMicros: number;
+    inputTokens: number;
+    outputTokens: number;
+    lastActivity: string | null;
+  };
 };
 
 type StripeAggregate = {
@@ -1496,7 +1503,7 @@ export async function getCustomerActivityAction(
 
   try {
     const admin = createServiceRoleClient();
-    const [{ data: profile }, userRes, { data: referralRows }] =
+    const [{ data: profile }, userRes, { data: referralRows }, { data: calUsageRows }] =
       await Promise.all([
         admin
           .from("profiles")
@@ -1508,7 +1515,32 @@ export async function getCustomerActivityAction(
           .from("referral_awards")
           .select("recipient_id")
           .eq("sender_id", userId),
+        admin
+          .from("coach_ai_token_usage")
+          .select("cost_micros, input_tokens, output_tokens, occurred_at")
+          .eq("user_id", userId)
+          .limit(50_000),
       ]);
+
+    const calUsage = (
+      (calUsageRows ?? []) as Array<{
+        cost_micros: number | null;
+        input_tokens: number | null;
+        output_tokens: number | null;
+        occurred_at: string;
+      }>
+    ).reduce(
+      (acc, r) => {
+        acc.costMicros += Number(r.cost_micros ?? 0);
+        acc.inputTokens += Number(r.input_tokens ?? 0);
+        acc.outputTokens += Number(r.output_tokens ?? 0);
+        if (!acc.lastActivity || r.occurred_at > acc.lastActivity) {
+          acc.lastActivity = r.occurred_at;
+        }
+        return acc;
+      },
+      { costMicros: 0, inputTokens: 0, outputTokens: 0, lastActivity: null as string | null },
+    );
 
     const recipientIds = (
       (referralRows ?? []) as Array<{ recipient_id: string | null }>
@@ -1547,6 +1579,7 @@ export async function getCustomerActivityAction(
         totalSecondsOnSite: p?.total_seconds_on_site ?? 0,
         lastActiveAt: p?.last_active_at ?? null,
         directReferrals,
+        calUsage,
       },
     };
   } catch (error) {

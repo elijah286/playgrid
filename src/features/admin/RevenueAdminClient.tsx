@@ -2,6 +2,7 @@
 
 import type { LucideIcon } from "lucide-react";
 import {
+  Brain,
   Clock,
   CreditCard,
   DollarSign,
@@ -646,7 +647,19 @@ function CustomerDrawer({
   const combinedValue = payer.lifetimeSpend + payer.networkSpend;
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+    // Below `sm:` the drawer is full-width (no backdrop to tap), so it's kept
+    // within the site chrome instead of covering it end to end — otherwise
+    // the only way out is the small X button. 61px matches --site-header-height
+    // (globals.css) — measured, not just computed from classes: the header's
+    // h-8→h-9 logo bump at `sm:` doesn't actually change the row height, so
+    // it's 61px at every width, not 57px. 52px is HomeBottomNav's height
+    // (globals.css's own canonical figure); it renders on every route except
+    // the ones in bottomNavRoutes.ts, which /settings isn't, so it's visible
+    // underneath this drawer on mobile too.
+    <div
+      className="fixed inset-x-0 bottom-[52px] top-[61px] z-50 flex justify-end sm:top-0 sm:bottom-0"
+      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+    >
       <button
         type="button"
         aria-label="Close"
@@ -758,6 +771,37 @@ function CustomerDrawer({
                 <DrawerStat
                   label="Last seen"
                   value={formatRelative(detail?.lastActiveAt ?? null)}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Cal usage */}
+          <div>
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
+              <Brain className="size-3.5" /> Cal usage
+            </p>
+            {loading ? (
+              <p className="text-sm text-muted">Loading…</p>
+            ) : payer.userId == null ? (
+              <p className="text-sm text-muted">
+                No linked account — can&apos;t show Cal usage.
+              </p>
+            ) : loadError ? (
+              <p className="text-sm text-rose-600 dark:text-rose-400">
+                {loadError}
+              </p>
+            ) : !detail?.calUsage.lastActivity ? (
+              <p className="text-sm text-muted">Hasn&apos;t used Coach Cal yet.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <DrawerStat
+                  label="Cal spend"
+                  value={formatCurrency(detail.calUsage.costMicros / 1_000_000)}
+                />
+                <DrawerStat
+                  label="Last Cal activity"
+                  value={formatRelative(detail.calUsage.lastActivity)}
                 />
               </div>
             )}
