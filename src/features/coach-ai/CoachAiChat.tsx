@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { BookOpen, Check, Copy, Paperclip, Send, Square, Trash2, Wrench, X } from "lucide-react";
+import { BookOpen, Check, Copy, Paperclip, Send, Square, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui";
 import type { CoachAiTurn, NoteProposalSavedState, PlaybookChip } from "@/app/actions/coach-ai";
 import {
@@ -27,6 +27,7 @@ import type { SaveDefenseProposalState } from "@/app/actions/coach-ai";
 import type { SaveDefenseProposal } from "@/lib/coach-ai/save-defense-tools";
 import type { ChoiceProposal } from "@/lib/coach-ai/ask-choice-tool";
 import { CoachAiIcon } from "./CoachAiIcon";
+import { CalActivityTrace } from "./CalActivityTrace";
 import { AssistantMessageWithFeedback } from "./AssistantMessageWithFeedback";
 import { AssistantMessage } from "./AssistantMessage";
 import { CoachCalCostMeter } from "./CoachCalCostMeter";
@@ -1298,18 +1299,11 @@ export function CoachAiChat({
                       <span className="mt-0.5 inline-block h-3.5 w-0.5 animate-pulse rounded-full bg-primary/60 align-middle" />
                     </>
                   ) : (
-                    <div className="flex items-center gap-2 py-1 text-sm text-muted">
-                      <Dots />
-                      {statusText && (
-                        <span className="text-[12px] italic">{statusText}</span>
-                      )}
-                    </div>
-                  )}
-                  {toolCallsDuringStream.length > 0 && !partialText && (
-                    <div className="mt-1 inline-flex items-center gap-1 text-[11px] text-muted">
-                      <Wrench className="size-3" />
-                      {toolCallsDuringStream.join(", ")}
-                    </div>
+                    <CalActivityTrace
+                      mode="live"
+                      toolCalls={toolCallsDuringStream}
+                      statusText={statusText}
+                    />
                   )}
                 </div>
               </li>
@@ -1663,12 +1657,7 @@ function TurnItem({
               ))}
             </div>
           )}
-          {t.toolCalls.length > 0 && (
-            <div className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-muted">
-              <Wrench className="size-3" />
-              {t.toolCalls.join(", ")}
-            </div>
-          )}
+          <CalActivityTrace mode="done" toolCalls={t.toolCalls} />
         </div>
       )}
     </li>
@@ -1980,15 +1969,5 @@ function SaveDefensePlayChip({
         </button>
       </div>
     </div>
-  );
-}
-
-function Dots() {
-  return (
-    <span className="inline-flex items-center gap-1" aria-label="Thinking">
-      <span className="size-1.5 animate-pulse rounded-full bg-current" style={{ animationDelay: "0ms" }} />
-      <span className="size-1.5 animate-pulse rounded-full bg-current" style={{ animationDelay: "120ms" }} />
-      <span className="size-1.5 animate-pulse rounded-full bg-current" style={{ animationDelay: "240ms" }} />
-    </span>
   );
 }
