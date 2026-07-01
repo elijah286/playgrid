@@ -43,6 +43,7 @@ import {
   conversationCoversPlay,
   isContextDivider,
 } from "./context-boundary";
+import { reconcileServerTurns } from "./reconcile-turns";
 
 type OutOfBudgetPayload = {
   /** which window tripped — drives copy + whether the pack CTA shows */
@@ -662,8 +663,13 @@ export function CoachAiChat({
       if (cancelled || !data?.ok) return;
       const serverTurns = data.turns ?? [];
       if (serverTurns.length > 0) {
-        setTurns(serverTurns);
-        saveTurns(storageKey, serverTurns);
+        // Merge, don't clobber: the server thread is authoritative for message
+        // content but doesn't persist context dividers or proposal chips. A
+        // straight overwrite dropped the "Earlier conversation" collapse and the
+        // "Added the defense" confirmation on refresh (2026-07-01).
+        const merged = reconcileServerTurns(serverTurns, loadTurns(storageKey));
+        setTurns(merged);
+        saveTurns(storageKey, merged);
       }
       if (data.runningTurnId) {
         // Resume path: initial mount found a turn from a prior session.

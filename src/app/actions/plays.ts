@@ -1325,14 +1325,13 @@ export async function attachDefenseFromFenceAction(args: {
   }
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Auth + edit-permission checks are independent — run them together.
+  // (Permission RPC param is named `pb`; PostgREST resolves overloads by NAME.)
+  const [{ data: { user } }, { data: canEdit, error: permErr }] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase.rpc("can_edit_playbook", { pb: playbookId }),
+  ]);
   if (!user) return { ok: false as const, error: "Not signed in." };
-
-  // Permission check mirrors createDefensePlayFromFenceAction — the RPC
-  // parameter is named `pb` (PostgREST resolves overloads by parameter NAME).
-  const { data: canEdit, error: permErr } = await supabase.rpc("can_edit_playbook", { pb: playbookId });
   if (permErr) return { ok: false as const, error: permErr.message };
   if (canEdit !== true) return { ok: false as const, error: "You don't have edit access to this playbook." };
 
@@ -2595,12 +2594,17 @@ export async function createCustomOpponentAction(
   if (!ctx.ok) return ctx;
   const { supabase, parent, variant } = ctx;
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Independent read-guards run in parallel (was 3 sequential round-trips over
+  // the pooler — a chunk of the perceived "add defense" latency). assertNotLocked
+  // depends on ownerId so it follows. Writes stay AFTER all guards pass so a
+  // failed guard never soft-deletes the prior opponent.
+  const [{ data: { user } }, ownerId, gameLock] = await Promise.all([
+    supabase.auth.getUser(),
+    getPlaybookOwnerId(parent.playbook_id as string),
+    assertNoActiveGameSession(supabase, parent.playbook_id as string),
+  ]);
   if (!user) return { ok: false as const, error: "Not signed in." };
-
-  const ownerId = await getPlaybookOwnerId(parent.playbook_id as string);
+  if (gameLock.locked) return gameModeLockedResult(gameLock.lock);
   if (ownerId) {
     const lock = await assertNotLocked({
       ownerId,
@@ -2609,8 +2613,6 @@ export async function createCustomOpponentAction(
     });
     if (!lock.ok) return { ok: false as const, error: lock.error };
   }
-  const gameLock = await assertNoActiveGameSession(supabase, parent.playbook_id as string);
-  if (gameLock.locked) return gameModeLockedResult(gameLock.lock);
 
   // Replacing any prior custom opponent: soft-delete the existing hidden child.
   await supabase
@@ -2672,9 +2674,9 @@ export async function createCustomOpponentAction(
     .single();
   if (verErr || !ver) return { ok: false as const, error: verErr?.message ?? "Version insert failed" };
 
-  await supabase.from("plays").update({ current_version_id: ver.id }).eq("id", hidden.id);
-
-  // Update parent: link vs_play_id + snapshot, ensure visible.
+  // The two final updates touch DIFFERENT rows (the hidden child's
+  // current_version_id vs the parent's vs_play_id/snapshot) and don't depend on
+  // each other — run them in parallel to shave one more round-trip.
   const snapshot: VsPlaySnapshot = {
     players: doc.layers.players,
     routes: doc.layers.routes,
@@ -2685,14 +2687,17 @@ export async function createCustomOpponentAction(
     sourceName: doc.metadata.coachName,
     sourceFormationName: "",
   };
-  await supabase
-    .from("plays")
-    .update({
-      vs_play_id: hidden.id,
-      vs_play_snapshot: snapshot as unknown as Record<string, unknown>,
-      opponent_hidden: false,
-    })
-    .eq("id", parentPlayId);
+  await Promise.all([
+    supabase.from("plays").update({ current_version_id: ver.id }).eq("id", hidden.id),
+    supabase
+      .from("plays")
+      .update({
+        vs_play_id: hidden.id,
+        vs_play_snapshot: snapshot as unknown as Record<string, unknown>,
+        opponent_hidden: false,
+      })
+      .eq("id", parentPlayId),
+  ]);
 
   return { ok: true as const, hiddenPlayId: hidden.id, players: doc.layers.players };
 }
