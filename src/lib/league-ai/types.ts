@@ -10,6 +10,7 @@
 // must go through human approval (the chip pattern) — never silent.
 
 import type { ToolDef } from "@/lib/coach-ai/llm";
+import type { Capability } from "@/lib/league/access-control";
 
 /** Resolved per request, AFTER the chat route has authorized the operator for
  *  this league. Tool handlers may therefore act within this league's scope. */
@@ -18,6 +19,9 @@ export type LeagueToolContext = {
   userId: string;
   /** operator/league_admin (can approve consequential writes) vs read-only roles. */
   isLeagueAdmin: boolean;
+  /** For a delegated member (not an admin): the capabilities they hold on this
+   *  league. Owners have isLeagueAdmin=true and bypass this. */
+  capabilities: Capability[];
 };
 
 export type LeagueToolResult =

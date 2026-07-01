@@ -16,7 +16,7 @@ vi.mock("./tools", async (importOriginal) => {
 
 import { runLeagueAgent } from "./runner";
 
-const CTX = { leagueId: "L1", userId: "U1", isLeagueAdmin: true };
+const CTX = { leagueId: "L1", userId: "U1", isLeagueAdmin: true, capabilities: [] };
 
 function toolUseTurn(name: string, input: Record<string, unknown>) {
   return {

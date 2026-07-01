@@ -16,6 +16,7 @@ import {
   isLeagueAdminRole,
   leagueAiWritesEnabled,
 } from "@/lib/league/access";
+import { capabilitiesForLeague } from "@/lib/league/authorize";
 import { runLeagueTool, LEAGUE_CONSEQUENTIAL_TOOL_NAMES } from "@/lib/league-ai/tools";
 
 type ApproveRequest = {
@@ -64,17 +65,21 @@ export async function POST(req: Request): Promise<Response> {
 
   const memberships = await getCurrentLeagueMemberships();
   const membership = memberships.find((m) => m.leagueId === leagueId);
-  if (!membership || !isLeagueAdminRole(membership.role)) {
+  const isAdmin = !!membership && isLeagueAdminRole(membership.role);
+  const capabilities = isAdmin ? [] : await capabilitiesForLeague(user.email, leagueId);
+  if (!isAdmin && capabilities.length === 0) {
     return NextResponse.json(
       { ok: false, error: "Not authorized for this league" },
       { status: 403 },
     );
   }
 
+  // runLeagueTool re-checks the capability for this specific tool (defense in depth).
   const r = await runLeagueTool(toolName, input, {
     leagueId,
     userId: user.id,
-    isLeagueAdmin: true,
+    isLeagueAdmin: isAdmin,
+    capabilities,
   });
   if (!r.ok) {
     return NextResponse.json({ ok: false, error: r.error }, { status: 400 });

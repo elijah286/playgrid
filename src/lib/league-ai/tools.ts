@@ -10,6 +10,7 @@
 
 import type { ToolDef } from "@/lib/coach-ai/llm";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
+import type { Capability } from "@/lib/league/access-control";
 import type { LeagueTool, LeagueToolContext, LeagueToolResult } from "./types";
 import { COMMS_TOOLS } from "./comms-tools";
 import { GROUP_TOOLS } from "./group-tools";
@@ -115,10 +116,34 @@ export const LEAGUE_TOOLS: LeagueTool[] = [
   ...STORE_TOOLS,
 ];
 
-/** Tools available for this context. Consequential tools (added later) gate on
- *  ctx.isLeagueAdmin here; read tools are always available to an authorized member. */
+/** Which capability each consequential tool requires. A tool absent here is
+ *  owner-only (e.g. the cross-league group announcement). */
+const TOOL_CAPABILITY: Record<string, Capability> = {
+  send_announcement: "manage_communications",
+  set_registration_status: "manage_registration",
+  place_players_on_team: "manage_rosters",
+  unassign_player: "manage_rosters",
+  create_teams: "manage_teams",
+  assign_team_coach: "manage_teams",
+  distribute_practice_plan: "manage_curriculum",
+  add_store_item: "manage_store",
+  rename_league: "manage_settings",
+  set_registration_link: "manage_settings",
+  // send_group_announcement intentionally absent → owner-only (spans leagues).
+};
+
+/** May this context use a consequential tool? Owners always; a delegated member
+ *  only if they hold the tool's capability on this league. */
+export function canUseConsequential(ctx: LeagueToolContext, toolName: string): boolean {
+  if (ctx.isLeagueAdmin) return true;
+  const cap = TOOL_CAPABILITY[toolName];
+  return !!cap && ctx.capabilities.includes(cap);
+}
+
+/** Tools available for this context: reads always; a consequential tool only if
+ *  the caller is an owner or holds its capability. */
 export function leagueToolsFor(ctx: LeagueToolContext): LeagueTool[] {
-  return LEAGUE_TOOLS.filter((t) => t.kind === "read" || ctx.isLeagueAdmin);
+  return LEAGUE_TOOLS.filter((t) => t.kind === "read" || canUseConsequential(ctx, t.def.name));
 }
 
 export function leagueToolDefs(ctx: LeagueToolContext): ToolDef[] {
@@ -156,10 +181,10 @@ export async function runLeagueTool(
   // gated tool returns a clear reason rather than "unknown".
   const tool = LEAGUE_TOOLS.find((t) => t.def.name === name);
   if (!tool) return { ok: false, error: `Unknown tool: ${name}` };
-  // Consequential tools are admin-only AND (per the convention) must be routed
-  // through human approval by the agent runner before reaching here.
-  if (tool.kind === "consequential" && !ctx.isLeagueAdmin) {
-    return { ok: false, error: "That action requires a league admin." };
+  // Consequential tools require the capability (owners always have it) AND are
+  // routed through human approval by the agent runner before reaching here.
+  if (tool.kind === "consequential" && !canUseConsequential(ctx, tool.def.name)) {
+    return { ok: false, error: "You don't have permission for that action." };
   }
   try {
     return await tool.handler(input, ctx);

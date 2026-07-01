@@ -6,7 +6,9 @@ import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { isLeagueAdmin } from "@/lib/league/access";
 import {
   grantsCover,
+  isCapability,
   scopeFromColumns,
+  scopeIncludesLeague,
   type Capability,
 } from "@/lib/league/access-control";
 
@@ -56,6 +58,51 @@ export async function hasCapabilityViaGrant(
     scope: scopeFromColumns(g as Parameters<typeof scopeFromColumns>[0]),
   }));
   return grantsCover(grants, capability, { id: leagueId, sport: league.sport as string, groupIds });
+}
+
+/** The union of capabilities this email holds on `leagueId` through active grants
+ *  (empty if none). Used to scope Leo's tools for a delegated member. */
+export async function capabilitiesForLeague(
+  email: string | null | undefined,
+  leagueId: string,
+): Promise<Capability[]> {
+  const e = (email ?? "").trim().toLowerCase();
+  if (!e) return [];
+  const admin = createServiceRoleClient();
+
+  const { data: league } = await admin
+    .from("leagues")
+    .select("created_by, sport")
+    .eq("id", leagueId)
+    .maybeSingle();
+  if (!league?.created_by) return [];
+
+  const { data: grantRows } = await admin
+    .from("league_access_grants")
+    .select("capabilities, scope_kind, scope_leagues, scope_sport, scope_group_id")
+    .eq("owner_id", league.created_by as string)
+    .eq("member_email", e)
+    .eq("status", "active");
+  if (!grantRows || grantRows.length === 0) return [];
+
+  const { data: gm } = await admin
+    .from("league_group_members")
+    .select("group_id")
+    .eq("league_id", leagueId);
+  const leagueFacts = {
+    id: leagueId,
+    sport: league.sport as string,
+    groupIds: (gm ?? []).map((x) => x.group_id as string),
+  };
+
+  const caps = new Set<Capability>();
+  for (const g of grantRows) {
+    const scope = scopeFromColumns(g as Parameters<typeof scopeFromColumns>[0]);
+    if (scopeIncludesLeague(scope, leagueFacts)) {
+      for (const c of (g.capabilities as string[]) ?? []) if (isCapability(c)) caps.add(c);
+    }
+  }
+  return [...caps];
 }
 
 /** True if the current user may perform `capability` on `leagueId` — the owner/

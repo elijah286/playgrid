@@ -15,6 +15,7 @@ import {
   leagueAiEnabled,
   leagueAiWritesEnabled,
 } from "@/lib/league/access";
+import { capabilitiesForLeague } from "@/lib/league/authorize";
 import { runLeagueAgent, type LeoTurn } from "@/lib/league-ai/runner";
 
 type LeoRequest = {
@@ -56,10 +57,13 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  // Operator-only: Leo's read tools surface league-wide data (rosters, contacts).
+  // Owner/operator, or a delegated member holding at least one capability here.
+  // Delegated members get a Leo scoped to their capabilities (below).
   const memberships = await getCurrentLeagueMemberships();
   const membership = memberships.find((m) => m.leagueId === leagueId);
-  if (!membership || !isLeagueAdminRole(membership.role)) {
+  const isAdmin = !!membership && isLeagueAdminRole(membership.role);
+  const capabilities = isAdmin ? [] : await capabilitiesForLeague(user.email, leagueId);
+  if (!isAdmin && capabilities.length === 0) {
     return NextResponse.json(
       { ok: false, error: "Not authorized for this league" },
       { status: 403 },
@@ -82,7 +86,7 @@ export async function POST(req: Request): Promise<Response> {
     const result = await runLeagueAgent(
       history,
       userMessage,
-      { leagueId, userId: user.id, isLeagueAdmin: true },
+      { leagueId, userId: user.id, isLeagueAdmin: isAdmin, capabilities },
       { allowWrites: leagueAiWritesEnabled() },
     );
     return NextResponse.json({

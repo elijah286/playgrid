@@ -3,8 +3,9 @@ import { describe, expect, it } from "vitest";
 import { LEAGUE_TOOLS, leagueToolDefs, leagueToolsFor, runLeagueTool } from "./tools";
 import type { LeagueToolContext } from "./types";
 
-const adminCtx: LeagueToolContext = { leagueId: "L1", userId: "U1", isLeagueAdmin: true };
-const memberCtx: LeagueToolContext = { leagueId: "L1", userId: "U2", isLeagueAdmin: false };
+const adminCtx: LeagueToolContext = { leagueId: "L1", userId: "U1", isLeagueAdmin: true, capabilities: [] };
+const memberCtx: LeagueToolContext = { leagueId: "L1", userId: "U2", isLeagueAdmin: false, capabilities: [] };
+const merchCtx: LeagueToolContext = { leagueId: "L1", userId: "U3", isLeagueAdmin: false, capabilities: ["manage_store"] };
 
 describe("league-ai tool registry", () => {
   it("exposes the seed read tools with well-formed defs", () => {
@@ -40,10 +41,17 @@ describe("league-ai tool registry", () => {
     expect(leagueToolsFor(adminCtx).length).toBeGreaterThan(leagueToolsFor(memberCtx).length);
   });
 
-  it("refuses a consequential tool for a non-admin caller", async () => {
+  it("refuses a consequential tool the caller lacks the capability for", async () => {
     const r = await runLeagueTool("send_announcement", {}, memberCtx);
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toMatch(/admin/i);
+    if (!r.ok) expect(r.error).toMatch(/permission/i);
+  });
+
+  it("a delegated member sees only their capability's consequential tools + all reads", () => {
+    const names = leagueToolsFor(merchCtx).map((t) => t.def.name);
+    expect(names).toContain("add_store_item"); // manage_store → allowed
+    expect(names).toContain("league_overview"); // read → always
+    expect(names).not.toContain("send_announcement"); // manage_communications → not granted
   });
 
   it("rejects an unknown tool (no handler invoked)", async () => {
