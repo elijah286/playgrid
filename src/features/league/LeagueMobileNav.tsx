@@ -70,6 +70,15 @@ export function LeagueMobileNav({
     return exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
   };
 
+  // Members see the fixed primary tabs; a delegated member gets their first few
+  // accessible sections instead, so the bar never shows a tab they'd 404 on.
+  const primary =
+    activeLeague?.capabilities == null
+      ? PRIMARY
+      : sections
+          .slice(0, 4)
+          .map((s) => ({ path: s.path, label: s.label, Icon: s.icon, exact: s.exact }));
+
   return (
     <>
       <nav
@@ -81,7 +90,7 @@ export function LeagueMobileNav({
           paddingRight: "env(safe-area-inset-right, 0px)",
         }}
       >
-        {PRIMARY.map((t) => (
+        {primary.map((t) => (
           <Link key={t.path} href={`${base}${t.path}`} className={tabCls(tabActive(t.path, t.exact))}>
             <t.Icon className="size-5" aria-hidden />
             <span className="truncate">{t.label}</span>

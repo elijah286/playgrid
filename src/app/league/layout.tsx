@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { hasLeagueAccess, leagueOpsEnabled, leagueAiEnabled } from "@/lib/league/access";
+import { capabilitiesForLeague } from "@/lib/league/authorize";
 import { getLeagueNavData } from "@/lib/league/console";
 import { LeagueRail } from "@/features/league/LeagueRail";
 import { LeagueMobileNav } from "@/features/league/LeagueMobileNav";
@@ -38,9 +39,21 @@ export default async function LeagueLayout({
   // No leagues in the active org → the first-run prompt renders clean, no rail.
   if (leagues.length === 0) return <div className="min-h-full">{children}</div>;
 
-  const railLeagues = leagues
-    .map((l) => ({ id: l.id, name: l.name, sport: l.sport, location: l.location }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  // Per-league capabilities drive the rail's section filtering: a member (roles
+  // present) gets null → the full rail; a delegated member (no roles) gets exactly
+  // their granted capabilities → only the sections they can actually use.
+  const railLeagues = (
+    await Promise.all(
+      leagues.map(async (l) => ({
+        id: l.id,
+        name: l.name,
+        sport: l.sport,
+        location: l.location,
+        capabilities:
+          l.roles.length > 0 ? null : await capabilitiesForLeague(user.email ?? null, l.id),
+      })),
+    )
+  ).sort((a, b) => a.name.localeCompare(b.name));
   const leoOn = leagueAiEnabled();
 
   return (

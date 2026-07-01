@@ -12,6 +12,7 @@ import {
   Megaphone,
   Rows3,
   Settings,
+  ShoppingBag,
   Sparkles,
   Trophy,
   UserPlus,
@@ -19,27 +20,54 @@ import {
 } from "lucide-react";
 
 import { leagueHasPlaybooks } from "@/lib/league/sportConfig";
+import type { Capability } from "@/lib/league/access-control";
 
-export type RailLeague = { id: string; name: string; sport: string; location: string | null };
+export type RailLeague = {
+  id: string;
+  name: string;
+  sport: string;
+  location: string | null;
+  /** Null = full access (owner/member — the rail is unfiltered). An array = a
+   *  delegated member; the rail shows only the sections these capabilities cover. */
+  capabilities: Capability[] | null;
+};
 
-export type LeagueSection = { path: string; label: string; icon: LucideIcon; exact?: boolean };
+export type LeagueSection = {
+  path: string;
+  label: string;
+  icon: LucideIcon;
+  exact?: boolean;
+  /** Capability a delegated member needs to see this section. Sections without one
+   *  (Overview, Leo) are always shown. Ignored for members, who have full access. */
+  capability?: Capability;
+};
 
-export function leagueSections(sport: string, leoEnabled: boolean): LeagueSection[] {
+export function leagueSections(
+  sport: string,
+  leoEnabled: boolean,
+  capabilities?: Capability[] | null,
+): LeagueSection[] {
   const items: LeagueSection[] = [
     { path: "", label: "Overview", icon: LayoutDashboard, exact: true },
-    { path: "/registration", label: "Registration", icon: ClipboardList },
-    { path: "/teams", label: "Teams", icon: Users },
-    { path: "/roster", label: "Roster", icon: UserPlus },
-    { path: "/divisions", label: "Divisions", icon: Rows3 },
-    { path: "/schedule", label: "Schedule", icon: Calendar },
-    { path: "/games", label: "Games", icon: Trophy },
-    { path: "/communications", label: "Communications", icon: Megaphone },
-    { path: "/financials", label: "Financials", icon: DollarSign },
+    { path: "/registration", label: "Registration", icon: ClipboardList, capability: "manage_registration" },
+    { path: "/store", label: "Store", icon: ShoppingBag, capability: "manage_store" },
+    { path: "/teams", label: "Teams", icon: Users, capability: "manage_teams" },
+    { path: "/roster", label: "Roster", icon: UserPlus, capability: "manage_rosters" },
+    { path: "/divisions", label: "Divisions", icon: Rows3, capability: "manage_teams" },
+    { path: "/schedule", label: "Schedule", icon: Calendar, capability: "manage_schedule" },
+    { path: "/games", label: "Games", icon: Trophy, capability: "manage_schedule" },
+    { path: "/communications", label: "Communications", icon: Megaphone, capability: "manage_communications" },
+    { path: "/financials", label: "Financials", icon: DollarSign, capability: "view_financials" },
   ];
-  if (leagueHasPlaybooks(sport)) items.push({ path: "/curriculum", label: "Curriculum", icon: BookOpen });
+  if (leagueHasPlaybooks(sport))
+    items.push({ path: "/curriculum", label: "Curriculum", icon: BookOpen, capability: "manage_curriculum" });
   if (leoEnabled) items.push({ path: "/assistant", label: "Leo", icon: Sparkles });
-  items.push({ path: "/settings", label: "Settings", icon: Settings });
-  return items;
+  items.push({ path: "/settings", label: "Settings", icon: Settings, capability: "manage_settings" });
+
+  // Members/owners (capabilities == null) see every section; a delegated member
+  // sees only what their grant covers (capability-less sections always show).
+  if (capabilities == null) return items;
+  return items.filter((s) => !s.capability || capabilities.includes(s.capability));
 }
 
 const LAST_LEAGUE_KEY = "league:last";
@@ -78,7 +106,9 @@ export function useLeagueNav(leagues: RailLeague[], leoEnabled: boolean) {
   const candidate = urlLeagueId ?? remembered ?? leagues[0]?.id ?? null;
   const activeLeague = leagues.find((l) => l.id === candidate) ?? leagues[0] ?? null;
   const activeLeagueId = activeLeague?.id ?? null;
-  const sections = activeLeague ? leagueSections(activeLeague.sport, leoEnabled) : [];
+  const sections = activeLeague
+    ? leagueSections(activeLeague.sport, leoEnabled, activeLeague.capabilities)
+    : [];
 
   const hrefFor = (s: LeagueSection) => `/league/${activeLeagueId}${s.path}`;
   const isActive = (s: LeagueSection) => {

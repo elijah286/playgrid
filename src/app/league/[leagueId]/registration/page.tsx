@@ -5,11 +5,9 @@ import QRCode from "qrcode";
 
 import { resolveLeagueView } from "@/lib/league/authorize";
 import { getRegistrationConfigAction } from "@/app/actions/league-registration-config";
-import { listStoreItemsAction } from "@/app/actions/league-store";
 import { listRegistrationsAction } from "@/app/actions/league-registrations";
 import { getPaymentStatusAction } from "@/app/actions/league-payments";
 import { RegistrationSettings } from "@/features/league/RegistrationSettings";
-import { StoreItemsManager } from "@/features/league/StoreItemsManager";
 import { ShareRegistrationLink } from "@/features/league/ShareRegistrationLink";
 import { RegistrationsReview } from "@/features/league/RegistrationsReview";
 import { PaymentsConnect } from "@/features/league/PaymentsConnect";
@@ -41,9 +39,8 @@ export default async function RegistrationPage({
     .maybeSingle();
   const slug = (leagueRow?.slug as string | null) ?? null;
   const registerUrl = `${SITE_URL}/register/${slug ?? leagueId}`;
-  const [config, store, registrations, paymentStatus, qrDataUrl] = await Promise.all([
+  const [config, registrations, paymentStatus, qrDataUrl] = await Promise.all([
     getRegistrationConfigAction(leagueId),
-    listStoreItemsAction(leagueId),
     listRegistrationsAction(leagueId),
     getPaymentStatusAction(leagueId),
     QRCode.toDataURL(registerUrl, { width: 264, margin: 1 }),
@@ -57,7 +54,7 @@ export default async function RegistrationPage({
       </Link>
       <h1 className="mt-2 text-2xl font-extrabold tracking-tight">Registration</h1>
       <p className="mt-1 text-sm text-muted">
-        Configure registration, share your sign-up link, and set what families can buy.
+        Configure registration and share your sign-up link with families.
       </p>
 
       <h2 className="mb-2 mt-7 text-sm font-semibold">Share with families</h2>
@@ -79,10 +76,13 @@ export default async function RegistrationPage({
       <PaymentsConnect leagueId={leagueId} initial={paymentStatus} />
 
       <h2 className="mb-2 mt-8 text-sm font-semibold">Store items</h2>
-      <p className="mb-3 text-xs text-muted">
-        Jerseys, equipment, or add-on fees families can purchase during registration.
+      <p className="text-xs text-muted">
+        Jerseys, equipment, and add-on fees now live on the{" "}
+        <Link href={`/league/${leagueId}/store`} className="text-primary hover:underline">
+          Store
+        </Link>{" "}
+        page.
       </p>
-      <StoreItemsManager leagueId={leagueId} initialItems={store.ok ? store.items : []} />
     </div>
   );
 }

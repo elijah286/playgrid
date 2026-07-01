@@ -2,23 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 
-import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { isLeagueAdmin } from "@/lib/league/access";
-import { resolveLeagueView } from "@/lib/league/authorize";
+import { gateLeagueCapability, resolveLeagueView } from "@/lib/league/authorize";
 import { EVENT_KINDS, type EventKind, type LeagueEventInput, type LeagueEventRow } from "@/lib/league/events";
 
-async function gateAdmin(leagueId: string) {
-  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false as const, error: "Not signed in." };
-  if (!(await isLeagueAdmin(leagueId))) {
-    return { ok: false as const, error: "You don't administer this league." };
-  }
-  return { ok: true as const, supabase };
+// Event writes require manage_schedule — an owner/admin OR a delegated member who
+// holds it (mirrors league-games.ts; owner reads via cookie/RLS, delegate via the
+// service role). The write actions keep using `gate.supabase`.
+function gateAdmin(leagueId: string) {
+  return gateLeagueCapability(leagueId, "manage_schedule");
 }
 
 function clean(input: LeagueEventInput) {
