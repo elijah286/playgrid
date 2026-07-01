@@ -2966,8 +2966,9 @@ export async function runAgent(
       // For compose_defense specifically, prefer an offense-containing prior
       // fence — defense-only fences leave the overlay branch with no offense
       // to preserve (see priorAssistantOffenseFenceJson docstring above).
+      const isOverlayTool = OFFENSE_BASELINE_TOOLS.has(tu.name);
       const priorFenceForTool =
-        OFFENSE_BASELINE_TOOLS.has(tu.name)
+        isOverlayTool
           ? resolveDefenseOverlayBaseline({
               historyOffenseFence: priorAssistantOffenseFenceJson,
               anchoredOffenseFence: anchoredOffenseFenceJson,
@@ -2978,16 +2979,38 @@ export async function runAgent(
             // diagram so the edit targets the play on screen, never a fence
             // authored on a different play.
             (priorAssistantFenceJson ?? anchoredPlayFence);
+
+      // ANCHORED-AUTHORITATIVE OVERLAY (2026-06-30): when a play is on screen AND
+      // the coach's request is about THIS play (no "all/other/each plays"
+      // language), a defense overlay / matchup grade MUST land on the anchored
+      // play — never a stale in-chat fence Cal passed, never a freelanced offense.
+      // Force `on_play` to the anchored offense UNLESS Cal's on_play already
+      // matches the anchored roster (an edit of it). Closes the hole where the
+      // fabrication guard accepted ANY known-real fence (incl. a different play
+      // built earlier in the same thread): surfaced 2026-06-30 — coach on "Tesla
+      // Counter" got a "Stick Right"/default offense in the Cover 1 overlay. The
+      // multi-play install flow ("vs all my plays") still passes its own per-play
+      // on_play because coachTargetsOtherPlays() short-circuits the force.
+      let inputForTool = tu.input as Record<string, unknown>;
+      if (isOverlayTool) {
+        const forced = resolveOverlayOnPlay({
+          providedOnPlay: typeof inputForTool.on_play === "string" ? inputForTool.on_play : "",
+          anchoredOffenseFence: anchoredOffenseFenceJson,
+          coachText: lastUserText,
+        });
+        if (forced) inputForTool = { ...inputForTool, on_play: forced };
+      }
+
       // For overlay/grade tools, an explicitly-passed fence is legitimate if it
       // matches the anchored play OR a history offense fence — not just the
-      // resolved baseline. Pass both so the fabrication guard doesn't clobber a
-      // real-but-different play the coach is targeting.
-      const otherRealFences = OFFENSE_BASELINE_TOOLS.has(tu.name)
+      // resolved baseline. (Only decisive when the override above didn't force the
+      // anchored play — i.e. no anchor, or the coach targeted other plays.)
+      const otherRealFences = isOverlayTool
         ? [anchoredOffenseFenceJson, priorAssistantOffenseFenceJson]
         : [];
       const correctedInput = autoCorrectPriorFence(
         tu.name,
-        tu.input as Record<string, unknown>,
+        inputForTool,
         priorFenceForTool,
         otherRealFences,
       );
@@ -4174,6 +4197,45 @@ function sameOffenseRoster(a: string, b: string): boolean {
   const fb = offenseFingerprint(b);
   if (!fa || !fb) return false;
   return fa.count === fb.count && fa.ids === fb.ids;
+}
+
+/** True when the coach's message targets OTHER or MULTIPLE plays rather than the
+ *  one on screen — "install Cover 3 vs all my plays", "add the defense to each
+ *  play", "overlay it on my other play". When false (the common deictic case —
+ *  "show cover 1 vs this defense", "try again", "how does cover 3 defend this"),
+ *  the anchored play is authoritative for compose_defense/evaluate_matchup and
+ *  the overlay is FORCED onto it. Keeps the multi-play install flow (where Cal
+ *  legitimately passes a different play's fence per call) working. */
+export function coachTargetsOtherPlays(text: string): boolean {
+  if (!text) return false;
+  const t = text.toLowerCase();
+  // "all/each/every/both … plays" in either order.
+  if (/\b(all|each|every|both)\b[^.?!\n]{0,20}\bplays?\b/.test(t)) return true;
+  if (/\bplays?\b[^.?!\n]{0,20}\b(all|each|every|both)\b/.test(t)) return true;
+  // A specific different play: "other/another/different/remaining play(s)".
+  if (/\b(other|another|different|remaining)\b[^.?!\n]{0,12}\bplays?\b/.test(t)) return true;
+  if (/\brest of (my|the) plays?\b/.test(t)) return true;
+  return false;
+}
+
+/** Decide the `on_play` a compose_defense / evaluate_matchup call should use.
+ *  Anchored-authoritative: when a play is on screen and the coach isn't
+ *  targeting other/multiple plays, the overlay/grade is FORCED onto the anchored
+ *  offense — unless Cal's on_play is an edit of that same play (same roster),
+ *  which is kept. Returns the fence to force, or null to leave Cal's input
+ *  untouched (no anchor, an other-play request, or an edit-of-anchored — the
+ *  downstream fabrication guard handles those). */
+export function resolveOverlayOnPlay(opts: {
+  providedOnPlay: string;
+  anchoredOffenseFence: string | null;
+  coachText: string;
+}): string | null {
+  const { providedOnPlay, anchoredOffenseFence, coachText } = opts;
+  if (!anchoredOffenseFence) return null; // nothing on screen to force onto
+  if (coachTargetsOtherPlays(coachText)) return null; // multi/other-play request
+  const provided = providedOnPlay.trim();
+  if (provided && sameOffenseRoster(provided, anchoredOffenseFence)) return null; // edit of anchored — keep
+  return anchoredOffenseFence; // deictic "this play" → force the anchored offense
 }
 
 /** Tool names that accept a prior play fence as a string input. Their

@@ -35,8 +35,10 @@
 import { describe, expect, it } from "vitest";
 import {
   autoCorrectPriorFence,
+  coachTargetsOtherPlays,
   extractAnchoredOffenseFence,
   resolveDefenseOverlayBaseline,
+  resolveOverlayOnPlay,
 } from "./agent";
 
 const OFFENSE_DIAGRAM = JSON.stringify({
@@ -227,5 +229,91 @@ describe("autoCorrectPriorFence — fabrication guard, not baseline-enforcer", (
       [HISTORY_DIFFERENT],
     );
     expect(out.on_play).toBe(ANCHORED);
+  });
+});
+
+describe("coachTargetsOtherPlays", () => {
+  it("is false for deictic single-play overlay requests", () => {
+    for (const t of [
+      "show me how a cover 1 should line up against this defense and how they move",
+      "try again",
+      "how does cover 3 defend this",
+      "add the defense",
+      "show this play vs Tampa 2",
+    ]) {
+      expect(coachTargetsOtherPlays(t)).toBe(false);
+    }
+  });
+
+  it("is true for multi-play / other-play install requests", () => {
+    for (const t of [
+      "install Cover 3 vs all my plays",
+      "add the defense to each play",
+      "put Cover 2 on every play",
+      "overlay it on both plays",
+      "show cover 1 on my other play",
+      "do the same for the rest of my plays",
+    ]) {
+      expect(coachTargetsOtherPlays(t)).toBe(true);
+    }
+  });
+});
+
+describe("resolveOverlayOnPlay — anchored play is authoritative for overlays", () => {
+  const ANCHORED = OFFENSE_DIAGRAM; // Tesla Counter on screen
+  // A different play built earlier in the same thread (the bug's stale fence).
+  const STALE_DIFFERENT = JSON.stringify({
+    title: "Stick Right",
+    players: [
+      { id: "C", team: "O" },
+      { id: "QB", team: "O" },
+      { id: "Y", team: "O" },
+      { id: "X", team: "O" },
+      { id: "Z", team: "O" },
+    ],
+    routes: [],
+  });
+
+  it("BUG REPRO: forces the anchored play when Cal passed a stale different-play on_play", () => {
+    // Coach on Tesla Counter, deictic request; Cal wrongly passed Stick Right.
+    const forced = resolveOverlayOnPlay({
+      providedOnPlay: STALE_DIFFERENT,
+      anchoredOffenseFence: ANCHORED,
+      coachText: "show cover 1 vs this defense",
+    });
+    expect(forced).toBe(ANCHORED);
+  });
+
+  it("forces the anchored play when Cal omitted on_play", () => {
+    expect(
+      resolveOverlayOnPlay({ providedOnPlay: "", anchoredOffenseFence: ANCHORED, coachText: "try again" }),
+    ).toBe(ANCHORED);
+  });
+
+  it("keeps Cal's on_play when it is an EDIT of the anchored play (same roster)", () => {
+    const editedAnchored = ANCHORED.replace("Mesh Right", "Mesh Right (edited)");
+    expect(
+      resolveOverlayOnPlay({
+        providedOnPlay: editedAnchored,
+        anchoredOffenseFence: ANCHORED,
+        coachText: "add cover 2 to this",
+      }),
+    ).toBeNull(); // null → leave Cal's input untouched
+  });
+
+  it("does NOT force when the coach targets other/multiple plays (multi-play install)", () => {
+    expect(
+      resolveOverlayOnPlay({
+        providedOnPlay: STALE_DIFFERENT,
+        anchoredOffenseFence: ANCHORED,
+        coachText: "install Cover 3 vs all my plays",
+      }),
+    ).toBeNull();
+  });
+
+  it("does NOT force when no play is anchored (lobby)", () => {
+    expect(
+      resolveOverlayOnPlay({ providedOnPlay: STALE_DIFFERENT, anchoredOffenseFence: null, coachText: "show cover 3" }),
+    ).toBeNull();
   });
 });
