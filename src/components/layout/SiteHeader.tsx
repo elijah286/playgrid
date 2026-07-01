@@ -5,6 +5,7 @@ import { getCachedUserRole } from "@/lib/auth/profile-cache";
 import { SiteHeaderShell } from "@/components/layout/SiteHeaderShell";
 import { getCurrentEntitlement, hasUsedCoachProTrial, type SubscriptionTier } from "@/lib/billing/entitlement";
 import { canUseAiFeatures } from "@/lib/billing/features";
+import { getCoachCalFreePromptState } from "@/lib/billing/coach-cal-free-prompts";
 import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
 import {
   getBetaFeatures,
@@ -59,9 +60,22 @@ export async function SiteHeader() {
           const entitlement = await getCurrentEntitlement();
           userTier = entitlement?.tier ?? "free";
           const isEntitled = isAdmin || canUseAiFeatures(entitlement);
-          coachAiAvailable = isEntitled;
-          // Logged-in users without a Team Coach subscription see the promo
-          // launcher (upgrade CTA) instead of the chat.
+          // Free (non-subscribed) users get a small allowance of real Cal
+          // prompts before the paywall. While they still have prompts left,
+          // the launcher opens the real chat — not the upgrade promo. The
+          // stream route enforces the same allowance server-side; this only
+          // decides which launcher surface renders.
+          let hasFreeCalPrompts = false;
+          if (!isEntitled) {
+            try {
+              hasFreeCalPrompts = (await getCoachCalFreePromptState(authUser.id)).hasRemaining;
+            } catch {
+              /* best effort — fall back to promo launcher */
+            }
+          }
+          coachAiAvailable = isEntitled || hasFreeCalPrompts;
+          // Logged-in users who are neither subscribed nor holding free
+          // prompts see the promo launcher (upgrade CTA) instead of the chat.
           showCoachCalPromo = !coachAiAvailable;
           // Trial gate retained for legacy preview surfaces — the Cal-folded
           // Team Coach tier has no trial today, so this only matters if we

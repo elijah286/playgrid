@@ -754,6 +754,9 @@ export function SettingsClient({
                   }
                   initialCoachCalVersion={d.coachCalVersion}
                   initialCoachAiEvalDays={d.coachAiEvalDays}
+                  initialCoachCalFreePromptAllowance={
+                    d.coachCalFreePromptAllowance
+                  }
                   initialSuggestReviews={d.suggestReviews}
                 />
               </div>

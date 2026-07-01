@@ -10,6 +10,7 @@ import { getMobileEditingEnabled } from "@/lib/site/mobile-editing-config";
 import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
 import { getCurrentEntitlement, hasUsedCoachProTrial } from "@/lib/billing/entitlement";
 import { canUseAiFeatures, canUseGameMode } from "@/lib/billing/features";
+import { hasFreeCalPromptsRemaining } from "@/lib/billing/coach-cal-free-prompts";
 import {
   getBetaFeatures,
   isBetaFeatureAvailable,
@@ -198,10 +199,18 @@ export default async function PlayEditPage({ params }: Props) {
   );
   const practicePlansAvailable = isCoachInPlaybook;
   const viewerCanUseGameMode = isAdmin || canUseGameMode(editorEntitlement);
-  const coachAiAvailable = isAdmin || canUseAiFeatures(editorEntitlement);
-  const showCoachCalCta = !canUseAiFeatures(editorEntitlement) && user !== null && !isAdmin;
-  // Cal launcher promo: only logged-in users without entitlement see the
-  // upgrade preview. Anonymous example viewers don't see Cal at all.
+  const coachAiEntitled = isAdmin || canUseAiFeatures(editorEntitlement);
+  // Free users with trial prompts left get the real launcher, not the promo
+  // (mirrors SiteHeader / the playbook page).
+  const hasFreeCalPrompts =
+    !coachAiEntitled && user !== null
+      ? await hasFreeCalPromptsRemaining(user.id)
+      : false;
+  const coachAiAvailable = coachAiEntitled || hasFreeCalPrompts;
+  const showCoachCalCta = !coachAiAvailable && user !== null && !isAdmin;
+  // Cal launcher promo: only logged-in users without entitlement (and out of
+  // free prompts) see the upgrade preview. Anonymous example viewers don't see
+  // Cal at all.
   const showCoachCalPromo = user !== null && !coachAiAvailable;
   // Trial-eligibility for the floating CTA copy. Only matters for free
   // users showing the CTA; paid `coach` users already get upgrade copy

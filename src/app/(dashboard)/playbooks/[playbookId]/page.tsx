@@ -23,6 +23,7 @@ import type { SportVariant } from "@/domain/play/types";
 import { normalizePlaybookSettings } from "@/domain/playbook/settings";
 import { getCurrentEntitlement, hasUsedCoachProTrial } from "@/lib/billing/entitlement";
 import { canUseAiFeatures, canUseGameMode, tierAtLeast } from "@/lib/billing/features";
+import { hasFreeCalPromptsRemaining } from "@/lib/billing/coach-cal-free-prompts";
 import { getFreePlayCapForOwner } from "@/lib/site/free-plays-config";
 import { getPlaybookOwnerId } from "@/lib/billing/owner-entitlement";
 import {
@@ -331,9 +332,15 @@ export default async function PlaybookDetailPage({ params }: Props) {
   // same entitlement gate as the global one — non-entitled users get the
   // marketing popover, entitled users get the chat.
   const coachAiEntitled = isAdmin || canUseAiFeatures(viewerEntitlement);
-  const coachAiAvailable = coachAiEntitled;
+  // Free users with trial prompts left get the real launcher, not the promo
+  // (see SiteHeader for the canonical version of this gate).
+  const hasFreeCalPrompts =
+    !coachAiEntitled && user !== null
+      ? await hasFreeCalPromptsRemaining(user.id)
+      : false;
+  const coachAiAvailable = coachAiEntitled || hasFreeCalPrompts;
   const showCoachCalCta =
-    !coachAiEntitled && user !== null && !isAdmin;
+    !coachAiAvailable && user !== null && !isAdmin;
   const showCoachCalPromoInPlaybook = !coachAiAvailable && user !== null;
   const referralConfig = await timed(
     `playbook-page:referralConfig pb=${playbookId}`,

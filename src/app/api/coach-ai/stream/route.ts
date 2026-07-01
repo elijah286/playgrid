@@ -6,6 +6,10 @@ import type { PlayDocument } from "@/domain/play/types";
 import type { ChatMessage, ContentBlock } from "@/lib/coach-ai/llm";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { canUseAiFeatures } from "@/lib/billing/features";
+import {
+  getCoachCalFreePromptState,
+  recordFreePromptUsed,
+} from "@/lib/billing/coach-cal-free-prompts";
 import { getCoachCalCostState } from "@/lib/billing/coach-cal-cost-cap";
 import { getCoachCalImageCapState } from "@/lib/billing/coach-cal-image-cap";
 import { COACH_CAL_IMAGE_UPLOADS_ENABLED } from "@/lib/coach-ai/image-upload";
@@ -72,8 +76,8 @@ function turnsToHistory(turns: StreamRequest["history"]): ChatMessage[] {
 }
 
 async function loadCallerInfo(): Promise<
-  | { ok: true; userId: string; isAdmin: boolean }
-  | { ok: false; error: string }
+  | { ok: true; userId: string; isAdmin: boolean; usingFreeAllowance: boolean }
+  | { ok: false; error: string; code?: string }
 > {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -86,8 +90,21 @@ async function loadCallerInfo(): Promise<
   const isAdmin = profile?.role === "admin";
   const entitlement = await getCurrentEntitlement();
   const isEntitled = isAdmin || canUseAiFeatures(entitlement);
-  if (!isEntitled) return { ok: false, error: "Coach Cal requires a Team Coach subscription." };
-  return { ok: true, userId: user.id, isAdmin };
+  if (isEntitled) return { ok: true, userId: user.id, isAdmin, usingFreeAllowance: false };
+
+  // Not subscribed: allow a small number of free trial prompts so the coach
+  // can actually feel Cal before the paywall. The lifetime counter is only
+  // decremented on a SUCCESSFUL turn (see recordFreePromptUsed in the success
+  // branch) — errors/failed turns never burn a free prompt.
+  const free = await getCoachCalFreePromptState(user.id);
+  if (free.hasRemaining) {
+    return { ok: true, userId: user.id, isAdmin, usingFreeAllowance: true };
+  }
+  return {
+    ok: false,
+    error: "You've used your free Coach Cal prompts. Upgrade to Team Coach to keep going.",
+    code: "free_prompts_exhausted",
+  };
 }
 
 async function loadToolContext(
@@ -248,7 +265,8 @@ export async function POST(req: Request): Promise<Response> {
   const gate = await loadCallerInfo();
   if (!gate.ok) {
     return new Response(
-      sseChunk("error", { message: gate.error }) + sseChunk("done", { toolCalls: [], text: "" }),
+      sseChunk("error", { message: gate.error, code: gate.code }) +
+        sseChunk("done", { toolCalls: [], text: "" }),
       { status: 200, headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } },
     );
   }
@@ -505,10 +523,17 @@ export async function POST(req: Request): Promise<Response> {
           mutated: result.mutated,
         },
       });
-      // Record usage asynchronously — don't block the response
+      // Record usage asynchronously — don't block the response. This is the
+      // ONLY place usage is recorded; it runs after the agent resolves, so a
+      // failed turn (caught below) never counts against any meter.
       recordUsage(gate.userId).catch(() => { /* non-critical */ });
       if (userImage) {
         recordImageUsage(gate.userId).catch(() => { /* non-critical */ });
+      }
+      // Free-trial users burn one free prompt per SUCCESSFUL turn only — same
+      // success-branch placement as recordUsage, so errors don't count.
+      if (gate.usingFreeAllowance) {
+        recordFreePromptUsed(gate.userId).catch(() => { /* non-critical */ });
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";

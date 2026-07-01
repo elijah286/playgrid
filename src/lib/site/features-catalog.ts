@@ -739,6 +739,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "coach-cal-free-trial-prompts",
+    name: "Free Coach Cal trial prompts",
+    description:
+      "New (and existing) free coaches get a handful of real Coach Cal prompts before subscribing — they can actually build a play, generate notes, or ask a matchup question and see Cal work, instead of only ever seeing an upgrade wall. The allowance is a lifetime count per account (site-admin configurable, default 5); only successful turns count, so a Cal error never burns a prompt. Once the free prompts are used up, Cal invites them to Team Coach.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-07-01",
+  },
+  {
     id: "coach-cal-matchup-grade",
     name: "Ask Coach Cal if a play beats a defense",
     description:

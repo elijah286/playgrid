@@ -10,6 +10,7 @@ import {
 } from "@/lib/site/beta-features-config";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { canUseAiFeatures, tierAtLeast } from "@/lib/billing/features";
+import { hasFreeCalPromptsRemaining } from "@/lib/billing/coach-cal-free-prompts";
 import { withTimeout } from "@/lib/perf/with-timeout";
 import { Suspense } from "react";
 import Link from "next/link";
@@ -124,9 +125,14 @@ async function DashboardData({
     { isAdmin, isEntitled: true },
   );
   const canUseTeamFeatures = isAdmin || tierAtLeast(entitlement, "coach");
-  const coachAiAvailable = isAdmin || canUseAiFeatures(entitlement);
-  // Logged-in users without Team Coach see the promo CTA — same logic as
-  // SiteHeader uses to decide whether to render the Cal launcher button.
+  const coachAiEntitled = isAdmin || canUseAiFeatures(entitlement);
+  // Free users with trial prompts left get the real launcher, not the promo
+  // (same gate as SiteHeader).
+  const hasFreeCalPrompts =
+    !coachAiEntitled && profileRes.user
+      ? await hasFreeCalPromptsRemaining(profileRes.user.id)
+      : false;
+  const coachAiAvailable = coachAiEntitled || hasFreeCalPrompts;
   const showCoachCalPromo = !coachAiAvailable;
   // Welcome dialogs: only fire when the upgrade-success / checkout-success
   // redirect landed us here AND the user's actual entitlement matches the

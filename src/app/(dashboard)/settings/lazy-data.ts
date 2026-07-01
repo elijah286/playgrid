@@ -43,6 +43,7 @@ import { getReferralConfig } from "@/lib/site/referral-config";
 import { getCoachCalUpgradeBannerEnabled } from "@/lib/site/coach-cal-banner-config";
 import { getCoachCalVersion } from "@/lib/site/coach-cal-version";
 import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
+import { getCoachCalFreePromptAllowance } from "@/lib/site/coach-cal-free-prompts-config";
 import { getSuggestReviews } from "@/lib/site/review-prompt-config";
 import {
   listOpexServicesAction,
@@ -186,6 +187,7 @@ export async function loadSiteTabData() {
     coachCalUpgradeBannerEnabled,
     coachCalVersion,
     coachAiEvalDays,
+    coachCalFreePromptAllowance,
     suggestReviews,
   ] = await Promise.all([
     getSeatDefaults(),
@@ -201,6 +203,7 @@ export async function loadSiteTabData() {
     getCoachCalUpgradeBannerEnabled(),
     getCoachCalVersion(),
     getCoachAiEvalDays(),
+    getCoachCalFreePromptAllowance(),
     getSuggestReviews(),
   ]);
 
@@ -219,6 +222,7 @@ export async function loadSiteTabData() {
     coachCalUpgradeBannerEnabled,
     coachCalVersion,
     coachAiEvalDays,
+    coachCalFreePromptAllowance,
     suggestReviews,
   };
 }

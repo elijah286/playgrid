@@ -11,6 +11,7 @@ import { setReferralConfigAction } from "@/app/actions/admin-referral";
 import { setCoachCalUpgradeBannerEnabledAction } from "@/app/actions/admin-coach-cal-banner";
 import { setCoachCalVersionAction } from "@/app/actions/admin-coach-cal-version";
 import { setCoachAiEvalDaysAction } from "@/app/actions/admin-coach-ai-eval";
+import { setCoachCalFreePromptAllowanceAction } from "@/app/actions/admin-coach-cal-free-prompts";
 import {
   setSuggestReviewsAction,
   resetRatingPromptForSelfAction,
@@ -20,6 +21,10 @@ import {
   COACH_AI_EVAL_DAYS_MIN,
   COACH_AI_EVAL_DAYS_MAX,
 } from "@/lib/site/coach-ai-eval-config";
+import {
+  COACH_CAL_FREE_PROMPT_ALLOWANCE_MIN,
+  COACH_CAL_FREE_PROMPT_ALLOWANCE_MAX,
+} from "@/lib/site/coach-cal-free-prompts-config";
 import {
   setAppleSigninEnabledAction,
   setGoogleSigninEnabledAction,
@@ -38,6 +43,7 @@ export function SiteSettingsAdminClient({
   initialCoachCalUpgradeBannerEnabled,
   initialCoachCalVersion,
   initialCoachAiEvalDays,
+  initialCoachCalFreePromptAllowance,
   initialSuggestReviews,
 }: {
   initialHideLobbyAnimation: boolean;
@@ -51,6 +57,7 @@ export function SiteSettingsAdminClient({
   initialCoachCalUpgradeBannerEnabled: boolean;
   initialCoachCalVersion: "v1" | "v2";
   initialCoachAiEvalDays: number;
+  initialCoachCalFreePromptAllowance: number;
   initialSuggestReviews: SuggestReviews;
 }) {
   const { toast } = useToast();
@@ -84,6 +91,14 @@ export function SiteSettingsAdminClient({
   const [evalDaysInput, setEvalDaysInput] = useState(String(initialCoachAiEvalDays));
   const [evalDaysPending, startEvalDaysTransition] = useTransition();
 
+  const [savedFreePrompts, setSavedFreePrompts] = useState(
+    initialCoachCalFreePromptAllowance,
+  );
+  const [freePromptsInput, setFreePromptsInput] = useState(
+    String(initialCoachCalFreePromptAllowance),
+  );
+  const [freePromptsPending, startFreePromptsTransition] = useTransition();
+
   const [suggestReviews, setSuggestReviews] = useState<SuggestReviews>(initialSuggestReviews);
   const [suggestReviewsPending, startSuggestReviewsTransition] = useTransition();
   const [resetPending, startResetTransition] = useTransition();
@@ -115,6 +130,38 @@ export function SiteSettingsAdminClient({
       setEvalDaysInput(String(res.value));
       toast(
         `Coach Cal eval window set to ${res.value} day${res.value === 1 ? "" : "s"}. Existing evaluators keep the window they signed up with.`,
+        "success",
+      );
+    });
+  }
+
+  function saveFreePrompts() {
+    const next = Number(freePromptsInput);
+    if (
+      !Number.isFinite(next) ||
+      next < COACH_CAL_FREE_PROMPT_ALLOWANCE_MIN ||
+      next > COACH_CAL_FREE_PROMPT_ALLOWANCE_MAX
+    ) {
+      toast(
+        `Enter a number between ${COACH_CAL_FREE_PROMPT_ALLOWANCE_MIN} and ${COACH_CAL_FREE_PROMPT_ALLOWANCE_MAX}.`,
+        "error",
+      );
+      setFreePromptsInput(String(savedFreePrompts));
+      return;
+    }
+    const rounded = Math.floor(next);
+    if (rounded === savedFreePrompts) return;
+    startFreePromptsTransition(async () => {
+      const res = await setCoachCalFreePromptAllowanceAction(rounded);
+      if (!res.ok) {
+        toast(res.error, "error");
+        setFreePromptsInput(String(savedFreePrompts));
+        return;
+      }
+      setSavedFreePrompts(res.value);
+      setFreePromptsInput(String(res.value));
+      toast(
+        `Free Coach Cal prompts set to ${res.value}. Applies to free users who haven't used theirs up yet.`,
         "success",
       );
     });
@@ -521,6 +568,49 @@ export function SiteSettingsAdminClient({
               Number(evalDaysInput) === savedEvalDays
             }
             onClick={saveEvalDays}
+          >
+            Save
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-foreground">
+            Free Coach Cal prompts
+          </p>
+          <p className="mt-0.5 text-xs text-muted">
+            How many real Coach Cal prompts a free (non-subscribed) user gets
+            before the paywall — a lifetime allowance per account. Only
+            successful turns count; a Cal error never burns a prompt. Cost caps
+            still bound spend. Set to 0 to disable the free trial entirely.
+            Default is 5.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min={COACH_CAL_FREE_PROMPT_ALLOWANCE_MIN}
+            max={COACH_CAL_FREE_PROMPT_ALLOWANCE_MAX}
+            step={1}
+            className="w-20 rounded-md bg-surface px-3 py-1.5 text-sm ring-1 ring-border"
+            value={freePromptsInput}
+            disabled={freePromptsPending}
+            onChange={(e) => setFreePromptsInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") saveFreePrompts();
+            }}
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={freePromptsPending}
+            disabled={
+              freePromptsPending ||
+              freePromptsInput.trim() === "" ||
+              Number(freePromptsInput) === savedFreePrompts
+            }
+            onClick={saveFreePrompts}
           >
             Save
           </Button>

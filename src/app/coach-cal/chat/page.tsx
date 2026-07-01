@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { canUseAiFeatures } from "@/lib/billing/features";
+import { hasFreeCalPromptsRemaining } from "@/lib/billing/coach-cal-free-prompts";
 import { getCachedUserRole } from "@/lib/auth/profile-cache";
 import { ChatWindow } from "./ChatWindow";
 
@@ -26,7 +27,12 @@ export default async function CoachCalChatPage({
     getCachedUserRole(user.id),
   ]);
   const isAdmin = role === "admin";
-  const entitled = isAdmin || canUseAiFeatures(entitlement);
+  // Free users with trial prompts left can open the full chat; only send the
+  // truly locked-out (no subscription, no free prompts) to pricing.
+  const entitled =
+    isAdmin ||
+    canUseAiFeatures(entitlement) ||
+    (await hasFreeCalPromptsRemaining(user.id));
   if (!entitled) redirect("/pricing");
 
   const { playbook: playbookId } = await searchParams;
