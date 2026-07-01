@@ -3,8 +3,13 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { isLeagueAdmin } from "@/lib/league/access";
 import {
+  getCurrentLeagueMemberships,
+  isLeagueAdmin,
+  isLeagueAdminRole,
+} from "@/lib/league/access";
+import {
+  decideLeagueView,
   grantsCover,
   isCapability,
   scopeFromColumns,
@@ -146,4 +151,72 @@ export async function gateLeagueCapability(
     };
   }
   return { ok: false, error: "You don't have permission to do that." };
+}
+
+export type LeagueViewAccess = {
+  userId: string;
+  email: string | null;
+  /** The client to read with: the cookie client for a member (RLS-natural) or
+   *  the service-role client for a delegated member (the grant is the authority,
+   *  exactly as the portfolio landing treats `accessibleLeagues()`). */
+  db: LeagueDb;
+  /** Admin-role member OR any delegated member (delegates are managers). Drives
+   *  admin-only UI (e.g. showing Leo); it does NOT re-gate the page. */
+  isAdmin: boolean;
+  viaGrant: boolean;
+  /** The delegate's capabilities on this league ([] for a member — they read via
+   *  RLS, so no capability set is needed). */
+  capabilities: Capability[];
+};
+
+/**
+ * Authorize VIEWING a league console page, and hand back the right DB client.
+ *
+ * This is the read-side twin of `gateLeagueCapability`. The org-context landing
+ * lists a delegate's leagues via `accessibleLeagues()` + service-role, but the
+ * per-league pages historically gated on raw `league_members` — so a delegated
+ * member saw the portfolio yet 404'd on every drill-down. This resolver closes
+ * that gap: members keep their exact gate and RLS-bound client; a delegated
+ * member is admitted by a covering grant and reads via the service role.
+ *
+ * Returns null when the user has no access at all, so the page can `notFound()`.
+ * Pass `memberAdminOnly` to preserve an admin-only member gate, and
+ * `delegateCapability` for the capability a delegate must hold (omit it on the
+ * league home, where any covering grant suffices).
+ */
+export async function resolveLeagueView(
+  leagueId: string,
+  opts?: { memberAdminOnly?: boolean; delegateCapability?: Capability },
+): Promise<LeagueViewAccess | null> {
+  if (!hasSupabaseEnv()) return null;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const memberships = await getCurrentLeagueMemberships();
+  const membership = memberships.find((m) => m.leagueId === leagueId);
+  const isMember = !!membership;
+  const isAdminMember = !!membership && isLeagueAdminRole(membership.role);
+
+  // Only pay for the grant lookup when the user isn't already a member.
+  const delegateCapabilities = isMember
+    ? []
+    : await capabilitiesForLeague(user.email, leagueId);
+
+  const decision = decideLeagueView({ isMember, isAdminMember, delegateCapabilities }, opts);
+  if (!decision) return null;
+
+  return {
+    userId: user.id,
+    email: user.email ?? null,
+    db:
+      decision.via === "delegate"
+        ? (createServiceRoleClient() as unknown as LeagueDb)
+        : supabase,
+    isAdmin: decision.isAdmin,
+    viaGrant: decision.via === "delegate",
+    capabilities: delegateCapabilities,
+  };
 }

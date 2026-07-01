@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   ALL_CAPABILITIES,
   capabilitiesForRole,
+  decideLeagueView,
   grantsCover,
   roleForCapabilities,
   scopeIncludesLeague,
@@ -102,5 +103,75 @@ describe("grantsCover (the can() decision)", () => {
     ];
     expect(grantsCover(grants, "manage_rosters", baseball)).toBe(true);
     expect(grantsCover(grants, "manage_store", baseball)).toBe(false);
+  });
+});
+
+describe("decideLeagueView (console page access)", () => {
+  it("admits any member to a plain page; a coach is denied on an admin-only page", () => {
+    // Non-admin member (e.g. a coach) may view a plain page…
+    expect(
+      decideLeagueView({ isMember: true, isAdminMember: false, delegateCapabilities: [] }),
+    ).toEqual({ via: "member", isAdmin: false });
+    // …but not an admin-only page.
+    expect(
+      decideLeagueView(
+        { isMember: true, isAdminMember: false, delegateCapabilities: [] },
+        { memberAdminOnly: true },
+      ),
+    ).toBeNull();
+    // An admin-role member passes the admin-only gate.
+    expect(
+      decideLeagueView(
+        { isMember: true, isAdminMember: true, delegateCapabilities: [] },
+        { memberAdminOnly: true },
+      ),
+    ).toEqual({ via: "member", isAdmin: true });
+  });
+
+  it("member gate ignores grant capabilities (members never take the delegate path)", () => {
+    // A member with no caps still passes; delegateCapability is a delegate-only concern.
+    expect(
+      decideLeagueView(
+        { isMember: true, isAdminMember: true, delegateCapabilities: [] },
+        { memberAdminOnly: true, delegateCapability: "manage_rosters" },
+      ),
+    ).toEqual({ via: "member", isAdmin: true });
+  });
+
+  it("admits a delegate holding the page's capability; denies without it", () => {
+    expect(
+      decideLeagueView(
+        { isMember: false, isAdminMember: false, delegateCapabilities: ["manage_rosters"] },
+        { delegateCapability: "manage_rosters" },
+      ),
+    ).toEqual({ via: "delegate", isAdmin: true });
+    expect(
+      decideLeagueView(
+        { isMember: false, isAdminMember: false, delegateCapabilities: ["manage_store"] },
+        { delegateCapability: "manage_rosters" },
+      ),
+    ).toBeNull();
+  });
+
+  it("admits a delegate with ANY grant to a plain page (no specific capability required)", () => {
+    expect(
+      decideLeagueView({
+        isMember: false,
+        isAdminMember: false,
+        delegateCapabilities: ["manage_store"],
+      }),
+    ).toEqual({ via: "delegate", isAdmin: true });
+  });
+
+  it("denies a user who is neither a member nor a covering delegate", () => {
+    expect(
+      decideLeagueView({ isMember: false, isAdminMember: false, delegateCapabilities: [] }),
+    ).toBeNull();
+    expect(
+      decideLeagueView(
+        { isMember: false, isAdminMember: false, delegateCapabilities: [] },
+        { delegateCapability: "manage_teams" },
+      ),
+    ).toBeNull();
   });
 });

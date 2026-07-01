@@ -14,8 +14,13 @@ import { isUnrostered, type RegistrationStatus } from "./registration";
  */
 
 /** A league's sport (RLS-scoped to leagues the caller belongs to), or null. */
-export async function getLeagueSport(leagueId: string): Promise<string | null> {
-  const supabase = await createClient();
+export async function getLeagueSport(
+  leagueId: string,
+  db?: Awaited<ReturnType<typeof createClient>>,
+): Promise<string | null> {
+  // Accept a caller-supplied client so a delegated member (who can't RLS-read the
+  // league) can pass the service-role client from resolveLeagueView().
+  const supabase = db ?? (await createClient());
   const { data } = await supabase
     .from("leagues")
     .select("sport")
@@ -573,8 +578,12 @@ export type LeagueDashboard = {
 /** Operational summary for one league. Returns null if not visible to the user. */
 export async function loadLeagueDashboard(
   leagueId: string,
+  db?: Awaited<ReturnType<typeof createClient>>,
 ): Promise<LeagueDashboard | null> {
-  const supabase = await createClient();
+  // A delegated member can't RLS-read this league, so the page passes the
+  // service-role client from resolveLeagueView(); members pass their cookie
+  // client (or nothing, and we make one — unchanged behavior).
+  const supabase = db ?? (await createClient());
 
   const { data: league } = await supabase
     .from("leagues")

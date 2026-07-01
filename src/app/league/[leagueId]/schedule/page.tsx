@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { getCurrentLeagueMemberships } from "@/lib/league/access";
+import { resolveLeagueView } from "@/lib/league/authorize";
 import { listLeagueEventsAction } from "@/app/actions/league-events";
 import { EventsManager } from "@/features/league/EventsManager";
 
@@ -17,8 +17,8 @@ export default async function SchedulePage({
 }) {
   const { leagueId } = await params;
 
-  const memberships = await getCurrentLeagueMemberships();
-  if (!memberships.some((m) => m.leagueId === leagueId)) notFound();
+  const access = await resolveLeagueView(leagueId, { delegateCapability: "manage_schedule" });
+  if (!access) notFound();
 
   const res = await listLeagueEventsAction(leagueId);
 

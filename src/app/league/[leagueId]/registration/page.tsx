@@ -3,8 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import QRCode from "qrcode";
 
-import { getCurrentLeagueMemberships } from "@/lib/league/access";
-import { createClient } from "@/lib/supabase/server";
+import { resolveLeagueView } from "@/lib/league/authorize";
 import { getRegistrationConfigAction } from "@/app/actions/league-registration-config";
 import { listStoreItemsAction } from "@/app/actions/league-store";
 import { listRegistrationsAction } from "@/app/actions/league-registrations";
@@ -28,12 +27,14 @@ export default async function RegistrationPage({
 }) {
   const { leagueId } = await params;
 
-  const memberships = await getCurrentLeagueMemberships();
-  if (!memberships.some((m) => m.leagueId === leagueId)) notFound();
+  const access = await resolveLeagueView(leagueId, {
+    delegateCapability: "manage_registration",
+  });
+  if (!access) notFound();
 
-  // Prefer the custom slug (set in Settings) for a short, shareable link.
-  const supabase = await createClient();
-  const { data: leagueRow } = await supabase
+  // Prefer the custom slug (set in Settings) for a short, shareable link. Read via
+  // the authorized client so a delegated member isn't blocked by RLS.
+  const { data: leagueRow } = await access.db
     .from("leagues")
     .select("slug")
     .eq("id", leagueId)

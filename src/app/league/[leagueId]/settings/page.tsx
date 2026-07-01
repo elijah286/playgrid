@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { getCurrentLeagueMemberships, isLeagueAdminRole } from "@/lib/league/access";
+import { resolveLeagueView } from "@/lib/league/authorize";
 import { getLeagueSettingsAction } from "@/app/actions/league-settings";
 import { LeagueSettingsManager } from "@/features/league/LeagueSettingsManager";
 
@@ -19,8 +19,11 @@ export default async function LeagueSettingsPage({
 }) {
   const { leagueId } = await params;
 
-  const memberships = await getCurrentLeagueMemberships();
-  if (!memberships.some((m) => m.leagueId === leagueId && isLeagueAdminRole(m.role))) notFound();
+  const access = await resolveLeagueView(leagueId, {
+    memberAdminOnly: true,
+    delegateCapability: "manage_settings",
+  });
+  if (!access) notFound();
 
   const settings = await getLeagueSettingsAction(leagueId);
   if (!settings) notFound();

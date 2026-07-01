@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { getCurrentLeagueMemberships } from "@/lib/league/access";
-import { createClient } from "@/lib/supabase/server";
+import { resolveLeagueView } from "@/lib/league/authorize";
 import { listDivisionsAction } from "@/app/actions/league-divisions";
 import { listLeagueTeamsAction } from "@/app/actions/league-teams";
 import { sportTerms } from "@/lib/league/sportConfig";
@@ -20,14 +19,13 @@ export default async function TeamsPage({
 }) {
   const { leagueId } = await params;
 
-  const memberships = await getCurrentLeagueMemberships();
-  if (!memberships.some((m) => m.leagueId === leagueId)) notFound();
+  const access = await resolveLeagueView(leagueId, { delegateCapability: "manage_teams" });
+  if (!access) notFound();
 
-  const supabase = await createClient();
   const [divisionsRes, teamsRes, leagueRes] = await Promise.all([
     listDivisionsAction(leagueId),
     listLeagueTeamsAction(leagueId),
-    supabase.from("leagues").select("sport").eq("id", leagueId).maybeSingle(),
+    access.db.from("leagues").select("sport").eq("id", leagueId).maybeSingle(),
   ]);
   const divisions = divisionsRes.ok ? divisionsRes.items.map((d) => ({ id: d.id, name: d.name })) : [];
   const sport = (leagueRes.data?.sport as string | null) ?? "football";

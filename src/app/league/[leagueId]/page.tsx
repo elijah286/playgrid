@@ -17,11 +17,8 @@ import {
   Users,
 } from "lucide-react";
 
-import {
-  getCurrentLeagueMemberships,
-  isLeagueAdminRole,
-  leagueAiEnabled,
-} from "@/lib/league/access";
+import { leagueAiEnabled } from "@/lib/league/access";
+import { resolveLeagueView } from "@/lib/league/authorize";
 import { loadLeagueDashboard, getMyLeagues } from "@/lib/league/console";
 import { leagueHasPlaybooks, sportTerms } from "@/lib/league/sportConfig";
 import { LeagueSwitcher } from "@/features/league/LeagueSwitcher";
@@ -120,17 +117,18 @@ export default async function LeagueDashboardPage({
 }) {
   const { leagueId } = await params;
 
-  const memberships = await getCurrentLeagueMemberships();
-  if (!memberships.some((m) => m.leagueId === leagueId)) notFound();
-  const isAdmin = memberships.some(
-    (m) => m.leagueId === leagueId && isLeagueAdminRole(m.role),
-  );
+  // Grant-aware: an owner/member reads via RLS; a delegated member (grant-holder)
+  // is admitted and reads via the service role. Matches the org-context landing so
+  // a league shown in the portfolio never 404s on drill-down.
+  const access = await resolveLeagueView(leagueId);
+  if (!access) notFound();
+  const isAdmin = access.isAdmin;
   const showLeo = isAdmin && leagueAiEnabled();
 
   const myLeagues = await getMyLeagues();
   const hasMultipleLeagues = myLeagues.length > 1;
 
-  const dash = await loadLeagueDashboard(leagueId);
+  const dash = await loadLeagueDashboard(leagueId, access.db);
   if (!dash) notFound();
 
   const r = dash.registrations;

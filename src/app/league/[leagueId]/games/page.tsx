@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { getCurrentLeagueMemberships, isLeagueAdminRole } from "@/lib/league/access";
+import { resolveLeagueView } from "@/lib/league/authorize";
 import { getGamesBoardAction } from "@/app/actions/league-games";
 import { sportTerms } from "@/lib/league/sportConfig";
 import { GamesAndStandings } from "@/features/league/GamesAndStandings";
@@ -18,8 +18,11 @@ export default async function GamesPage({
 }) {
   const { leagueId } = await params;
 
-  const memberships = await getCurrentLeagueMemberships();
-  if (!memberships.some((m) => m.leagueId === leagueId && isLeagueAdminRole(m.role))) notFound();
+  const access = await resolveLeagueView(leagueId, {
+    memberAdminOnly: true,
+    delegateCapability: "manage_schedule",
+  });
+  if (!access) notFound();
 
   const res = await getGamesBoardAction(leagueId);
   const board =

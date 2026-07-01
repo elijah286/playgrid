@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { gateLeagueCapability } from "@/lib/league/authorize";
+import { gateLeagueCapability, resolveLeagueView } from "@/lib/league/authorize";
 import { ensureDefaultWorkspace } from "@/lib/data/workspace";
 
 export type LeagueTeamRow = {
@@ -35,7 +35,11 @@ function gateAdmin(leagueId: string) {
 
 export async function listLeagueTeamsAction(leagueId: string) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured.", items: [] as LeagueTeamRow[] };
-  const supabase = await createClient();
+  // Grant-aware read: a member reads via RLS; a delegated member with manage_teams
+  // reads via the service role. No access → empty (as an RLS read would be).
+  const access = await resolveLeagueView(leagueId, { delegateCapability: "manage_teams" });
+  if (!access) return { ok: true as const, items: [] as LeagueTeamRow[] };
+  const supabase = access.db;
   const { data, error } = await supabase
     .from("teams")
     .select("id, name, league_division_id, head_coach_name, head_coach_email")

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { getCurrentLeagueMemberships, isLeagueAdminRole } from "@/lib/league/access";
+import { resolveLeagueView } from "@/lib/league/authorize";
 import { getFinancialsAction } from "@/app/actions/league-financials";
 
 export const metadata: Metadata = {
@@ -20,8 +20,11 @@ export default async function FinancialsPage({
 }) {
   const { leagueId } = await params;
 
-  const memberships = await getCurrentLeagueMemberships();
-  if (!memberships.some((m) => m.leagueId === leagueId && isLeagueAdminRole(m.role))) notFound();
+  const access = await resolveLeagueView(leagueId, {
+    memberAdminOnly: true,
+    delegateCapability: "view_financials",
+  });
+  if (!access) notFound();
 
   const f = await getFinancialsAction(leagueId);
 

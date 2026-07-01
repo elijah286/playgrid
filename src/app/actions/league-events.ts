@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { isLeagueAdmin } from "@/lib/league/access";
+import { resolveLeagueView } from "@/lib/league/authorize";
 import { EVENT_KINDS, type EventKind, type LeagueEventInput, type LeagueEventRow } from "@/lib/league/events";
 
 async function gateAdmin(leagueId: string) {
@@ -33,7 +34,11 @@ function clean(input: LeagueEventInput) {
 
 export async function listLeagueEventsAction(leagueId: string) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured.", items: [] as LeagueEventRow[] };
-  const supabase = await createClient();
+  // Grant-aware read: a member reads via RLS; a delegated member with
+  // manage_schedule reads via the service role.
+  const access = await resolveLeagueView(leagueId, { delegateCapability: "manage_schedule" });
+  if (!access) return { ok: true as const, items: [] as LeagueEventRow[] };
+  const supabase = access.db;
   const { data, error } = await supabase
     .from("league_events")
     .select("id, kind, title, starts_at, location, notes")

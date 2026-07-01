@@ -2,12 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import {
-  getCurrentLeagueMemberships,
-  isLeagueAdminRole,
-  leagueAiEnabled,
-  leagueAiWritesEnabled,
-} from "@/lib/league/access";
+import { leagueAiEnabled, leagueAiWritesEnabled } from "@/lib/league/access";
+import { resolveLeagueView } from "@/lib/league/authorize";
 import { LeoChat } from "@/features/league/LeoChat";
 
 export const metadata: Metadata = {
@@ -21,11 +17,11 @@ export default async function LeoPage({
 }) {
   const { leagueId } = await params;
 
-  // Dark by default; operator-only.
+  // Dark by default; admins + delegated members (Leo scopes its tools to the
+  // delegate's capabilities server-side).
   if (!leagueAiEnabled()) notFound();
-  const memberships = await getCurrentLeagueMemberships();
-  const membership = memberships.find((m) => m.leagueId === leagueId);
-  if (!membership || !isLeagueAdminRole(membership.role)) notFound();
+  const access = await resolveLeagueView(leagueId, { memberAdminOnly: true });
+  if (!access) notFound();
 
   const writesEnabled = leagueAiWritesEnabled();
 

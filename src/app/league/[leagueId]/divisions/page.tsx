@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { getCurrentLeagueMemberships } from "@/lib/league/access";
+import { resolveLeagueView } from "@/lib/league/authorize";
 import { listDivisionsAction } from "@/app/actions/league-divisions";
 import { DivisionsManager } from "@/features/league/DivisionsManager";
 
@@ -18,8 +18,8 @@ export default async function DivisionsPage({
   const { leagueId } = await params;
 
   // Per-league isolation (the layout already confirmed organizer access).
-  const memberships = await getCurrentLeagueMemberships();
-  if (!memberships.some((m) => m.leagueId === leagueId)) notFound();
+  const access = await resolveLeagueView(leagueId, { delegateCapability: "manage_teams" });
+  if (!access) notFound();
 
   const res = await listDivisionsAction(leagueId);
 

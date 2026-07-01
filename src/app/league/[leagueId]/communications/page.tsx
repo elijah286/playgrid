@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { getCurrentLeagueMemberships } from "@/lib/league/access";
+import { resolveLeagueView } from "@/lib/league/authorize";
 import {
   getBroadcastAudiencesAction,
   listBroadcastsAction,
@@ -20,8 +20,10 @@ export default async function CommunicationsPage({
 }) {
   const { leagueId } = await params;
 
-  const memberships = await getCurrentLeagueMemberships();
-  if (!memberships.some((m) => m.leagueId === leagueId)) notFound();
+  const access = await resolveLeagueView(leagueId, {
+    delegateCapability: "manage_communications",
+  });
+  if (!access) notFound();
 
   const [broadcasts, audiencesRes] = await Promise.all([
     listBroadcastsAction(leagueId),

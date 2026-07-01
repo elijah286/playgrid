@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { getCurrentLeagueMemberships, isLeagueAdminRole } from "@/lib/league/access";
+import { resolveLeagueView } from "@/lib/league/authorize";
 import { getRosterBoardAction } from "@/app/actions/league-roster";
 import { RosterBoard } from "@/features/league/RosterBoard";
 
@@ -18,9 +18,13 @@ export default async function RosterPage({
   const { leagueId } = await params;
 
   // Rostering is an admin-only workspace — gate the page to match the actions
-  // so a non-admin member doesn't land on a misleading empty board.
-  const memberships = await getCurrentLeagueMemberships();
-  if (!memberships.some((m) => m.leagueId === leagueId && isLeagueAdminRole(m.role))) notFound();
+  // so a non-admin member doesn't land on a misleading empty board. A delegated
+  // member needs manage_rosters (owners/admins always pass).
+  const access = await resolveLeagueView(leagueId, {
+    memberAdminOnly: true,
+    delegateCapability: "manage_rosters",
+  });
+  if (!access) notFound();
 
   const res = await getRosterBoardAction(leagueId);
   const board = res.ok && res.board ? res.board : { teams: [], unrostered: [], waitlistedCount: 0 };

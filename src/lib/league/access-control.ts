@@ -118,6 +118,35 @@ export function grantsCover(
   );
 }
 
+/**
+ * Decide whether a user may VIEW a league console page — the pure heart of
+ * `resolveLeagueView()`. A member keeps their existing gate verbatim (any member,
+ * or admin-role only when `memberAdminOnly`); a delegated member (not in
+ * league_members) is admitted when an active grant covers the page — the specific
+ * `delegateCapability` when the page maps to one, otherwise any grant at all.
+ * Returns null when there is no access, so the page can `notFound()`.
+ *
+ * Members short-circuit before any grant logic, so existing owner/coach behavior
+ * is unchanged; the delegate branch is purely additive.
+ */
+export function decideLeagueView(
+  input: { isMember: boolean; isAdminMember: boolean; delegateCapabilities: Capability[] },
+  opts?: { memberAdminOnly?: boolean; delegateCapability?: Capability },
+): { via: "member" | "delegate"; isAdmin: boolean } | null {
+  if (input.isMember) {
+    if (opts?.memberAdminOnly && !input.isAdminMember) return null;
+    return { via: "member", isAdmin: input.isAdminMember };
+  }
+  if (input.delegateCapabilities.length === 0) return null;
+  if (
+    opts?.delegateCapability &&
+    !input.delegateCapabilities.includes(opts.delegateCapability)
+  ) {
+    return null;
+  }
+  return { via: "delegate", isAdmin: true };
+}
+
 export function scopeLabel(scope: AccessScope, leagueCount?: number): string {
   switch (scope.kind) {
     case "portfolio":

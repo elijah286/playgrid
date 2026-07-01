@@ -2,10 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 
-import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { gateLeagueCapability } from "@/lib/league/authorize";
+import { gateLeagueCapability, resolveLeagueView } from "@/lib/league/authorize";
 import { sendLeagueBroadcast } from "@/lib/notifications/league-broadcast-email";
 import { sendPushToUsers } from "@/lib/notifications/push";
 import {
@@ -84,7 +83,13 @@ export async function getBroadcastAudiencesAction(leagueId: string) {
 
 export async function listBroadcastsAction(leagueId: string) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured.", items: [] as BroadcastRow[] };
-  const supabase = await createClient();
+  // Grant-aware read: a member reads via RLS; a delegated member with
+  // manage_communications reads via the service role.
+  const access = await resolveLeagueView(leagueId, {
+    delegateCapability: "manage_communications",
+  });
+  if (!access) return { ok: true as const, items: [] as BroadcastRow[] };
+  const supabase = access.db;
   const { data, error } = await supabase
     .from("league_broadcasts")
     .select("id, title, body, audience, recipient_count, sent_at, created_at")

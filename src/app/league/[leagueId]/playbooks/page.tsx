@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { getCurrentLeagueMemberships, isLeagueAdminRole } from "@/lib/league/access";
+import { resolveLeagueView } from "@/lib/league/authorize";
 import { getLeagueSport } from "@/lib/league/console";
 import { leagueHasPlaybooks } from "@/lib/league/sportConfig";
 import { listLeaguePlaybooksAction } from "@/app/actions/league-playbooks";
@@ -19,11 +19,15 @@ export default async function LeaguePlaybooksPage({
 }) {
   const { leagueId } = await params;
 
-  const memberships = await getCurrentLeagueMemberships();
-  if (!memberships.some((m) => m.leagueId === leagueId && isLeagueAdminRole(m.role))) notFound();
+  const access = await resolveLeagueView(leagueId, {
+    memberAdminOnly: true,
+    delegateCapability: "manage_curriculum",
+  });
+  if (!access) notFound();
 
-  // Playbook seeding is the football-only coach-product bridge.
-  if (!leagueHasPlaybooks(await getLeagueSport(leagueId))) notFound();
+  // Playbook seeding is the football-only coach-product bridge. Read the sport
+  // via the authorized client so a delegated member isn't blocked by RLS.
+  if (!leagueHasPlaybooks(await getLeagueSport(leagueId, access.db))) notFound();
 
   const res = await listLeaguePlaybooksAction(leagueId);
   const teams = res.ok ? res.teams : [];

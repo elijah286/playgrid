@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { isLeagueAdmin } from "@/lib/league/access";
+import { can } from "@/lib/league/authorize";
 import { copyPlaybookContents } from "@/lib/data/playbook-copy";
 import { defaultSettingsForVariant } from "@/domain/playbook/settings";
 import { leagueHasPlaybooks } from "@/lib/league/sportConfig";
@@ -33,7 +33,9 @@ async function gateAdmin(leagueId: string) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
-  if (!(await isLeagueAdmin(leagueId))) {
+  // Owner/admin OR a delegated member holding manage_curriculum (playbooks are
+  // the curriculum bridge). Data access still runs via the service role below.
+  if (!(await can("manage_curriculum", leagueId))) {
     return { ok: false as const, error: "You don't administer this league." };
   }
   // The playbook bridge is football-only — refuse for any other sport (the

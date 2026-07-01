@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { gateLeagueCapability } from "@/lib/league/authorize";
+import { gateLeagueCapability, resolveLeagueView } from "@/lib/league/authorize";
 
 export type StoreItemRow = {
   id: string;
@@ -113,7 +113,11 @@ function fields(input: StoreItemInput) {
 
 export async function listStoreItemsAction(leagueId: string) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured.", items: [] as StoreItemRow[] };
-  const supabase = await createClient();
+  // Grant-aware read: a member reads via RLS; a delegated member with manage_store
+  // reads via the service role.
+  const access = await resolveLeagueView(leagueId, { delegateCapability: "manage_store" });
+  if (!access) return { ok: true as const, items: [] as StoreItemRow[] };
+  const supabase = access.db;
   const { data, error } = await supabase
     .from("league_store_items")
     .select("id, name, description, price_cents, required, active, options")

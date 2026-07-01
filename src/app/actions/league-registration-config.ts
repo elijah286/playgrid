@@ -2,9 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
-import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { gateLeagueCapability } from "@/lib/league/authorize";
+import { gateLeagueCapability, resolveLeagueView } from "@/lib/league/authorize";
 
 export type RegistrationConfig = {
   isOpen: boolean;
@@ -23,7 +22,13 @@ const DEFAULTS: RegistrationConfig = {
 /** The league-wide registration window (division_id is null) acts as the config. */
 export async function getRegistrationConfigAction(leagueId: string): Promise<RegistrationConfig> {
   if (!hasSupabaseEnv()) return DEFAULTS;
-  const supabase = await createClient();
+  // Grant-aware read: a member reads via RLS; a delegated member with
+  // manage_registration reads via the service role.
+  const access = await resolveLeagueView(leagueId, {
+    delegateCapability: "manage_registration",
+  });
+  if (!access) return DEFAULTS;
+  const supabase = access.db;
   const { data } = await supabase
     .from("registration_windows")
     .select("is_open, opens_at, closes_at, fee_cents")
