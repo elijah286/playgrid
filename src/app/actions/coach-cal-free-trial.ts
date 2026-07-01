@@ -4,11 +4,15 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { canUseAiFeatures } from "@/lib/billing/features";
 import { getCoachCalFreePromptState } from "@/lib/billing/coach-cal-free-prompts";
+import { COACH_CAL_FREE_TRIAL_RESET_EMAIL } from "@/lib/billing/coach-cal-test-account";
 
 export type CoachCalFreeTrialStatus = {
   allowance: number;
   used: number;
   remaining: number;
+  /** True only for the single test account allowed to self-reset its counter.
+   *  Drives a small "(reset)" link in the banner — nobody else sees it. */
+  canReset: boolean;
 };
 
 /**
@@ -41,7 +45,9 @@ export async function getCoachCalFreeTrialStatusAction(): Promise<CoachCalFreeTr
     if (canUseAiFeatures(entitlement)) return null;
 
     const { allowance, used, remaining } = await getCoachCalFreePromptState(user.id);
-    return { allowance, used, remaining };
+    const canReset =
+      (user.email ?? "").trim().toLowerCase() === COACH_CAL_FREE_TRIAL_RESET_EMAIL;
+    return { allowance, used, remaining, canReset };
   } catch {
     return null;
   }

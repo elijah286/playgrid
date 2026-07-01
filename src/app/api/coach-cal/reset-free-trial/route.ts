@@ -1,14 +1,15 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { getCoachCalFreePromptAllowance } from "@/lib/site/coach-cal-free-prompts-config";
+import { COACH_CAL_FREE_TRIAL_RESET_EMAIL } from "@/lib/billing/coach-cal-test-account";
 
 // Scoped test tool: lets ONE hardcoded account reset its own free Coach Cal
 // prompt counter so the owner can repeatedly experience the brand-new-free-user
 // flow. It only ever resets the *caller's own* row, and only when the caller is
 // signed in as this exact email — so even if the guard were bypassed it could
-// not touch anyone else's account. Not linked anywhere in the UI; it's a
-// bookmark the owner hits by hand.
-const ALLOWED_EMAIL = "elijah.kerry@emerson.com";
+// not touch anyone else's account. Reached via a "(reset)" link the trial
+// banner shows ONLY to this account.
+const ALLOWED_EMAIL = COACH_CAL_FREE_TRIAL_RESET_EMAIL;
 
 function html(status: number, body: string): Response {
   return new Response(

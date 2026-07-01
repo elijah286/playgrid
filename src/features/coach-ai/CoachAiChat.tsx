@@ -353,7 +353,7 @@ export function CoachAiChat({
   // banner never shows for paid coaches or admins. Decremented locally on each
   // successful turn and zeroed on the exhausted error; the server is the real
   // enforcer either way.
-  const [freeTrial, setFreeTrial] = useState<{ allowance: number; remaining: number } | null>(null);
+  const [freeTrial, setFreeTrial] = useState<{ allowance: number; remaining: number; canReset: boolean } | null>(null);
   // Set when the server reports an in-flight assistant turn for this thread
   // (typically because the coach closed the window mid-stream and reopened).
   // While set, a polling effect drives the visible "thinking" indicator and
@@ -454,7 +454,11 @@ export function CoachAiChat({
     void (async () => {
       const status = await getCoachCalFreeTrialStatusAction();
       if (cancelled) return;
-      setFreeTrial(status ? { allowance: status.allowance, remaining: status.remaining } : null);
+      setFreeTrial(
+        status
+          ? { allowance: status.allowance, remaining: status.remaining, canReset: status.canReset }
+          : null,
+      );
     })();
     return () => { cancelled = true; };
   }, [isAdmin]);
@@ -1247,17 +1251,30 @@ export function CoachAiChat({
       )}
       {freeTrial && (
         <div className="flex items-center justify-between gap-3 border-b border-border bg-surface-inset px-4 py-2 text-xs">
-          {freeTrial.remaining > 0 ? (
-            <span className="text-muted">
-              <span className="font-semibold text-foreground">Free preview</span> ·{" "}
-              {freeTrial.remaining} of {freeTrial.allowance} prompt
-              {freeTrial.allowance === 1 ? "" : "s"} left
-            </span>
-          ) : (
-            <span className="text-muted">
-              <span className="font-semibold text-foreground">Free preview used up</span> · upgrade to keep chatting with Cal
-            </span>
-          )}
+          <span className="text-muted">
+            {freeTrial.remaining > 0 ? (
+              <>
+                <span className="font-semibold text-foreground">Free preview</span> ·{" "}
+                {freeTrial.remaining} of {freeTrial.allowance} prompt
+                {freeTrial.allowance === 1 ? "" : "s"} left
+              </>
+            ) : (
+              <>
+                <span className="font-semibold text-foreground">Free preview used up</span> · upgrade to keep chatting with Cal
+              </>
+            )}
+            {freeTrial.canReset && (
+              <>
+                {" "}
+                <a
+                  href="/api/coach-cal/reset-free-trial"
+                  className="underline decoration-dotted hover:text-foreground"
+                >
+                  (reset)
+                </a>
+              </>
+            )}
+          </span>
           <a
             href="/pricing"
             className="shrink-0 font-semibold text-primary hover:underline"
