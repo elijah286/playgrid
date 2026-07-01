@@ -17,6 +17,13 @@ export type CoachAiTokenUsageRow = {
   contextBreakdown: Record<string, number>;
 };
 
+export type CoachAiUsageWindow =
+  | "lifetime"
+  | "last_3_months"
+  | "last_30_days"
+  | "current_month"
+  | "last_month";
+
 export type CoachAiTokenUsageSummary =
   | {
       ok: true;
@@ -29,31 +36,68 @@ export type CoachAiTokenUsageSummary =
         cacheWriteTokens: number;
         activeUsers: number;
       };
-      monthLabel: string;
+      rangeLabel: string;
     }
   | { ok: false; error: string };
 
+/** UTC start/end bounds for each preset window. `end === null` means "through now." */
+function resolveWindowRange(
+  window: CoachAiUsageWindow,
+): { start: Date | null; end: Date | null; label: string } {
+  const now = new Date();
+  const monthStart = (offsetMonths: number) => {
+    const d = new Date(now);
+    d.setUTCDate(1);
+    d.setUTCHours(0, 0, 0, 0);
+    d.setUTCMonth(d.getUTCMonth() + offsetMonths);
+    return d;
+  };
+  const daysAgo = (n: number) => {
+    const d = new Date(now);
+    d.setUTCDate(d.getUTCDate() - n);
+    return d;
+  };
+  const monthLabel = (d: Date) =>
+    d.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+
+  switch (window) {
+    case "lifetime":
+      return { start: null, end: null, label: "Lifetime" };
+    case "last_3_months":
+      return { start: daysAgo(90), end: null, label: "Last 3 months" };
+    case "last_30_days":
+      return { start: daysAgo(30), end: null, label: "Last 30 days" };
+    case "current_month":
+      return { start: monthStart(0), end: null, label: monthLabel(monthStart(0)) };
+    case "last_month":
+      return { start: monthStart(-1), end: monthStart(0), label: monthLabel(monthStart(-1)) };
+  }
+}
+
 /**
- * Per-user Coach Cal token usage + cost for the current calendar month.
+ * Per-user Coach Cal token usage + cost for the given time window.
  * Admin only. The numbers are raw Anthropic API spend, which is the
  * right input for tuning per-user caps — not the same thing as the
  * message-count meter coaches see.
  */
-export async function listCoachAiTokenUsageAction(): Promise<CoachAiTokenUsageSummary> {
+export async function listCoachAiTokenUsageAction(
+  window: CoachAiUsageWindow = "lifetime",
+): Promise<CoachAiTokenUsageSummary> {
   await requireAdmin();
   const admin = createServiceRoleClient();
-  const monthStart = new Date();
-  monthStart.setUTCDate(1);
-  monthStart.setUTCHours(0, 0, 0, 0);
+  const { start, end, label } = resolveWindowRange(window);
 
-  const { data, error } = await admin
+  let query = admin
     .from("coach_ai_token_usage")
     .select(
       "user_id, occurred_at, context, input_tokens, output_tokens, cache_read_input_tokens, cache_creation_input_tokens, cost_micros",
     )
-    .gte("occurred_at", monthStart.toISOString())
     .order("occurred_at", { ascending: false })
     .limit(50_000);
+  if (start) query = query.gte("occurred_at", start.toISOString());
+  if (end) query = query.lt("occurred_at", end.toISOString());
+
+  const { data, error } = await query;
   if (error) return { ok: false, error: error.message };
 
   type Agg = Omit<CoachAiTokenUsageRow, "email" | "displayName" | "role">;
@@ -120,13 +164,7 @@ export async function listCoachAiTokenUsageAction(): Promise<CoachAiTokenUsageSu
     },
   );
 
-  const monthLabel = monthStart.toLocaleDateString("en-US", {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-
-  return { ok: true, rows, totals, monthLabel };
+  return { ok: true, rows, totals, rangeLabel: label };
 }
 
 type UserInfo = { email: string | null; displayName: string | null; role: string | null };

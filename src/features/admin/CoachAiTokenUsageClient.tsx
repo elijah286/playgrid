@@ -1,12 +1,24 @@
 "use client";
 
-import { Card } from "@/components/ui";
-import type {
-  CoachAiTokenUsageRow,
-  CoachAiTokenUsageSummary,
+import { useState, useTransition } from "react";
+import { Card, Select } from "@/components/ui";
+import { cn } from "@/lib/utils";
+import {
+  listCoachAiTokenUsageAction,
+  type CoachAiTokenUsageRow,
+  type CoachAiTokenUsageSummary,
+  type CoachAiUsageWindow,
 } from "@/app/actions/coach-ai-token-usage";
 
 type Props = { initial: CoachAiTokenUsageSummary };
+
+const WINDOW_OPTIONS: { value: CoachAiUsageWindow; label: string }[] = [
+  { value: "lifetime", label: "Lifetime" },
+  { value: "last_3_months", label: "Last 3 months" },
+  { value: "last_30_days", label: "Last 30 days" },
+  { value: "current_month", label: "Current month" },
+  { value: "last_month", label: "Last month" },
+];
 
 // Micro-USD → display string. We show full cents on the row level so a
 // run-up to the $5 ceiling is legible at a glance; totals show whole
@@ -45,40 +57,74 @@ function formatContextBreakdown(b: Record<string, number>): string {
 }
 
 export function CoachAiTokenUsageClient({ initial }: Props) {
-  if (!initial.ok) {
+  const [summary, setSummary] = useState(initial);
+  const [selectedWindow, setSelectedWindow] = useState<CoachAiUsageWindow>("lifetime");
+  const [pending, startTransition] = useTransition();
+
+  function changeWindow(next: CoachAiUsageWindow) {
+    setSelectedWindow(next);
+    startTransition(async () => {
+      const res = await listCoachAiTokenUsageAction(next);
+      setSummary(res);
+    });
+  }
+
+  const windowSelector = (
+    <Select
+      value={selectedWindow}
+      onChange={(v) => changeWindow(v as CoachAiUsageWindow)}
+      options={WINDOW_OPTIONS}
+      className="w-40"
+      disabled={pending}
+    />
+  );
+
+  if (!summary.ok) {
     return (
-      <Card className="p-4">
-        <div className="text-sm text-red-600">
-          Failed to load Cal usage: {initial.error}
-        </div>
-      </Card>
+      <div className="space-y-4">
+        <Card className="p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-sm text-red-600">
+              Failed to load Cal usage: {summary.error}
+            </div>
+            {windowSelector}
+          </div>
+        </Card>
+      </div>
     );
   }
 
-  const { rows, totals, monthLabel } = initial;
+  const { rows, totals, rangeLabel } = summary;
   const paidCap = 5_000_000; // $5 in micro-USD — the per-paid-user ceiling.
+  // The cap is a *calendar-month* ceiling (COACH_CAL_COST_LIMITS.monthMicros).
+  // Comparing it against a multi-month or rolling total would misreport
+  // ordinary usage as "over cap," so only show it for single-month windows.
+  const capApplies = selectedWindow === "current_month" || selectedWindow === "last_month";
 
   return (
-    <div className="space-y-4">
+    <div className={cn("space-y-4", pending && "opacity-60 transition-opacity")}>
       <Card className="p-4">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <div className="text-sm text-slate-500">
-              {monthLabel} · Coach Cal raw API spend
+              {rangeLabel} · Coach Cal raw API spend
             </div>
             <div className="text-2xl font-semibold">
               {fmtMicros(totals.costMicros)}
             </div>
           </div>
-          <div className="text-right text-sm text-slate-600">
-            <div>
-              {totals.activeUsers} active users ·{" "}
-              {fmtTokens(totals.inputTokens)} in /{" "}
-              {fmtTokens(totals.outputTokens)} out
-            </div>
-            <div className="text-xs text-slate-500">
-              cache: {fmtTokens(totals.cacheReadTokens)} read ·{" "}
-              {fmtTokens(totals.cacheWriteTokens)} write
+          <div className="flex flex-col items-end gap-2">
+            {windowSelector}
+            <div className="text-right text-sm text-slate-600">
+              <div>
+                {totals.activeUsers} active users ·{" "}
+                {fmtTokens(totals.inputTokens)} in /{" "}
+                {fmtTokens(totals.outputTokens)} out
+              </div>
+              <div className="text-xs text-slate-500">
+                cache: {fmtTokens(totals.cacheReadTokens)} read ·{" "}
+                {fmtTokens(totals.cacheWriteTokens)} write
+              </div>
             </div>
           </div>
         </div>
@@ -90,7 +136,7 @@ export function CoachAiTokenUsageClient({ initial }: Props) {
           <thead className="bg-slate-50 text-slate-600">
             <tr>
               <th className="px-3 py-2 text-left">User</th>
-              <th className="px-3 py-2 text-right">MTD cost</th>
+              <th className="px-3 py-2 text-right">Cost</th>
               <th className="px-3 py-2 text-right">vs $5 cap</th>
               <th className="px-3 py-2 text-right">Tokens (in/out)</th>
               <th className="px-3 py-2 text-left">Breakdown</th>
@@ -101,12 +147,12 @@ export function CoachAiTokenUsageClient({ initial }: Props) {
             {rows.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-3 py-4 text-center text-slate-500">
-                  No usage recorded this month yet.
+                  No usage recorded in this window yet.
                 </td>
               </tr>
             )}
             {rows.map((r) => (
-              <UserRow key={r.userId} row={r} paidCap={paidCap} />
+              <UserRow key={r.userId} row={r} paidCap={paidCap} capApplies={capApplies} />
             ))}
           </tbody>
         </table>
@@ -116,10 +162,10 @@ export function CoachAiTokenUsageClient({ initial }: Props) {
       <div className="space-y-2 md:hidden">
         {rows.length === 0 ? (
           <Card className="p-4 text-center text-sm text-slate-500">
-            No usage recorded this month yet.
+            No usage recorded in this window yet.
           </Card>
         ) : (
-          rows.map((r) => <UserCard key={r.userId} row={r} paidCap={paidCap} />)
+          rows.map((r) => <UserCard key={r.userId} row={r} paidCap={paidCap} capApplies={capApplies} />)
         )}
       </div>
 
@@ -132,7 +178,15 @@ export function CoachAiTokenUsageClient({ initial }: Props) {
   );
 }
 
-function UserRow({ row, paidCap }: { row: CoachAiTokenUsageRow; paidCap: number }) {
+function UserRow({
+  row,
+  paidCap,
+  capApplies,
+}: {
+  row: CoachAiTokenUsageRow;
+  paidCap: number;
+  capApplies: boolean;
+}) {
   const pct = paidCap > 0 ? Math.min(100, (row.costMicros / paidCap) * 100) : 0;
   const overCap = row.costMicros > paidCap;
   const barColor = overCap
@@ -157,14 +211,18 @@ function UserRow({ row, paidCap }: { row: CoachAiTokenUsageRow; paidCap: number 
       </td>
       <td className="px-3 py-2 text-right font-mono">{fmtMicros(row.costMicros)}</td>
       <td className="px-3 py-2 text-right">
-        <div className="inline-flex items-center gap-2">
-          <div className="h-1.5 w-20 rounded-full bg-slate-200 overflow-hidden">
-            <div className={`h-full ${barColor}`} style={{ width: `${pct}%` }} />
+        {capApplies ? (
+          <div className="inline-flex items-center gap-2">
+            <div className="h-1.5 w-20 rounded-full bg-slate-200 overflow-hidden">
+              <div className={`h-full ${barColor}`} style={{ width: `${pct}%` }} />
+            </div>
+            <span className={`text-xs ${overCap ? "text-red-600 font-semibold" : "text-slate-500"}`}>
+              {pct.toFixed(0)}%
+            </span>
           </div>
-          <span className={`text-xs ${overCap ? "text-red-600 font-semibold" : "text-slate-500"}`}>
-            {pct.toFixed(0)}%
-          </span>
-        </div>
+        ) : (
+          <span className="text-xs text-slate-400">—</span>
+        )}
       </td>
       <td className="px-3 py-2 text-right font-mono text-xs text-slate-600">
         {fmtTokens(row.inputTokens)} / {fmtTokens(row.outputTokens)}
@@ -179,7 +237,15 @@ function UserRow({ row, paidCap }: { row: CoachAiTokenUsageRow; paidCap: number 
   );
 }
 
-function UserCard({ row, paidCap }: { row: CoachAiTokenUsageRow; paidCap: number }) {
+function UserCard({
+  row,
+  paidCap,
+  capApplies,
+}: {
+  row: CoachAiTokenUsageRow;
+  paidCap: number;
+  capApplies: boolean;
+}) {
   const pct = paidCap > 0 ? Math.min(100, (row.costMicros / paidCap) * 100) : 0;
   const overCap = row.costMicros > paidCap;
   const barColor = overCap
@@ -206,14 +272,16 @@ function UserCard({ row, paidCap }: { row: CoachAiTokenUsageRow; paidCap: number
         <div className="font-semibold tabular-nums">{fmtMicros(row.costMicros)}</div>
       </div>
 
-      <div className="mt-2 flex items-center gap-2">
-        <div className="h-1.5 w-full rounded-full bg-slate-200 overflow-hidden">
-          <div className={`h-full ${barColor}`} style={{ width: `${pct}%` }} />
+      {capApplies && (
+        <div className="mt-2 flex items-center gap-2">
+          <div className="h-1.5 w-full rounded-full bg-slate-200 overflow-hidden">
+            <div className={`h-full ${barColor}`} style={{ width: `${pct}%` }} />
+          </div>
+          <span className={`shrink-0 text-xs ${overCap ? "text-red-600 font-semibold" : "text-slate-500"}`}>
+            {pct.toFixed(0)}% of $5
+          </span>
         </div>
-        <span className={`shrink-0 text-xs ${overCap ? "text-red-600 font-semibold" : "text-slate-500"}`}>
-          {pct.toFixed(0)}% of $5
-        </span>
-      </div>
+      )}
 
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
         <span>
