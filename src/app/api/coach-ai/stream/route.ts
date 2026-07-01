@@ -120,11 +120,27 @@ async function loadToolContext(
         formation: (playRow.formation_name as string | null) ?? null,
         playbookId: (playRow.playbook_id as string | null) ?? null,
       };
-      // Prefer the client's live doc when available — it reflects edits the
-      // autosave debounce has not yet persisted. Fall back to play_versions
-      // when no editor is mounted (e.g. the chat is opened from a list view).
-      let doc: PlayDocument | null = livePlayDoc ?? null;
-      if (!doc) {
+      // Build the anchored-play diagram. Prefer the client's live doc (it
+      // reflects unsaved editor edits), but if it's missing OR fails to convert,
+      // FALL BACK to the persisted version. A bad/mid-edit live doc must never
+      // leave Cal without the anchored play's geometry: when playDiagramText is
+      // null the anchored-play force (compose_defense / evaluate_matchup) can't
+      // fire, and Cal hand-authors an approximate offense to overlay onto.
+      // Surfaced 2026-07-01: a hand-authored play ("Noah") got a Cover 4 overlay
+      // built on a default/approximated offense instead of the real play.
+      const anchoredPlayName = resolvedPlay.name ?? "play";
+      const toDiagram = (doc: PlayDocument | null): { text: string; recap: string } | null => {
+        if (!doc) return null;
+        try {
+          const diagram = playDocumentToCoachDiagram(doc, anchoredPlayName);
+          return { text: JSON.stringify(diagram), recap: recapCoachDiagram(diagram) };
+        } catch {
+          return null;
+        }
+      };
+      let built = toDiagram(livePlayDoc ?? null);
+      const liveConverted = built !== null;
+      if (!built) {
         const versionId = (playRow.current_version_id as string | null) ?? null;
         if (versionId) {
           const { data: version } = await supabase
@@ -132,15 +148,20 @@ async function loadToolContext(
             .select("document")
             .eq("id", versionId)
             .maybeSingle();
-          doc = (version?.document ?? null) as PlayDocument | null;
+          built = toDiagram((version?.document ?? null) as PlayDocument | null);
         }
       }
-      if (doc) {
-        try {
-          const diagram = playDocumentToCoachDiagram(doc, resolvedPlay.name ?? "play");
-          playDiagramText = JSON.stringify(diagram);
-          playDiagramRecap = recapCoachDiagram(diagram);
-        } catch { /* malformed doc — fall back to no diagram, model can still call get_play */ }
+      if (built) {
+        playDiagramText = built.text;
+        playDiagramRecap = built.recap;
+      } else {
+        // A play is anchored but we couldn't produce its diagram from either
+        // source. Log it — this is the state that disables the anchored-play
+        // overlay force, so a nonzero rate here explains any wrong-play overlay.
+        console.warn(
+          `[coach-ai:anchor] play ${playId} anchored but NO diagram ` +
+            `(livePlayDoc=${livePlayDoc ? "present" : "absent"} converted=${liveConverted})`,
+        );
       }
     }
   }
