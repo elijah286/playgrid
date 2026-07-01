@@ -97,6 +97,58 @@ describe("extractAnchoredOffenseFence", () => {
 });
 
 describe("resolveDefenseOverlayBaseline", () => {
+  it("BUG REPRO (flood, 2026-07-01): an offense composed THIS turn wins over a stale defense-only history fence", () => {
+    // Coach has NO offense anchored, only a Cover 3 defense-only fence in
+    // history ("show me Cover 3"). They say "build a flood play" — Cal calls
+    // compose_play (producing the flood offense THIS turn) then compose_defense
+    // to overlay the Cover 3. The freshly composed flood is not yet in history
+    // and is not the anchored play, so before this fix the baseline fell back to
+    // the Cover 3 defense-only fence → the overlay stripped it, preserved zero
+    // offense, and the flood vanished (Cal saved "7v7 Zone Cover 3" instead).
+    const baseline = resolveDefenseOverlayBaseline({
+      thisTurnOffenseFence: OFFENSE_DIAGRAM,
+      historyOffenseFence: null,
+      anchoredOffenseFence: null,
+      anyHistoryFence: DEFENSE_ONLY_DIAGRAM,
+    });
+    expect(baseline).toBe(OFFENSE_DIAGRAM);
+  });
+
+  it("an offense composed THIS turn wins even over the anchored play (fresh intent > on-screen play)", () => {
+    // Coach is viewing play B (anchored) but explicitly says "build a flood and
+    // show Cover 3 on it". The flood they just asked Cal to build is the intended
+    // overlay target — fresher and more intentional than whatever was on screen.
+    const anchoredB = JSON.stringify({
+      title: "Some Other Play",
+      variant: "flag_7v7",
+      players: [
+        { id: "QB", x: 0, y: -3, team: "O" },
+        { id: "C", x: 0, y: 0, team: "O" },
+        { id: "Y", x: 4, y: 0, team: "O" },
+      ],
+      routes: [],
+    });
+    const baseline = resolveDefenseOverlayBaseline({
+      thisTurnOffenseFence: OFFENSE_DIAGRAM,
+      historyOffenseFence: null,
+      anchoredOffenseFence: anchoredB,
+      anyHistoryFence: null,
+    });
+    expect(baseline).toBe(OFFENSE_DIAGRAM);
+  });
+
+  it("no this-turn offense -> precedence is unchanged (anchored play wins)", () => {
+    // Regression guard: omitting thisTurnOffenseFence must leave every existing
+    // precedence rule intact.
+    const baseline = resolveDefenseOverlayBaseline({
+      thisTurnOffenseFence: null,
+      historyOffenseFence: null,
+      anchoredOffenseFence: OFFENSE_DIAGRAM,
+      anyHistoryFence: DEFENSE_ONLY_DIAGRAM,
+    });
+    expect(baseline).toBe(OFFENSE_DIAGRAM);
+  });
+
   it("BUG REPRO: anchored offense + no history offense -> overlays onto the anchored play", () => {
     // Coach opened an offensive play and asked for a defense in a fresh chat.
     // The only prior fence is a defense-only exploration ("show me Cover 3").

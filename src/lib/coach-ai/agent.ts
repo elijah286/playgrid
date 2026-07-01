@@ -2470,6 +2470,13 @@ export async function runAgent(
    *  compose_play, modify_play_route) are safe to auto-persist into the
    *  anchored playId; defense overlays may target a different play. */
   let lastFenceToolName: string | null = null;
+  /** The freshest OFFENSE-bearing fence a tool composed THIS turn (compose_play,
+   *  or an offense edit like revise_play/flip_play/modify_play_route). It becomes
+   *  the top-precedence overlay baseline for a later compose_defense /
+   *  evaluate_matchup in the same turn, so "build a flood play" → "show Cover 3
+   *  on it" overlays onto the flood instead of falling back to a stale
+   *  defense-only history fence. See resolveDefenseOverlayBaseline. */
+  let thisTurnOffenseFenceJson: string | null = null;
   /** Phase 2b — per-turn provenance tracker. Records every fence body
    *  that's "approved" to appear in Cal's reply:
    *
@@ -2970,6 +2977,7 @@ export async function runAgent(
       const priorFenceForTool =
         isOverlayTool
           ? resolveDefenseOverlayBaseline({
+              thisTurnOffenseFence: thisTurnOffenseFenceJson,
               historyOffenseFence: priorAssistantOffenseFenceJson,
               anchoredOffenseFence: anchoredOffenseFenceJson,
               anyHistoryFence: priorAssistantFenceJson,
@@ -3002,11 +3010,14 @@ export async function runAgent(
       }
 
       // For overlay/grade tools, an explicitly-passed fence is legitimate if it
-      // matches the anchored play OR a history offense fence — not just the
-      // resolved baseline. (Only decisive when the override above didn't force the
-      // anchored play — i.e. no anchor, or the coach targeted other plays.)
+      // matches the anchored play, a history offense fence, OR an offense Cal
+      // composed earlier this turn — not just the resolved baseline. (Only
+      // decisive when the override above didn't force the anchored play — i.e. no
+      // anchor, or the coach targeted other plays.) Including the this-turn
+      // offense lets Cal pass the flood it just built without the fabrication
+      // guard clobbering it.
       const otherRealFences = isOverlayTool
-        ? [anchoredOffenseFenceJson, priorAssistantOffenseFenceJson]
+        ? [anchoredOffenseFenceJson, priorAssistantOffenseFenceJson, thisTurnOffenseFenceJson]
         : [];
       const correctedInput = autoCorrectPriorFence(
         tu.name,
@@ -3028,6 +3039,13 @@ export async function runAgent(
         "compose_defense",
         "set_defender_assignment",
       ]);
+      // The fence-producing tools whose output is a DEFENSE placement (offense,
+      // if present, is only the preserved overlay baseline). Excluded from the
+      // this-turn offense-baseline capture below.
+      const DEFENSE_FENCE_TOOLS = new Set([
+        "compose_defense",
+        "set_defender_assignment",
+      ]);
       if (r.ok && FENCE_PRODUCING_TOOLS.has(tu.name)) {
         // Capture EVERY fence in the tool result (a single tool call
         // can return more than one — e.g. revise_play that touches
@@ -3046,6 +3064,15 @@ export async function runAgent(
         if (captured) {
           lastFenceFromTool = captured;
           lastFenceToolName = tu.name;
+          // Record the freshest OFFENSE fence composed this turn so a later
+          // compose_defense/evaluate_matchup overlays onto it (Rule 11 baseline).
+          // Defense tools also emit offense (byte-preserved), but that's just the
+          // baseline echoing back — capturing it would re-inject defenders that
+          // get stripped anyway, so we exclude them.
+          if (!DEFENSE_FENCE_TOOLS.has(tu.name)) {
+            const offenseFence = extractAnchoredOffenseFence(captured);
+            if (offenseFence) thisTurnOffenseFenceJson = offenseFence;
+          }
         }
       }
       // Capture compose_defense input args so the defense auto-commit
@@ -4143,6 +4170,11 @@ export function extractAnchoredOffenseFence(playDiagramText: string | null): str
 
 /** Pick the offense baseline compose_defense overlays the defense onto.
  *  Precedence (highest first):
+ *    0. An OFFENSE fence composed THIS turn (compose_play / an offense edit
+ *       earlier in the same reply). When the coach says "build a flood play"
+ *       and Cal composes it then overlays a coverage in the same turn, that
+ *       fresh offense is the intended target — it isn't in history yet and
+ *       isn't the anchored play, so nothing else here captures it.
  *    1. The most-recent OFFENSE fence emitted in this chat — captures edits the
  *       coach made this conversation (e.g. Cal revised a route, then "add D"),
  *       which are fresher than the pre-edit anchored diagram.
@@ -4155,11 +4187,23 @@ export function extractAnchoredOffenseFence(playDiagramText: string | null): str
  *  chain: it only changes the result when history has no offense fence but an
  *  anchored offense play exists — exactly the broken case. */
 export function resolveDefenseOverlayBaseline(opts: {
+  thisTurnOffenseFence?: string | null;
   historyOffenseFence: string | null;
   anchoredOffenseFence: string | null;
   anyHistoryFence: string | null;
 }): string | null {
-  const { historyOffenseFence, anchoredOffenseFence, anyHistoryFence } = opts;
+  const { thisTurnOffenseFence, historyOffenseFence, anchoredOffenseFence, anyHistoryFence } = opts;
+  // An offense Cal composed THIS turn is the most explicit overlay target — the
+  // coach literally just asked Cal to build it ("build a flood play") and then
+  // wants a coverage over it. It's fresher and more intentional than the
+  // anchored play or any history fence, so it wins outright. Without this, a
+  // freshly-composed offense produced by compose_play earlier in the same turn
+  // was invisible to the baseline resolver (which only saw prior turns + the
+  // anchored diagram), so compose_defense fell back to a stale defense-only
+  // history fence and produced an offense-less overlay — the 2026-07-01 "build
+  // a flood play" report where Cal saved the Cover 3 defense and the flood
+  // offense vanished.
+  if (thisTurnOffenseFence) return thisTurnOffenseFence;
   // No play on screen → the only offense signal is chat history (lobby mode, or
   // a defense-install flow with no anchored play). Preserve the original
   // history-first behavior.
