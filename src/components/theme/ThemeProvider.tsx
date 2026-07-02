@@ -9,7 +9,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { applyColorSchemeToDocument } from "./colorModeStorage";
+import { applyColorSchemeToDocument, colorSchemeQuery } from "./colorModeStorage";
 import type { ColorSchemePreference } from "./colorModeStorage";
 import {
   getColorSchemeServerSnapshot,
@@ -41,8 +41,9 @@ export function ThemeProvider({
 
   useEffect(() => {
     applyColorSchemeToDocument(colorScheme);
-    if (colorScheme !== "system" || typeof window === "undefined") return;
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    if (colorScheme !== "system") return;
+    const mq = colorSchemeQuery();
+    if (!mq) return;
     const handler = () => applyColorSchemeToDocument("system");
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
