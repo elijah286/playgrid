@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildRatingPromptNotice } from "./rating-prompt-notice";
+import {
+  buildRatingPromptNotice,
+  buildRatingShownNotice,
+} from "./rating-prompt-notice";
 import { APP_STORE_REVIEWS_URL, playStoreReviewsUrl } from "@/lib/native/appStore";
 
 describe("buildRatingPromptNotice", () => {
@@ -54,5 +57,28 @@ describe("buildRatingPromptNotice", () => {
   it("falls back to 'Someone' when the who is blank", () => {
     const n = buildRatingPromptNotice({ who: "   ", outcome: "rated", platform: "ios" });
     expect(n.body.startsWith("Someone")).toBe(true);
+  });
+});
+
+describe("buildRatingShownNotice", () => {
+  it("records the send as a review_prompt notice with outcome=shown", () => {
+    const n = buildRatingShownNotice({ who: "Marcus", platform: "ios" });
+    expect(n.kind).toBe("review_prompt");
+    expect(n.severity).toBe("info");
+    expect(n.body).toBe("Marcus was shown the rating prompt");
+    // Points the admin at the coach in the users tab (same as the dismissed
+    // outcome) — there's nothing store-side to link to for a mere show.
+    expect(n.href).toBe("/settings?tab=users");
+    expect(n.detail).toMatchObject({ outcome: "shown", platform: "ios" });
+  });
+
+  it("carries the android platform through to detail", () => {
+    const n = buildRatingShownNotice({ who: "Dana", platform: "android" });
+    expect(n.detail).toMatchObject({ outcome: "shown", platform: "android" });
+  });
+
+  it("falls back to 'Someone' when the who is blank", () => {
+    const n = buildRatingShownNotice({ who: "  ", platform: "android" });
+    expect(n.body).toBe("Someone was shown the rating prompt");
   });
 });

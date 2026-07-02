@@ -6,6 +6,7 @@ import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getSuggestReviews } from "@/lib/site/review-prompt-config";
 import {
   buildRatingPromptNotice,
+  buildRatingShownNotice,
   type RatingOutcome,
   type RatingSentiment,
 } from "@/lib/notifications/rating-prompt-notice";
@@ -167,10 +168,22 @@ export async function recordRatingOutcome(
 }
 
 /**
- * Record that the rating nudge was shown. Stamps rating_prompt_shown_at so
- * the 365-day cooldown starts. Called by RatingNudge immediately on render.
+ * Record that the rating nudge was shown. Does two things:
+ *  1. Stamps profiles.rating_prompt_shown_at so the 365-day cooldown starts.
+ *  2. Writes a 'review_prompt' notice (detail.outcome = 'shown') so the site
+ *     admin inbox shows who was shown the nudge and when — the top of the
+ *     funnel, recorded independently of whether the coach ever acts. Without
+ *     this, a nudge that's shown then ignored is invisible to admins (the
+ *     outcome notices only fire on a tap-through).
+ *
+ * Called by RatingNudge immediately on render. The cooldown stamp happens
+ * first and the notice insert is a best-effort add-on, so a failure to log the
+ * send (e.g. before the review_prompt migration lands) can never break the
+ * cooldown or the coach's flow.
  */
-export async function recordRatingPromptShown(): Promise<void> {
+export async function recordRatingPromptShown(
+  platform: "ios" | "android" = "ios",
+): Promise<void> {
   if (!hasSupabaseEnv()) return;
   try {
     const supabase = await createClient();
@@ -179,10 +192,34 @@ export async function recordRatingPromptShown(): Promise<void> {
     } = await supabase.auth.getUser();
     if (!user) return;
     const admin = createServiceRoleClient();
+
+    // Cooldown stamp first — this is the load-bearing part and must not be
+    // gated on the notice insert succeeding.
     await admin
       .from("profiles")
       .update({ rating_prompt_shown_at: new Date().toISOString() })
       .eq("id", user.id);
+
+    // Then record the send as an admin-inbox event (best-effort telemetry).
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("display_name")
+      .eq("id", user.id)
+      .single();
+    const displayName = (profile?.display_name as string | null)?.trim() || null;
+    const who = displayName || user.email || "Someone";
+
+    const notice = buildRatingShownNotice({ who, platform });
+    await admin.from("system_notices").insert({
+      kind: notice.kind,
+      severity: notice.severity,
+      user_id: user.id,
+      user_display_name: displayName,
+      user_email: user.email ?? null,
+      body: notice.body,
+      href: notice.href,
+      detail: notice.detail,
+    });
   } catch {
     // best-effort
   }

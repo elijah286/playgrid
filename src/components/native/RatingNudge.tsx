@@ -58,9 +58,11 @@ type Step = "ask" | "rate" | "feedback" | "thanks";
  * localStorage key prevents re-show within the same browser session even if
  * the server-side timestamp hasn't been written yet.
  *
- * Every terminal outcome (left a review / dismissed / sent feedback) is
- * reported to the site-admin inbox — see recordRatingOutcome and, for the
- * unhappy path, submitFeedbackAction's 'feedback_received' notice.
+ * The send itself is reported to the site-admin inbox on show (see
+ * recordRatingPromptShown), and so is every terminal outcome (left a review /
+ * dismissed / sent feedback) — see recordRatingOutcome and, for the unhappy
+ * path, submitFeedbackAction's 'feedback_received' notice. So an admin can see
+ * who was shown the nudge and when, and whether or not they acted on it.
  */
 export function RatingNudge() {
   const pathname = usePathname();
@@ -96,7 +98,7 @@ export function RatingNudge() {
       } catch {
         // ignore
       }
-      void recordRatingPromptShown();
+      void recordRatingPromptShown(storePlatform());
       track({ event: "rating_nudge_view", target: "rating_nudge" });
     }
 

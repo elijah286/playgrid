@@ -689,7 +689,7 @@ export const FEATURES: FeatureEntry[] = [
     id: "rating-nudge-sentiment-gate",
     name: "Smart App Store rating nudge",
     description:
-      "The in-app rating nudge now asks \"are you enjoying the app?\" before ever inviting a public review. Coaches who say yes are sent to the App Store rating sheet; coaches who say no are quietly routed to a private feedback box instead of a 1-star review — steering happy sentiment to the stores and unhappy sentiment to the team. Every outcome reports to the Site admin inbox: whether a coach left a review (with a link to the store's reviews page) or dismissed the prompt, and unhappy feedback lands in the Feedback tab.",
+      "The in-app rating nudge now asks \"are you enjoying the app?\" before ever inviting a public review. Coaches who say yes are sent to the App Store rating sheet; coaches who say no are quietly routed to a private feedback box instead of a 1-star review — steering happy sentiment to the stores and unhappy sentiment to the team. The Site admin inbox records the whole funnel: who was shown the nudge and when, then whether that coach left a review (with a link to the store's reviews page), dismissed the prompt, or sent private feedback (which lands in the Feedback tab).",
     category: "Admin tools",
     status: "internal",
     addedDate: "2026-07-02",

@@ -70,3 +70,32 @@ export function buildRatingPromptNotice(args: {
     detail,
   };
 }
+
+/**
+ * Rating-nudge SEND → admin system_notice.
+ *
+ * Records that the nudge was shown to a coach — the top of the funnel — so an
+ * admin can see who was invited to rate and when, independently of whether they
+ * ever act on it. Without this, a nudge that's shown and then ignored leaves no
+ * trace in the admin inbox (the outcome notices only fire when the coach taps
+ * through), so "whether or not they did anything" couldn't be answered.
+ *
+ * Rides the same 'review_prompt' kind as the outcome notices (differentiated by
+ * detail.outcome = 'shown'), so it needs no new migration and renders in the
+ * admin inbox with the existing 'review' badge. Kept OUT of
+ * ADMIN_PUSH_NOTICE_KINDS for the same reason the outcomes are — it's in-app
+ * telemetry, not a device-interrupt event.
+ */
+export function buildRatingShownNotice(args: {
+  who: string;
+  platform: "ios" | "android";
+}): RatingPromptNotice {
+  const who = args.who.trim() || "Someone";
+  return {
+    kind: "review_prompt",
+    severity: "info",
+    body: `${who} was shown the rating prompt`,
+    href: "/settings?tab=users",
+    detail: { outcome: "shown", platform: args.platform },
+  };
+}
