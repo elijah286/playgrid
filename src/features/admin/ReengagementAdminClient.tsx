@@ -201,7 +201,7 @@ export function ReengagementAdminClient({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-foreground">Re-engagement email</h2>
           <p className="text-sm text-muted">

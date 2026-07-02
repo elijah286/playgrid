@@ -30,6 +30,22 @@ export function appStoreConfigured(id: string = APP_STORE_ID): boolean {
 export const APP_STORE_URL = `https://apps.apple.com/app/id${APP_STORE_ID}`;
 
 /**
+ * Public reviews page for each store, as a plain web URL (not a native deep
+ * link) so it opens from a desktop admin inbox. There is no per-review URL —
+ * neither store exposes one — so "a link to that review" resolves to the
+ * listing's reviews section. Used by the rating-nudge admin notice.
+ */
+export const APP_STORE_REVIEWS_URL = `${APP_STORE_URL}?see-all=reviews`;
+
+export function playStoreReviewsUrl(): string {
+  return `https://play.google.com/store/apps/details?id=${PLAY_STORE_ID}&showAllReviews=true`;
+}
+
+export function storeReviewsUrl(platform: "ios" | "android"): string {
+  return platform === "android" ? playStoreReviewsUrl() : APP_STORE_REVIEWS_URL;
+}
+
+/**
  * iPhone/iPod/iPad announce themselves in the UA. iPadOS 13+ Safari reports a
  * desktop "Macintosh" UA by default, so an iPad is also inferred from a Mac UA
  * with a touch screen — desktop Macs report maxTouchPoints 0.

@@ -2747,6 +2747,14 @@ function KindBadge({
       </span>
     );
   }
+  // Rating-nudge outcomes (left a review / dismissed) read as "review".
+  if (kind === "admin_notice" && adminKind === "review_prompt") {
+    return (
+      <span className="rounded-full bg-warning-light px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning">
+        review
+      </span>
+    );
+  }
   const map: Record<InboxAlertKind | ResolvedKind, { label: string; cls: string }> = {
     roster_claim: { label: "claim", cls: "bg-primary/10 text-primary" },
     membership: { label: "join", cls: "bg-secondary/10 text-secondary" },

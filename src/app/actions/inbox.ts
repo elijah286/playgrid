@@ -33,7 +33,10 @@ export type AdminNoticeKind =
   | "feedback_received"
   // A failed production functional-test run — written by the functional-tests
   // ingest endpoint (20260626150000).
-  | "functional_test_failed";
+  | "functional_test_failed"
+  // What a coach did on the App Store rating nudge — left a review or dismissed
+  // it. Written directly by recordRatingOutcome (20260702130000).
+  | "review_prompt";
 
 /** Active = visible in the default Active view + counted in the red-bang
  *  badge. Archived = visible only in the Archived view + not counted.

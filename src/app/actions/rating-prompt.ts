@@ -4,6 +4,11 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getSuggestReviews } from "@/lib/site/review-prompt-config";
+import {
+  buildRatingPromptNotice,
+  type RatingOutcome,
+  type RatingSentiment,
+} from "@/lib/notifications/rating-prompt-notice";
 
 export type RatingTrigger =
   | "cal_save"
@@ -106,6 +111,58 @@ export async function checkRatingEligibility(): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Record what the coach did on the rating nudge as a site-admin notice.
+ *
+ * Fired for the two terminal outcomes that don't already emit a notice:
+ *  - "rated"     — happy coach was sent to the App Store to review.
+ *  - "dismissed" — coach closed the prompt without reviewing.
+ * The unhappy → private-feedback path goes through submitFeedbackAction, which
+ * emits its own 'feedback_received' notice, so it isn't handled here.
+ *
+ * Writes a review_prompt row to system_notices via the service-role client
+ * (system_notices has no INSERT RLS policy). Best-effort — a failure to log the
+ * outcome must never break the coach's flow (they've already tapped through).
+ */
+export async function recordRatingOutcome(
+  outcome: RatingOutcome,
+  platform: "ios" | "android",
+  sentiment: RatingSentiment = "unknown",
+): Promise<void> {
+  if (!hasSupabaseEnv()) return;
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const admin = createServiceRoleClient();
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("display_name")
+      .eq("id", user.id)
+      .single();
+
+    const displayName = (profile?.display_name as string | null)?.trim() || null;
+    const who = displayName || user.email || "Someone";
+
+    const notice = buildRatingPromptNotice({ who, outcome, platform, sentiment });
+    await admin.from("system_notices").insert({
+      kind: notice.kind,
+      severity: notice.severity,
+      user_id: user.id,
+      user_display_name: displayName,
+      user_email: user.email ?? null,
+      body: notice.body,
+      href: notice.href,
+      detail: notice.detail,
+    });
+  } catch {
+    // best-effort — telemetry only
   }
 }
 

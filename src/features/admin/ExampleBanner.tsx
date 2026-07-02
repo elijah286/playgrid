@@ -10,7 +10,7 @@ import { FlaskConical } from "lucide-react";
 export function ExampleBanner({ isPublished }: { isPublished: boolean }) {
   return (
     <div
-      className={`mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${
+      className={`mb-4 flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${
         isPublished
           ? "border-emerald-500/30 bg-emerald-50/80 text-emerald-950 dark:bg-emerald-500/10 dark:text-emerald-100"
           : "border-amber-500/30 bg-amber-50/80 text-amber-950 dark:bg-amber-500/10 dark:text-amber-100"

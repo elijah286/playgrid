@@ -87,7 +87,7 @@ export function CoachInvitationsAdminClient({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-start sm:justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-foreground">Coach invitations</h2>
           <p className="mt-1 text-sm text-muted">

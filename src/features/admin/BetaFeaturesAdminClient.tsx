@@ -180,7 +180,7 @@ export function BetaFeaturesAdminClient({
             key={f.key}
             className="rounded-2xl border border-border bg-surface-raised p-4"
           >
-            <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-foreground">{f.label}</p>
                 <p className="mt-0.5 text-xs text-muted">{f.description}</p>
@@ -198,7 +198,7 @@ export function BetaFeaturesAdminClient({
               <div
                 role="radiogroup"
                 aria-label={`${f.label} scope`}
-                className="inline-flex overflow-hidden rounded-lg ring-1 ring-border"
+                className="inline-flex self-start overflow-hidden rounded-lg ring-1 ring-border sm:self-auto"
               >
                 {SCOPE_OPTIONS.map((opt) => {
                   const active = current === opt.value;

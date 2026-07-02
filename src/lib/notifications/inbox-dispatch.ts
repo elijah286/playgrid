@@ -126,6 +126,17 @@ export function adminPushMessage(n: ClaimedNotice): PushMessage {
         body: n.body,
         link: n.href ?? "/settings?tab=functional_tests",
       };
+    case "review_prompt":
+      // Rating-nudge outcome (left a review / dismissed). Not in
+      // ADMIN_PUSH_NOTICE_KINDS today — it renders in the in-app admin inbox,
+      // not a device push — but keep dedicated copy so it degrades gracefully
+      // if it's ever promoted. body is self-contained ("<who> …"); href points
+      // at the store reviews page (rated) or the users tab (dismissed).
+      return {
+        title: "Rating nudge ⭐",
+        body: n.body,
+        link: n.href ?? "/settings?tab=users",
+      };
     default:
       return { title: "Site update", body: n.body, link: n.href ?? "/admin/users" };
   }
