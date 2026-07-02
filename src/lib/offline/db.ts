@@ -48,7 +48,7 @@ function openDb(): Promise<IDBDatabase> {
     return Promise.reject(new Error("IndexedDB unavailable"));
   }
   if (dbPromise) return dbPromise;
-  dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
+  const opening = new Promise<IDBDatabase>((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
@@ -66,6 +66,16 @@ function openDb(): Promise<IDBDatabase> {
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
+  });
+  // Cache the CONNECTION, never a failure. WKWebView's storage service can
+  // refuse the open in the first moments after a cold app launch; caching
+  // that rejection would pin every read for the rest of the page session to
+  // the same error (the "offline copy won't open until I force-reload" bug).
+  // Dropping the cache on failure makes the next call retry from scratch —
+  // which is also what lets the offline error boundary's "Try again" work.
+  dbPromise = opening.catch((e: unknown) => {
+    dbPromise = null;
+    throw e;
   });
   return dbPromise;
 }

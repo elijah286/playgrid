@@ -59,9 +59,17 @@ export function OfflinePlaybookClient({ playbookId }: Props) {
       return;
     }
     let alive = true;
-    void getCachedPlayDocument(activeId).then((d) => {
-      if (alive) setActiveDoc((d as PlayDocument | null) ?? null);
-    });
+    void getCachedPlayDocument(activeId)
+      .then((d) => {
+        if (alive) setActiveDoc((d as PlayDocument | null) ?? null);
+      })
+      // A rejected read (e.g. WKWebView's storage service refusing IndexedDB
+      // connections right after a cold launch) must not escape as an
+      // unhandled rejection — degrade to the "Select a play" empty state;
+      // picking a play again retries the read.
+      .catch(() => {
+        if (alive) setActiveDoc(null);
+      });
     return () => {
       alive = false;
     };
