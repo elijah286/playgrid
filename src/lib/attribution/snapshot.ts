@@ -75,7 +75,7 @@ export async function snapshotFirstTouchToProfile(
   }
 }
 
-async function enrichSignupNotice(
+export async function enrichSignupNotice(
   admin: ReturnType<typeof createServiceRoleClient>,
   userId: string,
   payload: NonNullable<Awaited<ReturnType<typeof readFirstTouchCookie>>>,
@@ -106,6 +106,13 @@ async function enrichSignupNotice(
   // `Alice signed up via copy link to "Examples vs. 1-3-1 Blitz" (sent by Bob)`.
   let via = cls.label.toLowerCase();
   let extra: string | null = cls.detail;
+  // Referrer identity for a playbook-invite signup — who sent the invite
+  // this person signed up through. Surfaced separately from `via`/`extra`
+  // (rather than folded into body text) so the inbox row can render it as
+  // a clickable link to the referrer's own admin user-detail view.
+  let invitedByUserId: string | null = null;
+  let invitedByEmail: string | null = null;
+  let invitedByName: string | null = null;
   if (cls.kind === "copy_link" && cls.shareToken) {
     const { data: cl } = await admin
       .from("playbook_copy_links")
@@ -140,6 +147,26 @@ async function enrichSignupNotice(
       via = `copy link${pbName ? ` to "${pbName}"` : ""}${senderLabel ? ` (sent by ${senderLabel})` : ""}`;
       extra = null;
     }
+  } else if (cls.kind === "playbook_invite" && cls.shareToken) {
+    const { data: inv } = await admin
+      .from("playbook_invites")
+      .select("created_by")
+      .eq("token", cls.shareToken)
+      .maybeSingle();
+    if (inv?.created_by) {
+      invitedByUserId = inv.created_by as string;
+      const { data: inviterUser } = await admin.auth.admin.getUserById(
+        invitedByUserId,
+      );
+      const { data: inviterProfile } = await admin
+        .from("profiles")
+        .select("display_name")
+        .eq("id", invitedByUserId)
+        .maybeSingle();
+      invitedByEmail = inviterUser?.user?.email ?? null;
+      invitedByName =
+        (inviterProfile?.display_name as string | null)?.trim() || null;
+    }
   }
 
   const who =
@@ -162,6 +189,9 @@ async function enrichSignupNotice(
         utm_campaign: payload.utm_campaign,
         share_token: cls.shareToken,
         referrer: payload.referrer,
+        invited_by_user_id: invitedByUserId,
+        invited_by_email: invitedByEmail,
+        invited_by_name: invitedByName,
       },
     })
     .eq("id", notice.id as string);
