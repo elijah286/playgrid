@@ -111,9 +111,32 @@ export async function updateLeagueTeamAction(
   return { ok: true as const };
 }
 
+// Standings are derived from final games, so deleting a team's games deletes
+// the opponent's results too. The FK is ON DELETE RESTRICT (20260701140000);
+// this message is the friendly face of that constraint.
+function blockedByGamesError(count?: number) {
+  const games =
+    typeof count === "number"
+      ? `${count} recorded game${count === 1 ? "" : "s"}`
+      : "recorded games";
+  return {
+    ok: false as const,
+    error: `This team has ${games}. Delete its games/scores first, then delete the team.`,
+  };
+}
+
 export async function deleteLeagueTeamAction(leagueId: string, teamId: string) {
   const gate = await gateAdmin(leagueId);
   if (!gate.ok) return gate;
+
+  // Mirror the DB constraint before deleting so the operator gets an
+  // explanation instead of a raw FK violation.
+  const { count, error: gamesError } = await gate.supabase
+    .from("league_games")
+    .select("id", { count: "exact", head: true })
+    .or(`home_team_id.eq.${teamId},away_team_id.eq.${teamId}`);
+  if (gamesError) return { ok: false as const, error: gamesError.message };
+  if ((count ?? 0) > 0) return blockedByGamesError(count ?? 0);
 
   // Scoped to league teams only (never a coach team).
   const { error } = await gate.supabase
@@ -121,7 +144,11 @@ export async function deleteLeagueTeamAction(leagueId: string, teamId: string) {
     .delete()
     .eq("id", teamId)
     .eq("league_id", leagueId);
-  if (error) return { ok: false as const, error: error.message };
+  if (error) {
+    // A game recorded between the check and the delete trips the FK (23503).
+    if (error.code === "23503") return blockedByGamesError();
+    return { ok: false as const, error: error.message };
+  }
   revalidatePath(`/league/${leagueId}/teams`);
   return { ok: true as const };
 }
