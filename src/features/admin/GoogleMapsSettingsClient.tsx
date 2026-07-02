@@ -84,7 +84,7 @@ export function GoogleMapsSettingsClient({ initial }: { initial: Initial }) {
             </label>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="primary"

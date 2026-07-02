@@ -83,7 +83,7 @@ export function CoachAiTokenUsageClient({ initial }: Props) {
     return (
       <div className="space-y-4">
         <Card className="p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <div className="text-sm text-red-600">
               Failed to load Cal usage: {summary.error}
             </div>
@@ -104,7 +104,7 @@ export function CoachAiTokenUsageClient({ initial }: Props) {
   return (
     <div className={cn("space-y-4", pending && "opacity-60 transition-opacity")}>
       <Card className="p-4">
-        <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
           <div>
             <div className="text-sm text-slate-500">
               {rangeLabel} · Coach Cal raw API spend

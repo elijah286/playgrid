@@ -422,7 +422,7 @@ export function SiteSettingsAdminClient({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface-raised p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-foreground">Suggest reviews</p>
           <p className="mt-0.5 text-xs text-muted">
@@ -440,7 +440,7 @@ export function SiteSettingsAdminClient({
             </button>
           </p>
         </div>
-        <div className="inline-flex items-center gap-1 rounded-lg bg-surface p-1 ring-1 ring-border">
+        <div className="inline-flex items-center gap-1 self-start rounded-lg bg-surface p-1 ring-1 ring-border sm:self-auto">
           {(["everyone", "only_admins", "off"] as const).map((opt) => (
             <button
               key={opt}
@@ -463,7 +463,7 @@ export function SiteSettingsAdminClient({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface-raised p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-foreground">
             Coach Cal version
@@ -479,7 +479,7 @@ export function SiteSettingsAdminClient({
             both versions because they're bug fixes, not behavior changes.
           </p>
         </div>
-        <div className="inline-flex items-center gap-1 rounded-lg bg-surface p-1 ring-1 ring-border">
+        <div className="inline-flex items-center gap-1 self-start rounded-lg bg-surface p-1 ring-1 ring-border sm:self-auto">
           <button
             type="button"
             className={`rounded-md px-3 py-1 text-sm transition-colors ${
@@ -507,7 +507,7 @@ export function SiteSettingsAdminClient({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface-raised p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-foreground">
             Coach Cal upgrade banner
@@ -530,7 +530,7 @@ export function SiteSettingsAdminClient({
         </label>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface-raised p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-foreground">
             Coach Cal eval window
@@ -574,7 +574,7 @@ export function SiteSettingsAdminClient({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface-raised p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-foreground">
             Free Coach Cal prompts
@@ -617,7 +617,7 @@ export function SiteSettingsAdminClient({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface-raised p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-foreground">
             Free-tier plays per playbook
@@ -658,7 +658,7 @@ export function SiteSettingsAdminClient({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface-raised p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-foreground">
             Hide playbook animation on lobby
@@ -680,7 +680,7 @@ export function SiteSettingsAdminClient({
         </label>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface-raised p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-foreground">
             Public examples page
@@ -704,7 +704,7 @@ export function SiteSettingsAdminClient({
         </label>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface-raised p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-foreground">
             Mobile play editing
@@ -727,7 +727,7 @@ export function SiteSettingsAdminClient({
         </label>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface-raised p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-foreground">
             Continue with Google
@@ -750,7 +750,7 @@ export function SiteSettingsAdminClient({
         </label>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface-raised p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-foreground">
             Continue with Apple
@@ -774,7 +774,7 @@ export function SiteSettingsAdminClient({
         </label>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface-raised p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-foreground">
             Hide owner info on About page

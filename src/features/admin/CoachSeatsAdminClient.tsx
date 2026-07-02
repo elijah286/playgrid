@@ -256,7 +256,7 @@ export function CoachSeatsAdminClient({
         </p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-surface p-3">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-2 rounded-xl border border-border bg-surface p-3">
             <div className="min-w-0">
               <p className="text-xs font-medium text-foreground">Team Coach</p>
               <p className="text-[11px] text-muted">Default 3.</p>
@@ -291,7 +291,7 @@ export function CoachSeatsAdminClient({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-surface p-3">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-2 rounded-xl border border-border bg-surface p-3">
             <div className="min-w-0">
               <p className="text-xs font-medium text-foreground">Coach Pro</p>
               <p className="text-[11px] text-muted">Default 5. Beta-gated tier.</p>

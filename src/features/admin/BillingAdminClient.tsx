@@ -180,7 +180,7 @@ export function BillingAdminClient({
     <div className="space-y-6">
       <StripeSettingsClient initial={stripeStatus} />
 
-      <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-card p-4 ring-1 ring-border">
+      <section className="flex flex-col gap-3 rounded-xl bg-card p-4 ring-1 ring-border sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div>
           <h2 className="text-sm font-semibold text-foreground">Coach AI tier</h2>
           <p className="mt-0.5 text-xs text-muted">
@@ -200,7 +200,7 @@ export function BillingAdminClient({
       </section>
 
       <section className="rounded-xl bg-card p-4 ring-1 ring-border">
-        <header className="mb-3 flex items-center justify-between">
+        <header className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-sm font-semibold text-foreground">Gift codes</h2>
             <p className="text-xs text-muted">

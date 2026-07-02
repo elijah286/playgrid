@@ -110,7 +110,7 @@ export function ClaudeSettingsClient({
             </label>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="primary"
@@ -171,7 +171,7 @@ export function ClaudeSettingsClient({
           </div>
 
           <div className="mt-6 border-t border-black/5 pt-4">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h4 className="text-sm font-semibold text-foreground">Admin API key (cost reports)</h4>
                 <p className="mt-0.5 text-xs text-muted">
@@ -201,7 +201,7 @@ export function ClaudeSettingsClient({
                 />
               </label>
             </div>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
               <Button
                 variant="primary"
                 size="sm"

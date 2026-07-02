@@ -408,7 +408,7 @@ export function TrafficAdminClient({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div>
           <h2 className="text-sm font-semibold text-foreground">Traffic</h2>
           <p className="text-xs text-muted">
@@ -488,7 +488,7 @@ export function TrafficAdminClient({
           </div>
 
           <div className="rounded-2xl border border-border bg-surface-raised p-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm font-semibold text-foreground">Views &amp; signups per day</p>
               <div className="flex items-center gap-3 text-xs text-muted">
                 <span className="inline-flex items-center gap-1.5">
@@ -1049,7 +1049,7 @@ function ViralityPanel({
             {data.recentShares.map((s) => (
               <li
                 key={s.id}
-                className="flex flex-wrap items-center justify-between gap-2 py-2"
+                className="flex flex-col gap-2 py-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
               >
                 <span className="text-foreground">
                   <span className="font-medium">{s.actorName ?? "Unknown"}</span>

@@ -10,6 +10,8 @@ import {
   playStoreUrl,
   shouldShowIosBanner,
   storeUrl,
+  storeReviewsUrl,
+  APP_STORE_REVIEWS_URL,
   type IosBannerEnv,
 } from "./appStore";
 
@@ -52,6 +54,19 @@ describe("appStoreConfigured", () => {
 describe("APP_STORE_URL", () => {
   it("points at the listing for the configured id", () => {
     expect(APP_STORE_URL).toBe(`https://apps.apple.com/app/id${APP_STORE_ID}`);
+  });
+});
+
+describe("storeReviewsUrl", () => {
+  it("iOS points at the App Store reviews section of the listing", () => {
+    expect(storeReviewsUrl("ios")).toBe(APP_STORE_REVIEWS_URL);
+    expect(APP_STORE_REVIEWS_URL).toBe(`${APP_STORE_URL}?see-all=reviews`);
+  });
+
+  it("Android points at the Play Store listing with reviews shown", () => {
+    expect(storeReviewsUrl("android")).toBe(
+      `https://play.google.com/store/apps/details?id=${PLAY_STORE_ID}&showAllReviews=true`,
+    );
   });
 });
 

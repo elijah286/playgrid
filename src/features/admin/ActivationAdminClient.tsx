@@ -178,7 +178,7 @@ export function ActivationAdminClient({
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold">Monetization Health</h2>
           <p className="mt-1 text-sm text-muted">

@@ -96,7 +96,7 @@ export function FeedbackAdminClient({
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-border bg-surface-raised p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-foreground">
               Floating “Send feedback” pill
@@ -116,7 +116,7 @@ export function FeedbackAdminClient({
             <span>{widgetEnabled ? "On" : "Off"}</span>
           </label>
         </div>
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+        <div className="mt-3 flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3 border-t border-border pt-3">
           <div>
             <p className="text-sm font-medium text-foreground">
               Show on touch devices
@@ -139,7 +139,7 @@ export function FeedbackAdminClient({
         </div>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-sm font-semibold text-foreground">
             User feedback
