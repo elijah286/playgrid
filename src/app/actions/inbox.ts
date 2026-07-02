@@ -93,6 +93,14 @@ export type InboxAlert = {
   /** Subject's email — used by user_signup rows to deep-link the admin
    *  users table pre-filtered to this account. */
   userEmail?: string | null;
+  /** Referrer for a user_signup sourced from a playbook invite link — the
+   *  coach whose invite this person signed up through. Set from
+   *  system_notices.detail (written by enrichSignupNotice). Lets the row
+   *  render "Referred by <name>", linked to the referrer's own admin
+   *  user-detail view. */
+  invitedByUserId?: string | null;
+  invitedByEmail?: string | null;
+  invitedByName?: string | null;
 };
 
 /**
@@ -322,7 +330,7 @@ async function buildAdminNoticeAlerts(
   const { data, error } = await supabase
     .from("system_notices")
     .select(
-      "id, kind, severity, user_id, user_display_name, user_email, body, href, created_at",
+      "id, kind, severity, user_id, user_display_name, user_email, body, href, detail, created_at",
     )
     .order("created_at", { ascending: false })
     .limit(200);
@@ -337,6 +345,7 @@ async function buildAdminNoticeAlerts(
     user_email: string | null;
     body: string;
     href: string | null;
+    detail: Record<string, unknown> | null;
     created_at: string;
   };
 
@@ -359,6 +368,9 @@ async function buildAdminNoticeAlerts(
     body: r.body,
     href: r.href,
     severity: r.severity,
+    invitedByUserId: (r.detail?.invited_by_user_id as string | null) ?? null,
+    invitedByEmail: (r.detail?.invited_by_email as string | null) ?? null,
+    invitedByName: (r.detail?.invited_by_name as string | null) ?? null,
   }));
 }
 

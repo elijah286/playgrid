@@ -2819,6 +2819,18 @@ function NotificationRow({
           {body && (
             <p className="mt-0.5 line-clamp-2 text-xs text-muted">{body}</p>
           )}
+          {alert.adminKind === "user_signup" && alert.invitedByEmail && (
+            <p className="mt-0.5 truncate text-xs text-muted">
+              Referred by{" "}
+              <Link
+                href={`/settings?tab=users&q=${encodeURIComponent(alert.invitedByEmail)}`}
+                className="font-medium text-foreground hover:underline"
+                onClick={(e) => selectMode && e.preventDefault()}
+              >
+                {alert.invitedByName || alert.invitedByEmail}
+              </Link>
+            </p>
+          )}
         </>
       }
     />
