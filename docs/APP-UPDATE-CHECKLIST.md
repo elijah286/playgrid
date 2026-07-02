@@ -33,7 +33,9 @@ no resubmission needed. Putting web work on this branch only delays it.
 
 | Item | Why it needs an app update | Web-side prep (ship to `main` early) | Status |
 |---|---|---|---|
-| Universal Links / App Links | iOS associated-domains entitlement + Android applinks intent filters + `capacitor.config.ts` | serve `/.well-known/apple-app-site-association` + `assetlinks.json` | not started |
+| Universal Links / App Links | iOS associated-domains entitlement + Android applinks intent filters + `capacitor.config.ts` | serve `/.well-known/apple-app-site-association` + `assetlinks.json` | not started — needs an `appUrlOpen` handler too; next cycle |
+| Offline mode on iOS (App-Bound Domains) | `WKAppBoundDomains` in Info.plist + `ios.limitsNavigationsToAppBoundDomains` in `capacitor.config.ts` — WKWebView has no `navigator.serviceWorker` without them, so the offline shell never ran on iOS | none (sw.js already live) | **shipped in v1.0.1 (build 11)** |
+| Capacitor iOS runtime 8.3.1 → 8.4.1 | `cap sync` now regenerates `CapApp-SPM/Package.swift` with an 8.4.1 pin (installed CLI moved ahead of the checked-in pin). Deliberately reverted for build 11 — archive what was tested. Take the bump with its own test pass. **Until then: run `npx cap copy ios` (not full `cap sync`) before archiving, or revert Package.swift after sync.** | none | not started |
 
 _Add rows as we find them._
 
