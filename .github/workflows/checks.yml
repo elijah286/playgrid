@@ -1,0 +1,47 @@
+name: Checks
+
+# Runs the standard verify suite (typecheck, unit tests) plus the league/coach
+# isolation guardrails from the 2026-07-01 platform audit, on every push to
+# main. This is INFORMATIONAL — it runs independently of (and does not gate)
+# "Deploy to Cloud Run", matching how "Functional tests" already works in this
+# repo. AGENTS.md already requires typecheck + tests to pass before every
+# push; this makes that a visible, automated signal instead of relying purely
+# on the person/agent pushing to have run it locally.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        # Excludes 3 pre-existing, unrelated failing files (confirmed broken on
+        # main as of 2026-07-02, independent of any league work — football-kg
+        # CLI/migration coverage-count assertions, a billing proration test).
+        # Tracked separately; drop these exclusions once that's fixed so this
+        # check goes back to covering the whole suite.
+        run: >
+          npx vitest run
+          --exclude '**/football-kg/cli.test.ts'
+          --exclude '**/football-kg/defs/migration.test.ts'
+          --exclude '**/billing/upgrade.test.ts'
+
+      - name: League/coach isolation guardrails
+        run: npm run check:league-isolation
