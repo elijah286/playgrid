@@ -76,6 +76,16 @@
 	<string>xogridmaker accesses your photo library so you can choose an image for your profile or team logo, or share a play sheet with Coach Cal.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- App-Bound Domains: unlocks Service Workers (and other "powerful web
+	     APIs") in the WKWebView for these registrable domains + subdomains.
+	     Pairs with ios.limitsNavigationsToAppBoundDomains in
+	     capacitor.config.ts — WebKit requires BOTH before it exposes
+	     navigator.serviceWorker. The offline playbook feature (public/sw.js
+	     caching /home and /offline/*) is dead on iOS without this. -->
+	<key>WKAppBoundDomains</key>
+	<array>
+		<string>xogridmaker.com</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

@@ -23,6 +23,18 @@ const config: CapacitorConfig = {
       }
     : undefined,
   ios: {
+    // REQUIRED for offline mode. WKWebView only exposes Service Workers to
+    // "app-bound domains": this flag + the WKAppBoundDomains array in
+    // ios/App/App/Info.plist (xogridmaker.com). Without BOTH, iOS has no
+    // `navigator.serviceWorker` at all, so the offline shell (public/sw.js)
+    // never installs and an airplane-mode launch hangs on the splash screen
+    // forever. Side effect: the WebView can only top-level-navigate to
+    // app-bound domains — already our behavior, since Capacitor opens
+    // external links in the system browser and native sign-in uses the
+    // SocialLogin SDK (no in-WebView OAuth redirects). NOTE: if you ever
+    // point server.url at a LAN address for local device testing, flip this
+    // off for that build or the initial load itself will be blocked.
+    limitsNavigationsToAppBoundDomains: true,
     // `never` keeps WKWebView edge-to-edge so the header's background paints
     // behind the status bar / dynamic island. We pair this with
     // `viewport-fit=cover` + CSS `env(safe-area-inset-top)` on
