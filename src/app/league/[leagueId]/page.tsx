@@ -320,7 +320,13 @@ export default async function LeagueDashboardPage({
           />
         ) : null}
         <MoreItem icon={<Palette className="size-4" />} label="Branding" />
-        <MoreItem icon={<ShoppingBag className="size-4" />} label="Store" />
+        {!access.viaGrant || access.capabilities.includes("manage_store") ? (
+          <MoreItem
+            icon={<ShoppingBag className="size-4" />}
+            label="Store"
+            href={`/league/${leagueId}/store`}
+          />
+        ) : null}
         <MoreItem
           icon={<Settings className="size-4" />}
           label="Settings"

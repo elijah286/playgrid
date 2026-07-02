@@ -248,8 +248,8 @@ export function StoreItemsManager({
         ) : null}
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-border">
-        <table className="w-full text-left text-sm">
+      <div className="overflow-x-auto rounded-2xl border border-border">
+        <table className="w-full min-w-[36rem] text-left text-sm">
           <thead className="bg-foreground/5 text-xs font-semibold uppercase tracking-wide text-muted">
             <tr>
               <th className="px-4 py-3">Item</th>

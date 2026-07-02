@@ -338,8 +338,8 @@ export function DivisionsManager({
       </div>
 
       {/* Full catalog: every division (standard + custom), with details. */}
-      <div className="overflow-hidden rounded-2xl border">
-        <table className="w-full text-left text-sm">
+      <div className="overflow-x-auto rounded-2xl border">
+        <table className="w-full min-w-[40rem] text-left text-sm">
           <thead className="bg-foreground/5 text-xs font-semibold uppercase tracking-wide text-muted">
             <tr>
               <th className="px-4 py-3">Division</th>

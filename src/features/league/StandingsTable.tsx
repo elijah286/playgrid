@@ -35,11 +35,11 @@ export function StandingsTable({
       {standings
         .filter((d) => d.rows.length > 0)
         .map((d) => (
-          <div key={d.divisionId ?? "__none__"} className="overflow-hidden rounded-2xl border border-border">
+          <div key={d.divisionId ?? "__none__"} className="overflow-x-auto rounded-2xl border border-border">
             <div className="border-b border-border bg-foreground/5 px-4 py-2 text-sm font-semibold text-foreground">
               {d.divisionName ?? "Teams"}
             </div>
-            <table className="w-full text-left text-sm">
+            <table className="w-full min-w-[34rem] text-left text-sm">
               <thead className="text-xs font-semibold uppercase tracking-wide text-muted">
                 <tr>
                   <th className="px-4 py-2">Team</th>

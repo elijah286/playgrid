@@ -150,8 +150,8 @@ export function PeopleAccessManager({ initial }: { initial: AccessOverview }) {
       {msg ? <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-100 dark:ring-amber-800">{msg}</p> : null}
 
       {/* MEMBERS TABLE */}
-      <div className="overflow-hidden rounded-2xl border border-border">
-        <table className="w-full text-left text-sm">
+      <div className="overflow-x-auto rounded-2xl border border-border">
+        <table className="w-full min-w-[32rem] text-left text-sm">
           <thead className="bg-surface-raised text-xs text-muted">
             <tr>
               <th className="px-4 py-2.5 font-medium">Member</th>

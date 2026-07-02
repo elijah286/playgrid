@@ -23,7 +23,8 @@ export type FeatureCategory =
   | "Billing & accounts"
   | "Marketing site"
   | "Onboarding & help"
-  | "Admin tools";
+  | "Admin tools"
+  | "League operations";
 
 export type FeatureStatus = "ga" | "beta" | "internal";
 
@@ -1699,6 +1700,75 @@ export const FEATURES: FeatureEntry[] = [
   // per-image vision calls were expensive. The capability is off end-to-end
   // (see COACH_CAL_IMAGE_UPLOADS_ENABLED), so it's removed from the catalog
   // rather than listed as GA. Restore this entry if the feature is re-enabled.
+
+  // ── League operations ────────────────────────────────────────────
+  // A parallel product for youth-league operators (registration, rosters,
+  // scheduling, comms, payments) built on top of the same platform. Invisible
+  // to every existing coach — gated behind LEAGUE_OPS_ENABLED and organizer
+  // status — so every entry here is "beta"/"internal" until that gate lifts.
+  {
+    id: "league-operator-console",
+    name: "League operator console",
+    description:
+      "A command-center dashboard for running a youth league or a whole portfolio of them — KPIs (leagues, teams, registrations, fill rate, revenue), a needs-attention queue (registrations to approve, teams without a coach, unrostered players, closing windows), and a sortable, filterable table of every league across cities and sports. Operators managing more than one organization get an org switcher so each org's numbers — revenue especially — never blend together.",
+    category: "League operations",
+    status: "beta",
+    addedDate: "2026-06-20",
+  },
+  {
+    id: "league-public-registration-payments",
+    name: "Public registration, payments & merch store",
+    description:
+      "A shareable link (plus QR code) opens a mobile-friendly signup form for parents — player and guardian info, sport-specific questions, and optional merch/equipment add-ons with sizes — that goes straight to secure Stripe checkout. Operators set the registration fee, open/close window, and store catalog; approved signups flow into the roster queue automatically.",
+    category: "League operations",
+    status: "beta",
+    addedDate: "2026-06-21",
+  },
+  {
+    id: "league-teams-schedule-standings",
+    name: "Teams, scheduling & standings",
+    description:
+      "Operators create divisions (with birthdate-window age gating), build teams, assign coaches, place approved players onto rosters, and schedule games and practices. Scores entered against the schedule roll up into automatic, sport-correct standings — points-and-differential for football, table points for soccer, win percentage for basketball and baseball.",
+    category: "League operations",
+    status: "beta",
+    addedDate: "2026-06-21",
+  },
+  {
+    id: "league-coach-playbook-distribution",
+    name: "Coach playbook & practice-plan distribution",
+    description:
+      "For football leagues, operators seed every team a starter playbook and email the head coach a personal copy that lands ready to build on in their own XO Gridmaker account — the same classic playbook experience coaches already use. Operators can also build a practice plan once and distribute it to every team's coach in one click.",
+    category: "League operations",
+    status: "beta",
+    addedDate: "2026-06-21",
+  },
+  {
+    id: "league-delegated-access",
+    name: "Delegated staff access (roles & permissions)",
+    description:
+      "League operators can grant teammates scoped access instead of sharing one login — a merch coordinator who can only manage the store, a local admin who only sees one city's leagues, a baseball coordinator who sees every baseball league across the portfolio. Access is defined by a role preset (or custom capability picks) crossed with a scope (portfolio-wide, specific leagues, a sport, or a league group), and every delegated action is authorized against that grant.",
+    category: "League operations",
+    status: "beta",
+    addedDate: "2026-06-30",
+  },
+  {
+    id: "league-multi-sport",
+    name: "Multi-sport league support",
+    description:
+      "Leagues aren't football-only: operators pick a sport at creation (football, soccer, basketball, baseball, volleyball) and the whole console adapts — sport-correct standings and terminology (\"match\" and \"manager\" for soccer, \"game\" and \"coach\" for football), sport-specific registration questions, and the football-only playbook bridge cleanly hidden for every other sport.",
+    category: "League operations",
+    status: "beta",
+    addedDate: "2026-06-30",
+  },
+  {
+    id: "league-ai-assistant-leo",
+    name: "Leo, the league AI assistant",
+    description:
+      "A chat assistant scoped to a league operator's own data — league status, who's not rostered yet, registration triage — that can also draft and, after an explicit human approval step, send announcements, place players on teams, and distribute practice plans. Every consequential action is proposed first and only runs once the operator approves it.",
+    category: "League operations",
+    status: "internal",
+    addedDate: "2026-06-29",
+  },
 ];
 
 /** Group features by category, preserving the order they appear in FEATURES. */

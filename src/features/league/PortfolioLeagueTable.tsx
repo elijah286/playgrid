@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import type { PortfolioLeagueRow, PortfolioStatus } from "@/lib/league/console";
 import { sportConfig } from "@/lib/league/sportConfig";
@@ -27,11 +27,14 @@ type SortKey = "name" | "location" | "sport" | "teams" | "registrations" | "fill
 
 export function PortfolioLeagueTable({ leagues }: { leagues: PortfolioLeagueRow[] }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [q, setQ] = useState("");
   const [sport, setSport] = useState("");
   const [location, setLocation] = useState("");
   const [status, setStatus] = useState("");
-  const [attentionOnly, setAttentionOnly] = useState(false);
+  // Deep-linkable: the portfolio dashboard's needs-attention KPIs link here with
+  // ?attn=1 when more than one league contributes, so the filter is pre-applied.
+  const [attentionOnly, setAttentionOnly] = useState(() => searchParams.get("attn") === "1");
   const [sortKey, setSortKey] = useState<SortKey>("registrations");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
@@ -89,7 +92,7 @@ export function PortfolioLeagueTable({ leagues }: { leagues: PortfolioLeagueRow[
   );
 
   return (
-    <div>
+    <div id="league-table" className="scroll-mt-4">
       {/* facet bar */}
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <h2 className="mr-auto text-sm font-semibold text-foreground">Leagues</h2>

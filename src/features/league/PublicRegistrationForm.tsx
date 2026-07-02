@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 
 import {
   submitPublicRegistrationAction,
@@ -15,6 +15,24 @@ function money(cents: number) {
 
 const inputCls =
   "mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary";
+const inputErrorCls =
+  "mt-1 w-full rounded-lg border border-red-400 bg-surface px-3 py-2 text-sm text-foreground focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500 dark:border-red-700 dark:focus:border-red-600";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Mirrors the server's required-field rules (public-registration.ts) — client
+// side so a parent finds out what's wrong before a round trip, not after.
+type RequiredField = "playerFirstName" | "playerLastName" | "guardianName" | "guardianEmail";
+
+export function validate(f: Record<RequiredField, string>): Partial<Record<RequiredField, string>> {
+  const errors: Partial<Record<RequiredField, string>> = {};
+  if (!f.playerFirstName.trim()) errors.playerFirstName = "Enter the player's first name.";
+  if (!f.playerLastName.trim()) errors.playerLastName = "Enter the player's last name.";
+  if (!f.guardianName.trim()) errors.guardianName = "Enter a parent/guardian name.";
+  if (!f.guardianEmail.trim()) errors.guardianEmail = "Enter an email address.";
+  else if (!EMAIL_RE.test(f.guardianEmail.trim())) errors.guardianEmail = "Enter a valid email address.";
+  return errors;
+}
 
 export function PublicRegistrationForm({
   leagueId,
@@ -53,8 +71,11 @@ export function PublicRegistrationForm({
   });
   const [sportDetails, setSportDetails] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<RequiredField, string>>>({});
   const [done, setDone] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  const fieldRefs = useRef<Partial<Record<RequiredField, HTMLInputElement | null>>>({});
 
   const total = useMemo(() => {
     const items = storeItems
@@ -67,6 +88,9 @@ export function PublicRegistrationForm({
 
   function set<K extends keyof typeof f>(k: K, v: string) {
     setF((prev) => ({ ...prev, [k]: v }));
+    // Clear a field's error as soon as the parent edits it, rather than leaving
+    // it red until the next submit attempt re-validates everything.
+    setFieldErrors((prev) => (prev[k as RequiredField] ? { ...prev, [k]: undefined } : prev));
   }
 
   function toggle(item: PublicStoreItem) {
@@ -86,6 +110,15 @@ export function PublicRegistrationForm({
 
   function submit() {
     setError(null);
+    const errors = validate(f);
+    setFieldErrors(errors);
+    const firstInvalid = (Object.keys(errors) as RequiredField[])[0];
+    if (firstInvalid) {
+      const el = fieldRefs.current[firstInvalid];
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      el?.focus();
+      return;
+    }
     // One chosen size per selected item that has sizes (default to the first).
     const chosenVariants: Record<string, string> = {};
     for (const i of storeItems) {
@@ -135,11 +168,33 @@ export function PublicRegistrationForm({
         <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="block text-sm">
             <span className="font-medium text-foreground">First name</span>
-            <input value={f.playerFirstName} onChange={(e) => set("playerFirstName", e.target.value)} className={inputCls} />
+            <input
+              ref={(el) => {
+                fieldRefs.current.playerFirstName = el;
+              }}
+              value={f.playerFirstName}
+              onChange={(e) => set("playerFirstName", e.target.value)}
+              aria-invalid={!!fieldErrors.playerFirstName}
+              className={fieldErrors.playerFirstName ? inputErrorCls : inputCls}
+            />
+            {fieldErrors.playerFirstName ? (
+              <span className="mt-1 block text-xs text-red-600 dark:text-red-400">{fieldErrors.playerFirstName}</span>
+            ) : null}
           </label>
           <label className="block text-sm">
             <span className="font-medium text-foreground">Last name</span>
-            <input value={f.playerLastName} onChange={(e) => set("playerLastName", e.target.value)} className={inputCls} />
+            <input
+              ref={(el) => {
+                fieldRefs.current.playerLastName = el;
+              }}
+              value={f.playerLastName}
+              onChange={(e) => set("playerLastName", e.target.value)}
+              aria-invalid={!!fieldErrors.playerLastName}
+              className={fieldErrors.playerLastName ? inputErrorCls : inputCls}
+            />
+            {fieldErrors.playerLastName ? (
+              <span className="mt-1 block text-xs text-red-600 dark:text-red-400">{fieldErrors.playerLastName}</span>
+            ) : null}
           </label>
           <label className="block text-sm">
             <span className="font-medium text-foreground">Date of birth</span>
@@ -192,11 +247,34 @@ export function PublicRegistrationForm({
         <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="block text-sm sm:col-span-2">
             <span className="font-medium text-foreground">Full name</span>
-            <input value={f.guardianName} onChange={(e) => set("guardianName", e.target.value)} className={inputCls} />
+            <input
+              ref={(el) => {
+                fieldRefs.current.guardianName = el;
+              }}
+              value={f.guardianName}
+              onChange={(e) => set("guardianName", e.target.value)}
+              aria-invalid={!!fieldErrors.guardianName}
+              className={fieldErrors.guardianName ? inputErrorCls : inputCls}
+            />
+            {fieldErrors.guardianName ? (
+              <span className="mt-1 block text-xs text-red-600 dark:text-red-400">{fieldErrors.guardianName}</span>
+            ) : null}
           </label>
           <label className="block text-sm">
             <span className="font-medium text-foreground">Email</span>
-            <input type="email" value={f.guardianEmail} onChange={(e) => set("guardianEmail", e.target.value)} className={inputCls} />
+            <input
+              ref={(el) => {
+                fieldRefs.current.guardianEmail = el;
+              }}
+              type="email"
+              value={f.guardianEmail}
+              onChange={(e) => set("guardianEmail", e.target.value)}
+              aria-invalid={!!fieldErrors.guardianEmail}
+              className={fieldErrors.guardianEmail ? inputErrorCls : inputCls}
+            />
+            {fieldErrors.guardianEmail ? (
+              <span className="mt-1 block text-xs text-red-600 dark:text-red-400">{fieldErrors.guardianEmail}</span>
+            ) : null}
           </label>
           <label className="block text-sm">
             <span className="font-medium text-foreground">Phone <span className="text-muted">(optional)</span></span>

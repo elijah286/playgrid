@@ -59,8 +59,12 @@ export default async function LeagueLayout({
   return (
     <div className="md:flex">
       <LeagueRail leagues={railLeagues} leoEnabled={leoOn} orgs={orgs} activeOrgId={activeOrgId} />
-      {/* pb on mobile clears the fixed league bottom bar */}
-      <div className="min-w-0 flex-1 pb-16 md:pb-0">{children}</div>
+      {/* Clears the fixed league bottom bar on mobile: its own 48px content height
+          plus the safe-area inset it pads itself with (LeagueMobileNav.tsx), so this
+          can't drift out of sync on notched devices the way a static pb-16 did. */}
+      <div className="min-w-0 flex-1 pb-[calc(48px_+_env(safe-area-inset-bottom,0px))] md:pb-0">
+        {children}
+      </div>
       <LeagueMobileNav leagues={railLeagues} leoEnabled={leoOn} orgs={orgs} activeOrgId={activeOrgId} />
     </div>
   );

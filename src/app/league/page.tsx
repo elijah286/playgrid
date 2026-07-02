@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
+import Link from "next/link";
 
 import { getPortfolioSummary } from "@/lib/league/console";
+import type { PortfolioLeagueRow } from "@/lib/league/console";
 import { listLeagueGroupsAction } from "@/app/actions/league-groups";
 import { CreateLeagueForm } from "@/features/league/CreateLeagueForm";
 import { LeagueGroupsManager } from "@/features/league/LeagueGroupsManager";
@@ -26,13 +29,36 @@ function Kpi({ label, value, sub }: { label: string; value: string; sub: string 
   );
 }
 
-function Attn({ n, label }: { n: number; label: string }) {
-  return (
-    <div className="flex items-center gap-2.5 border-l border-border px-4 py-2.5 first:border-l-0">
+function Attn({ n, label, href }: { n: number; label: string; href?: string }) {
+  const cls = "flex items-center gap-2.5 border-l border-border px-4 py-2.5 first:border-l-0";
+  const content = (
+    <>
       <span className="text-xl font-semibold tabular-nums text-foreground">{n}</span>
       <span className="text-xs leading-tight text-muted">{label}</span>
-    </div>
+    </>
   );
+  return href ? (
+    <Link href={href} className={`${cls} transition hover:bg-foreground/5`}>
+      {content}
+    </Link>
+  ) : (
+    <div className={cls}>{content}</div>
+  );
+}
+
+/** Where a needs-attention count sends the operator: straight to the one league
+ *  responsible when there's exactly one, otherwise to the faceted table below
+ *  pre-filtered to attention items — there's no single page that covers "12
+ *  registrations to approve across 4 leagues." */
+export function attentionHref(
+  leagues: PortfolioLeagueRow[],
+  matches: (l: PortfolioLeagueRow) => boolean,
+  singleLeaguePath: (id: string) => string,
+): string | undefined {
+  const contributing = leagues.filter(matches);
+  if (contributing.length === 0) return undefined;
+  if (contributing.length === 1) return singleLeaguePath(contributing[0].id);
+  return "/league?attn=1#league-table";
 }
 
 /** Portfolio home: the operator's command center across every league. */
@@ -65,6 +91,28 @@ export default async function LeagueHomePage() {
 
   const { totals, leagues } = summary;
   const groups = await listLeagueGroupsAction();
+
+  const soonMs = Date.now() + 7 * 24 * 3600 * 1000;
+  const needsReviewHref = attentionHref(
+    leagues,
+    (l) => l.needsReview > 0,
+    (id) => `/league/${id}/registration`,
+  );
+  const noCoachHref = attentionHref(
+    leagues,
+    (l) => l.teamsWithoutCoach > 0,
+    (id) => `/league/${id}/teams`,
+  );
+  const unrosteredHref = attentionHref(
+    leagues,
+    (l) => l.unrostered > 0,
+    (id) => `/league/${id}/roster`,
+  );
+  const closingSoonHref = attentionHref(
+    leagues,
+    (l) => l.isOpen && !!l.closesAt && Date.parse(l.closesAt) <= soonMs,
+    (id) => `/league/${id}/registration`,
+  );
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 text-foreground sm:px-6">
@@ -100,16 +148,18 @@ export default async function LeagueHomePage() {
       <div className="mt-4 overflow-hidden rounded-xl bg-surface-inset">
         <div className="px-4 pb-1 pt-2.5 text-[11px] uppercase tracking-wide text-muted">Needs attention</div>
         <div className="grid grid-cols-2 sm:grid-cols-4">
-          <Attn n={totals.needsReview} label="registrations to approve" />
-          <Attn n={totals.teamsWithoutCoach} label="teams without a coach" />
-          <Attn n={totals.unrostered} label="approved, not yet rostered" />
-          <Attn n={totals.windowsClosingSoon} label="windows close this week" />
+          <Attn n={totals.needsReview} label="registrations to approve" href={needsReviewHref} />
+          <Attn n={totals.teamsWithoutCoach} label="teams without a coach" href={noCoachHref} />
+          <Attn n={totals.unrostered} label="approved, not yet rostered" href={unrosteredHref} />
+          <Attn n={totals.windowsClosingSoon} label="windows close this week" href={closingSoonHref} />
         </div>
       </div>
 
       {/* faceted league table */}
       <div className="mt-7">
-        <PortfolioLeagueTable leagues={leagues} />
+        <Suspense fallback={null}>
+          <PortfolioLeagueTable leagues={leagues} />
+        </Suspense>
       </div>
 
       {/* groups + create (secondary) */}

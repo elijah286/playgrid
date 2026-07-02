@@ -165,7 +165,7 @@ export function LeoChat({
   }
 
   return (
-    <div className="flex h-[70vh] flex-col overflow-hidden rounded-2xl border border-border bg-surface">
+    <div className="flex h-[70dvh] flex-col overflow-hidden rounded-2xl border border-border bg-surface">
       <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
         <div className="text-sm font-semibold text-foreground">Leo</div>
         {messages.length > 0 ? (
