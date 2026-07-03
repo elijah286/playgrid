@@ -31,10 +31,7 @@ export default async function RosterPage({
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-12 text-foreground sm:px-6">
-      <Link href={`/league/${leagueId}`} className="text-xs text-muted hover:underline">
-        ← Console
-      </Link>
-      <h1 className="mt-2 text-2xl font-extrabold tracking-tight">Rostering</h1>
+      <h1 className="text-2xl font-extrabold tracking-tight">Rostering</h1>
       <p className="mt-1 text-sm text-muted">
         Place approved players onto teams. Approve registrations in the{" "}
         <Link href={`/league/${leagueId}/registration`} className="text-primary hover:underline">

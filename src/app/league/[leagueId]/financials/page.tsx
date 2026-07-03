@@ -30,10 +30,7 @@ export default async function FinancialsPage({
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-12 text-foreground sm:px-6">
-      <Link href={`/league/${leagueId}`} className="text-xs text-muted hover:underline">
-        ← Console
-      </Link>
-      <h1 className="mt-2 text-2xl font-extrabold tracking-tight">Financials</h1>
+      <h1 className="text-2xl font-extrabold tracking-tight">Financials</h1>
       <p className="mt-1 text-sm text-muted">
         Registration revenue for this league. Add-on prices and fees are snapshotted at signup.
       </p>

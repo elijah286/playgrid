@@ -1,17 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronsUpDown, LayoutDashboard, UsersRound } from "lucide-react";
+import { LayoutDashboard, UsersRound } from "lucide-react";
 
 import { useLeagueNav, type RailLeague } from "./useLeagueNav";
-import { LeagueSwitcherPalette } from "./LeagueSwitcherPalette";
 import { OrgSwitcher, type SwitcherOrg } from "./OrgSwitcher";
 
 export type { RailLeague };
 
-/** Desktop app-wide rail for the operator area (md+). The mobile counterpart is
- *  LeagueMobileNav; both share useLeagueNav. */
+/** Desktop app-wide rail for the operator area (md+): org switcher, portfolio
+ *  links, and this league's sections. The mobile counterpart is
+ *  LeagueMobileNav; both share useLeagueNav. League switching itself lives in
+ *  LeagueBreadcrumb, the persistent subheader above the content — not here,
+ *  so there's exactly one place to switch leagues, not two. */
 export function LeagueRail({
   leagues,
   leoEnabled,
@@ -23,21 +24,7 @@ export function LeagueRail({
   orgs: SwitcherOrg[];
   activeOrgId: string | null;
 }) {
-  const { pathname, activeLeague, activeLeagueId, sections, hrefFor, isActive, switchLeague } =
-    useLeagueNav(leagues, leoEnabled);
-  const [paletteOpen, setPaletteOpen] = useState(false);
-
-  // ⌘K / Ctrl-K opens the switcher (desktop only; the rail owns the shortcut).
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setPaletteOpen((o) => !o);
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  const { pathname, sections, hrefFor, isActive } = useLeagueNav(leagues, leoEnabled);
 
   const portfolioActive = pathname === "/league";
   const peopleActive = pathname === "/league/people";
@@ -63,21 +50,6 @@ export function LeagueRail({
         </Link>
       </div>
 
-      <div className="border-b border-border p-3">
-        <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-muted">League</div>
-        <button
-          type="button"
-          onClick={() => setPaletteOpen(true)}
-          className="flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-surface-raised px-2.5 py-2 text-left text-sm font-medium text-foreground hover:bg-foreground/5"
-        >
-          <span className="min-w-0 truncate">{activeLeague ? activeLeague.name : "Pick a league"}</span>
-          <span className="flex shrink-0 items-center gap-1 text-muted">
-            <kbd className="rounded border border-border px-1 text-[10px]">⌘K</kbd>
-            <ChevronsUpDown className="size-4" />
-          </span>
-        </button>
-      </div>
-
       <nav className="flex-1 overflow-y-auto p-2">
         {sections.map((s) => {
           const Icon = s.icon;
@@ -89,17 +61,6 @@ export function LeagueRail({
           );
         })}
       </nav>
-
-      <LeagueSwitcherPalette
-        open={paletteOpen}
-        leagues={leagues}
-        activeId={activeLeagueId}
-        onSelect={(id) => {
-          setPaletteOpen(false);
-          switchLeague(id);
-        }}
-        onClose={() => setPaletteOpen(false)}
-      />
     </aside>
   );
 }

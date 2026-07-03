@@ -19,9 +19,8 @@ import {
 
 import { leagueAiEnabled } from "@/lib/league/access";
 import { resolveLeagueView } from "@/lib/league/authorize";
-import { loadLeagueDashboard, getMyLeagues } from "@/lib/league/console";
+import { loadLeagueDashboard } from "@/lib/league/console";
 import { leagueHasPlaybooks, sportTerms } from "@/lib/league/sportConfig";
-import { LeagueSwitcher } from "@/features/league/LeagueSwitcher";
 
 export const metadata: Metadata = {
   title: "League console · XO Gridmaker",
@@ -125,9 +124,6 @@ export default async function LeagueDashboardPage({
   const isAdmin = access.isAdmin;
   const showLeo = isAdmin && leagueAiEnabled();
 
-  const myLeagues = await getMyLeagues();
-  const hasMultipleLeagues = myLeagues.length > 1;
-
   const dash = await loadLeagueDashboard(leagueId, access.db);
   if (!dash) notFound();
 
@@ -145,36 +141,24 @@ export default async function LeagueDashboardPage({
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 text-foreground sm:px-6">
-      {/* context bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-          {hasMultipleLeagues ? (
-            <LeagueSwitcher
-              leagues={myLeagues.map((l) => ({ id: l.id, name: l.name }))}
-              currentId={leagueId}
-            />
-          ) : (
-            <span className="font-medium text-foreground">{dash.league.name}</span>
-          )}
+      <div className="flex flex-wrap items-start justify-between gap-3 pb-5">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight">{dash.league.name}</h1>
+          <p className="mt-1 text-sm text-muted">
+            <span className="capitalize">{dash.league.sport}</span> · {dash.teams}{" "}
+            {dash.teams === 1 ? "team" : "teams"} · {r.total} {r.total === 1 ? "player" : "players"}
+          </p>
         </div>
         {hasPlaybooks ? (
           <Link
             href="/playbooks"
             target="_blank"
             rel="noopener noreferrer"
-            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-foreground/5"
+            className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-foreground/5"
           >
             Coach view ↗
           </Link>
         ) : null}
-      </div>
-
-      <div className="pb-5 pt-5">
-        <h1 className="text-2xl font-extrabold tracking-tight">{dash.league.name}</h1>
-        <p className="mt-1 text-sm text-muted">
-          <span className="capitalize">{dash.league.sport}</span> · {dash.teams}{" "}
-          {dash.teams === 1 ? "team" : "teams"} · {r.total} {r.total === 1 ? "player" : "players"}
-        </p>
       </div>
 
       {/* at a glance */}

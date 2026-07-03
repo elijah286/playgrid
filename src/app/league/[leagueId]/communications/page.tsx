@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { resolveLeagueView } from "@/lib/league/authorize";
@@ -35,10 +34,7 @@ export default async function CommunicationsPage({
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-12 text-foreground sm:px-6">
-      <Link href={`/league/${leagueId}`} className="text-xs text-muted hover:underline">
-        ← Console
-      </Link>
-      <h1 className="mt-2 text-2xl font-extrabold tracking-tight">Communications</h1>
+      <h1 className="text-2xl font-extrabold tracking-tight">Communications</h1>
       <p className="mt-1 text-sm text-muted">
         Send announcements by email — to everyone, all families, a single team, or your coaches.
       </p>

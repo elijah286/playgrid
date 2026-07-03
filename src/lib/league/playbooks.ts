@@ -9,9 +9,20 @@ export const SEEDABLE_VARIANTS: { value: SportVariant; label: string }[] = [
 
 export type LeagueTeamPlaybook = { id: string; name: string };
 
-export type LeaguePlaybookTeam = {
+/** Which teams a distribution batch targets. "unseeded" = every team without a
+ *  playbook yet (the default — safe to re-run without duplicating work);
+ *  "all" = every team, including already-seeded ones (idempotent — re-seeding
+ *  a team returns its existing playbook rather than creating a duplicate). */
+export type DistributeScope = "unseeded" | "all" | string[];
+
+export type PlaybookSendStatus = "no_playbook" | "not_sent" | "sent" | "claimed";
+
+export type PlaybookDistributionRow = {
   teamId: string;
   teamName: string;
   headCoachEmail: string | null;
-  playbooks: LeagueTeamPlaybook[];
+  playbook: LeagueTeamPlaybook | null;
+  sendStatus: PlaybookSendStatus;
+  /** Most recent copy-link creation time for this team's playbook, if any. */
+  lastSentAt: string | null;
 };

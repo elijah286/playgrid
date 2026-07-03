@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  ChevronsUpDown,
   ClipboardList,
   LayoutDashboard,
   type LucideIcon,
@@ -14,7 +13,6 @@ import {
 } from "lucide-react";
 
 import { useLeagueNav, type LeagueSection, type RailLeague } from "./useLeagueNav";
-import { LeagueSwitcherPalette } from "./LeagueSwitcherPalette";
 import { OrgSwitcher, type SwitcherOrg } from "./OrgSwitcher";
 
 // The four primary sections that live in the bottom bar; everything else is in
@@ -33,7 +31,9 @@ const tabCls = (active: boolean) =>
   }`;
 
 /** Mobile (<md) bottom bar for the operator area — replaces the coach bottom nav
- *  on /league (HomeBottomNav bails there via isOwnBottomBarRoute). */
+ *  on /league (HomeBottomNav bails there via isOwnBottomBarRoute). League
+ *  switching itself lives in LeagueBreadcrumb (the sticky bar above the
+ *  content), not here — this bar is sections-only. */
 export function LeagueMobileNav({
   leagues,
   leoEnabled,
@@ -45,10 +45,11 @@ export function LeagueMobileNav({
   orgs: SwitcherOrg[];
   activeOrgId: string | null;
 }) {
-  const { pathname, activeLeague, activeLeagueId, sections, hrefFor, isActive, switchLeague } =
-    useLeagueNav(leagues, leoEnabled);
+  const { pathname, activeLeague, activeLeagueId, sections, hrefFor, isActive } = useLeagueNav(
+    leagues,
+    leoEnabled,
+  );
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [paletteOpen, setPaletteOpen] = useState(false);
 
   // Reserve footer clearance for the bar (globals.css `body.has-bottom-nav`).
   useEffect(() => {
@@ -64,7 +65,7 @@ export function LeagueMobileNav({
     return () => document.removeEventListener("keydown", k);
   }, [sheetOpen]);
 
-  const base = `/league/${activeLeagueId}`;
+  const base = `/league/${activeLeagueId ?? ""}`;
   const tabActive = (path: string, exact?: boolean) => {
     const href = `${base}${path}`;
     return exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
@@ -111,23 +112,8 @@ export function LeagueMobileNav({
           orgs={orgs}
           activeOrgId={activeOrgId}
           onClose={() => setSheetOpen(false)}
-          onSwitch={() => {
-            setSheetOpen(false);
-            setPaletteOpen(true);
-          }}
         />
       ) : null}
-
-      <LeagueSwitcherPalette
-        open={paletteOpen}
-        leagues={leagues}
-        activeId={activeLeagueId}
-        onSelect={(id) => {
-          setPaletteOpen(false);
-          switchLeague(id);
-        }}
-        onClose={() => setPaletteOpen(false)}
-      />
     </>
   );
 }
@@ -140,7 +126,6 @@ function MoreSheet({
   orgs,
   activeOrgId,
   onClose,
-  onSwitch,
 }: {
   leagueName: string;
   sections: LeagueSection[];
@@ -149,7 +134,6 @@ function MoreSheet({
   orgs: SwitcherOrg[];
   activeOrgId: string | null;
   onClose: () => void;
-  onSwitch: () => void;
 }) {
   return (
     <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-label="League menu">
@@ -167,19 +151,10 @@ function MoreSheet({
           </div>
         ) : null}
 
-        {/* league switcher */}
-        <div className="flex items-center gap-2 border-b border-border p-3">
-          <div className="min-w-0 flex-1">
-            <div className="text-[11px] uppercase tracking-wide text-muted">League</div>
-            <div className="truncate text-sm font-semibold text-foreground">{leagueName}</div>
-          </div>
-          <button
-            type="button"
-            onClick={onSwitch}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-foreground/5"
-          >
-            Switch <ChevronsUpDown className="size-4" />
-          </button>
+        {/* current league (context only — switch via the bar above the content) */}
+        <div className="border-b border-border px-3 py-2.5">
+          <div className="text-[11px] uppercase tracking-wide text-muted">League</div>
+          <div className="truncate text-sm font-semibold text-foreground">{leagueName}</div>
         </div>
 
         {/* all sections */}

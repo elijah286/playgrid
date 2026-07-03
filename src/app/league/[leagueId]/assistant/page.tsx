@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { leagueAiEnabled, leagueAiWritesEnabled } from "@/lib/league/access";
@@ -27,10 +26,7 @@ export default async function LeoPage({
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8 text-foreground sm:px-6">
-      <Link href={`/league/${leagueId}`} className="text-xs text-muted hover:underline">
-        ← Console
-      </Link>
-      <div className="mt-2 flex items-center gap-2">
+      <div className="flex items-center gap-2">
         <h1 className="text-2xl font-extrabold tracking-tight">Leo</h1>
         <span className="rounded-full bg-surface-inset px-2 py-0.5 text-[11px] font-medium text-muted">
           Beta

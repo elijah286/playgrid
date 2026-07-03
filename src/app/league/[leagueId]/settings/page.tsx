@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { resolveLeagueView } from "@/lib/league/authorize";
@@ -30,10 +29,7 @@ export default async function LeagueSettingsPage({
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-12 text-foreground sm:px-6">
-      <Link href={`/league/${leagueId}`} className="text-xs text-muted hover:underline">
-        ← Console
-      </Link>
-      <h1 className="mt-2 text-2xl font-extrabold tracking-tight">Settings</h1>
+      <h1 className="text-2xl font-extrabold tracking-tight">Settings</h1>
       <p className="mt-1 text-sm text-muted">
         Rename your league, set a short registration link, or remove the league.
       </p>

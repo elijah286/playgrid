@@ -49,10 +49,7 @@ export default async function RegistrationPage({
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-12 text-foreground sm:px-6">
-      <Link href={`/league/${leagueId}`} className="text-xs text-muted hover:underline">
-        ← Console
-      </Link>
-      <h1 className="mt-2 text-2xl font-extrabold tracking-tight">Registration</h1>
+      <h1 className="text-2xl font-extrabold tracking-tight">Registration</h1>
       <p className="mt-1 text-sm text-muted">
         Configure registration and share your sign-up link with families.
       </p>

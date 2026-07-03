@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { resolveLeagueView } from "@/lib/league/authorize";
 import { getLeagueSport } from "@/lib/league/console";
 import { leagueHasPlaybooks } from "@/lib/league/sportConfig";
-import { listLeaguePlaybooksAction } from "@/app/actions/league-playbooks";
+import { listPlaybookDistributionAction } from "@/app/actions/league-playbooks";
 import { LeaguePlaybooksManager } from "@/features/league/LeaguePlaybooksManager";
 
 export const metadata: Metadata = {
@@ -29,22 +28,19 @@ export default async function LeaguePlaybooksPage({
   // via the authorized client so a delegated member isn't blocked by RLS.
   if (!leagueHasPlaybooks(await getLeagueSport(leagueId, access.db))) notFound();
 
-  const res = await listLeaguePlaybooksAction(leagueId);
-  const teams = res.ok ? res.teams : [];
+  const res = await listPlaybookDistributionAction(leagueId);
+  const rows = res.ok ? res.rows : [];
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-12 text-foreground sm:px-6">
-      <Link href={`/league/${leagueId}`} className="text-xs text-muted hover:underline">
-        ← Console
-      </Link>
-      <h1 className="mt-2 text-2xl font-extrabold tracking-tight">Playbooks</h1>
+      <h1 className="text-2xl font-extrabold tracking-tight">Playbooks</h1>
       <p className="mt-1 text-sm text-muted">
-        Seed each team a starter playbook, then email the head coach their own copy — they land in
-        XO Gridmaker ready to build on their team&apos;s plays.
+        Seed teams a starter playbook and email each head coach their own copy — it lands in XO
+        Gridmaker ready to build on their team&apos;s plays.
       </p>
 
       <div className="mt-6">
-        <LeaguePlaybooksManager leagueId={leagueId} initialTeams={teams} />
+        <LeaguePlaybooksManager leagueId={leagueId} initialRows={rows} />
       </div>
     </div>
   );

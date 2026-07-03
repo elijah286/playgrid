@@ -8,6 +8,7 @@ import {
   ClipboardList,
   DollarSign,
   LayoutDashboard,
+  Layers,
   type LucideIcon,
   Megaphone,
   Rows3,
@@ -59,8 +60,10 @@ export function leagueSections(
     { path: "/communications", label: "Communications", icon: Megaphone, capability: "manage_communications" },
     { path: "/financials", label: "Financials", icon: DollarSign, capability: "view_financials" },
   ];
-  if (leagueHasPlaybooks(sport))
+  if (leagueHasPlaybooks(sport)) {
+    items.push({ path: "/playbooks", label: "Playbooks", icon: Layers, capability: "manage_curriculum" });
     items.push({ path: "/curriculum", label: "Curriculum", icon: BookOpen, capability: "manage_curriculum" });
+  }
   if (leoEnabled) items.push({ path: "/assistant", label: "Leo", icon: Sparkles });
   items.push({ path: "/settings", label: "Settings", icon: Settings, capability: "manage_settings" });
 
@@ -122,5 +125,19 @@ export function useLeagueNav(leagues: RailLeague[], leoEnabled: boolean) {
     router.push(sec ? `/league/${id}/${sec}` : `/league/${id}`);
   };
 
-  return { pathname, activeLeague, activeLeagueId, sections, hrefFor, isActive, switchLeague };
+  // Whether the current route is actually inside a specific league (as
+  // opposed to /league or /league/people, which have no "active league" in
+  // the URL — activeLeague there is just a remembered-league guess).
+  const insideLeague = urlLeagueId !== null;
+
+  return {
+    pathname,
+    activeLeague,
+    activeLeagueId,
+    sections,
+    hrefFor,
+    isActive,
+    switchLeague,
+    insideLeague,
+  };
 }

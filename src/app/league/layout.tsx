@@ -8,6 +8,7 @@ import { capabilitiesForLeague } from "@/lib/league/authorize";
 import { getLeagueNavData } from "@/lib/league/console";
 import { LeagueRail } from "@/features/league/LeagueRail";
 import { LeagueMobileNav } from "@/features/league/LeagueMobileNav";
+import { LeagueBreadcrumb } from "@/features/league/LeagueBreadcrumb";
 
 // Always evaluate the gate per-request; never statically render the surface.
 export const dynamic = "force-dynamic";
@@ -62,7 +63,8 @@ export default async function LeagueLayout({
       {/* Clears the fixed league bottom bar on mobile: its own 48px content height
           plus the safe-area inset it pads itself with (LeagueMobileNav.tsx), so this
           can't drift out of sync on notched devices the way a static pb-16 did. */}
-      <div className="min-w-0 flex-1 pb-[calc(48px_+_env(safe-area-inset-bottom,0px))] md:pb-0">
+      <div className="flex min-w-0 flex-1 flex-col pb-[calc(48px_+_env(safe-area-inset-bottom,0px))] md:pb-0">
+        <LeagueBreadcrumb leagues={railLeagues} leoEnabled={leoOn} />
         {children}
       </div>
       <LeagueMobileNav leagues={railLeagues} leoEnabled={leoOn} orgs={orgs} activeOrgId={activeOrgId} />
