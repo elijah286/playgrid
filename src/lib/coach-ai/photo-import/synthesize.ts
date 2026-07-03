@@ -33,9 +33,11 @@
 
 import { synthesizeOffense } from "@/domain/play/offensiveSynthesize";
 import { findTemplate } from "@/domain/play/routeTemplates";
+import { sportProfileForVariant } from "@/domain/play/factory";
 import type { PlaySpec, PlayerAssignment, AssignmentAction, RouteModifier, Confidence } from "@/domain/play/spec";
 import { PLAY_SPEC_SCHEMA_VERSION } from "@/domain/play/spec";
 import type { SportVariant } from "@/domain/play/types";
+import type { CoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
 import type { ExtractedAssignment, ExtractedPlayer, PlayExtraction } from "./schema";
 
 export type ImportWarning = {
@@ -43,6 +45,7 @@ export type ImportWarning = {
     | "formation_fallback"
     | "formation_unresolved"
     | "player_count_mismatch"
+    | "player_mapping_cross_depth"
     | "player_unmapped"
     | "player_unassigned"
     | "family_unknown"
@@ -56,6 +59,9 @@ export type ImportWarning = {
 export type PlayerMapping = {
   sheetLabel: string;
   rosterId: string;
+  /** The sheet circle's printed color name (extraction vocabulary) —
+   *  drives draft recoloring via applySheetIdentity. */
+  sheetColor?: string;
 };
 
 export type SynthesisResult = {
@@ -122,15 +128,43 @@ export function formationCandidates(extraction: PlayExtraction): string[] {
   return candidates;
 }
 
-type RosterSlot = { id: string; x: number };
+type RosterSlot = { id: string; x: number; y: number };
 
 function rosterSkillSlots(variant: SportVariant, formationName: string): RosterSlot[] | null {
   const synth = synthesizeOffense(variant, formationName);
   if (!synth) return null;
   return synth.players
     .filter((p) => !NON_SKILL_ROSTER_IDS.has(p.id))
-    .map((p) => ({ id: p.id, x: p.x }))
+    .map((p) => ({ id: p.id, x: p.x, y: p.y }))
     .sort((a, b) => a.x - b.x);
+}
+
+/** Roster y at or below this is a backfield slot (backs sit -4..-6;
+ *  wings/slots sit 0..-1). */
+const BACKFIELD_Y = -1.5;
+
+/**
+ * How well the photographed play fits the playbook's variant. The first
+ * prod test imported a 7v7 sheet into a 5v5 playbook and got garbage by
+ * construction — routes force-mapped onto a roster with 2 fewer
+ * receivers. |delta| >= 2 should hard-stop the import with a "wrong
+ * playbook?" prompt; |delta| == 1 is more likely a read miss (a missed
+ * receiver) and proceeds with the count-mismatch warning.
+ */
+export function variantFit(
+  extraction: PlayExtraction,
+  variant: SportVariant,
+): { observedSkill: number; expectedSkill: number; photoPlayers: number; expectedPlayers: number; delta: number } {
+  const expectedPlayers = sportProfileForVariant(variant).offensePlayerCount;
+  const expectedSkill = Math.max(0, expectedPlayers - 2); // minus C + Q
+  const observedSkill = observedSkillPlayers(extraction).length;
+  return {
+    observedSkill,
+    expectedSkill,
+    expectedPlayers,
+    photoPlayers: Math.max(extraction.players.length, observedSkill + 2),
+    delta: observedSkill - expectedSkill,
+  };
 }
 
 function buildRouteAction(
@@ -275,6 +309,11 @@ export function synthesizePlaySpec(
   }
 
   // ── 2. Player mapping (sheet letters → roster slots) ─────────────
+  // Depth-aware pairing: backfield players map to backfield slots and
+  // line players to line slots, each group left-to-right. A flat
+  // left-to-right zip across both groups put an offset back on an
+  // on-LOS slot (and pushed a line receiver into the backfield) in the
+  // first prod test (2026-07-03), scrambling every downstream route.
   const observed = observedSkillPlayers(extraction);
   if (observed.length !== roster.length) {
     warnings.push({
@@ -282,20 +321,48 @@ export function synthesizePlaySpec(
       message: `The photo shows ${observed.length} route-running players but a ${opts.variant} ${formationName} has ${roster.length} skill slots — extra ${observed.length > roster.length ? "sheet players were dropped" : "slots were left unassigned"}.`,
     });
   }
-  const mappedCount = Math.min(observed.length, roster.length);
+
   const mapping: PlayerMapping[] = [];
   const rosterIdBySheetLabel = new Map<string, string>();
-  for (let i = 0; i < mappedCount; i++) {
-    const sheetLabel = observed[i].label.trim().toUpperCase();
-    mapping.push({ sheetLabel: observed[i].label, rosterId: roster[i].id });
-    rosterIdBySheetLabel.set(sheetLabel, roster[i].id);
-  }
-  for (let i = mappedCount; i < observed.length; i++) {
+  const mapPair = (obs: ExtractedPlayer, slot: RosterSlot, crossDepth: boolean) => {
+    mapping.push({
+      sheetLabel: obs.label,
+      rosterId: slot.id,
+      ...(obs.color ? { sheetColor: obs.color } : {}),
+    });
+    rosterIdBySheetLabel.set(obs.label.trim().toUpperCase(), slot.id);
+    if (crossDepth) {
+      warnings.push({
+        code: "player_mapping_cross_depth",
+        message: `Sheet player "${obs.label}" landed on slot ${slot.id} at a different depth than drawn (line vs backfield) — double-check their position.`,
+      });
+    }
+  };
+  const obsFront = observed.filter((p) => !p.backfield);
+  const obsBack = observed.filter((p) => p.backfield);
+  const rosFront = roster.filter((s) => s.y > BACKFIELD_Y);
+  const rosBack = roster.filter((s) => s.y <= BACKFIELD_Y);
+  const frontN = Math.min(obsFront.length, rosFront.length);
+  const backN = Math.min(obsBack.length, rosBack.length);
+  for (let i = 0; i < frontN; i++) mapPair(obsFront[i], rosFront[i], false);
+  for (let i = 0; i < backN; i++) mapPair(obsBack[i], rosBack[i], false);
+  // Cross-fill leftovers (e.g. a 2-back play into a 1-back formation)
+  // rather than dropping readable players — flagged per pair.
+  const leftoverObs = [...obsFront.slice(frontN), ...obsBack.slice(backN)];
+  const leftoverRos = [...rosFront.slice(frontN), ...rosBack.slice(backN)];
+  const crossN = Math.min(leftoverObs.length, leftoverRos.length);
+  for (let i = 0; i < crossN; i++) mapPair(leftoverObs[i], leftoverRos[i], true);
+  for (const obs of leftoverObs.slice(crossN)) {
     warnings.push({
       code: "player_unmapped",
-      message: `Sheet player "${observed[i].label}" had no open slot in ${formationName} and was dropped.`,
+      message: `Sheet player "${obs.label}" had no open slot in ${formationName} and was dropped.`,
     });
   }
+  // Present the mapping in sheet reading order regardless of pairing order.
+  const sheetOrder = new Map(observed.map((p, i) => [p.label.trim().toUpperCase(), i]));
+  mapping.sort(
+    (a, b) => (sheetOrder.get(a.sheetLabel.trim().toUpperCase()) ?? 99) - (sheetOrder.get(b.sheetLabel.trim().toUpperCase()) ?? 99),
+  );
 
   // ── 3. Assignments ────────────────────────────────────────────────
   const assignments: PlayerAssignment[] = [];
@@ -360,4 +427,74 @@ export function synthesizePlaySpec(
   };
 
   return { spec, warnings, mapping };
+}
+
+/* ────────────────────────────────────────────────────────────────────
+ * Sheet identity — make the draft LOOK like the photo.
+ *
+ * Spec assignments must reference roster ids (spec.ts invariant 1), so
+ * player IDs never change. But CoachDiagramPlayer has a display `role`
+ * (label) and a `color`, and the review experience lives or dies on
+ * the coach being able to eyeball photo vs draft player-by-player —
+ * sheet-black-Z rendering as a red "X" reads as wrong even when the
+ * route is right (first prod test, 2026-07-03).
+ * ──────────────────────────────────────────────────────────────────── */
+
+/** Extraction color vocabulary → diagram hex. Tuned to read like the
+ *  printed sheets (and stay distinguishable on the green field). */
+export const SHEET_COLOR_HEX: Record<string, string> = {
+  black: "#1F2937",
+  gray: "#6B7280",
+  white: "#E5E7EB",
+  red: "#DC2626",
+  orange: "#EA580C",
+  yellow: "#EAB308",
+  green: "#059669",
+  blue: "#2563EB",
+  purple: "#7C3AED",
+  pink: "#DB2777",
+  brown: "#92400E",
+};
+
+/** Relabel + recolor mapped players so the draft wears the sheet's own
+ *  letters and colors. IDs are untouched; unmapped players (C, QB)
+ *  keep their defaults. Pure — returns a new diagram. */
+export function applySheetIdentity(diagram: CoachDiagram, mapping: PlayerMapping[]): CoachDiagram {
+  if (mapping.length === 0) return diagram;
+  const byRosterId = new Map(mapping.map((m) => [m.rosterId, m]));
+  return {
+    ...diagram,
+    players: diagram.players.map((p) => {
+      const m = byRosterId.get(p.id);
+      if (!m) return p;
+      const hex = m.sheetColor ? SHEET_COLOR_HEX[m.sheetColor] : undefined;
+      return { ...p, role: m.sheetLabel, ...(hex ? { color: hex } : {}) };
+    }),
+  };
+}
+
+/**
+ * Rewrite projected notes to use the sheet's letters ("@Z runs...")
+ * instead of roster slot ids ("@X runs..."). Two-phase token swap so a
+ * sheet letter that collides with a DIFFERENT roster id can't chain
+ * (sheet-Z→roster-X while sheet-X→roster-B would otherwise turn @B
+ * into @X and then @X into @Z).
+ */
+export function rewriteNotesToSheetLabels(notes: string, mapping: PlayerMapping[]): string {
+  if (!notes || mapping.length === 0) return notes;
+  const NUL = String.fromCharCode(0); // can never occur in projected notes
+  const tokens = mapping.map((m, i) => ({
+    from: `@${m.rosterId}`,
+    tmp: NUL + String(i) + NUL,
+    to: `@${m.sheetLabel}`,
+  }));
+  let out = notes;
+  // Longest roster ids first so "@Z2" is consumed before "@Z".
+  for (const t of [...tokens].sort((a, b) => b.from.length - a.from.length)) {
+    out = out.split(t.from).join(t.tmp);
+  }
+  for (const t of tokens) {
+    out = out.split(t.tmp).join(t.to);
+  }
+  return out;
 }

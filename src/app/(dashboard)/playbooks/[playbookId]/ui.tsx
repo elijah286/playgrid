@@ -1875,17 +1875,17 @@ function PlaybookDetailClientInner({
           </Button>
           {photoImportAvailable && !isViewer && (
             // Beta (photo_play_import): photograph a play sheet → draft
-            // play. Icon-only on phones so the tight 360px row 1 doesn't
-            // wrap; label appears from sm: up. Placed after New play so
-            // the ml-auto right-pinning logic above is untouched.
+            // play. Desktop-only here — even an icon button overflowed
+            // the carefully-packed 360px mobile row 1 (first prod test).
+            // Mobile entry lives inside the "Start a new play" dialog.
             <Link
               href={`/playbooks/${playbookId}/import-photo`}
-              className="inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-border bg-surface px-2.5 text-sm font-medium text-foreground hover:bg-surface-raised sm:order-9 sm:px-3"
+              className="hidden h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-border bg-surface px-3 text-sm font-medium text-foreground hover:bg-surface-raised sm:order-9 sm:inline-flex"
               aria-label="Import play from photo"
               title="Import play from photo"
             >
               <Camera className="size-4" />
-              <span className="hidden sm:inline">Import</span>
+              <span>Import</span>
             </Link>
           )}
           </div>
@@ -2782,6 +2782,21 @@ function PlaybookDetailClientInner({
                 </button>
               </div>
             </div>
+
+            {photoImportAvailable && !isViewer && (
+              // Photo import's mobile home (the toolbar entry is
+              // desktop-only): coaches on phones reach it through the
+              // same "Start a new play" dialog they already use.
+              <Link
+                href={`/playbooks/${playbookId}/import-photo`}
+                onClick={() => setShowFormationPicker(false)}
+                className="mx-4 mt-3 flex shrink-0 items-center gap-2 rounded-lg border border-dashed border-border bg-surface px-3 py-2.5 text-sm font-medium text-foreground hover:bg-surface-inset"
+              >
+                <Camera className="size-4 text-muted" />
+                Import from a photo
+                <span className="ml-auto text-xs font-normal text-muted">Snap a play sheet →</span>
+              </Link>
+            )}
 
             <div className="flex min-h-0 flex-1 flex-col p-4">
               {loadingFormations ? (

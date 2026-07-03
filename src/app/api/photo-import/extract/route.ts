@@ -18,7 +18,7 @@ import { loadPlaybookSettings } from "@/lib/coach-ai/play-tools";
 import { recordCoachCalImageUsed } from "@/lib/billing/coach-cal-image-cap";
 import { checkPhotoImportAccess, capBlocks } from "@/lib/coach-ai/photo-import/access";
 import { extractPanel } from "@/lib/coach-ai/photo-import/llm-calls";
-import { synthesizePlaySpec } from "@/lib/coach-ai/photo-import/synthesize";
+import { synthesizePlaySpec, variantFit } from "@/lib/coach-ai/photo-import/synthesize";
 import {
   cropPanel,
   isSupportedMediaType,
@@ -86,6 +86,28 @@ export async function POST(req: Request) {
   // One successful expensive read = one unit of the monthly image cap
   // (admins are counted too, just not blocked).
   void recordCoachCalImageUsed(access.userId);
+
+  // Observability: the raw semantic read, one grep-able line per import.
+  // When a coach reports a bad draft, this line tells us whether the
+  // MODEL misread the panel or the deterministic synthesis mishandled a
+  // correct read — the June pipeline died partly because nobody could
+  // make that distinction. Photos themselves are never logged.
+  console.log(
+    `[photo-import] extraction user=${access.userId} playbook=${body.playbookId} label="${label}" ` +
+      JSON.stringify(read.extraction),
+  );
+
+  // Variant gate: a 7v7 sheet imported into a 5v5 playbook produces
+  // garbage by construction (routes force-mapped onto a roster with
+  // fewer receivers) — surfaced in the first prod test. |delta| of 1
+  // is more likely a missed receiver, so it proceeds with a warning.
+  const fit = variantFit(read.extraction, variant);
+  if (Math.abs(fit.delta) >= 2) {
+    return NextResponse.json({
+      variantMismatch: { ...fit, variant },
+      capRemaining: Math.max(0, access.cap.remaining - 1),
+    });
+  }
 
   const settings = await loadPlaybookSettings(body.playbookId, variant);
   const synthesis = synthesizePlaySpec(read.extraction, {

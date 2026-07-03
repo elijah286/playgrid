@@ -47,6 +47,7 @@ CLASSIFICATION RULES
   - "low": occluded, faint, tangled with other routes, or you are pattern-guessing.
 - Estimate depth by counting gridlines — do NOT round to the family's typical depth. Any integer is valid (7, 12, 18...).
 - players[].orderFromLeft: number every player 1..N strictly left-to-right as drawn (leftmost = 1), counting C and Q too and ignoring depth. Two stacked players share an x — give the front (on-LOS) player the lower number.
+- players[].color: the fill color of each circle as printed (black, gray, white, red, orange, yellow, green, blue, purple, pink, brown, other). Report what you see — the draft diagram recolors itself to match.
 - formation.name: what a coach would call the alignment ("Trips Left", "Trips Right", "Spread Doubles", "Bunch Left", "Stack Right", "Empty", "Quads Right"...). strength = the side with more receivers.
 
 OUTPUT

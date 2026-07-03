@@ -17,16 +17,21 @@
  *     coach approves is byte-for-byte what gets validated and saved.
  */
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, Loader2, RefreshCw } from "lucide-react";
+import { Camera, ClipboardCopy, Loader2, RefreshCw } from "lucide-react";
 import type { SportVariant } from "@/domain/play/types";
 import type { PlaySpec, PlayerAssignment, AssignmentAction } from "@/domain/play/spec";
 import { ROUTE_TEMPLATES } from "@/domain/play/routeTemplates";
 import { playSpecToCoachDiagram } from "@/domain/play/specRenderer";
 import { PlayDiagramEmbed } from "@/features/coach-ai/PlayDiagramEmbed";
 import type { PlayExtraction } from "@/lib/coach-ai/photo-import/schema";
-import type { ImportWarning, PlayerMapping } from "@/lib/coach-ai/photo-import/synthesize";
+import {
+  applySheetIdentity,
+  SHEET_COLOR_HEX,
+  type ImportWarning,
+  type PlayerMapping,
+} from "@/lib/coach-ai/photo-import/synthesize";
 
 type BBox = { x: number; y: number; w: number; h: number };
 type Panel = { label: string; bbox: BBox; thumbBase64: string };
@@ -41,12 +46,42 @@ type Phase =
   | { step: "saving" };
 
 type ExtractResponse = {
-  extraction: PlayExtraction;
-  spec: PlaySpec;
-  mapping: PlayerMapping[];
-  warnings: ImportWarning[];
+  extraction?: PlayExtraction;
+  spec?: PlaySpec;
+  mapping?: PlayerMapping[];
+  warnings?: ImportWarning[];
   capRemaining: number;
+  /** Present when the photographed play's player count doesn't fit
+   *  this playbook's format (e.g. a 7v7 sheet in a 5v5 playbook). */
+  variantMismatch?: {
+    photoPlayers: number;
+    expectedPlayers: number;
+    variant: string;
+  };
 };
+
+function humanizeVariant(variant: string): string {
+  return variant.split("_").reverse().join(" "); // "flag_7v7" → "7v7 flag"
+}
+
+/** Rotating status lines + elapsed seconds, so a 20-60s model call
+ *  reads as work-in-progress instead of a stuck spinner. */
+function StageTicker({ stages, note }: { stages: string[]; note?: string }) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const stage = stages[Math.min(Math.floor(elapsed / 7), stages.length - 1)];
+  return (
+    <div className="text-center">
+      <div className="text-sm font-medium text-foreground">{stage}</div>
+      <div className="mt-1 text-xs tabular-nums text-muted">
+        {elapsed}s{note ? ` · ${note}` : ""}
+      </div>
+    </div>
+  );
+}
 
 const ROUTE_FAMILIES = ROUTE_TEMPLATES.map((t) => t.name);
 const KIND_OPTIONS = [
@@ -162,24 +197,28 @@ export function PhotoImportClient(props: {
   const [cropPreview, setCropPreview] = useState<string | null>(null);
   const [playName, setPlayName] = useState("");
   const [lastPanels, setLastPanels] = useState<Panel[] | null>(null);
+  const [debugCopied, setDebugCopied] = useState(false);
 
   const capText = props.capExempt
     ? null
     : `${capRemaining} of ${props.capLimit} photo imports left this month`;
 
-  // Live draft render — the same pipeline the save path validates.
+  // Live draft render — the same pipeline the save path validates, plus
+  // the sheet's own letters/colors so photo ↔ draft compare player by
+  // player.
   const preview = useMemo(() => {
     if (!spec) return null;
     try {
       const rendered = playSpecToCoachDiagram(spec);
+      const identified = applySheetIdentity(rendered.diagram, mapping);
       return {
-        json: JSON.stringify({ ...rendered.diagram, title: playName || spec.title }),
+        json: JSON.stringify({ ...identified, title: playName || spec.title }),
         renderWarnings: rendered.warnings,
       };
     } catch {
       return null;
     }
-  }, [spec, playName]);
+  }, [spec, mapping, playName]);
 
   const postJson = useCallback(async (url: string, body: unknown) => {
     const res = await fetch(url, {
@@ -202,11 +241,21 @@ export function PhotoImportClient(props: {
           image: { base64: img.base64, mediaType: img.mediaType },
           ...(panel ? { bbox: panel.bbox, label: panel.label } : { label: "Imported play" }),
         })) as unknown as ExtractResponse;
+        setCapRemaining(json.capRemaining);
+        if (json.variantMismatch) {
+          const vm = json.variantMismatch;
+          throw new Error(
+            `That looks like a ${vm.photoPlayers}-player play, but this playbook is ${humanizeVariant(vm.variant)} (${vm.expectedPlayers} players). ` +
+              `Open a playbook that matches the play's format and import it there — or re-crop if the panel caught players from a neighboring play.`,
+          );
+        }
+        if (!json.spec || !json.extraction || !json.mapping) {
+          throw new Error("The reader returned an incomplete result — try again.");
+        }
         setSpec(json.spec);
         setExtraction(json.extraction);
         setMapping(json.mapping);
-        setWarnings(json.warnings);
-        setCapRemaining(json.capRemaining);
+        setWarnings(json.warnings ?? []);
         setPlayName(json.spec.title ?? panel?.label ?? "Imported play");
         setCropPreview(await cropPreviewDataUrl(img, panel?.bbox ?? { x: 0, y: 0, w: 1, h: 1 }));
         setPhase({ step: "review" });
@@ -267,13 +316,14 @@ export function PhotoImportClient(props: {
         playbookId: props.playbookId,
         spec: { ...spec, title: playName || spec.title },
         name: playName || spec.title || "Imported play",
+        mapping,
       })) as { url?: string };
       router.push(json.url ?? `/playbooks/${props.playbookId}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed.");
       setPhase({ step: "review" });
     }
-  }, [spec, playName, postJson, props.playbookId, router]);
+  }, [spec, playName, mapping, postJson, props.playbookId, router]);
 
   const sheetAssignment = useCallback(
     (sheetLabel: string) =>
@@ -296,9 +346,18 @@ export function PhotoImportClient(props: {
           className={`flex min-h-56 cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border bg-surface p-8 text-center hover:bg-surface-raised ${busy ? "pointer-events-none opacity-70" : ""}`}
         >
           {busy ? <Loader2 className="size-8 animate-spin text-muted" /> : <Camera className="size-8 text-muted" />}
-          <div className="text-sm font-medium text-foreground">
-            {busy ? "Reading the sheet…" : "Take a photo or choose one"}
-          </div>
+          {busy ? (
+            <StageTicker
+              stages={[
+                "Scanning the photo for play panels…",
+                "Reading panel borders and labels…",
+                "Cropping each play…",
+              ]}
+              note="usually 10–25 seconds"
+            />
+          ) : (
+            <div className="text-sm font-medium text-foreground">Take a photo or choose one</div>
+          )}
           <div className="max-w-sm text-xs text-muted">
             Works with printed play-sheet exports (Playmaker X and similar) and clear hand-drawn plays. The photo is
             read in-flight and never stored.
@@ -374,8 +433,16 @@ export function PhotoImportClient(props: {
     return (
       <div className="flex min-h-56 flex-col items-center justify-center gap-3 rounded-xl border border-border bg-surface p-8">
         <Loader2 className="size-8 animate-spin text-muted" />
-        <div className="text-sm font-medium text-foreground">Reading {phase.label}…</div>
-        <div className="text-xs text-muted">Tracing each color from circle to arrowhead. Usually 20–60 seconds.</div>
+        <StageTicker
+          stages={[
+            `Reading ${phase.label}…`,
+            "Tracing each color from circle to arrowhead…",
+            "Matching shapes to the route catalog…",
+            "Counting gridlines for depths…",
+            "Building the draft play…",
+          ]}
+          note="usually 20–60 seconds"
+        />
       </div>
     );
   }
@@ -440,7 +507,16 @@ export function PhotoImportClient(props: {
                 const conf = fromSheet?.confidence;
                 return (
                   <tr key={m.rosterId} className={`border-b border-border last:border-0 ${lowConfidence(conf) ? "bg-amber-50/40" : ""}`}>
-                    <td className="px-3 py-2 font-semibold text-foreground">{m.sheetLabel}</td>
+                    <td className="px-3 py-2 font-semibold text-foreground">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span
+                          aria-hidden
+                          className="inline-block size-2.5 shrink-0 rounded-full border border-black/10"
+                          style={{ backgroundColor: (m.sheetColor && SHEET_COLOR_HEX[m.sheetColor]) || "#9CA3AF" }}
+                        />
+                        {m.sheetLabel}
+                      </span>
+                    </td>
                     <td className="px-3 py-2 text-muted">{m.rosterId}</td>
                     <td className="px-3 py-2">
                       <select
@@ -543,12 +619,35 @@ export function PhotoImportClient(props: {
           </table>
         </div>
 
-        {(extraction?.ambiguities?.length ?? 0) > 0 && (
-          <div className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-muted">
-            <span className="font-semibold text-foreground">Reader notes: </span>
-            {extraction!.ambiguities!.join(" · ")}
-          </div>
-        )}
+        <div className="flex items-start justify-between gap-3">
+          {(extraction?.ambiguities?.length ?? 0) > 0 ? (
+            <div className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-muted">
+              <span className="font-semibold text-foreground">Reader notes: </span>
+              {extraction!.ambiguities!.join(" · ")}
+            </div>
+          ) : (
+            <div className="flex-1" />
+          )}
+          <button
+            type="button"
+            title="Copy the raw read (extraction, spec, mapping, warnings) for debugging"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs font-medium text-muted hover:bg-surface-raised hover:text-foreground"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(
+                  JSON.stringify({ extraction, spec, mapping, warnings }, null, 2),
+                );
+                setDebugCopied(true);
+                setTimeout(() => setDebugCopied(false), 2000);
+              } catch {
+                setError("Couldn't copy — clipboard unavailable in this browser.");
+              }
+            }}
+          >
+            <ClipboardCopy className="size-3.5" />
+            {debugCopied ? "Copied ✓" : "Copy debug"}
+          </button>
+        </div>
 
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface px-3 py-3">
           <label className="flex items-center gap-2 text-sm font-medium text-foreground">

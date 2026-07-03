@@ -15,6 +15,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import type { SportVariant } from "@/domain/play/types";
@@ -35,12 +36,26 @@ import { coachDiagramToPlayDocument, type CoachDiagram } from "@/features/coach-
 import { createPlayAction } from "@/app/actions/plays";
 import { recordPlayVersion } from "@/lib/versions/play-version-writer";
 import { checkPhotoImportAccess } from "@/lib/coach-ai/photo-import/access";
+import { applySheetIdentity, rewriteNotesToSheetLabels } from "@/lib/coach-ai/photo-import/synthesize";
 
 type SaveRequest = {
   playbookId?: string;
   spec?: unknown;
   name?: string;
+  mapping?: unknown;
 };
+
+const mappingSchema = z
+  .array(
+    z
+      .object({
+        sheetLabel: z.string().min(1).max(8),
+        rosterId: z.string().min(1).max(8),
+        sheetColor: z.string().max(16).optional(),
+      })
+      .strict(),
+  )
+  .max(24);
 
 export async function POST(req: Request) {
   const access = await checkPhotoImportAccess();
@@ -85,7 +100,15 @@ export async function POST(req: Request) {
   });
   if (!resolved.ok) return NextResponse.json({ error: resolved.error }, { status: 400 });
 
-  const diagram: CoachDiagram = { ...resolved.diagram, variant, title: name };
+  // Sheet identity: the saved play wears the photo's own letters and
+  // colors (display-only — spec assignments keep roster ids).
+  const mappingParse = mappingSchema.safeParse(body.mapping ?? []);
+  const mapping = mappingParse.success ? mappingParse.data : [];
+
+  const diagram: CoachDiagram = applySheetIdentity(
+    { ...resolved.diagram, variant, title: name },
+    mapping,
+  );
   autoResolveColorClashes(diagram);
 
   const assignmentCheck = validateRouteAssignments(diagram, {
@@ -116,7 +139,10 @@ export async function POST(req: Request) {
   doc.metadata.spec = resolved.spec ?? spec;
   try {
     const projected = projectSpecToNotes(spec);
-    if (projected.trim().length > 0) doc.metadata.notes = projected;
+    if (projected.trim().length > 0) {
+      // Notes speak the sheet's letters, matching the relabeled diagram.
+      doc.metadata.notes = rewriteNotesToSheetLabels(projected, mapping);
+    }
   } catch {
     // Never block a save on notes projection.
   }

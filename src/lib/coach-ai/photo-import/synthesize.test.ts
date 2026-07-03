@@ -1,8 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { findTemplate } from "@/domain/play/routeTemplates";
 import { playSpecToCoachDiagram } from "@/domain/play/specRenderer";
+import { synthesizeOffense } from "@/domain/play/offensiveSynthesize";
 import { parsePlaySpec } from "@/domain/play/spec";
-import { synthesizePlaySpec, formationCandidates, observedSkillPlayers } from "./synthesize";
+import type { CoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
+import {
+  synthesizePlaySpec,
+  formationCandidates,
+  observedSkillPlayers,
+  variantFit,
+  applySheetIdentity,
+  rewriteNotesToSheetLabels,
+  SHEET_COLOR_HEX,
+} from "./synthesize";
 import type { PlayExtraction } from "./schema";
 
 function midDepth(family: string): number {
@@ -169,6 +179,108 @@ describe("synthesizePlaySpec — degraded reads", () => {
     const x = res.mapping.find((m) => m.sheetLabel === "X")!.rosterId;
     const action = res.spec.assignments.find((a) => a.player === x)!.action;
     expect(action).toMatchObject({ kind: "route", modifiers: ["motion"] });
+  });
+});
+
+describe("depth-aware mapping", () => {
+  it("maps the backfield sheet player onto a backfield roster slot", () => {
+    // First prod test (2026-07-03): a flat left-to-right zip put the
+    // offset back on an on-LOS slot, scrambling routes onto the wrong
+    // players. Spread Doubles has a known backfield slot (B at y≈-5).
+    const ext = tripsLeftExtraction();
+    ext.formation = { name: "Spread Doubles", confidence: "high" };
+    ext.players = ext.players.map((p) =>
+      p.label === "B" ? { ...p, onLos: false, backfield: true } : p,
+    );
+    const res = synthesizePlaySpec(ext, { variant: "flag_7v7" });
+
+    const synth = synthesizeOffense("flag_7v7", res.spec.formation.name)!;
+    const yById = new Map(synth.players.map((p) => [p.id, p.y]));
+
+    const bSlot = res.mapping.find((m) => m.sheetLabel === "B")!.rosterId;
+    expect(yById.get(bSlot)).toBeLessThanOrEqual(-1.5);
+    // Line players stay on line slots.
+    for (const label of ["X", "Y", "A", "Z"]) {
+      const slot = res.mapping.find((m) => m.sheetLabel === label)!.rosterId;
+      expect(yById.get(slot), `${label} → ${slot}`).toBeGreaterThan(-1.5);
+    }
+    expect(res.warnings.filter((w) => w.code === "player_mapping_cross_depth")).toHaveLength(0);
+  });
+
+  it("cross-fills with a warning when depth groups don't line up", () => {
+    // Two backfield players into a one-back formation: the second back
+    // must land somewhere, flagged rather than dropped.
+    const ext = tripsLeftExtraction();
+    ext.formation = { name: "Spread Doubles", confidence: "high" };
+    ext.players = ext.players.map((p) =>
+      p.label === "B" || p.label === "Y" ? { ...p, onLos: false, backfield: true } : p,
+    );
+    const res = synthesizePlaySpec(ext, { variant: "flag_7v7" });
+    expect(res.mapping).toHaveLength(5);
+    expect(res.warnings.some((w) => w.code === "player_mapping_cross_depth")).toBe(true);
+  });
+
+  it("carries the sheet color into the mapping", () => {
+    const ext = tripsLeftExtraction();
+    ext.players = ext.players.map((p) => (p.label === "Z" ? { ...p, color: "black" } : p));
+    const res = synthesizePlaySpec(ext, { variant: "flag_7v7" });
+    expect(res.mapping.find((m) => m.sheetLabel === "Z")!.sheetColor).toBe("black");
+  });
+});
+
+describe("variantFit", () => {
+  it("flags a 7v7 sheet against a 5v5 playbook and accepts the matching variant", () => {
+    const ext = tripsLeftExtraction(); // 5 skill players + C + Q
+    expect(variantFit(ext, "flag_7v7").delta).toBe(0);
+    const misfit = variantFit(ext, "flag_5v5");
+    expect(misfit.expectedPlayers).toBe(5);
+    expect(misfit.delta).toBe(2);
+    expect(misfit.photoPlayers).toBe(7);
+  });
+});
+
+describe("sheet identity", () => {
+  it("relabels and recolors mapped players only", () => {
+    const diagram: CoachDiagram = {
+      variant: "flag_7v7",
+      players: [
+        { id: "X", role: "X", team: "O" },
+        { id: "B", role: "B", team: "O", color: "#123456" },
+        { id: "QB", role: "QB", team: "O" },
+        { id: "C", role: "C", team: "O" },
+      ],
+      routes: [],
+    } as unknown as CoachDiagram;
+    const out = applySheetIdentity(diagram, [
+      { sheetLabel: "Z", rosterId: "X", sheetColor: "black" },
+      { sheetLabel: "A", rosterId: "B" }, // no color read — keeps existing
+    ]);
+    const byId = new Map(out.players.map((p) => [p.id, p]));
+    expect(byId.get("X")).toMatchObject({ id: "X", role: "Z", color: SHEET_COLOR_HEX.black });
+    expect(byId.get("B")).toMatchObject({ id: "B", role: "A", color: "#123456" });
+    expect(byId.get("QB")!.role).toBe("QB");
+    // Pure: input untouched.
+    expect(diagram.players.find((p) => p.id === "X")!.role).toBe("X");
+  });
+
+  it("rewrites notes to sheet letters without collision chains", () => {
+    // sheet-Z→roster-X and sheet-X→roster-B: a naive sequential replace
+    // would turn @B into @X and then that @X into @Z.
+    const mapping = [
+      { sheetLabel: "Z", rosterId: "X" },
+      { sheetLabel: "X", rosterId: "B" },
+    ];
+    expect(rewriteNotesToSheetLabels("@X drags right while @B runs the flat.", mapping)).toBe(
+      "@Z drags right while @X runs the flat.",
+    );
+  });
+
+  it("consumes longer roster ids before their prefixes", () => {
+    const mapping = [
+      { sheetLabel: "Q1", rosterId: "Z" },
+      { sheetLabel: "Q2", rosterId: "Z2" },
+    ];
+    expect(rewriteNotesToSheetLabels("@Z and @Z2 cross.", mapping)).toBe("@Q1 and @Q2 cross.");
   });
 });
 
