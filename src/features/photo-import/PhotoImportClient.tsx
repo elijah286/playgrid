@@ -43,10 +43,18 @@ type Phase =
   | { step: "detecting" }
   | { step: "panels"; panels: Panel[] }
   | { step: "extracting"; label: string; panels: Panel[] | null }
+  | { step: "resuming"; jobId: string }
   | { step: "review" }
   | { step: "saving" };
 
+type VariantMismatchInfo = {
+  photoPlayers: number;
+  expectedPlayers: number;
+  variant: string;
+};
+
 type ExtractResponse = {
+  jobId?: string | null;
   extraction?: PlayExtraction;
   spec?: PlaySpec;
   mapping?: PlayerMapping[];
@@ -54,15 +62,38 @@ type ExtractResponse = {
   capRemaining: number;
   /** Present when the photographed play's player count doesn't fit
    *  this playbook's format (e.g. a 7v7 sheet in a 5v5 playbook). */
-  variantMismatch?: {
-    photoPlayers: number;
-    expectedPlayers: number;
-    variant: string;
-  };
+  variantMismatch?: VariantMismatchInfo;
+};
+
+type JobSummary = {
+  id: string;
+  label: string;
+  status: "running" | "done" | "error";
+  hasMismatch: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type JobFull = JobSummary & {
+  cropBase64: string | null;
+  mediaType: string | null;
+  extraction: PlayExtraction | null;
+  spec: PlaySpec | null;
+  mapping: PlayerMapping[] | null;
+  warnings: ImportWarning[] | null;
+  variantMismatch: VariantMismatchInfo | null;
+  error: string | null;
 };
 
 function humanizeVariant(variant: string): string {
   return variant.split("_").reverse().join(" "); // "flag_7v7" → "7v7 flag"
+}
+
+function mismatchMessage(vm: VariantMismatchInfo): string {
+  return (
+    `That looks like a ${vm.photoPlayers}-player play, but this playbook is ${humanizeVariant(vm.variant)} (${vm.expectedPlayers} players). ` +
+    `Open a playbook that matches the play's format and import it there — or re-crop if the panel caught players from a neighboring play.`
+  );
 }
 
 /** Rotating status lines + elapsed seconds, so a 20-60s model call
@@ -200,6 +231,37 @@ export function PhotoImportClient(props: {
   const [lastPanels, setLastPanels] = useState<Panel[] | null>(null);
   const [debugCopied, setDebugCopied] = useState(false);
   const [useSheetLabels, setUseSheetLabels] = useState(true);
+  const [recentJobs, setRecentJobs] = useState<(JobSummary & { stale: boolean })[]>([]);
+  const [resumeJob, setResumeJob] = useState<JobFull | null>(null);
+  const [resumeStale, setResumeStale] = useState(false);
+  const [staleMs, setStaleMs] = useState(150_000);
+
+  // Staleness is judged when data arrives (not during render — the
+  // react-hooks purity rule, and it only needs job-fetch granularity).
+  const refreshJobs = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/photo-import/jobs?playbookId=${encodeURIComponent(props.playbookId)}`);
+      if (!res.ok) return;
+      const json = (await res.json()) as { jobs?: JobSummary[]; staleMs?: number };
+      const threshold = typeof json.staleMs === "number" ? json.staleMs : 150_000;
+      const now = Date.now();
+      setRecentJobs(
+        (json.jobs ?? []).map((j) => ({
+          ...j,
+          stale: j.status === "running" && now - new Date(j.updatedAt).getTime() > threshold,
+        })),
+      );
+      if (typeof json.staleMs === "number") setStaleMs(json.staleMs);
+    } catch {
+      // Recent-imports is a convenience — never block the flow on it.
+    }
+  }, [props.playbookId]);
+
+  useEffect(() => {
+    // Deferred so the effect body itself stays setState-free.
+    const t = setTimeout(() => void refreshJobs(), 0);
+    return () => clearTimeout(t);
+  }, [refreshJobs]);
 
   const capText = props.capExempt
     ? null
@@ -234,6 +296,27 @@ export function PhotoImportClient(props: {
     return json;
   }, []);
 
+  /** Shared landing for extract + retry + resume responses. Throws on
+   *  mismatch/incomplete so callers route the message to their own
+   *  fallback phase. */
+  const applyImportResult = useCallback(
+    (json: ExtractResponse, cropDataUrl: string | null, fallbackName: string) => {
+      setCapRemaining(json.capRemaining);
+      if (json.variantMismatch) throw new Error(mismatchMessage(json.variantMismatch));
+      if (!json.spec || !json.extraction || !json.mapping) {
+        throw new Error("The reader returned an incomplete result — try again.");
+      }
+      setSpec(json.spec);
+      setExtraction(json.extraction);
+      setMapping(json.mapping);
+      setWarnings(json.warnings ?? []);
+      setPlayName(json.spec.title ?? fallbackName);
+      setCropPreview(cropDataUrl);
+      setPhase({ step: "review" });
+    },
+    [],
+  );
+
   const extractPanelFlow = useCallback(
     async (img: LoadedImage, panel: Panel | null, panels: Panel[] | null) => {
       setError(null);
@@ -244,31 +327,93 @@ export function PhotoImportClient(props: {
           image: { base64: img.base64, mediaType: img.mediaType },
           ...(panel ? { bbox: panel.bbox, label: panel.label } : { label: "Imported play" }),
         })) as unknown as ExtractResponse;
-        setCapRemaining(json.capRemaining);
-        if (json.variantMismatch) {
-          const vm = json.variantMismatch;
-          throw new Error(
-            `That looks like a ${vm.photoPlayers}-player play, but this playbook is ${humanizeVariant(vm.variant)} (${vm.expectedPlayers} players). ` +
-              `Open a playbook that matches the play's format and import it there — or re-crop if the panel caught players from a neighboring play.`,
-          );
-        }
-        if (!json.spec || !json.extraction || !json.mapping) {
-          throw new Error("The reader returned an incomplete result — try again.");
-        }
-        setSpec(json.spec);
-        setExtraction(json.extraction);
-        setMapping(json.mapping);
-        setWarnings(json.warnings ?? []);
-        setPlayName(json.spec.title ?? panel?.label ?? "Imported play");
-        setCropPreview(await cropPreviewDataUrl(img, panel?.bbox ?? { x: 0, y: 0, w: 1, h: 1 }));
-        setPhase({ step: "review" });
+        const cropDataUrl = await cropPreviewDataUrl(img, panel?.bbox ?? { x: 0, y: 0, w: 1, h: 1 });
+        applyImportResult(json, cropDataUrl, panel?.label ?? "Imported play");
       } catch (e) {
         setError(e instanceof Error ? e.message : "Extraction failed.");
         setPhase(panels ? { step: "panels", panels } : { step: "pick" });
+        void refreshJobs();
       }
     },
-    [postJson, props.playbookId],
+    [postJson, props.playbookId, applyImportResult, refreshJobs],
   );
+
+  /** Retry a stalled/errored job from its stored crop (no re-upload). */
+  const onRetry = useCallback(
+    async (jobId: string) => {
+      setError(null);
+      setResumeStale(false);
+      setResumeJob((j) => (j ? { ...j, status: "running", error: null, updatedAt: new Date().toISOString() } : j));
+      try {
+        const json = (await postJson(`/api/photo-import/jobs/${jobId}/retry`, {})) as unknown as ExtractResponse;
+        const cropDataUrl = resumeJob?.cropBase64
+          ? `data:${resumeJob.mediaType ?? "image/jpeg"};base64,${resumeJob.cropBase64}`
+          : null;
+        applyImportResult(json, cropDataUrl, resumeJob?.label ?? "Imported play");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Retry failed.");
+        setPhase({ step: "pick" });
+        void refreshJobs();
+      }
+    },
+    [postJson, resumeJob, applyImportResult, refreshJobs],
+  );
+
+  // Resume polling: while on the resuming screen, refresh the job every
+  // 5s; a finished job hydrates straight into review.
+  useEffect(() => {
+    if (phase.step !== "resuming") return;
+    const jobId = phase.jobId;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/photo-import/jobs/${jobId}`);
+        const json = (await res.json().catch(() => ({}))) as { job?: JobFull; error?: string; staleMs?: number };
+        if (cancelled) return;
+        if (!res.ok || !json.job) {
+          setError(json.error ?? "Couldn't load that import — it may have expired.");
+          setPhase({ step: "pick" });
+          void refreshJobs();
+          return;
+        }
+        const threshold = typeof json.staleMs === "number" ? json.staleMs : staleMs;
+        if (typeof json.staleMs === "number") setStaleMs(json.staleMs);
+        setResumeJob(json.job);
+        setResumeStale(
+          json.job.status === "running" && Date.now() - new Date(json.job.updatedAt).getTime() > threshold,
+        );
+        if (json.job.status === "done") {
+          try {
+            applyImportResult(
+              {
+                capRemaining,
+                variantMismatch: json.job.variantMismatch ?? undefined,
+                spec: json.job.spec ?? undefined,
+                extraction: json.job.extraction ?? undefined,
+                mapping: json.job.mapping ?? undefined,
+                warnings: json.job.warnings ?? undefined,
+              },
+              json.job.cropBase64 ? `data:${json.job.mediaType ?? "image/jpeg"};base64,${json.job.cropBase64}` : null,
+              json.job.label,
+            );
+          } catch (e) {
+            setError(e instanceof Error ? e.message : "Import failed.");
+            setPhase({ step: "pick" });
+            void refreshJobs();
+          }
+        }
+      } catch {
+        // transient — keep polling
+      }
+    };
+    void tick();
+    const timer = setInterval(tick, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+    // capRemaining/staleMs are read-through only; re-subscribing on their change is harmless.
+  }, [phase, applyImportResult, refreshJobs, capRemaining, staleMs]);
 
   const onFile = useCallback(
     async (file: File) => {
@@ -363,8 +508,8 @@ export function PhotoImportClient(props: {
             <div className="text-sm font-medium text-foreground">Take a photo or choose one</div>
           )}
           <div className="max-w-sm text-xs text-muted">
-            Works with printed play-sheet exports (Playmaker X and similar) and clear hand-drawn plays. The photo is
-            read in-flight and never stored.
+            Works with printed play-sheet exports (Playmaker X and similar) and clear hand-drawn plays. Panels are
+            held privately for up to 24 hours while an import is in flight, then deleted.
           </div>
           {capText && <div className="text-xs font-medium text-muted">{capText}</div>}
           <input
@@ -380,6 +525,105 @@ export function PhotoImportClient(props: {
             }}
           />
         </label>
+        {recentJobs.length > 0 && (
+          <div className="rounded-xl border border-border bg-surface p-3">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Recent imports</div>
+            <div className="space-y-1.5">
+              {recentJobs.map((j) => {
+                const isStale = j.stale;
+                const statusText =
+                  j.status === "done"
+                    ? j.hasMismatch
+                      ? "Wrong playbook format"
+                      : "Ready to review"
+                    : j.status === "error"
+                      ? "Failed — can retry"
+                      : isStale
+                        ? "Stalled — can retry"
+                        : "Working…";
+                const tone =
+                  j.status === "done" && !j.hasMismatch
+                    ? "text-emerald-700"
+                    : j.status === "running" && !isStale
+                      ? "text-muted"
+                      : "text-amber-700";
+                return (
+                  <button
+                    key={j.id}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      setError(null);
+                      setResumeJob(null);
+                      setPhase({ step: "resuming", jobId: j.id });
+                    }}
+                    className="flex w-full items-center justify-between gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-left text-sm hover:bg-surface-raised"
+                  >
+                    <span className="font-medium text-foreground">{j.label}</span>
+                    <span className={`shrink-0 text-xs font-medium ${tone}`}>{statusText}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (phase.step === "resuming") {
+    const j = resumeJob;
+    const isStale = resumeStale;
+    const failed = j?.status === "error";
+    return (
+      <div className="space-y-3">
+        {errorBox}
+        <div className="flex min-h-56 flex-col items-center justify-center gap-3 rounded-xl border border-border bg-surface p-8">
+          {failed ? null : <Loader2 className="size-8 animate-spin text-muted" />}
+          {failed ? (
+            <div className="max-w-md text-center text-sm font-medium text-foreground">
+              This import failed{j?.error ? `: ${j.error}` : "."}
+            </div>
+          ) : isStale ? (
+            <div className="max-w-md text-center text-sm font-medium text-foreground">
+              This read looks stalled — it probably lost its connection when the page closed. Retry runs it again
+              from the stored panel (no re-upload).
+            </div>
+          ) : (
+            <StageTicker
+              stages={[
+                `Reading ${j?.label ?? "your play"}…`,
+                "Tracing each color from circle to arrowhead…",
+                "Matching shapes to the route catalog…",
+                "Counting gridlines for depths…",
+                "Building the draft play…",
+              ]}
+              note="usually 20–60 seconds — you can leave and come back"
+            />
+          )}
+          <div className="flex items-center gap-2">
+            {(failed || isStale) && (
+              <button
+                type="button"
+                onClick={() => void onRetry(phase.jobId)}
+                className="rounded-lg border border-brand-green bg-brand-green px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-green-hover"
+              >
+                Retry this read
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setResumeJob(null);
+                setPhase({ step: "pick" });
+                void refreshJobs();
+              }}
+              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-foreground hover:bg-surface-raised"
+            >
+              Back
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -428,6 +672,11 @@ export function PhotoImportClient(props: {
             </button>
           ))}
         </div>
+        {extracting && (
+          <p className="text-xs text-muted">
+            You can leave this page — the read keeps going and will be under “Recent imports” when you return.
+          </p>
+        )}
         {capText && <p className="text-xs text-muted">{capText} — each imported play uses one.</p>}
       </div>
     );
@@ -447,6 +696,10 @@ export function PhotoImportClient(props: {
           ]}
           note="usually 20–60 seconds"
         />
+        <div className="max-w-sm text-center text-xs text-muted">
+          You can leave this page — the read keeps going and will be waiting under “Recent imports” when you come
+          back.
+        </div>
       </div>
     );
   }

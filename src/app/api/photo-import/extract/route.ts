@@ -4,21 +4,25 @@
  * Step 2 of photo play import: read ONE panel into a semantic
  * PlayExtraction (expensive vision call) and synthesize it onto a
  * PlaySpec against the target playbook's variant and throw-cap rules.
- * Counts one image against the monthly cap. Nothing is saved — the
- * coach reviews and corrects the draft client-side first.
+ * Counts one image against the monthly cap. Nothing is saved as a play
+ * — the coach reviews and corrects the draft first.
+ *
+ * The run is also persisted as a photo_import_jobs row (best-effort)
+ * so a coach who leaves the page mid-read can resume the result — or
+ * retry a stalled read — from "Recent imports". The stored panel crop
+ * lives at most 24h.
  *
  * Body: { playbookId, image: { base64, mediaType }, bbox?, label? }
- * →     { extraction, spec, mapping, warnings, variant, capRemaining }
+ * →     { jobId?, extraction, spec, mapping, warnings, variant, capRemaining }
+ *   or  { jobId?, variantMismatch, capRemaining }
  */
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import type { SportVariant } from "@/domain/play/types";
-import { loadPlaybookSettings } from "@/lib/coach-ai/play-tools";
-import { recordCoachCalImageUsed } from "@/lib/billing/coach-cal-image-cap";
 import { checkPhotoImportAccess, capBlocks } from "@/lib/coach-ai/photo-import/access";
-import { extractPanel } from "@/lib/coach-ai/photo-import/llm-calls";
-import { synthesizePlaySpec, variantFit } from "@/lib/coach-ai/photo-import/synthesize";
+import { runPanelImport } from "@/lib/coach-ai/photo-import/run-import";
+import { createJob, finishJob } from "@/lib/coach-ai/photo-import/jobs";
 import {
   cropPanel,
   isSupportedMediaType,
@@ -75,53 +79,50 @@ export async function POST(req: Request) {
   const crop = await cropPanel(base64, mediaType, bbox, label);
   if (!crop) return NextResponse.json({ error: "Couldn't crop that panel from the photo." }, { status: 422 });
 
-  const read = await extractPanel({
+  // Persist the run so it survives the coach leaving the page.
+  const jobId = await createJob({
+    userId: access.userId,
+    playbookId: body.playbookId,
+    label,
+    cropBase64: crop.base64,
+    mediaType: crop.mediaType,
+  });
+
+  const outcome = await runPanelImport({
+    userId: access.userId,
+    playbookId: body.playbookId,
+    variant,
     cropBase64: crop.base64,
     mediaType: crop.mediaType,
     label,
-    userId: access.userId,
   });
-  if (!read.ok) return NextResponse.json({ error: read.error }, { status: 502 });
 
-  // One successful expensive read = one unit of the monthly image cap
-  // (admins are counted too, just not blocked).
-  void recordCoachCalImageUsed(access.userId);
+  const capRemaining = Math.max(0, access.cap.remaining - 1);
 
-  // Observability: the raw semantic read, one grep-able line per import.
-  // When a coach reports a bad draft, this line tells us whether the
-  // MODEL misread the panel or the deterministic synthesis mishandled a
-  // correct read — the June pipeline died partly because nobody could
-  // make that distinction. Photos themselves are never logged.
-  console.log(
-    `[photo-import] extraction user=${access.userId} playbook=${body.playbookId} label="${label}" ` +
-      JSON.stringify(read.extraction),
-  );
-
-  // Variant gate: a 7v7 sheet imported into a 5v5 playbook produces
-  // garbage by construction (routes force-mapped onto a roster with
-  // fewer receivers) — surfaced in the first prod test. |delta| of 1
-  // is more likely a missed receiver, so it proceeds with a warning.
-  const fit = variantFit(read.extraction, variant);
-  if (Math.abs(fit.delta) >= 2) {
-    return NextResponse.json({
-      variantMismatch: { ...fit, variant },
-      capRemaining: Math.max(0, access.cap.remaining - 1),
-    });
+  if (!outcome.ok) {
+    await finishJob(jobId, { status: "error", error: outcome.error });
+    return NextResponse.json({ error: outcome.error, jobId }, { status: 502 });
+  }
+  if (outcome.kind === "variant_mismatch") {
+    await finishJob(jobId, { status: "done", extraction: outcome.extraction, variantMismatch: outcome.mismatch });
+    return NextResponse.json({ jobId, variantMismatch: outcome.mismatch, capRemaining });
   }
 
-  const settings = await loadPlaybookSettings(body.playbookId, variant);
-  const synthesis = synthesizePlaySpec(read.extraction, {
-    variant,
-    maxThrowDepthYds: settings.maxThrowDepthYds ?? null,
-    title: label,
+  await finishJob(jobId, {
+    status: "done",
+    extraction: outcome.extraction,
+    spec: outcome.spec,
+    mapping: outcome.mapping,
+    warnings: outcome.warnings,
   });
 
   return NextResponse.json({
-    extraction: read.extraction,
-    spec: synthesis.spec,
-    mapping: synthesis.mapping,
-    warnings: synthesis.warnings,
+    jobId,
+    extraction: outcome.extraction,
+    spec: outcome.spec,
+    mapping: outcome.mapping,
+    warnings: outcome.warnings,
     variant,
-    capRemaining: Math.max(0, access.cap.remaining - 1),
+    capRemaining,
   });
 }

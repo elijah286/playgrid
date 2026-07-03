@@ -3,9 +3,10 @@
  * crop pipeline from the 2026-05 vision work (`image-crop.ts`), which
  * was never the part that failed.
  *
- * Photos are processed IN-FLIGHT only: nothing here (or anywhere in the
- * import pipeline) persists the coach's photo. The base64 lives on the
- * request, is cropped, sent to the model, and dropped.
+ * Retention: the FULL photo is processed in-flight and never persisted.
+ * The cropped panel of an in-flight import is held on its
+ * photo_import_jobs row for up to 24 hours (see jobs.ts) so a coach can
+ * leave mid-read and resume/retry, then deleted.
  */
 
 import sharp from "sharp";
