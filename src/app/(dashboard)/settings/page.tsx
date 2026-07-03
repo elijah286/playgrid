@@ -199,6 +199,7 @@ async function SettingsBody({
           ? geoRes.summary
           : {
               windowDays: 30,
+              payingOnly: false,
               totals: {
                 plottedViews: 0,
                 plottedSessions: 0,

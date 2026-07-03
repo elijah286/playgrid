@@ -1401,7 +1401,7 @@ export const FEATURES: FeatureEntry[] = [
     id: "admin-geography",
     name: "Geography dashboard",
     description:
-      "Site Admin → Geography plots a world map of user activity with one dot per city, sized so the dot's area is proportional to views. Includes per-city and per-country tables (views, sessions, signups) and a 7/30/90/365 day window selector.",
+      "Site Admin → Geography plots a world map of user activity with one dot per city, sized so the dot's area is proportional to views. Includes per-city and per-country tables (views, sessions, signups), a 7/30/90/365 day window selector, and a \"Paying users only\" toggle that narrows the map and tables to cities with active paying customers (Stripe or Apple subscriptions), so it's easy to see where revenue is concentrated.",
     category: "Admin tools",
     status: "internal",
     addedDate: "2026-05-15",

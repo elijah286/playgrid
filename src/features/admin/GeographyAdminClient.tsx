@@ -163,16 +163,18 @@ export function GeographyAdminClient({
 }) {
   const [summary, setSummary] = useState<GeoSummary>(initialSummary);
   const [windowDays, setWindowDays] = useState<number>(initialSummary.windowDays);
+  const [payingOnly, setPayingOnly] = useState<boolean>(initialSummary.payingOnly);
   const [error, setError] = useState<string | null>(initialError);
   const [pending, startTransition] = useTransition();
   const { toast } = useToast();
 
-  function refresh(nextDays: number) {
+  function refresh(nextDays: number, nextPayingOnly: boolean = payingOnly) {
     startTransition(async () => {
-      const res = await getGeoSummaryAction(nextDays);
+      const res = await getGeoSummaryAction(nextDays, nextPayingOnly);
       if (res.ok) {
         setSummary(res.summary);
         setWindowDays(res.summary.windowDays);
+        setPayingOnly(res.summary.payingOnly);
         setError(null);
       } else {
         setError(res.error);
@@ -192,12 +194,37 @@ export function GeographyAdminClient({
         <div>
           <h2 className="text-base font-semibold text-foreground">Geography</h2>
           <p className="mt-1 text-sm text-muted">
-            City dots are sized by views (area ∝ usage). Rows captured before this
-            tab shipped don&apos;t have coordinates yet — they&apos;ll show up in
-            the country table but not on the map.
+            {payingOnly ? (
+              <>
+                Showing only cities with <strong>paying users</strong> (active
+                Stripe or Apple subscription). Signed-out and free-tier traffic is
+                hidden. Dots are sized by those users&apos; views.
+              </>
+            ) : (
+              <>
+                City dots are sized by views (area ∝ usage). Rows captured before
+                this tab shipped don&apos;t have coordinates yet — they&apos;ll show
+                up in the country table but not on the map.
+              </>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => refresh(windowDays, !payingOnly)}
+            disabled={pending}
+            aria-pressed={payingOnly}
+            title="Show only cities with paying users (active Stripe or Apple subscription)"
+            className={`rounded-md px-2.5 py-1 text-xs font-medium ring-1 ring-inset transition-colors ${
+              payingOnly
+                ? "bg-emerald-600 text-white ring-emerald-600 hover:bg-emerald-700"
+                : "bg-surface-raised text-foreground ring-border hover:bg-surface-inset"
+            }`}
+          >
+            Paying users only
+          </button>
+          <span className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" />
           {([7, 30, 90, 365] as const).map((d) => (
             <button
               key={d}

@@ -29,6 +29,7 @@ export type GeoCountryPoint = {
 
 export type GeoSummary = {
   windowDays: number;
+  payingOnly: boolean;
   totals: {
     plottedViews: number;
     plottedSessions: number;
@@ -70,9 +71,38 @@ type ViewRow = {
   user_id: string | null;
 };
 
-function emptySummary(windowDays: number): GeoSummary {
+/**
+ * Decide which page-view rows count toward the geography summary.
+ *
+ * Two independent filters, both applied here so the aggregation loop below
+ * works on a single already-clean list:
+ *   1. Admin-session exclusion — drop every view from any session that was
+ *      ever authenticated as an admin (mirrors the Traffic tab).
+ *   2. Paying-only — when `payingUserIds` is provided, keep only views tied to
+ *      a user in that set. Anonymous (signed-out) views can't be attributed to
+ *      a payer, so they drop out entirely.
+ *
+ * Pure and export-only so the filter is unit-testable without a database.
+ */
+export function selectGeoViews<T extends { session_id: string; user_id: string | null }>(
+  views: T[],
+  opts: { adminIds: ReadonlySet<string>; payingUserIds: ReadonlySet<string> | null },
+): T[] {
+  const adminSessionIds = new Set<string>();
+  for (const v of views) {
+    if (v.user_id && opts.adminIds.has(v.user_id)) adminSessionIds.add(v.session_id);
+  }
+  return views.filter((v) => {
+    if (adminSessionIds.has(v.session_id)) return false;
+    if (opts.payingUserIds && !(v.user_id && opts.payingUserIds.has(v.user_id))) return false;
+    return true;
+  });
+}
+
+function emptySummary(windowDays: number, payingOnly = false): GeoSummary {
   return {
     windowDays,
+    payingOnly,
     totals: {
       plottedViews: 0,
       plottedSessions: 0,
@@ -88,6 +118,7 @@ function emptySummary(windowDays: number): GeoSummary {
 
 export async function getGeoSummaryAction(
   windowDays: number = 30,
+  payingOnly: boolean = false,
 ): Promise<Ok | Err> {
   const guard = await requireAdmin();
   if (!guard.ok) return { ok: false, error: guard.error };
@@ -105,6 +136,23 @@ export async function getGeoSummaryAction(
     const excludedExtra = await getAnalyticsExcludedUserIds();
     for (const id of excludedExtra) adminIds.add(id);
 
+    // Paying-user filter: the set of user_ids with a paid entitlement backed
+    // by real money (Stripe or Apple IAP — comp grants are free-of-charge and
+    // deliberately excluded). Only loaded when the toggle is on. The
+    // user_entitlements view is already time-bounded, so an expired sub won't
+    // appear here.
+    let payingUserIds: Set<string> | null = null;
+    if (payingOnly) {
+      const entitlements = await fetchAllRows<{ user_id: string; tier: string | null; source: string | null }>(() =>
+        admin
+          .from("user_entitlements")
+          .select("user_id, tier, source")
+          .neq("tier", "free")
+          .in("source", ["stripe", "apple"]),
+      );
+      payingUserIds = new Set<string>(entitlements.map((e) => e.user_id));
+    }
+
     const allViews = await fetchAllRows<ViewRow>(() =>
       admin
         .from("page_views")
@@ -114,13 +162,7 @@ export async function getGeoSummaryAction(
         .order("created_at", { ascending: false }),
     );
 
-    // Same admin-session exclusion logic as the Traffic tab: drop anything
-    // from a session that was ever authenticated as an admin.
-    const adminSessionIds = new Set<string>();
-    for (const v of allViews) {
-      if (v.user_id && adminIds.has(v.user_id)) adminSessionIds.add(v.session_id);
-    }
-    const views = allViews.filter((v) => !adminSessionIds.has(v.session_id));
+    const views = selectGeoViews(allViews, { adminIds, payingUserIds });
 
     // Signups in window so we can attribute "new users" to each city.
     const newProfilesRaw = await fetchAllRows<{ id: string; role: string | null; created_at: string }>(() =>
@@ -249,6 +291,7 @@ export async function getGeoSummaryAction(
       ok: true,
       summary: {
         windowDays: days,
+        payingOnly,
         totals: {
           plottedViews,
           plottedSessions: plottedSessions.size,
@@ -269,8 +312,11 @@ export async function getGeoSummaryAction(
   }
 }
 
-export async function getGeoSummaryOrEmpty(windowDays: number = 30): Promise<GeoSummary> {
-  const res = await getGeoSummaryAction(windowDays);
+export async function getGeoSummaryOrEmpty(
+  windowDays: number = 30,
+  payingOnly: boolean = false,
+): Promise<GeoSummary> {
+  const res = await getGeoSummaryAction(windowDays, payingOnly);
   if (res.ok) return res.summary;
-  return emptySummary(windowDays);
+  return emptySummary(windowDays, payingOnly);
 }
