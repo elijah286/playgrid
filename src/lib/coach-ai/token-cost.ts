@@ -1,7 +1,7 @@
 // Per-model Anthropic pricing for cost attribution.
 //
 // Numbers are USD per million tokens, sourced from Anthropic's public
-// pricing page as of 2026-05-27. When Anthropic adjusts pricing or we
+// pricing page as of 2026-07-03. When Anthropic adjusts pricing or we
 // add a new model, update PRICING and bump the comment. Cost-tracking
 // rows already in the DB are NOT retroactively recomputed — they reflect
 // pricing at the time of the turn.
@@ -38,10 +38,10 @@ const PRICING: Record<string, ModelRates> = {
     cacheRead: 0.1,
   },
   "claude-opus-4-7": {
-    input: 15.0,
-    output: 75.0,
-    cacheWrite: 18.75,
-    cacheRead: 1.5,
+    input: 5.0,
+    output: 25.0,
+    cacheWrite: 6.25,
+    cacheRead: 0.5,
   },
   // Photo play import models (2026-07).
   "claude-opus-4-8": {

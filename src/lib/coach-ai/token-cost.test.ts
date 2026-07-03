@@ -29,10 +29,10 @@ describe("costMicros", () => {
   it("prices Opus 4.7 input/output at published rates", () => {
     expect(
       costMicros("claude-opus-4-7", { ...zeroUsage, input_tokens: 1_000_000 }),
-    ).toBe(15_000_000);
+    ).toBe(5_000_000);
     expect(
       costMicros("claude-opus-4-7", { ...zeroUsage, output_tokens: 1_000_000 }),
-    ).toBe(75_000_000);
+    ).toBe(25_000_000);
   });
 
   it("applies cache-read discount (10% of input)", () => {
@@ -78,7 +78,7 @@ describe("costMicros", () => {
         ...zeroUsage,
         input_tokens: 1_000_000,
       }),
-    ).toBe(15_000_000);
+    ).toBe(5_000_000);
   });
 
   it("returns 0 for unknown models rather than guessing", () => {
