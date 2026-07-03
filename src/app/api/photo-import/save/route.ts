@@ -36,14 +36,22 @@ import { coachDiagramToPlayDocument, type CoachDiagram } from "@/features/coach-
 import { createPlayAction } from "@/app/actions/plays";
 import { recordPlayVersion } from "@/lib/versions/play-version-writer";
 import { checkPhotoImportAccess } from "@/lib/coach-ai/photo-import/access";
-import { applySheetIdentity, rewriteNotesToSheetLabels } from "@/lib/coach-ai/photo-import/synthesize";
+import {
+  applySheetIdentity,
+  applyPhotoAlignment,
+  rewriteNotesToSheetLabels,
+} from "@/lib/coach-ai/photo-import/synthesize";
 
 type SaveRequest = {
   playbookId?: string;
   spec?: unknown;
   name?: string;
   mapping?: unknown;
+  /** false → keep the playbook's slot letters (colors still applied). */
+  useSheetLabels?: boolean;
 };
+
+const pointSchema = z.object({ x: z.number().min(-40).max(40), y: z.number().min(-20).max(30) }).strict();
 
 const mappingSchema = z
   .array(
@@ -52,6 +60,8 @@ const mappingSchema = z
         sheetLabel: z.string().min(1).max(8),
         rosterId: z.string().min(1).max(8),
         sheetColor: z.string().max(16).optional(),
+        align: pointSchema.optional(),
+        routeStartAt: pointSchema.optional(),
       })
       .strict(),
   )
@@ -100,15 +110,17 @@ export async function POST(req: Request) {
   });
   if (!resolved.ok) return NextResponse.json({ error: resolved.error }, { status: 400 });
 
-  // Sheet identity: the saved play wears the photo's own letters and
-  // colors (display-only — spec assignments keep roster ids).
+  // Photo fidelity: players start where the photo shows them (with
+  // motion drawn), and the play wears the sheet's letters/colors —
+  // same transform order as the client preview, so what the coach
+  // approved is what persists.
   const mappingParse = mappingSchema.safeParse(body.mapping ?? []);
   const mapping = mappingParse.success ? mappingParse.data : [];
 
-  const diagram: CoachDiagram = applySheetIdentity(
-    { ...resolved.diagram, variant, title: name },
-    mapping,
-  );
+  const aligned = applyPhotoAlignment({ ...resolved.diagram, variant, title: name }, mapping, variant);
+  const diagram: CoachDiagram = applySheetIdentity(aligned, mapping, {
+    labels: body.useSheetLabels !== false,
+  });
   autoResolveColorClashes(diagram);
 
   const assignmentCheck = validateRouteAssignments(diagram, {
@@ -140,8 +152,9 @@ export async function POST(req: Request) {
   try {
     const projected = projectSpecToNotes(spec);
     if (projected.trim().length > 0) {
-      // Notes speak the sheet's letters, matching the relabeled diagram.
-      doc.metadata.notes = rewriteNotesToSheetLabels(projected, mapping);
+      // Notes speak whichever lettering the diagram wears.
+      doc.metadata.notes =
+        body.useSheetLabels !== false ? rewriteNotesToSheetLabels(projected, mapping) : projected;
     }
   } catch {
     // Never block a save on notes projection.

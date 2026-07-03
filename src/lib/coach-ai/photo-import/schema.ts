@@ -52,6 +52,18 @@ export const extractedAssignmentSchema = z
     /** Page direction of the break/finish as drawn (offense faces up). */
     direction: z.enum(["left", "right"]).optional(),
     modifiers: z.array(z.string()).optional(),
+    /** Where the route BEGINS when pre-snap motion carries the player
+     *  somewhere else first (jet motion across the formation). The
+     *  player's own alignment stays at the pre-motion spot; this names
+     *  the post-motion spot the route launches from. Omit when the
+     *  route starts at the player's alignment. */
+    routeStart: z
+      .object({
+        side: z.enum(["left", "right", "center"]),
+        width: z.enum(["wide", "slot", "tight", "middle"]),
+      })
+      .strict()
+      .optional(),
     confidence: extractionConfidenceSchema,
     /** One short sentence: what visual evidence drove the call, and the
      *  runner-up family when confidence is not "high". */
@@ -70,6 +82,12 @@ export const extractedPlayerSchema = z
      *  players onto catalog formation slots, so it must reflect drawn
      *  left-to-right order regardless of depth. */
     orderFromLeft: z.number().int().min(1),
+    /** Lateral alignment bucket — drives the draft's starting positions
+     *  ("players start where the photo shows them" is the first thing a
+     *  coach checks). wide = outside third near the sideline; slot =
+     *  between wide and the core; tight = within ~4 yds of the center;
+     *  middle = on the centerline (C, Q, a back directly behind them). */
+    width: z.enum(["wide", "slot", "tight", "middle"]).optional(),
     /** Fill color of the player's circle as printed. Drives the draft's
      *  color-matching so the coach can compare photo ↔ draft player by
      *  player. */
@@ -143,11 +161,16 @@ export function buildExtractionTool(): {
           items: {
             type: "object",
             additionalProperties: false,
-            required: ["label", "side", "orderFromLeft", "color", "onLos", "backfield"],
+            required: ["label", "side", "orderFromLeft", "width", "color", "onLos", "backfield"],
             properties: {
               label: { type: "string", description: "Letter inside the circle (X, Y, Z, A, B, C, Q...)." },
               side: { type: "string", enum: ["left", "right", "center"] },
               orderFromLeft: { type: "integer", minimum: 1, description: "1-based left-to-right rank across the whole formation as drawn (leftmost player = 1), counting every player including C and Q, regardless of depth." },
+              width: {
+                type: "string",
+                enum: ["wide", "slot", "tight", "middle"],
+                description: "Lateral bucket: wide = outside third near the sideline; slot = between wide and the core; tight = within ~4 yards of the center; middle = on the centerline (C, Q, a back directly behind them).",
+              },
               color: {
                 type: "string",
                 enum: ["black", "gray", "white", "red", "orange", "yellow", "green", "blue", "purple", "pink", "brown", "other"],
@@ -186,6 +209,16 @@ export function buildExtractionTool(): {
               depthYds: { type: "number", description: "Deepest point past the LOS in yards, from counting the 5-yard gridlines. Any integer — do not round to template defaults." },
               direction: { type: "string", enum: ["left", "right"], description: "Page direction of the break/finish as drawn." },
               modifiers: { type: "array", items: { type: "string", enum: [...EXTRACTION_MODIFIERS] } },
+              routeStart: {
+                type: "object",
+                additionalProperties: false,
+                required: ["side", "width"],
+                description: "Only when pre-snap motion carries the player elsewhere before the route begins: the spot (at the end of the motion) the route launches from. The player's own alignment fields stay at the pre-motion spot.",
+                properties: {
+                  side: { type: "string", enum: ["left", "right", "center"] },
+                  width: { type: "string", enum: ["wide", "slot", "tight", "middle"] },
+                },
+              },
               confidence,
               evidence: { type: "string", description: "One sentence: the visual evidence, plus the runner-up family when not high-confidence." },
             },

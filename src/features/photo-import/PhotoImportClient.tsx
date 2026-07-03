@@ -28,6 +28,7 @@ import { PlayDiagramEmbed } from "@/features/coach-ai/PlayDiagramEmbed";
 import type { PlayExtraction } from "@/lib/coach-ai/photo-import/schema";
 import {
   applySheetIdentity,
+  applyPhotoAlignment,
   SHEET_COLOR_HEX,
   type ImportWarning,
   type PlayerMapping,
@@ -198,19 +199,21 @@ export function PhotoImportClient(props: {
   const [playName, setPlayName] = useState("");
   const [lastPanels, setLastPanels] = useState<Panel[] | null>(null);
   const [debugCopied, setDebugCopied] = useState(false);
+  const [useSheetLabels, setUseSheetLabels] = useState(true);
 
   const capText = props.capExempt
     ? null
     : `${capRemaining} of ${props.capLimit} photo imports left this month`;
 
-  // Live draft render — the same pipeline the save path validates, plus
-  // the sheet's own letters/colors so photo ↔ draft compare player by
-  // player.
+  // Live draft render — the same pipeline the save path validates:
+  // spec → renderer → photo alignment (players start where the photo
+  // shows them, motion drawn) → sheet letters/colors.
   const preview = useMemo(() => {
     if (!spec) return null;
     try {
       const rendered = playSpecToCoachDiagram(spec);
-      const identified = applySheetIdentity(rendered.diagram, mapping);
+      const aligned = applyPhotoAlignment(rendered.diagram, mapping, props.variant);
+      const identified = applySheetIdentity(aligned, mapping, { labels: useSheetLabels });
       return {
         json: JSON.stringify({ ...identified, title: playName || spec.title }),
         renderWarnings: rendered.warnings,
@@ -218,7 +221,7 @@ export function PhotoImportClient(props: {
     } catch {
       return null;
     }
-  }, [spec, mapping, playName]);
+  }, [spec, mapping, playName, useSheetLabels, props.variant]);
 
   const postJson = useCallback(async (url: string, body: unknown) => {
     const res = await fetch(url, {
@@ -317,13 +320,14 @@ export function PhotoImportClient(props: {
         spec: { ...spec, title: playName || spec.title },
         name: playName || spec.title || "Imported play",
         mapping,
+        useSheetLabels,
       })) as { url?: string };
       router.push(json.url ?? `/playbooks/${props.playbookId}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed.");
       setPhase({ step: "review" });
     }
-  }, [spec, playName, mapping, postJson, props.playbookId, router]);
+  }, [spec, playName, mapping, useSheetLabels, postJson, props.playbookId, router]);
 
   const sheetAssignment = useCallback(
     (sheetLabel: string) =>
@@ -659,6 +663,19 @@ export function PhotoImportClient(props: {
               maxLength={80}
               onChange={(e) => setPlayName(e.target.value)}
             />
+          </label>
+          <label
+            className="flex items-center gap-2 text-sm text-foreground"
+            title="On: players keep the photo's letters (Z, B, Y…). Off: the playbook's own slot letters."
+          >
+            <input
+              type="checkbox"
+              className="size-4 rounded border-border"
+              checked={useSheetLabels}
+              disabled={saving}
+              onChange={(e) => setUseSheetLabels(e.target.checked)}
+            />
+            Use the sheet&apos;s lettering
           </label>
           <div className="ml-auto flex items-center gap-2">
             <button

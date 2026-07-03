@@ -37,6 +37,7 @@ import { sportProfileForVariant } from "@/domain/play/factory";
 import type { PlaySpec, PlayerAssignment, AssignmentAction, RouteModifier, Confidence } from "@/domain/play/spec";
 import { PLAY_SPEC_SCHEMA_VERSION } from "@/domain/play/spec";
 import type { SportVariant } from "@/domain/play/types";
+import { sanitizeCoachDiagram } from "@/domain/play/sanitize";
 import type { CoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
 import type { ExtractedAssignment, ExtractedPlayer, PlayExtraction } from "./schema";
 
@@ -62,6 +63,15 @@ export type PlayerMapping = {
   /** The sheet circle's printed color name (extraction vocabulary) —
    *  drives draft recoloring via applySheetIdentity. */
   sheetColor?: string;
+  /** Target starting position in field yards (x from center, y from
+   *  LOS), derived from the photo's alignment buckets. Applied to the
+   *  rendered diagram by applyPhotoAlignment — "players start where
+   *  the photo shows them" is the first thing a coach checks. */
+  align?: { x: number; y: number };
+  /** Where the route launches from when pre-snap motion carries the
+   *  player somewhere else first (jet motion). Drawn as the dashed
+   *  motion zig-zag from `align` to here; the route path anchors here. */
+  routeStartAt?: { x: number; y: number };
 };
 
 export type SynthesisResult = {
@@ -142,6 +152,32 @@ function rosterSkillSlots(variant: SportVariant, formationName: string): RosterS
 /** Roster y at or below this is a backfield slot (backs sit -4..-6;
  *  wings/slots sit 0..-1). */
 const BACKFIELD_Y = -1.5;
+
+type WidthBucket = "wide" | "slot" | "tight" | "middle";
+
+/** Alignment buckets → field yards. Deterministic, stylized spacing —
+ *  the same philosophy as the formation synthesizer, driven by the
+ *  photo's observed structure instead of a formation name. */
+function bucketX(side: "left" | "right" | "center", width: WidthBucket, halfWidthYds: number): number {
+  if (side === "center" || width === "middle") return 0;
+  const mag = width === "tight" ? 3 : width === "slot" ? 6.5 : Math.max(8, halfWidthYds - 3.5);
+  return side === "left" ? -mag : mag;
+}
+
+function bucketY(p: { onLos: boolean; backfield: boolean }): number {
+  return p.onLos ? 0 : p.backfield ? -4.5 : -1.2;
+}
+
+/** Width fallback for extractions that omitted the bucket: outermost
+ *  player on a side reads as wide, inner players as slot. */
+function widthWithFallback(p: ExtractedPlayer, sameSide: ExtractedPlayer[]): WidthBucket {
+  if (p.width) return p.width;
+  if (p.side === "center") return "middle";
+  const orders = sameSide.map((s) => s.orderFromLeft);
+  const isOutermost =
+    p.side === "left" ? p.orderFromLeft === Math.min(...orders) : p.orderFromLeft === Math.max(...orders);
+  return isOutermost ? "wide" : "slot";
+}
 
 /**
  * How well the photographed play fits the playbook's variant. The first
@@ -364,6 +400,45 @@ export function synthesizePlaySpec(
     (a, b) => (sheetOrder.get(a.sheetLabel.trim().toUpperCase()) ?? 99) - (sheetOrder.get(b.sheetLabel.trim().toUpperCase()) ?? 99),
   );
 
+  // ── 2b. Alignment targets ─────────────────────────────────────────
+  // Place each mapped player where the PHOTO shows them (bucket →
+  // yards) rather than where the snapped formation's slot sits — the
+  // first thing a coach checks is starting positions (field feedback,
+  // 2026-07-03). Motion routes also get the spot the route launches
+  // from, so the dashed pre-snap motion can be drawn.
+  const halfW = sportProfileForVariant(opts.variant).fieldWidthYds / 2;
+  const obsByLabel = new Map(observed.map((p) => [p.label.trim().toUpperCase(), p]));
+  const assignByLabel = new Map(extraction.assignments.map((a) => [a.player.trim().toUpperCase(), a]));
+  for (const m of mapping) {
+    const key = m.sheetLabel.trim().toUpperCase();
+    const obs = obsByLabel.get(key);
+    if (!obs) continue;
+    const sameSide = observed.filter((p) => p.side === obs.side);
+    const x = bucketX(obs.side, widthWithFallback(obs, sameSide), halfW);
+    const y = bucketY(obs);
+    m.align = { x, y };
+    const routeStart = assignByLabel.get(key)?.routeStart;
+    if (routeStart) {
+      const rx = bucketX(routeStart.side, routeStart.width, halfW);
+      // Motion is lateral — the route launches at the player's own depth.
+      if (Math.abs(rx - x) > 1) m.routeStartAt = { x: rx, y };
+    }
+  }
+  // Collision pass per depth row: spread same-row players closer than
+  // 2 yds (stacks at DIFFERENT depths are legitimate and untouched).
+  const rowsByY = new Map<number, PlayerMapping[]>();
+  for (const m of mapping) {
+    if (m.align) rowsByY.set(m.align.y, [...(rowsByY.get(m.align.y) ?? []), m]);
+  }
+  for (const row of rowsByY.values()) {
+    row.sort((a, b) => a.align!.x - b.align!.x);
+    for (let i = 1; i < row.length; i++) {
+      if (row[i].align!.x - row[i - 1].align!.x < 2) {
+        row[i].align = { ...row[i].align!, x: row[i - 1].align!.x + 2 };
+      }
+    }
+  }
+
   // ── 3. Assignments ────────────────────────────────────────────────
   const assignments: PlayerAssignment[] = [];
   const assignedRosterIds = new Set<string>();
@@ -458,9 +533,16 @@ export const SHEET_COLOR_HEX: Record<string, string> = {
 
 /** Relabel + recolor mapped players so the draft wears the sheet's own
  *  letters and colors. IDs are untouched; unmapped players (C, QB)
- *  keep their defaults. Pure — returns a new diagram. */
-export function applySheetIdentity(diagram: CoachDiagram, mapping: PlayerMapping[]): CoachDiagram {
+ *  keep their defaults. `labels: false` keeps the playbook's slot
+ *  letters and applies colors only (coach's choice at review time).
+ *  Pure — returns a new diagram. */
+export function applySheetIdentity(
+  diagram: CoachDiagram,
+  mapping: PlayerMapping[],
+  opts: { labels?: boolean } = {},
+): CoachDiagram {
   if (mapping.length === 0) return diagram;
+  const labels = opts.labels !== false;
   const byRosterId = new Map(mapping.map((m) => [m.rosterId, m]));
   return {
     ...diagram,
@@ -468,9 +550,66 @@ export function applySheetIdentity(diagram: CoachDiagram, mapping: PlayerMapping
       const m = byRosterId.get(p.id);
       if (!m) return p;
       const hex = m.sheetColor ? SHEET_COLOR_HEX[m.sheetColor] : undefined;
-      return { ...p, role: m.sheetLabel, ...(hex ? { color: hex } : {}) };
+      return { ...p, ...(labels ? { role: m.sheetLabel } : {}), ...(hex ? { color: hex } : {}) };
     }),
   };
+}
+
+/**
+ * Move mapped players to the photo's alignment targets and carry their
+ * routes with them. Route paths are ABSOLUTE field yards, so each
+ * route translates by its carrier's delta; motion routes anchor at
+ * `routeStartAt` instead, with the dashed pre-snap motion drawn from
+ * the player's spot to the launch point (the diagram format renders
+ * `motion` waypoints natively). Sanitizes before returning (Rule 10 —
+ * every new diagram transform sanitizes).
+ */
+export function applyPhotoAlignment(
+  diagram: CoachDiagram,
+  mapping: PlayerMapping[],
+  variant: SportVariant,
+): CoachDiagram {
+  const moves = mapping.filter((m) => m.align);
+  if (moves.length === 0) return diagram;
+  const byRosterId = new Map(moves.map((m) => [m.rosterId, m]));
+  const oldPos = new Map(diagram.players.map((p) => [p.id, { x: p.x, y: p.y }]));
+
+  const players = diagram.players.map((p) => {
+    const m = byRosterId.get(p.id);
+    return m?.align ? { ...p, x: m.align.x, y: m.align.y } : p;
+  });
+
+  const routes = (diagram.routes ?? []).map((r) => {
+    const m = byRosterId.get(r.from);
+    const old = oldPos.get(r.from);
+    if (!m?.align || !old) return r;
+    const anchor = m.routeStartAt ?? m.align;
+    // Translate in X ONLY. Waypoint y-values are LOS-anchored depths
+    // (a Post's apex at y=15 means 15 yds past the line no matter where
+    // the carrier stands), and the drawn route always starts at the
+    // carrier's own position — so shifting y would corrupt depth
+    // semantics (the render-guard test caught a Post inflating to
+    // 20 yds), while leaving y keeps depths true and routes attached.
+    const dx = anchor.x - old.x;
+    const path = r.path.map(([x, y]) => [x + dx, y] as [number, number]);
+    if (!m.routeStartAt) return { ...r, path };
+    // Motion routes: the post-motion geometry isn't expressible as the
+    // carrier's catalog route (a flat launched from the far side of the
+    // formation "breaks inside" from where the carrier STANDS), so the
+    // diagram-level catalog tag comes off — the validators treat it as
+    // freeform geometry, exactly as they'd treat a hand-drawn jet
+    // motion. The SPEC keeps the semantic family + "motion" modifier
+    // for notes/KB truth.
+    const rest = { ...r, path, motion: [[m.routeStartAt.x, m.routeStartAt.y]] as [number, number][] } as typeof r & {
+      route_kind?: string;
+      direction?: string;
+    };
+    delete rest.route_kind;
+    delete rest.direction;
+    return rest;
+  });
+
+  return sanitizeCoachDiagram({ ...diagram, players, routes }, variant).diagram;
 }
 
 /**

@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { findTemplate } from "@/domain/play/routeTemplates";
 import { playSpecToCoachDiagram } from "@/domain/play/specRenderer";
 import { synthesizeOffense } from "@/domain/play/offensiveSynthesize";
+import { sportProfileForVariant } from "@/domain/play/factory";
 import { parsePlaySpec } from "@/domain/play/spec";
+import { validateRouteAssignments } from "@/lib/coach-ai/route-assignment-validate";
 import type { CoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
 import {
   synthesizePlaySpec,
@@ -10,6 +12,7 @@ import {
   observedSkillPlayers,
   variantFit,
   applySheetIdentity,
+  applyPhotoAlignment,
   rewriteNotesToSheetLabels,
   SHEET_COLOR_HEX,
 } from "./synthesize";
@@ -281,6 +284,130 @@ describe("sheet identity", () => {
       { sheetLabel: "Q2", rosterId: "Z2" },
     ];
     expect(rewriteNotesToSheetLabels("@Z and @Z2 cross.", mapping)).toBe("@Q1 and @Q2 cross.");
+  });
+});
+
+/** Play 1 from the Bomb Squad sheet: Z wide left, B tucked behind the
+ *  line left of center with jet motion across to the right, Y slot
+ *  left, X slot right, A wide right. */
+function motionExtraction(): PlayExtraction {
+  return {
+    title: "Play 1",
+    players: [
+      { label: "Z", side: "left", orderFromLeft: 1, width: "wide", color: "black", onLos: true, backfield: false },
+      { label: "B", side: "left", orderFromLeft: 2, width: "tight", color: "yellow", onLos: false, backfield: false },
+      { label: "Y", side: "left", orderFromLeft: 3, width: "slot", color: "green", onLos: true, backfield: false },
+      { label: "C", side: "center", orderFromLeft: 4, width: "middle", color: "black", onLos: true, backfield: false },
+      { label: "Q", side: "center", orderFromLeft: 5, width: "middle", color: "gray", onLos: false, backfield: true },
+      { label: "X", side: "right", orderFromLeft: 6, width: "slot", color: "red", onLos: true, backfield: false },
+      { label: "A", side: "right", orderFromLeft: 7, width: "wide", color: "blue", onLos: true, backfield: false },
+    ],
+    formation: { name: "Spread Doubles", confidence: "med" },
+    assignments: [
+      { player: "Z", kind: "route", family: "In", depthYds: 5, direction: "right", confidence: "high" },
+      {
+        player: "B",
+        kind: "route",
+        family: "Flat",
+        depthYds: 2,
+        direction: "right",
+        modifiers: ["motion"],
+        routeStart: { side: "right", width: "wide" },
+        confidence: "med",
+      },
+      { player: "Y", kind: "route", family: "Seam", depthYds: 12, confidence: "high" },
+      { player: "X", kind: "route", family: "Corner", depthYds: 12, direction: "right", confidence: "high" },
+      { player: "A", kind: "route", family: "Post", depthYds: 15, confidence: "med" },
+    ],
+  };
+}
+
+describe("alignment targets", () => {
+  const halfW = sportProfileForVariant("flag_7v7").fieldWidthYds / 2;
+  const wideX = Math.max(8, halfW - 3.5);
+
+  it("places players by bucket: wide/slot/tight, LOS/wing", () => {
+    const res = synthesizePlaySpec(motionExtraction(), { variant: "flag_7v7" });
+    const byLabel = new Map(res.mapping.map((m) => [m.sheetLabel, m]));
+    expect(byLabel.get("Z")!.align).toEqual({ x: -wideX, y: 0 });
+    expect(byLabel.get("B")!.align).toEqual({ x: -3, y: -1.2 });
+    expect(byLabel.get("Y")!.align).toEqual({ x: -6.5, y: 0 });
+    expect(byLabel.get("X")!.align).toEqual({ x: 6.5, y: 0 });
+    expect(byLabel.get("A")!.align).toEqual({ x: wideX, y: 0 });
+  });
+
+  it("computes the motion launch point at the player's own depth", () => {
+    const res = synthesizePlaySpec(motionExtraction(), { variant: "flag_7v7" });
+    const b = res.mapping.find((m) => m.sheetLabel === "B")!;
+    expect(b.routeStartAt).toEqual({ x: wideX, y: -1.2 });
+    // Non-motion players don't get a launch point.
+    expect(res.mapping.find((m) => m.sheetLabel === "Z")!.routeStartAt).toBeUndefined();
+  });
+
+  it("spreads same-row collisions but leaves cross-depth stacks alone", () => {
+    const ext = motionExtraction();
+    // Force Y onto Z's exact bucket (both wide-left on the line).
+    ext.players = ext.players.map((p) => (p.label === "Y" ? { ...p, width: "wide" } : p));
+    const res = synthesizePlaySpec(ext, { variant: "flag_7v7" });
+    const z = res.mapping.find((m) => m.sheetLabel === "Z")!.align!;
+    const y = res.mapping.find((m) => m.sheetLabel === "Y")!.align!;
+    expect(Math.abs(z.x - y.x)).toBeGreaterThanOrEqual(2);
+    // B sits at a different depth near Z's x — untouched by the spread.
+    expect(res.mapping.find((m) => m.sheetLabel === "B")!.align).toEqual({ x: -3, y: -1.2 });
+  });
+});
+
+describe("applyPhotoAlignment", () => {
+  it("moves players, carries routes, draws motion, and stays valid", () => {
+    const res = synthesizePlaySpec(motionExtraction(), { variant: "flag_7v7" });
+    const rendered = playSpecToCoachDiagram(res.spec);
+    const aligned = applyPhotoAlignment(rendered.diagram, res.mapping, "flag_7v7");
+
+    const byLabel = new Map(res.mapping.map((m) => [m.sheetLabel, m]));
+    const playerById = new Map(aligned.players.map((p) => [p.id, p]));
+
+    // Players sit at their photo positions.
+    for (const label of ["Z", "B", "Y", "X", "A"]) {
+      const m = byLabel.get(label)!;
+      const p = playerById.get(m.rosterId)!;
+      expect({ x: p.x, y: p.y }, label).toEqual(m.align);
+    }
+
+    // B's route: dashed motion to the launch point, path anchored there,
+    // and the catalog tag stripped (freeform geometry post-motion).
+    const b = byLabel.get("B")!;
+    const bRoute = (aligned.routes ?? []).find((r) => r.from === b.rosterId)!;
+    expect(bRoute.motion).toEqual([[b.routeStartAt!.x, b.routeStartAt!.y]]);
+    expect(Math.min(...bRoute.path.map(([x]) => x))).toBeGreaterThan(0); // launched right of center
+    expect((bRoute as { route_kind?: string }).route_kind).toBeUndefined();
+
+    // Z's route traveled with Z (path stays on the left half near the player).
+    const z = byLabel.get("Z")!;
+    const zRoute = (aligned.routes ?? []).find((r) => r.from === z.rosterId)!;
+    expect(zRoute.motion).toBeUndefined();
+    expect(zRoute.path[0][0]).toBeLessThan(0);
+
+    // Every coordinate survived sanitization and the depth gates still pass.
+    for (const r of aligned.routes ?? []) {
+      for (const [x, y] of r.path) {
+        expect(Number.isFinite(x) && Number.isFinite(y)).toBe(true);
+      }
+    }
+    const check = validateRouteAssignments(aligned, { variant: "flag_7v7" });
+    expect(check.ok, JSON.stringify(!check.ok ? check.errors : [])).toBe(true);
+  });
+
+  it("keeps playbook lettering when labels are off (colors still apply)", () => {
+    const res = synthesizePlaySpec(motionExtraction(), { variant: "flag_7v7" });
+    const rendered = playSpecToCoachDiagram(res.spec);
+    const out = applySheetIdentity(rendered.diagram, res.mapping, { labels: false });
+    // Sheet Z sits wide left, whose Spread Doubles slot is a different
+    // letter — the meaningful case for the toggle.
+    const z = res.mapping.find((m) => m.sheetLabel === "Z")!;
+    expect(z.rosterId).not.toBe("Z");
+    const player = out.players.find((p) => p.id === z.rosterId)!;
+    expect(player.role ?? player.id).not.toBe("Z");
+    expect(player.color).toBe(SHEET_COLOR_HEX.black);
   });
 });
 
