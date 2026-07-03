@@ -1725,6 +1725,15 @@ export const FEATURES: FeatureEntry[] = [
   // to every existing coach — gated behind LEAGUE_OPS_ENABLED and organizer
   // status — so every entry here is "beta"/"internal" until that gate lifts.
   {
+    id: "league-content-library",
+    name: "League content library",
+    description:
+      "Operators build an org-level library of their own play groups and practice plans — authored in the classic playbook editor, tagged into custom collections like \"new coaches\" or \"advanced\" — and mark items as defaults so every new team of that game type starts with them, org-wide or per league.",
+    category: "League operations",
+    status: "beta",
+    addedDate: "2026-07-03",
+  },
+  {
     id: "league-operator-console",
     name: "League operator console",
     description:

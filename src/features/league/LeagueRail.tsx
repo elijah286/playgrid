@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { LayoutDashboard, UsersRound } from "lucide-react";
+import { LayoutDashboard, Library, UsersRound } from "lucide-react";
 
 import { useLeagueNav, type RailLeague } from "./useLeagueNav";
 import { OrgSwitcher, type SwitcherOrg } from "./OrgSwitcher";
@@ -47,6 +47,10 @@ export function LeagueRail({
         <Link href="/league/people" className={linkCls(peopleActive)}>
           <UsersRound className="size-4 shrink-0" />
           People &amp; access
+        </Link>
+        <Link href="/league/library" className={linkCls(pathname === "/league/library")}>
+          <Library className="size-4 shrink-0" />
+          Library
         </Link>
       </div>
 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   ClipboardList,
   LayoutDashboard,
+  Library,
   type LucideIcon,
   MoreHorizontal,
   UserPlus,
@@ -193,6 +194,14 @@ function MoreSheet({
           >
             <UsersRound className="size-4 shrink-0" />
             People &amp; access
+          </Link>
+          <Link
+            href="/league/library"
+            onClick={onClose}
+            className="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm text-foreground hover:bg-foreground/5"
+          >
+            <Library className="size-4 shrink-0" />
+            Library
           </Link>
         </div>
       </div>
