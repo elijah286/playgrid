@@ -24,7 +24,7 @@ const DEFAULTS: BetaFeatures = {
   coach_ai_image_upload: "off",
   football_library: "all",
   offline_auto_cache: "off",
-  photo_play_import: "off",
+  photo_play_import: "me",
 };
 
 export async function getBetaFeaturesAction() {

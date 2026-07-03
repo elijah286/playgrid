@@ -44,9 +44,10 @@ const DEFAULTS: BetaFeatures = {
   // Photo play import (2026-07): photograph a play sheet → per-panel
   // semantic extraction into a PlaySpec → coach reviews side-by-side →
   // save. Distinct from the dead coach_ai_image_upload chat pipeline —
-  // this is the playbook-level import flow with a review step. Start
-  // "off"; flip to "me" for testing, then widen.
-  photo_play_import: "off",
+  // this is the playbook-level import flow with a review step.
+  // Defaults "me" (site admins only) for prod testing; widen from the
+  // admin Beta features panel once the eval bar is met.
+  photo_play_import: "me",
 };
 
 /** Safe "everything off" fallback for callers that need a value even when
