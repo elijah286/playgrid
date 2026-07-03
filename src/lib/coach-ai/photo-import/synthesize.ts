@@ -333,7 +333,7 @@ export function synthesizePlaySpec(
 
   // Roster slots nobody claimed: keep them honest (and visible in the
   // review UI) as explicit unassigned players rather than omitting.
-  for (const slot of roster.slice(0, Math.max(roster.length, 0))) {
+  for (const slot of roster) {
     if (!assignedRosterIds.has(slot.id)) {
       const mapped = mapping.find((m) => m.rosterId === slot.id);
       warnings.push({

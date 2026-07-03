@@ -377,6 +377,18 @@ export default async function PlaybookDetailPage({ params }: Props) {
       isAdmin,
       isEntitled: isCoachInPlaybook,
     });
+  // Photo play import (photo_play_import beta): coach-only toolbar entry.
+  // The import page and its API routes re-run the authoritative gate
+  // server-side — this flag only controls whether the button renders.
+  // ("custom" allowlist scope isn't evaluated here; allowlisted
+  // non-admins reach the flow via the direct URL until this computes it.)
+  const photoImportAvailable =
+    !isExamplePreview &&
+    isCoachInPlaybook &&
+    isBetaFeatureAvailable(betaFeatures.photo_play_import, {
+      isAdmin,
+      isEntitled: coachAiEntitled,
+    });
   // Practice Plans tab is coach-only.
   const practicePlansAvailable = !isExamplePreview && isCoachInPlaybook;
   // Team messaging is available to anyone who can view the playbook once
@@ -515,6 +527,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
         isAdmin={isAdmin}
         freeMaxPlays={freeMaxPlays}
         gameModeAvailable={gameModeAvailable}
+        photoImportAvailable={photoImportAvailable}
         gameResultsAvailable={gameResultsAvailable}
         teamCalendarAvailable={teamCalendarAvailable}
         versionHistoryAvailable={versionHistoryAvailable}

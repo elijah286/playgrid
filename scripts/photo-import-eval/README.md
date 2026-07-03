@@ -47,6 +47,8 @@ If `--dry` shows clipped panels, tune `--region top,bottom,left,right` (photo fr
 
 Rationale: with the review-UI product frame (side-by-side photo vs render, confirm before save), accuracy at that level means a coach fixes at most one route per play, and the UI pre-highlights the ones to check. Failing the bar cheaply here — rather than in beta, like last time — is the point of Phase 0.
 
-## What Phase 1 promotes (if the bar is met)
+## Relationship to the shipped feature (Phase 1)
 
-`schema.ts` + `prompt.ts` move to `src/lib/coach-ai/photo-import/`; extraction output maps deterministically onto `PlaySpec` (formation snap via `parseFormationName`, `custom_layout` fallback, depths clamped by catalog constraints) and rides the existing resolver → renderer → sanitizer path; the review UI applies corrections as `revise_play` mods. Metering reuses `src/lib/billing/coach-cal-image-cap.ts`. The 2026-05 pipeline's kill switch, crop code, and beta flag are inventoried in the memory note `photo-play-import-assessment`.
+The product pipeline lives in `src/lib/coach-ai/photo-import/` (this eval imports the same `schema.ts` + `prompt.ts`, so prompt/schema improvements measured here ship automatically): extraction → `synthesize.ts` → `PlaySpec` → the existing resolver → renderer → sanitizer path, fronted by `/api/photo-import/*` and the review UI at `/playbooks/[id]/import-photo`, behind the `photo_play_import` beta flag with the `coach-cal-image-cap` meter.
+
+This harness stays the accuracy gate: run it before widening the beta or changing the extraction model/prompt, and re-run `--score-only` after golden edits.

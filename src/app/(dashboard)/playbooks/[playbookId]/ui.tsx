@@ -52,6 +52,7 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  Camera,
   Check,
   CheckSquare,
   ChevronDown,
@@ -345,6 +346,7 @@ function PlaybookDetailClientInner({
   isAdmin = false,
   freeMaxPlays,
   gameModeAvailable = false,
+  photoImportAvailable = false,
   canUseGameMode = false,
   gameResultsAvailable = false,
   teamCalendarAvailable = false,
@@ -378,6 +380,8 @@ function PlaybookDetailClientInner({
   freeMaxPlays: number;
   /** When true, render the mobile "Game" button next to the search bar. */
   gameModeAvailable?: boolean;
+  /** When true, show the "Import play from photo" entry (photo_play_import beta). */
+  photoImportAvailable?: boolean;
   /** When true, show the "Games" tab for reviewing past game results. */
   gameResultsAvailable?: boolean;
   /** When true, show the "Calendar" tab gated by the team_calendar beta. */
@@ -1869,6 +1873,21 @@ function PlaybookDetailClientInner({
           >
             New play
           </Button>
+          {photoImportAvailable && !isViewer && (
+            // Beta (photo_play_import): photograph a play sheet → draft
+            // play. Icon-only on phones so the tight 360px row 1 doesn't
+            // wrap; label appears from sm: up. Placed after New play so
+            // the ml-auto right-pinning logic above is untouched.
+            <Link
+              href={`/playbooks/${playbookId}/import-photo`}
+              className="inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-border bg-surface px-2.5 text-sm font-medium text-foreground hover:bg-surface-raised sm:order-9 sm:px-3"
+              aria-label="Import play from photo"
+              title="Import play from photo"
+            >
+              <Camera className="size-4" />
+              <span className="hidden sm:inline">Import</span>
+            </Link>
+          )}
           </div>
           {/* Mobile: row 2 = TypeFilterMenu + Search. Putting the type
               filter beside search (instead of with the action buttons

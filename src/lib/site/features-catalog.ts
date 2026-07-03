@@ -241,6 +241,15 @@ export const FEATURES: FeatureEntry[] = [
 
   // ── Plays & formations ──────────────────────────────────────────
   {
+    id: "photo-play-import",
+    name: "Import plays from a photo",
+    description:
+      "Photograph a printed play sheet (Playmaker X and similar exports) or a clear hand-drawn play, and the importer reads it into a real, editable play: it finds each play panel on the sheet, identifies every player's route from the app's own route catalog (family, depth, break direction), and drafts the play in the target playbook's formation vocabulary. Nothing saves automatically — the coach reviews the draft side-by-side with the photo, with a confidence badge on every route and one-tap corrections, then saves. Imported plays are full citizens: same diagram engine, auto-generated notes, and version history as any other play. Photos are processed in-flight and never stored. Metered per month; behind the photo_play_import beta flag.",
+    category: "Plays & formations",
+    status: "beta",
+    addedDate: "2026-07-03",
+  },
+  {
     id: "qb-progression-numbers",
     name: "QB progression (read-order) numbers on receivers",
     description:
