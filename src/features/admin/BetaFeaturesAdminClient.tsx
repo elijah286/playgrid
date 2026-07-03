@@ -63,9 +63,15 @@ const FEATURES: FeatureMeta[] = [
   },
   {
     key: "coach_ai_image_upload",
-    label: "Coach Cal — photo / file attach",
+    label: "Coach Cal — photo / file attach (retired)",
     description:
-      "Surfaces the paperclip in the Coach Cal chat so coaches can attach a play-sheet photo or a file. The hand-drawn play-sheet vision pipeline is currently unreliable on small pencil arrows and rounded routes; pulled back to \"Only me\" while we work on accuracy. Re-widen once translation quality is consistently good across arbitrary drawings.",
+      "The old June chat pipeline: a paperclip in Coach Cal chat that read play-sheet photos into diagrams directly. It was hard-disabled in code (COACH_CAL_IMAGE_UPLOADS_ENABLED) after misreading ~30% of hand-drawn routes, so THIS TOGGLE IS CURRENTLY INERT — flipping it does nothing. Superseded by \"Photo play import\" below, which is the rebuilt, review-first version.",
+  },
+  {
+    key: "photo_play_import",
+    label: "Photo play import",
+    description:
+      "Import plays from a photo — the rebuilt version of photo→play. Lives on the PLAYBOOK page (camera \"Import\" button next to \"New play\"), not in Cal chat. Photograph a printed sheet or a clear hand-drawn play: panels are detected, each play is read semantically against the route catalog (families, depths, break directions — never raw geometry), and the coach reviews the draft beside the photo with per-route confidence badges before anything saves. Metered by the monthly Cal image cap. Keep at \"Only me\" until the extraction eval bar is met (scripts/photo-import-eval).",
   },
   {
     key: "football_library",
