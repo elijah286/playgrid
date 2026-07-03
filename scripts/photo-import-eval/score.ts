@@ -15,7 +15,7 @@
  */
 
 import { findTemplate } from "@/domain/play/routeTemplates";
-import type { ExtractedAssignment, PlayExtraction, ExtractionConfidence } from "./schema";
+import type { ExtractedAssignment, PlayExtraction, ExtractionConfidence } from "@/lib/coach-ai/photo-import/schema";
 import type { GoldenAssignment, GoldenPlay } from "./goldens";
 
 export const DEFAULT_DEPTH_TOL_YDS = 3;

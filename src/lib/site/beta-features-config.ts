@@ -13,7 +13,8 @@ export type BetaFeatureKey =
   | "team_messaging"
   | "coach_ai_image_upload"
   | "football_library"
-  | "offline_auto_cache";
+  | "offline_auto_cache"
+  | "photo_play_import";
 export type BetaFeatureScope = "off" | "me" | "all" | "custom";
 
 export type BetaFeatures = Record<BetaFeatureKey, BetaFeatureScope>;
@@ -40,6 +41,12 @@ const DEFAULTS: BetaFeatures = {
   // so they're available offline without thinking about it. Native-only and
   // gated — start "off", flip to "me" for site-admin testing, then "all".
   offline_auto_cache: "off",
+  // Photo play import (2026-07): photograph a play sheet → per-panel
+  // semantic extraction into a PlaySpec → coach reviews side-by-side →
+  // save. Distinct from the dead coach_ai_image_upload chat pipeline —
+  // this is the playbook-level import flow with a review step. Start
+  // "off"; flip to "me" for testing, then widen.
+  photo_play_import: "off",
 };
 
 /** Safe "everything off" fallback for callers that need a value even when

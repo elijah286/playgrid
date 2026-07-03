@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { aggregate, scoreAssignment, scorePlay, resolveFamily } from "./score";
 import type { GoldenPlay } from "./goldens";
-import type { PlayExtraction } from "./schema";
+import type { PlayExtraction } from "@/lib/coach-ai/photo-import/schema";
 
 describe("resolveFamily", () => {
   it("resolves catalog names case-insensitively", () => {
@@ -32,9 +32,9 @@ const golden: GoldenPlay = {
 function extraction(overrides: Partial<PlayExtraction> = {}): PlayExtraction {
   return {
     players: [
-      { label: "X", side: "right", onLos: true, backfield: false },
-      { label: "Y", side: "left", onLos: true, backfield: false },
-      { label: "B", side: "left", onLos: false, backfield: false },
+      { label: "X", side: "right", orderFromLeft: 3, onLos: true, backfield: false },
+      { label: "Y", side: "left", orderFromLeft: 1, onLos: true, backfield: false },
+      { label: "B", side: "left", orderFromLeft: 2, onLos: false, backfield: false },
     ],
     formation: { name: "Bunch Left", confidence: "med" },
     assignments: [

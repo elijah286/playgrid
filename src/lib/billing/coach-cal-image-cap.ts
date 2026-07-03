@@ -44,3 +44,37 @@ export async function getCoachCalImageCapState(userId: string): Promise<CoachCal
     resetDate,
   };
 }
+
+/**
+ * Record one image processed against the monthly cap. Read-modify-write
+ * (not atomic) is acceptable here: the counter is a soft cost guard on a
+ * single user's own sequential actions, not billing truth — the token
+ * ledger in coach_ai_token_usage carries the real spend. Best-effort:
+ * never throws, so a counting failure can't break the import itself.
+ */
+export async function recordCoachCalImageUsed(userId: string): Promise<void> {
+  try {
+    const now = new Date();
+    const monthStr = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+      .toISOString()
+      .slice(0, 10);
+    const admin = createServiceRoleClient();
+    const { data } = await admin
+      .from("coach_ai_usage")
+      .select("image_count")
+      .eq("user_id", userId)
+      .eq("month", monthStr)
+      .maybeSingle();
+    const next = ((data?.image_count as number | null) ?? 0) + 1;
+    await admin
+      .from("coach_ai_usage")
+      .upsert(
+        { user_id: userId, month: monthStr, image_count: next },
+        { onConflict: "user_id,month" },
+      );
+  } catch (err) {
+    console.warn(
+      `[photo-import] failed to record image usage for ${userId}: ${err instanceof Error ? err.message : err}`,
+    );
+  }
+}

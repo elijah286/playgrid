@@ -46,6 +46,7 @@ CLASSIFICATION RULES
   - "med": readable, but a specific plausible alternative exists (name it in evidence).
   - "low": occluded, faint, tangled with other routes, or you are pattern-guessing.
 - Estimate depth by counting gridlines — do NOT round to the family's typical depth. Any integer is valid (7, 12, 18...).
+- players[].orderFromLeft: number every player 1..N strictly left-to-right as drawn (leftmost = 1), counting C and Q too and ignoring depth. Two stacked players share an x — give the front (on-LOS) player the lower number.
 - formation.name: what a coach would call the alignment ("Trips Left", "Trips Right", "Spread Doubles", "Bunch Left", "Stack Right", "Empty", "Quads Right"...). strength = the side with more receivers.
 
 OUTPUT

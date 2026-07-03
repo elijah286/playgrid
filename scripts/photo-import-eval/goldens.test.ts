@@ -2,8 +2,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { findTemplate, ROUTE_TEMPLATES } from "@/domain/play/routeTemplates";
 import { loadGoldens } from "./goldens";
-import { buildSystemPrompt } from "./prompt";
-import { routeVocabularyNames } from "./schema";
+import { buildSystemPrompt } from "@/lib/coach-ai/photo-import/prompt";
+import { routeVocabularyNames } from "@/lib/coach-ai/photo-import/schema";
 
 const GOLDENS_FILE = path.join(__dirname, "goldens", "bomb-squad-offense-p1.json");
 

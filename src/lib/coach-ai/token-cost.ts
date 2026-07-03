@@ -43,6 +43,19 @@ const PRICING: Record<string, ModelRates> = {
     cacheWrite: 18.75,
     cacheRead: 1.5,
   },
+  // Photo play import models (2026-07).
+  "claude-opus-4-8": {
+    input: 5.0,
+    output: 25.0,
+    cacheWrite: 6.25,
+    cacheRead: 0.5,
+  },
+  "claude-sonnet-5": {
+    input: 3.0,
+    output: 15.0,
+    cacheWrite: 3.75,
+    cacheRead: 0.3,
+  },
 };
 
 // Sentinel for unknown models. Returns 0 so an unknown model can't bill

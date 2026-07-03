@@ -7,7 +7,12 @@ export type UsageContext =
   | "chat"
   | "vision_pass"
   | "layout_detection"
-  | "diagram_crop";
+  | "diagram_crop"
+  // Photo play import (2026-07): sheet-panel detection + per-panel
+  // semantic extraction. Separate contexts so admin spend views can
+  // split the import pipeline from chat.
+  | "photo_import_layout"
+  | "photo_import_extraction";
 
 export type RecordTokenUsageArgs = {
   userId: string;

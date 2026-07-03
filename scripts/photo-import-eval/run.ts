@@ -31,8 +31,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { cropPlaysFromSheet, type CroppedPlay } from "@/lib/coach-ai/image-crop";
 import { gridLayout, parseRegionFlag, DEFAULT_REGION, DEFAULT_CELL_MARGIN, type ContentRegion } from "./grid";
-import { buildSystemPrompt, buildUserText } from "./prompt";
-import { buildExtractionTool, playExtractionSchema, TOOL_NAME, type PlayExtraction } from "./schema";
+import { buildSystemPrompt, buildUserText } from "@/lib/coach-ai/photo-import/prompt";
+import { buildExtractionTool, playExtractionSchema, TOOL_NAME, type PlayExtraction } from "@/lib/coach-ai/photo-import/schema";
 import { loadGoldens, type GoldenSheet } from "./goldens";
 import { scorePlay, renderReport, type PlayScore } from "./score";
 

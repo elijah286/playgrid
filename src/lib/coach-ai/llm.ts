@@ -108,6 +108,14 @@ export type ChatOptions = {
   tools?: ToolDef[];
   maxTokens?: number;
   /**
+   * Explicit Claude model id for this call, bypassing pickClaudeModel's
+   * chat-oriented Haiku/vision routing. Non-chat pipelines (photo play
+   * import) pick their own model tier; chat turns should keep omitting
+   * this so the text/vision routing stays centralized. Ignored by the
+   * OpenAI path.
+   */
+  modelOverride?: string;
+  /**
    * Extended thinking budget in tokens (Claude only; ignored by OpenAI).
    * When set, enables Anthropic's `thinking` parameter — the model gets
    * up to `thinkingBudget` tokens of private reasoning before producing
@@ -201,7 +209,7 @@ async function chatClaude(opts: ChatOptions): Promise<ChatResult> {
         ...(i === opts.tools!.length - 1 ? { cache_control: { type: "ephemeral" as const } } : {}),
       }))
     : undefined;
-  const selectedModel = pickClaudeModel(opts.messages);
+  const selectedModel = opts.modelOverride ?? pickClaudeModel(opts.messages);
   // Extended thinking: Opus 4.7 changed the thinking API shape.
   // The old { type: "enabled", budget_tokens: N } form returns
   // a 400 ("Use thinking.type.adaptive ..."). The new form uses

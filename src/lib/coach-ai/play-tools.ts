@@ -817,7 +817,7 @@ type ResolvedInput =
  * path is the backward-compatible legacy flow and stays supported until
  * Cal's prompt is updated to prefer specs (Phase 4).
  */
-function resolveDiagramAndSpec(
+export function resolveDiagramAndSpec(
   rawSpec: unknown,
   rawDiagram: unknown,
   resolvedVariant: SportVariant,

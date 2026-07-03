@@ -65,6 +65,11 @@ export const extractedPlayerSchema = z
     label: z.string().min(1),
     /** Side of the center as drawn. */
     side: z.enum(["left", "right", "center"]),
+    /** 1-based rank across the formation, leftmost player = 1 (C and Q
+     *  included). This is the key the synthesizer uses to map sheet
+     *  players onto catalog formation slots, so it must reflect drawn
+     *  left-to-right order regardless of depth. */
+    orderFromLeft: z.number().int().min(1),
     onLos: z.boolean(),
     backfield: z.boolean(),
   })
@@ -134,10 +139,11 @@ export function buildExtractionTool(): {
           items: {
             type: "object",
             additionalProperties: false,
-            required: ["label", "side", "onLos", "backfield"],
+            required: ["label", "side", "orderFromLeft", "onLos", "backfield"],
             properties: {
               label: { type: "string", description: "Letter inside the circle (X, Y, Z, A, B, C, Q...)." },
               side: { type: "string", enum: ["left", "right", "center"] },
+              orderFromLeft: { type: "integer", minimum: 1, description: "1-based left-to-right rank across the whole formation as drawn (leftmost player = 1), counting every player including C and Q, regardless of depth." },
               onLos: { type: "boolean", description: "True when aligned on the line of scrimmage." },
               backfield: { type: "boolean", description: "True when aligned clearly behind the LOS (excluding Q)." },
             },
