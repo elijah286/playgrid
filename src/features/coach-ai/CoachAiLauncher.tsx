@@ -28,6 +28,7 @@ import { usePlayAnchor } from "./play-anchor";
 import { listPlaybooksAction, type PlaybookRow } from "@/app/actions/playbooks";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
 import { cn } from "@/lib/utils";
+import { hapticImpact } from "@/lib/native/haptics";
 import { track } from "@/lib/analytics/track";
 
 const PLAYBOOK_ROUTE_RE = /^\/playbooks\/([0-9a-f-]{8,})(?:\/|$)/i;
@@ -711,6 +712,71 @@ export function CoachAiLauncher({
     try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
   }
 
+  // ── Swipe-to-dismiss (mobile bottom-sheet) ───────────────────────────────
+  // The standard bottom-sheet metaphor: drag the header/grabber down to
+  // dismiss. Desktop float uses the header to *move* the window instead, so
+  // this only arms on narrow viewports in float mode. Tracks the finger 1:1
+  // (clamped so the sheet can't lift above its resting position); a release
+  // past the threshold or a downward flick closes, otherwise it snaps back.
+  const swipeRef = useRef<{ startY: number; startX: number; startT: number; active: boolean; pointerId: number } | null>(null);
+  const [swipeDy, setSwipeDy] = useState<number | null>(null);
+
+  function onSheetSwipeDown(e: React.PointerEvent<HTMLElement>) {
+    if (!isNarrow || panelMode !== "float") return;
+    const target = e.target as HTMLElement;
+    // Don't hijack taps on interactive chrome (mode buttons, close, context
+    // switcher) or on scroll/drag-exempt regions.
+    if (target.closest("button, a, input, textarea, select, [role='button'], [data-no-drag]")) return;
+    swipeRef.current = {
+      startY: e.clientY,
+      startX: e.clientX,
+      startT: e.timeStamp,
+      active: false,
+      pointerId: e.pointerId,
+    };
+  }
+
+  function onSheetSwipeMove(e: React.PointerEvent<HTMLElement>) {
+    const s = swipeRef.current;
+    if (!s) return;
+    const dy = e.clientY - s.startY;
+    const dx = e.clientX - s.startX;
+    if (!s.active) {
+      // Wait until the gesture is clearly a downward drag before claiming it,
+      // so a horizontal swipe or a jittery tap doesn't start a dismiss.
+      if (dy > 6 && dy > Math.abs(dx)) {
+        s.active = true;
+        try { (e.currentTarget as HTMLElement).setPointerCapture(s.pointerId); } catch { /* ignore */ }
+      } else if (Math.abs(dx) > 10 || dy < -6) {
+        swipeRef.current = null;
+        return;
+      } else {
+        return;
+      }
+    }
+    setSwipeDy(Math.max(0, dy));
+  }
+
+  function onSheetSwipeEnd(e: React.PointerEvent<HTMLElement>) {
+    const s = swipeRef.current;
+    if (!s) return;
+    swipeRef.current = null;
+    try { (e.currentTarget as HTMLElement).releasePointerCapture(s.pointerId); } catch { /* ignore */ }
+    const dy = swipeDy ?? 0;
+    setSwipeDy(null);
+    if (!s.active) return;
+    const sheetH = dialogRef.current?.offsetHeight ?? 0;
+    // Dismiss on a decisive drag (~30% of the sheet, capped so tall sheets
+    // don't demand a huge pull) or on a quick downward flick.
+    const distThreshold = Math.min(120, sheetH * 0.3 || 120);
+    const elapsed = e.timeStamp - s.startT;
+    const flick = dy > 48 && elapsed < 250;
+    if (dy > distThreshold || flick) {
+      void hapticImpact("light");
+      closeDialog();
+    }
+  }
+
   // ── Resize (bottom-right handle) — float mode only ───────────────────────
   const resizeRef = useRef<{ startX: number; startY: number; origW: number; origH: number } | null>(null);
 
@@ -865,6 +931,13 @@ export function CoachAiLauncher({
                 : {}),
               ...windowPosStyle,
               ...(panelMode === "docked" ? { width: dockedWidth } : {}),
+              // Follow the finger during a swipe-to-dismiss drag. Inline
+              // transform overrides the translate-y class; transition:none
+              // keeps it 1:1. Clearing swipeDy hands control back to the
+              // class so the open/close/snap-back transition animates.
+              ...(swipeDy != null
+                ? { transform: `translateY(${swipeDy}px)`, transition: "none" }
+                : {}),
             }}
             onPointerDown={onHeaderPointerDown}
             onPointerMove={onHeaderPointerMove}
@@ -943,10 +1016,32 @@ export function CoachAiLauncher({
               </div>
             )}
 
+            {/* ── Grabber (mobile bottom-sheet swipe-to-dismiss affordance) ─ */}
+            {isNarrow && panelMode === "float" && (
+              <div
+                onPointerDown={onSheetSwipeDown}
+                onPointerMove={onSheetSwipeMove}
+                onPointerUp={onSheetSwipeEnd}
+                onPointerCancel={onSheetSwipeEnd}
+                className="flex shrink-0 items-center justify-center pt-2 pb-1 touch-none sm:hidden"
+                aria-hidden="true"
+              >
+                <div className="h-1 w-9 rounded-full bg-muted/40" />
+              </div>
+            )}
+
             {/* ── Header ─────────────────────────────────────────────────── */}
             <header
+              onPointerDown={onSheetSwipeDown}
+              onPointerMove={onSheetSwipeMove}
+              onPointerUp={onSheetSwipeEnd}
+              onPointerCancel={onSheetSwipeEnd}
               className={cn(
                 "flex items-center gap-2 border-b px-3 py-2",
+                // Claim the vertical drag for swipe-to-dismiss — but only when
+                // the context popover is closed, so its scrollable list keeps
+                // its own touch scrolling.
+                isNarrow && panelMode === "float" && !contextOpen && "touch-none",
                 panelMode === "float" && "sm:cursor-grab sm:active:cursor-grabbing",
                 adminTrainingActive
                   ? "border-amber-300 bg-amber-50/60 dark:bg-amber-950/30"
