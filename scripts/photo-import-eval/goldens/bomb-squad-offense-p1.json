@@ -1,0 +1,228 @@
+{
+  "sheet": "bomb-squad-offense-2024-07-26-p1",
+  "variant": "flag_7v7",
+  "source": "Playmaker X printed export, photographed on grass in a plastic sleeve. 16 plays in a 4x4 grid. Players: X/Y/Z/A/B skill, C center (black square), Q QB (gray, shotgun). Routes are drawn in each player's circle color. Horizontal gridlines are 5-yard increments.",
+  "grid": {
+    "rows": 4,
+    "cols": 4,
+    "region": { "top": 0.125, "bottom": 0.965, "left": 0.045, "right": 0.965 }
+  },
+  "plays": [
+    {
+      "index": 1,
+      "verified": false,
+      "formation": { "name": "Spread Doubles", "alternates": ["Doubles", "Spread"], "strength": "balanced" },
+      "assignments": [
+        { "player": "Z", "kind": "route", "family": "Drag", "alternates": ["In"], "depthYds": 3, "depthTolYds": 2, "direction": "right" },
+        { "player": "B", "kind": "route", "family": "Flat", "alternates": ["Arrow"], "depthYds": 2, "depthTolYds": 2, "direction": "right", "modifiers": ["motion"] },
+        { "player": "Y", "kind": "route", "family": "Seam", "alternates": ["Go"], "depthYds": 12 },
+        { "player": "X", "kind": "route", "family": "Corner", "alternates": ["Post"], "depthYds": 12, "direction": "right" },
+        { "player": "A", "kind": "route", "family": "Go", "alternates": ["Fade"], "depthYds": 15 }
+      ],
+      "ambiguities": ["B's zigzag jet motion could be motion-into-flat or a jet-sweep handoff — the mesh with Q is not drawable on this sheet."],
+      "reviewNotes": "Confirm B: flat route after motion vs jet sweep carry. Confirm X breaks outside (corner), not inside (post)."
+    },
+    {
+      "index": 2,
+      "verified": false,
+      "formation": { "name": "Trips Left", "alternates": ["Trey Left"] },
+      "assignments": [
+        { "player": "Y", "kind": "route", "family": "Quick Out", "alternates": ["Flat"], "depthYds": 3, "depthTolYds": 2, "direction": "left" },
+        { "player": "Z", "kind": "route", "family": "Corner", "alternates": ["Post"], "depthYds": 15, "direction": "left" },
+        { "player": "A", "kind": "route", "family": "In", "alternates": ["Slant", "Dig"], "depthYds": 8, "direction": "right" },
+        { "player": "X", "kind": "route", "family": "Corner", "alternates": ["Out"], "depthYds": 10, "direction": "right" },
+        { "player": "B", "kind": "route", "family": "Out", "alternates": ["Corner"], "depthYds": 5, "direction": "right" }
+      ],
+      "reviewNotes": "Low-confidence panel from the photo. Verify especially Z (corner-left vs post) and A (in vs slant depth)."
+    },
+    {
+      "index": 3,
+      "verified": false,
+      "formation": { "name": "Trips Left", "alternates": ["Bunch Left"] },
+      "assignments": [
+        { "player": "A", "kind": "route", "family": "Corner", "alternates": ["Fade"], "depthYds": 12, "direction": "left" },
+        { "player": "Z", "kind": "route", "family": "Seam", "alternates": ["Go"], "depthYds": 15 },
+        { "player": "B", "kind": "route", "family": "Hitch", "alternates": ["Quick Out"], "depthYds": 5, "depthTolYds": 2 },
+        { "player": "X", "kind": "route", "family": "Out", "alternates": ["Corner"], "depthYds": 8, "direction": "right" },
+        { "player": "Y", "kind": "route", "family": "Seam", "alternates": ["Go"], "depthYds": 12 }
+      ],
+      "reviewNotes": "Left trio is tightly spaced — confirm trips vs bunch call. Confirm X's break angle (flat out vs climbing corner)."
+    },
+    {
+      "index": 4,
+      "verified": false,
+      "formation": { "name": "Trips Right", "alternates": ["Spread"] },
+      "assignments": [
+        { "player": "Y", "kind": "route", "family": "Quick Out", "alternates": ["Whip", "Flat"], "depthYds": 3, "depthTolYds": 2, "direction": "left" },
+        { "player": "A", "kind": "route", "family": "Flat", "alternates": ["Arrow"], "depthYds": 2, "depthTolYds": 2, "direction": "left" },
+        { "player": "Z", "kind": "route", "family": "Drag", "alternates": ["In"], "depthYds": 3, "depthTolYds": 2, "direction": "left" },
+        { "player": "X", "kind": "route", "family": "Corner", "alternates": ["Out & Up"], "depthYds": 15, "direction": "right" },
+        { "player": "B", "kind": "route", "family": "Go", "alternates": ["Seam"], "depthYds": 20 }
+      ],
+      "ambiguities": ["Two short dashed vertical arrows near the middle of the field — check-release, option marker, or decoy notation. Meaning unconfirmed."],
+      "reviewNotes": "This panel has the dashed-arrow notation — what do the dashed stems mean on Playmaker X exports? Verify Z's long crosser depth."
+    },
+    {
+      "index": 5,
+      "verified": false,
+      "formation": { "name": "Trips Right", "alternates": ["Stack Left", "Stack Left Trips Right"] },
+      "assignments": [
+        { "player": "Z", "kind": "route", "family": "Corner", "alternates": ["Fade"], "depthYds": 12, "direction": "left" },
+        { "player": "A", "kind": "route", "family": "In", "alternates": ["Slant"], "depthYds": 8, "direction": "right" },
+        { "player": "Y", "kind": "route", "family": "Post", "alternates": ["Dig"], "depthYds": 15, "direction": "left" },
+        { "player": "X", "kind": "route", "family": "Go", "alternates": ["Seam"], "depthYds": 15 },
+        { "player": "B", "kind": "route", "family": "Go", "alternates": ["Seam"], "depthYds": 20 }
+      ],
+      "ambiguities": ["Z/A far left look stacked — release order unclear.", "One long crosser comes from the right-side trio; which player it belongs to needs color confirmation."],
+      "reviewNotes": "Verify the stack pair (Z over A?) and which right-side player runs the deep crosser."
+    },
+    {
+      "index": 6,
+      "verified": false,
+      "formation": { "name": "Bunch Left", "alternates": ["Bunch"] },
+      "assignments": [
+        { "player": "A", "kind": "route", "family": "Seam", "alternates": ["Go"], "depthYds": 12 },
+        { "player": "B", "kind": "route", "family": "Corner", "alternates": ["Wheel"], "depthYds": 10, "direction": "right" },
+        { "player": "Y", "kind": "route", "family": "Flat", "alternates": ["Quick Out"], "depthYds": 4, "depthTolYds": 2, "direction": "left" },
+        { "player": "X", "kind": "route", "family": "Post", "alternates": ["Dig"], "depthYds": 12, "direction": "left" },
+        { "player": "Z", "kind": "route", "family": "Drag", "alternates": ["Whip"], "depthYds": 3, "depthTolYds": 2 }
+      ],
+      "ambiguities": ["Dense route crossing around the bunch — several break depths are coarse guesses.", "Z's path S-curves under the center before turning upfield — closest family unclear (drag vs whip vs angle)."],
+      "reviewNotes": "Stress-test panel — expect several corrections. The crossing cluster in the middle needs the physical sheet."
+    },
+    {
+      "index": 7,
+      "verified": false,
+      "formation": { "name": "Trips Right" },
+      "assignments": [
+        { "player": "Z", "kind": "route", "family": "Corner", "alternates": ["Fade"], "depthYds": 12, "direction": "left" },
+        { "player": "A", "kind": "route", "family": "Post", "alternates": ["Seam"], "depthYds": 15, "direction": "right" },
+        { "player": "B", "kind": "route", "family": "Drag", "alternates": ["Flat"], "depthYds": 3, "depthTolYds": 2, "direction": "left" },
+        { "player": "X", "kind": "route", "family": "Dig", "alternates": ["Post"], "depthYds": 10, "direction": "left" },
+        { "player": "Y", "kind": "route", "family": "Post", "alternates": ["Dig"], "depthYds": 15, "direction": "left" }
+      ],
+      "reviewNotes": "Two deep in-breakers from the right side — verify which of X/Y is the dig and which is the post, and B's shallow direction."
+    },
+    {
+      "index": 8,
+      "verified": false,
+      "formation": { "name": "Trips Left" },
+      "assignments": [
+        { "player": "X", "kind": "route", "family": "Go", "alternates": ["Seam", "Fade"], "depthYds": 20 },
+        { "player": "B", "kind": "route", "family": "Seam", "alternates": ["Go"], "depthYds": 15 },
+        { "player": "Y", "kind": "route", "family": "Seam", "alternates": ["Go"], "depthYds": 15 },
+        { "player": "A", "kind": "route", "family": "Seam", "alternates": ["Go"], "depthYds": 15 },
+        { "player": "Z", "kind": "route", "family": "Go", "alternates": ["Fade", "Seam"], "depthYds": 20 }
+      ],
+      "reviewNotes": "Cleanest panel on the sheet — reads as all verticals (5 verts). Should be the easiest confirm."
+    },
+    {
+      "index": 9,
+      "verified": false,
+      "formation": { "name": "Trips Left" },
+      "assignments": [
+        { "player": "A", "kind": "route", "family": "Go", "alternates": ["Fade"], "depthYds": 18 },
+        { "player": "Z", "kind": "route", "family": "Whip", "alternates": ["Drag"], "depthYds": 3, "depthTolYds": 2, "direction": "right" },
+        { "player": "Y", "kind": "route", "family": "Quick Out", "alternates": ["Flat"], "depthYds": 3, "depthTolYds": 2, "direction": "left" },
+        { "player": "B", "kind": "route", "family": "Dig", "alternates": ["In"], "depthYds": 8, "direction": "left" },
+        { "player": "X", "kind": "route", "family": "Go", "alternates": ["Seam"], "depthYds": 15 }
+      ],
+      "reviewNotes": "Verify Z's pivot shape (whip = out-pivot back inside?) and B's in-cut depth."
+    },
+    {
+      "index": 10,
+      "verified": false,
+      "formation": { "name": "Trips Left" },
+      "assignments": [
+        { "player": "A", "kind": "route", "family": "Go", "alternates": ["Seam"], "depthYds": 18 },
+        { "player": "Y", "kind": "route", "family": "Out", "alternates": ["Quick Out"], "depthYds": 5, "direction": "left" },
+        { "player": "X", "kind": "route", "family": "In", "alternates": ["Slant"], "depthYds": 6, "direction": "right" },
+        { "player": "Z", "kind": "route", "family": "Go", "alternates": ["Seam"], "depthYds": 18 },
+        { "player": "B", "kind": "route", "family": "Hitch", "alternates": ["Quick Out"], "depthYds": 5, "depthTolYds": 2 }
+      ],
+      "ambiguities": ["Small pennant/flag glyphs are attached to Y's and B's routes — notation meaning unconfirmed (option? sight-adjust?)."],
+      "reviewNotes": "What do the little flag glyphs mean on Playmaker X? They appear here and on plays 11 and 15."
+    },
+    {
+      "index": 11,
+      "verified": false,
+      "formation": { "name": "Trips Right" },
+      "assignments": [
+        { "player": "A", "kind": "route", "family": "Go", "alternates": ["Seam"], "depthYds": 15 },
+        { "player": "Z", "kind": "route", "family": "Hitch", "alternates": ["Sit"], "depthYds": 5, "depthTolYds": 2 },
+        { "player": "B", "kind": "route", "family": "Out", "alternates": ["Quick Out"], "depthYds": 5, "direction": "right" },
+        { "player": "X", "kind": "route", "family": "Corner", "alternates": ["Post"], "depthYds": 12, "direction": "right" },
+        { "player": "Y", "kind": "route", "family": "Post", "alternates": ["Dig"], "depthYds": 15, "direction": "left" }
+      ],
+      "ambiguities": ["Flag glyph on B's route."],
+      "reviewNotes": "Low-confidence panel — verify every route; the middle-of-field short route's owner (Z?) especially."
+    },
+    {
+      "index": 12,
+      "verified": false,
+      "formation": { "name": "Trips Right" },
+      "assignments": [
+        { "player": "A", "kind": "route", "family": "Seam", "alternates": ["Go"], "depthYds": 15 },
+        { "player": "Y", "kind": "route", "family": "In", "alternates": ["Post", "Dig"], "depthYds": 10, "direction": "right" },
+        { "player": "B", "kind": "route", "family": "Out", "alternates": ["Corner"], "depthYds": 6, "direction": "right" },
+        { "player": "X", "kind": "route", "family": "Comeback", "alternates": ["Curl"], "depthYds": 12, "direction": "right" },
+        { "player": "Z", "kind": "route", "family": "Go", "alternates": ["Seam"], "depthYds": 18 }
+      ],
+      "reviewNotes": "X hooks back at depth — comeback (settles toward sideline) vs curl (settles toward QB)? The hook direction decides the family."
+    },
+    {
+      "index": 13,
+      "verified": false,
+      "formation": { "name": "Spread Doubles", "alternates": ["Doubles"] },
+      "assignments": [
+        { "player": "Z", "kind": "route", "family": "Post", "alternates": ["Go"], "depthYds": 18, "direction": "right" },
+        { "player": "A", "kind": "route", "family": "Curl", "alternates": ["Hitch"], "depthYds": 8 },
+        { "player": "Y", "kind": "route", "family": "In", "alternates": ["Dig"], "depthYds": 10, "direction": "left" },
+        { "player": "X", "kind": "route", "family": "Drag", "alternates": ["In"], "depthYds": 4, "depthTolYds": 2, "direction": "left" },
+        { "player": "B", "kind": "route", "family": "Flat", "alternates": ["Arrow"], "depthYds": 2, "depthTolYds": 2, "direction": "right", "modifiers": ["motion"] }
+      ],
+      "ambiguities": ["B has the jet-motion zigzag again — motion-into-flat vs jet sweep handoff.", "Z's deep route crosses a long way — post vs straight go needs confirmation."],
+      "reviewNotes": "Same B-motion question as Play 1. Verify Z's deep crosser."
+    },
+    {
+      "index": 14,
+      "verified": false,
+      "formation": { "name": "Quads Right", "alternates": ["Empty", "Trips Right"] },
+      "assignments": [
+        { "player": "Y", "kind": "route", "family": "Seam", "alternates": ["Go"], "depthYds": 12 },
+        { "player": "Z", "kind": "route", "family": "Seam", "alternates": ["Go"], "depthYds": 15 },
+        { "player": "B", "kind": "route", "family": "Drag", "alternates": ["Flat"], "depthYds": 3, "depthTolYds": 2, "direction": "left" },
+        { "player": "X", "kind": "route", "family": "Post", "alternates": ["Dig"], "depthYds": 12, "direction": "left" },
+        { "player": "A", "kind": "route", "family": "Go", "alternates": ["Fade"], "depthYds": 18 }
+      ],
+      "reviewNotes": "Is the right side quads (4 aligned) or trips + a back? Verify which right-side player runs the shallow crosser (B?) vs the verticals."
+    },
+    {
+      "index": 15,
+      "verified": false,
+      "formation": { "name": "Trips Left" },
+      "assignments": [
+        { "player": "Z", "kind": "route", "family": "Slant", "alternates": ["Seam"], "depthYds": 5, "direction": "right" },
+        { "player": "A", "kind": "route", "family": "Post", "alternates": ["In"], "depthYds": 15, "direction": "right" },
+        { "player": "X", "kind": "route", "family": "Hitch", "alternates": ["Spot"], "depthYds": 4, "depthTolYds": 2 },
+        { "player": "B", "kind": "route", "family": "Corner", "alternates": ["Wheel"], "depthYds": 12, "direction": "right" },
+        { "player": "Y", "kind": "route", "family": "Curl", "alternates": ["Hitch"], "depthYds": 10 }
+      ],
+      "ambiguities": ["Flag glyph on X's short route."],
+      "reviewNotes": "Verify A's deep in-breaker and B corner vs wheel (does B climb from a flat start?)."
+    },
+    {
+      "index": 16,
+      "verified": false,
+      "formation": { "name": "Quads Right", "alternates": ["Empty"] },
+      "assignments": [
+        { "player": "Y", "kind": "route", "family": "Comeback", "alternates": ["Curl"], "depthYds": 12, "direction": "left" },
+        { "player": "Z", "kind": "route", "family": "Post", "alternates": ["Go"], "depthYds": 18, "direction": "left" },
+        { "player": "B", "kind": "route", "family": "Drag", "alternates": ["In"], "depthYds": 4, "depthTolYds": 2, "direction": "left" },
+        { "player": "X", "kind": "route", "family": "In", "alternates": ["Dig"], "depthYds": 8, "direction": "left" },
+        { "player": "A", "kind": "route", "family": "Corner", "alternates": ["Out & Up"], "depthYds": 15, "direction": "right" }
+      ],
+      "reviewNotes": "Iso Y left with a quads-right look. Verify Y's hook direction and whether A runs a single-break corner or a double move."
+    }
+  ]
+}
