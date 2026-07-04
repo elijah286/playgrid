@@ -1998,8 +1998,13 @@ function SaveDefensePlayChip({
 
   if (state?.status === "saved") {
     return (
-      <a
-        href={`/plays/${state.playId}`}
+      // The play editor route is /plays/<id>/edit — a bare /plays/<id> 404s
+      // (2026-07-04: coach saved a defense, clicked the pill, hit a 404).
+      // Use next/link (not <a>) so opening the play is a SOFT navigation: Cal
+      // lives in the persistent root-layout launcher, so it stays mounted and
+      // re-anchors instead of full-page-reloading and clearing the window.
+      <Link
+        href={`/plays/${state.playId}/edit`}
         className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-900 ring-1 ring-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-100 dark:ring-emerald-900"
       >
         <Check className="size-3.5 shrink-0" />
@@ -2008,7 +2013,7 @@ function SaveDefensePlayChip({
             ? `Added the defense to ${proposal.offensivePlayName} — open the play`
             : `Saved "${proposal.suggestedName}" — open the new play`}
         </span>
-      </a>
+      </Link>
     );
   }
 
