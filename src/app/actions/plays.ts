@@ -1232,6 +1232,24 @@ export async function createDefensePlayFromFenceAction(args: {
   };
   doc.metadata.vsPlaySnapshot = snapshot;
 
+  // Never save a noteless defense. Offense plays created via compose_play ship
+  // with notes projected from their spec ("a play is never noteless"); this
+  // defense-save path bypassed that (2026-07-04: coach saved a defense and the
+  // notes were blank). Project coaching notes from the coverage + diagram so a
+  // saved defense is teach-ready by default. Best-effort — a projection bug
+  // must never block the save.
+  try {
+    const { buildDefenseNotes } = await import("@/lib/coach-ai/defense-notes");
+    const projected = buildDefenseNotes({
+      playName: suggestedName,
+      diagram: defenseOnlyDiagram,
+      offenseName: snapshot.sourceName,
+    });
+    if (projected.trim().length > 0) doc.metadata.notes = projected;
+  } catch {
+    /* keep the blank note rather than fail the create */
+  }
+
   // Wristband + sort order — same logic as installDefenseVsPlayAction.
   const { data: codeRows } = await supabase
     .from("plays")
