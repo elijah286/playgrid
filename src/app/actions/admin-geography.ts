@@ -293,10 +293,3 @@ export async function getGeoSummaryOrEmpty(
   if (res.ok) return res.summary;
   return emptySummary(windowDays, payingOnly);
 }
-
-// CI-verification probe: reproduces the a1b87bfc failure class (sync export
-// from a "use server" module) to prove the Checks build job catches it.
-// This commit is reverted immediately after the run — do not keep.
-export function ciBuildProbeSyncExport(): string {
-  return "next build must reject sync exports from use-server modules";
-}
