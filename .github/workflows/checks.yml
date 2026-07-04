@@ -1,12 +1,12 @@
 name: Checks
 
-# Runs the standard verify suite (typecheck, unit tests) plus the league/coach
-# isolation guardrails from the 2026-07-01 platform audit, on every push to
-# main. This is INFORMATIONAL — it runs independently of (and does not gate)
-# "Deploy to Cloud Run", matching how "Functional tests" already works in this
-# repo. AGENTS.md already requires typecheck + tests to pass before every
-# push; this makes that a visible, automated signal instead of relying purely
-# on the person/agent pushing to have run it locally.
+# Runs the standard verify suite (typecheck, unit tests), the league/coach
+# isolation guardrails from the 2026-07-01 platform audit, and a `next build`,
+# on every push to main. This is INFORMATIONAL — it runs independently of
+# (and does not gate) "Deploy to Cloud Run", matching how "Functional tests"
+# already works in this repo. AGENTS.md already requires typecheck + tests to
+# pass before every push; this makes that a visible, automated signal instead
+# of relying purely on the person/agent pushing to have run it locally.
 on:
   push:
     branches: [main]
@@ -45,3 +45,52 @@ jobs:
 
       - name: League/coach isolation guardrails
         run: npm run check:league-isolation
+
+  build:
+    # `next build` enforces rules that typecheck and vitest cannot see —
+    # e.g. "Server Actions must be async functions" when a "use server"
+    # module exports a sync function (a1b87bfc broke every deploy this way
+    # on 2026-07-03 while Checks stayed green, until acaa5cd4), or
+    # useSearchParams without a Suspense boundary. Until this job existed,
+    # those errors only surfaced in the Docker build inside "Deploy to
+    # Cloud Run", well after merge. Informational like the job above; the
+    # deploy pipeline still does its own build and remains the artifact
+    # of record.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Restore Next.js build cache
+        # Two-tier key per the Next.js CI-caching guide: exact hit when
+        # sources are unchanged, lockfile-prefix fallback otherwise so a
+        # changed tree still warm-starts from the newest saved cache.
+        # Source hash is scoped to src/ (not **) so it can never sweep up
+        # node_modules regardless of step ordering. ~/.npm is already
+        # handled by setup-node's `cache: npm`.
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**/*.ts', 'src/**/*.tsx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('package-lock.json') }}-
+
+      - run: npm ci
+
+      - name: Next build
+        # Only the two Supabase vars are hard-required at build time
+        # (src/lib/supabase/{client,server}.ts throw without them); every
+        # other NEXT_PUBLIC_* has a safe fallback and the artifact is
+        # discarded, never served. Sentry vars are deliberately omitted so
+        # source-map upload self-disables (next.config.ts sourcemaps.disable)
+        # — keeps this build fast and out of Sentry's release history.
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_TELEMETRY_DISABLED: "1"
+        run: npm run build
