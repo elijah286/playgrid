@@ -35,6 +35,7 @@ import { CoachCalCostMeter } from "./CoachCalCostMeter";
 import { createMessagePackCheckoutAction } from "@/app/actions/coach-cal-pack";
 import type { NoteProposal } from "@/lib/coach-ai/playbook-tools";
 import { readLivePlayDoc } from "@/lib/coach-ai/live-play-doc";
+import { computeAnchoredContextStart } from "@/lib/coach-ai/anchored-context-scope";
 import { useNativePlatform } from "@/lib/native/useIsNativeApp";
 import { COACH_CAL_IMAGE_UPLOADS_ENABLED } from "@/lib/coach-ai/image-upload";
 import { detectAutoAnchorTarget } from "./auto-anchor";
@@ -42,7 +43,6 @@ import {
   activeContextTurns,
   contextDividerTurn,
   contextStartIndex,
-  conversationCoversPlay,
   isContextDivider,
 } from "./context-boundary";
 import { reconcileServerTurns } from "./reconcile-turns";
@@ -265,6 +265,7 @@ async function* parseSse(body: ReadableStream<Uint8Array>) {
 export function CoachAiChat({
   playbookId,
   playId,
+  playName = null,
   mode = "normal",
   isAdmin = false,
   canDebugCal = false,
@@ -274,6 +275,10 @@ export function CoachAiChat({
 }: {
   playbookId?: string | null;
   playId?: string | null;
+  /** Display name of the anchored play (e.g. "Curl-Flat Right"). Used to tell
+   *  whether a loaded conversation is about THIS play or a different one, so the
+   *  divider collapses a stale cross-play conversation instead of leaking it. */
+  playName?: string | null;
   mode?: "normal" | "admin_training";
   /** Site-admin flag — admins skip the free-trial-prompt-count fetch below
    *  (they're never on the trial). Not the debug-tools gate; see canDebugCal. */
@@ -574,39 +579,40 @@ export function CoachAiChat({
     const lastPlayId = loadLastPlayId(storageKey);
     const currentPlayId = playId ?? null;
 
-    // Is the loaded conversation actually ABOUT the play now on screen? It is
-    // when some turn was authored on this play (Layer 2 per-turn playId) OR it
-    // references this play's id (a play:// link — e.g. a play built here). When
-    // neither holds, the conversation is foreign to this play — a cross-session
-    // reopen or a jump to an unrelated play — and the prior turns must not drive
-    // Cal's answer. This is stronger than comparing lastPlayId (which can be
-    // stale) and self-heals: once the coach interacts on this play, the new
-    // turns carry its id, so later opens read as continuous.
-    const loadedIsForeignToCurrentPlay =
-      currentPlayId !== null && loaded.length > 0 && !conversationCoversPlay(loaded, currentPlayId);
+    // Where does the on-anchor context begin? Turns before this index are about
+    // a DIFFERENT play (or a stale cross-session conversation) and get collapsed
+    // behind an "Earlier conversation" divider. This uses the SAME fence-title /
+    // per-turn-playId logic the server applies authoritatively, so a play merely
+    // MENTIONED in passing no longer grants continuity — the failure mode that
+    // leaked a month-old "Bubble Right" conversation into "Curl-Flat Right"
+    // because Curl-Flat's play:// link appeared in an old multi-play recap
+    // (2026-07-04). Self-heals: once the coach interacts on this play, its turns
+    // carry the id and read as continuous.
+    const anchorScopeStart =
+      currentPlayId !== null
+        ? computeAnchoredContextStart({ history: loaded, anchoredPlayId: currentPlayId, anchoredPlayName: playName })
+        : 0;
     // Navigated OUT of a play to the lobby/dashboard while a play conversation
     // was loaded — the play talk is now background.
     const leftPlayView = currentPlayId === null && lastPlayId !== null && loaded.length > 0;
 
     // A discontinuous open inserts a HARD context divider: the prior turns
-    // collapse behind an "Earlier conversation" divider AND are excluded from
-    // what's sent to Cal (so Cal can't keep answering about the old play).
-    let dividerLabel: string | null = null;
+    // collapse behind it AND are excluded from what's sent to Cal.
+    let merged = loaded;
     if (playbookSwitched && loaded.length > 0) {
-      dividerLabel = "Earlier conversation — different playbook";
-    } else if (loadedIsForeignToCurrentPlay) {
-      dividerLabel = "Earlier conversation — different play";
+      merged = [...loaded, contextDividerTurn("Earlier conversation — different playbook")];
+    } else if (anchorScopeStart > 0) {
+      merged = [
+        ...loaded.slice(0, anchorScopeStart),
+        contextDividerTurn("Earlier conversation — different play"),
+        ...loaded.slice(anchorScopeStart),
+      ];
     } else if (leftPlayView) {
-      dividerLabel = "Earlier conversation";
+      merged = [...loaded, contextDividerTurn("Earlier conversation")];
     }
 
-    if (dividerLabel) {
-      const merged = [...loaded, contextDividerTurn(dividerLabel)];
-      setTurns(merged);
-      saveTurns(storageKey, merged);
-    } else {
-      setTurns(loaded);
-    }
+    setTurns(merged);
+    if (merged !== loaded) saveTurns(storageKey, merged);
     setError(null);
     prevStorageKeyRef.current = storageKey;
     prevPlayIdInScopeRef.current = { storageKey, playId: playId ?? null };
@@ -636,18 +642,23 @@ export function CoachAiChat({
     // "build a counter to this → it opens" flow never resets mid-thought.
     setTurns((cur) => {
       if (cur.length === 0) return cur;
-      // Continuity: don't reset when the play just opened is part of this
-      // conversation — either built here (its play:// link appears) or already
-      // discussed here (a turn was authored on it). Covers "build a counter →
-      // it opens" and "hop back to a play you were just on".
-      if (conversationCoversPlay(cur, playId)) return cur;
-      const last = cur[cur.length - 1];
-      if (last && isContextDivider(last)) return cur; // avoid a double divider
+      // Continuity: don't reset when the play just opened is the on-anchor focus
+      // of this conversation (built here, or actively discussed here). A play
+      // merely mentioned in passing no longer counts — same logic the server
+      // applies. When navigating to the lobby (no playId), collapse the play
+      // talk to background. Covers "build a counter → it opens" and "hop back to
+      // a play you were just on" without leaking a stale cross-play convo.
+      const start = playId
+        ? computeAnchoredContextStart({ history: cur, anchoredPlayId: playId, anchoredPlayName: playName })
+        : cur.length;
+      if (start === 0) return cur; // fully continuous
+      const boundaryHasDivider =
+        (start > 0 && isContextDivider(cur[start - 1]!)) || (start < cur.length && isContextDivider(cur[start]!));
+      if (boundaryHasDivider) return cur; // avoid a redundant divider
       const merged = [
-        ...cur,
-        contextDividerTurn(
-          playId ? "Earlier conversation — different play" : "Earlier conversation",
-        ),
+        ...cur.slice(0, start),
+        contextDividerTurn(playId ? "Earlier conversation — different play" : "Earlier conversation"),
+        ...cur.slice(start),
       ];
       saveTurns(storageKey, merged);
       return merged;

@@ -1275,6 +1275,7 @@ export function CoachAiLauncher({
                 <CoachAiChat
                   playbookId={playbookId}
                   playId={playId}
+                  playName={playId && playAnchor?.id === playId ? playAnchor.name ?? null : null}
                   mode={mode}
                   isAdmin={isAdmin}
                   canDebugCal={canDebugCal}

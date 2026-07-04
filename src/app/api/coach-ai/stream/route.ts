@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { runAgent, type AgentStreamEvent } from "@/lib/coach-ai/agent";
+import { computeAnchoredContextStart } from "@/lib/coach-ai/anchored-context-scope";
 import { playDocumentToCoachDiagram } from "@/lib/coach-ai/play-tools";
 import { recapCoachDiagram } from "@/lib/coach-ai/diagram-recap";
 import type { PlayDocument } from "@/domain/play/types";
@@ -402,18 +403,39 @@ export async function POST(req: Request): Promise<Response> {
       ]
     : text;
 
+  // Authoritative context scope: when a play is anchored, drop prior turns that
+  // are clearly about a DIFFERENT play, so a stale playbook-scoped conversation
+  // can't make the model answer about the wrong play (2026-07-04: coach on
+  // "Curl-Flat Right" got a "Bubble Right" answer because a month-old convo was
+  // still in context and the client divider missed it). The anchored play's
+  // diagram is injected into the system prompt separately, so dropping stale
+  // turns never leaves the model blind. Belt-and-suspenders to the client
+  // divider — the server never trusts the client to have filtered correctly.
+  const scopeStart = computeAnchoredContextStart({
+    history: body.history,
+    anchoredPlayId: ctx.playId,
+    anchoredPlayName: ctx.playName,
+  });
+  const scopedTurns = body.history.slice(scopeStart);
+  if (scopeStart > 0) {
+    console.warn(
+      `[coach-ai:scope] dropped ${scopeStart} stale turn(s) — anchored play ${ctx.playId} ` +
+        `("${ctx.playName ?? "?"}"); prior conversation focused on a different play`,
+    );
+  }
+
   const history: ChatMessage[] = [
-    ...turnsToHistory(body.history),
+    ...turnsToHistory(scopedTurns),
     { role: "user", content: currentUserContent },
   ];
-  // Per-message play scope, index-aligned with `history`. Each prior turn
-  // carries the play it was authored under (undefined for turns persisted
-  // before this shipped → treated as "unknown play", never excluded). The
+  // Per-message play scope, index-aligned with `history` (over the scoped
+  // turns). Each prior turn carries the play it was authored under (undefined
+  // for turns persisted before this shipped → treated as "unknown play"). The
   // current user turn is scoped to the play on screen now (ctx.playId). The
   // harness uses this to keep a ```play fence authored while viewing a DIFFERENT
   // play from becoming this turn's edit/overlay baseline.
   const historyPlayIds: (string | null)[] = [
-    ...body.history.map((t) => t.playId ?? null),
+    ...scopedTurns.map((t) => t.playId ?? null),
     ctx.playId ?? null,
   ];
 
