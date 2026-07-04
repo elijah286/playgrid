@@ -43,7 +43,7 @@ export async function runPanelImport(opts: {
   mediaType: string;
   label: string;
 }): Promise<PanelImportOutcome> {
-  const read = await extractPanel({
+  let read = await extractPanel({
     cropBase64: opts.cropBase64,
     mediaType: opts.mediaType,
     label: opts.label,
@@ -51,8 +51,31 @@ export async function runPanelImport(opts: {
   });
   if (!read.ok) return { ok: false, error: read.error };
 
-  // One successful expensive read = one unit of the monthly image cap
-  // (admins are counted too, just not blocked).
+  // Completeness re-read: exactly one skill player short is almost
+  // always a silently dropped circle (edge-clipped, or buried under
+  // crossing routes — a real prod failure, 2026-07-03), not a
+  // different format. One corrective pass with an explicit count;
+  // keep whichever read found more players. Two-or-more short is the
+  // variant gate's territory below.
+  const firstFit = variantFit(read.extraction, opts.variant);
+  if (firstFit.delta === -1) {
+    const reread = await extractPanel({
+      cropBase64: opts.cropBase64,
+      mediaType: opts.mediaType,
+      label: opts.label,
+      userId: opts.userId,
+      extraHint:
+        `A previous read of this panel found only ${firstFit.observedSkill} route-running players, but it should show ` +
+        `${firstFit.expectedSkill} lettered circles besides C and Q. Count the circles again — check the panel edges and ` +
+        `spots where routes cross — and include EVERY circle, even if partially cut off.`,
+    });
+    if (reread.ok && variantFit(reread.extraction, opts.variant).observedSkill > firstFit.observedSkill) {
+      read = reread;
+    }
+  }
+
+  // One imported panel = one unit of the monthly image cap, regardless
+  // of internal re-reads (those are our QA cost, not the coach's).
   void recordCoachCalImageUsed(opts.userId);
 
   // Observability: the raw semantic read, one grep-able line per import.

@@ -707,6 +707,16 @@ export function PhotoImportClient(props: {
   if ((phase.step === "review" || phase.step === "saving") && spec) {
     const saving = phase.step === "saving";
     const lowConfidence = (conf?: string) => conf === "med" || conf === "low";
+    // Every skill slot gets a row — including slots the reader never
+    // matched to a sheet player (a silently-missed circle), so the
+    // coach can hand them a route right here instead of hunting for a
+    // ghost player in the editor.
+    const reviewRows: { key: string; sheetLabel: string | null; sheetColor?: string; rosterId: string }[] = [
+      ...mapping.map((m) => ({ key: m.rosterId, sheetLabel: m.sheetLabel as string | null, sheetColor: m.sheetColor, rosterId: m.rosterId })),
+      ...spec.assignments
+        .filter((a) => a.player !== "C" && a.player !== "QB" && !mapping.some((m) => m.rosterId === a.player))
+        .map((a) => ({ key: a.player, sheetLabel: null, sheetColor: undefined as string | undefined, rosterId: a.player })),
+    ];
     return (
       <div className="space-y-4">
         {errorBox}
@@ -756,22 +766,25 @@ export function PhotoImportClient(props: {
               </tr>
             </thead>
             <tbody>
-              {mapping.map((m) => {
+              {reviewRows.map((m) => {
                 const assignment = spec.assignments.find((a) => a.player === m.rosterId);
                 if (!assignment) return null;
                 const action = assignment.action;
-                const fromSheet = sheetAssignment(m.sheetLabel);
+                const fromSheet = m.sheetLabel ? sheetAssignment(m.sheetLabel) : undefined;
                 const conf = fromSheet?.confidence;
                 return (
-                  <tr key={m.rosterId} className={`border-b border-border last:border-0 ${lowConfidence(conf) ? "bg-amber-50/40" : ""}`}>
+                  <tr key={m.key} className={`border-b border-border last:border-0 ${lowConfidence(conf) || !m.sheetLabel ? "bg-amber-50/40" : ""}`}>
                     <td className="px-3 py-2 font-semibold text-foreground">
-                      <span className="inline-flex items-center gap-1.5">
+                      <span
+                        className="inline-flex items-center gap-1.5"
+                        title={m.sheetLabel ? undefined : "This slot wasn't matched to a player in the photo — the reader may have missed a circle."}
+                      >
                         <span
                           aria-hidden
                           className="inline-block size-2.5 shrink-0 rounded-full border border-black/10"
                           style={{ backgroundColor: (m.sheetColor && SHEET_COLOR_HEX[m.sheetColor]) || "#9CA3AF" }}
                         />
-                        {m.sheetLabel}
+                        {m.sheetLabel ?? "not read"}
                       </span>
                     </td>
                     <td className="px-3 py-2 text-muted">{m.rosterId}</td>

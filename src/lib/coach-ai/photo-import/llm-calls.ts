@@ -147,10 +147,15 @@ export async function extractPanel(opts: {
   mediaType: string;
   label: string;
   userId: string;
+  /** Extra corrective instruction appended to the user turn — used by
+   *  the completeness re-read when a first pass came back a player
+   *  short. */
+  extraHint?: string;
 }): Promise<{ ok: true; extraction: PlayExtraction } | { ok: false; error: string }> {
+  const userText = opts.extraHint ? `${buildUserText(opts.label)}\n\n${opts.extraHint}` : buildUserText(opts.label);
   const baseUser: ChatMessage = {
     role: "user",
-    content: [imageBlock(opts.cropBase64, opts.mediaType), { type: "text", text: buildUserText(opts.label) }],
+    content: [imageBlock(opts.cropBase64, opts.mediaType), { type: "text", text: userText }],
   };
   let messages: ChatMessage[] = [baseUser];
 

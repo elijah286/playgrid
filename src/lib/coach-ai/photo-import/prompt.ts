@@ -24,6 +24,7 @@ export function buildSystemPrompt(): string {
 You never estimate pixel coordinates. You name things: a formation, and for each player a route family from a fixed vocabulary, a depth in yards, and a page direction. Rendering is done later by a deterministic engine from your names — so a wrong name is a wrong play, but an imprecise arrow trace costs nothing.
 
 HOW TO READ THE PANEL
+- COMPLETENESS FIRST: before reading any route, COUNT the lettered circles in the panel. players[] must contain exactly one entry per circle — including circles partially cut off at the panel edge or crowded by crossing routes (read what's visible and lower that player's confidence). Silently dropping a player is the worst possible error this tool can make; if a letter is unreadable, still include the circle with your best-guess label and confidence "low".
 - Players are circles with a letter inside (X, Y, Z, A, B...). The black SQUARE labeled C is the center. The gray circle labeled Q is the quarterback (below C = shotgun).
 - Each player's route is drawn in THE SAME COLOR as that player's circle. When routes cross or cluster, follow the color, not proximity. This is the most reliable signal in the panel.
 - The faint horizontal lines are yard lines spaced 5 YARDS apart. The row where the players sit is the line of scrimmage. Depth = the DEEPEST point the route reaches past the line of scrimmage, in yards, from counting line crossings (halfway to the first line ≈ 2-3 yd; one line ≈ 5 yd; two lines ≈ 10 yd; interpolate between lines).
