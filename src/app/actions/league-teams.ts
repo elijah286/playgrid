@@ -3,9 +3,11 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { gateLeagueCapability, resolveLeagueView } from "@/lib/league/authorize";
 import { ensureDefaultWorkspace } from "@/lib/data/workspace";
+import { autoSeedNewTeam } from "@/lib/league/team-playbook";
 
 export type LeagueTeamRow = {
   id: string;
@@ -81,14 +83,36 @@ export async function createLeagueTeamAction(leagueId: string, input: LeagueTeam
   const orgId = await operatorOrgId(gate.supabase, gate.userId);
   if (!orgId) return { ok: false as const, error: "No workspace found for your account." };
 
-  const { error } = await gate.supabase.from("teams").insert({
-    org_id: orgId,
-    league_id: leagueId,
-    ...fields,
-  });
-  if (error) return { ok: false as const, error: error.message };
+  const { data: created, error } = await gate.supabase
+    .from("teams")
+    .insert({
+      org_id: orgId,
+      league_id: leagueId,
+      ...fields,
+    })
+    .select("id, name")
+    .single();
+  if (error || !created) return { ok: false as const, error: error?.message ?? "Insert failed." };
+
+  // New teams get their playbook immediately: starter plays + the operator's
+  // library defaults for this game type (library plan, Phase 2). Best-effort —
+  // the team exists even if seeding hiccups; warnings surface in the UI.
+  let warnings: string[] = [];
+  try {
+    const seeded = await autoSeedNewTeam(createServiceRoleClient(), {
+      leagueId,
+      teamId: created.id as string,
+      teamName: created.name as string,
+      userId: gate.userId,
+    });
+    warnings = seeded.warnings;
+  } catch (e) {
+    warnings = [e instanceof Error ? e.message : "Playbook seeding failed."];
+  }
+
   revalidatePath(`/league/${leagueId}/teams`);
-  return { ok: true as const };
+  revalidatePath(`/league/${leagueId}/playbooks`);
+  return { ok: true as const, warnings };
 }
 
 export async function updateLeagueTeamAction(

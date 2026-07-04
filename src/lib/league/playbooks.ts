@@ -23,6 +23,8 @@ export type PlaybookDistributionRow = {
   headCoachEmail: string | null;
   playbook: LeagueTeamPlaybook | null;
   sendStatus: PlaybookSendStatus;
-  /** Most recent copy-link creation time for this team's playbook, if any. */
+  /** Most recent invite (or legacy copy-link) sent for this team's playbook. */
   lastSentAt: string | null;
+  /** Library items snapshotted into this team's playbook (from the ledger). */
+  distributions: { title: string; at: string }[];
 };

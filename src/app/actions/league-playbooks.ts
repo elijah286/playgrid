@@ -1,33 +1,36 @@
 "use server";
 
-import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { can } from "@/lib/league/authorize";
-import { copyPlaybookContents } from "@/lib/data/playbook-copy";
-import { defaultSettingsForVariant } from "@/domain/playbook/settings";
 import { leagueHasPlaybooks } from "@/lib/league/sportConfig";
-import { sendCoachPlaybookInvite } from "@/lib/notifications/coach-playbook-email";
+import {
+  leagueVariantToSportVariant,
+  seedOneTeam,
+  sendCoachHandoffInvite,
+} from "@/lib/league/team-playbook";
+import {
+  distributePlayGroupToPlaybook,
+  distributePracticePlanToPlaybook,
+} from "@/lib/league/distribute";
+import { defaultSettingsForVariant } from "@/domain/playbook/settings";
 import type { SportVariant } from "@/domain/play/types";
+import type { LibraryItem, LibraryItemKind } from "@/lib/league/library";
 import {
   SEEDABLE_VARIANTS,
   type DistributeScope,
-  type LeagueTeamPlaybook,
   type PlaybookDistributionRow,
 } from "@/lib/league/playbooks";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com";
-
-type AdminClient = ReturnType<typeof createServiceRoleClient>;
-
-// All data access runs via the service role AFTER the isLeagueAdmin gate (the
-// gate is the authorization). This (a) works for co-league_admins who don't own
-// the team's org, and (b) keeps seeded playbooks OUT of the operator's personal
-// coach playbook membership/quota — they're org-owned league assets, accessed
-// by the operator via org-ownership RLS, never as a coach playbook_member.
+// All data access runs via the service role AFTER the manage_curriculum gate
+// (the gate is the authorization). This (a) works for co-league_admins who
+// don't own the team's org, and (b) keeps seeded playbooks OUT of anyone's
+// personal coach playbook membership/quota — they're org-owned league assets.
+// The coach handoff is an INVITE (membership on the org-owned playbook), not
+// a copy link — see src/lib/league/team-playbook.ts and the library plan.
 
 async function gateAdmin(leagueId: string) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
@@ -46,114 +49,29 @@ async function gateAdmin(leagueId: string) {
   const admin = createServiceRoleClient();
   const { data: league } = await admin
     .from("leagues")
-    .select("sport, name")
+    .select("sport, name, created_by, settings")
     .eq("id", leagueId)
     .maybeSingle();
   if (!leagueHasPlaybooks((league?.sport as string | null) ?? null)) {
     return { ok: false as const, error: "Playbooks aren't available for this sport." };
   }
+  const settings = (league?.settings ?? {}) as { variant?: string };
   return {
     ok: true as const,
     userId: user.id,
     admin,
     leagueName: (league?.name as string) ?? "Your league",
+    operatorId: (league?.created_by as string) ?? user.id,
+    leagueVariant: leagueVariantToSportVariant(settings.variant ?? null),
   };
 }
 
-/** Seed one team a starter playbook if it doesn't already have one. Idempotent —
- *  a team that already has a non-archived playbook returns it unchanged, so
- *  calling this repeatedly (a re-seed, or re-running a batch) never duplicates. */
-async function seedOneTeam(
-  admin: AdminClient,
-  userId: string,
-  teamId: string,
-  teamName: string,
-  variant: SportVariant,
-): Promise<{ ok: true; playbook: LeagueTeamPlaybook } | { ok: false; error: string }> {
-  const { data: existing } = await admin
-    .from("playbooks")
-    .select("id, name")
-    .eq("team_id", teamId)
-    .eq("is_archived", false)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (existing?.id) {
-    return { ok: true, playbook: { id: existing.id as string, name: existing.name as string } };
-  }
+type AdminClient = ReturnType<typeof createServiceRoleClient>;
 
-  // Deterministic example pick (oldest = canonical) for the format.
-  const { data: example } = await admin
-    .from("playbooks")
-    .select("id")
-    .eq("is_public_example", true)
-    .eq("sport_variant", variant)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (!example?.id) {
-    return { ok: false, error: "No starter template for that format yet." };
-  }
-
-  const settings = defaultSettingsForVariant(variant, null);
-  const name = `${teamName} Playbook`;
-  const { data: newBook, error } = await admin
-    .from("playbooks")
-    .insert({ team_id: teamId, name, sport_variant: variant, settings })
-    .select("id")
-    .single();
-  if (error || !newBook) {
-    return { ok: false, error: error?.message ?? "Could not create the playbook." };
-  }
-
-  // Copy the example's plays + formations. On failure, delete the orphaned
-  // playbook (children cascade) so a retry is clean.
-  try {
-    await copyPlaybookContents(admin, example.id as string, newBook.id as string, userId);
-  } catch (e) {
-    await admin.from("playbooks").delete().eq("id", newBook.id as string);
-    return { ok: false, error: e instanceof Error ? e.message : "Could not copy starter plays." };
-  }
-
-  return { ok: true, playbook: { id: newBook.id as string, name } };
-}
-
-/** Mint a fresh copy link for a playbook and email it to a coach. Also serves
- *  as "resend" — each call mints a new link, so an earlier unclaimed one still
- *  works too (links don't get revoked by a resend). */
-async function sendOneCoachCopy(
-  admin: AdminClient,
-  userId: string,
-  playbookId: string,
-  teamName: string,
-  coachEmail: string,
-  leagueName: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const token = randomBytes(18).toString("base64url");
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-  const { error: linkErr } = await admin.from("playbook_copy_links").insert({
-    playbook_id: playbookId,
-    token,
-    expires_at: expiresAt,
-    created_by: userId,
-    copy_game_results: false,
-    max_uses: null,
-  });
-  if (linkErr) return { ok: false, error: linkErr.message };
-
-  const res = await sendCoachPlaybookInvite({
-    to: coachEmail,
-    leagueName,
-    teamName,
-    claimUrl: `${SITE_URL}/copy/${token}`,
-  });
-  if (!res.sent) return { ok: false, error: res.error ?? "Could not send the email." };
-  return { ok: true };
-}
-
-/** Per-team playbook + distribution status — the source for the Playbooks
- *  page's status board. sendStatus reads from playbook_copy_links.uses_count
- *  (>0 = the coach has redeemed a copy into their own account). */
+/** Per-team playbook + handoff status + what's been distributed — the source
+ *  for the Playbooks page's status board. Claimed = the coach holds an active
+ *  membership on the team playbook (invite accepted); legacy copy-link
+ *  redemptions still count so pre-invite sends read correctly. */
 export async function listPlaybookDistributionAction(leagueId: string) {
   const gate = await gateAdmin(leagueId);
   if (!gate.ok) return { ok: false as const, error: gate.error, rows: [] as PlaybookDistributionRow[] };
@@ -174,53 +92,89 @@ export async function listPlaybookDistributionAction(leagueId: string) {
   const playbookByTeam = new Map(
     (playbooks ?? []).map((p) => [p.team_id as string, { id: p.id as string, name: p.name as string }]),
   );
-
   const playbookIds = (playbooks ?? []).map((p) => p.id as string);
-  const { data: links } =
+
+  const nowIso = new Date().toISOString();
+  const [linksRes, invitesRes, membersRes, ledgerRes] = await Promise.all([
     playbookIds.length > 0
-      ? await admin.from("playbook_copy_links").select("playbook_id, uses_count, created_at").in("playbook_id", playbookIds)
-      : { data: [] };
-  const linkInfoByPlaybook = new Map<string, { claimed: boolean; lastSentAt: string }>();
-  for (const l of links ?? []) {
-    const pid = l.playbook_id as string;
-    const claimed = (l.uses_count as number) > 0;
-    const createdAt = l.created_at as string;
-    const cur = linkInfoByPlaybook.get(pid);
-    linkInfoByPlaybook.set(pid, {
-      claimed: (cur?.claimed ?? false) || claimed,
-      lastSentAt: !cur || createdAt > cur.lastSentAt ? createdAt : cur.lastSentAt,
-    });
+      ? admin.from("playbook_copy_links").select("playbook_id, uses_count, created_at").in("playbook_id", playbookIds)
+      : Promise.resolve({ data: [] }),
+    playbookIds.length > 0
+      ? admin
+          .from("playbook_invites")
+          .select("playbook_id, uses_count, created_at, revoked_at, expires_at")
+          .in("playbook_id", playbookIds)
+      : Promise.resolve({ data: [] }),
+    playbookIds.length > 0
+      ? admin
+          .from("playbook_members")
+          .select("playbook_id, role, status")
+          .in("playbook_id", playbookIds)
+          .neq("role", "owner")
+      : Promise.resolve({ data: [] }),
+    teamIds.length > 0
+      ? admin
+          .from("league_distributions")
+          .select("team_id, title_snapshot, created_at")
+          .in("team_id", teamIds)
+          .order("created_at", { ascending: true })
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const claimedPlaybooks = new Set<string>();
+  const sentInfo = new Map<string, string>(); // playbook_id -> latest sent at
+  const note = (pid: string, at: string) => {
+    const cur = sentInfo.get(pid);
+    if (!cur || at > cur) sentInfo.set(pid, at);
+  };
+  for (const m of membersRes.data ?? []) {
+    if ((m.status as string) === "active") claimedPlaybooks.add(m.playbook_id as string);
+  }
+  for (const l of linksRes.data ?? []) {
+    if ((l.uses_count as number) > 0) claimedPlaybooks.add(l.playbook_id as string);
+    note(l.playbook_id as string, l.created_at as string);
+  }
+  for (const i of invitesRes.data ?? []) {
+    if ((i.uses_count as number) > 0) claimedPlaybooks.add(i.playbook_id as string);
+    if (!i.revoked_at && (i.expires_at as string) > nowIso) note(i.playbook_id as string, i.created_at as string);
+  }
+
+  const distByTeam = new Map<string, { title: string; at: string }[]>();
+  for (const d of ledgerRes.data ?? []) {
+    const list = distByTeam.get(d.team_id as string) ?? [];
+    list.push({ title: d.title_snapshot as string, at: d.created_at as string });
+    distByTeam.set(d.team_id as string, list);
   }
 
   const rows: PlaybookDistributionRow[] = allTeams.map((t) => {
     const teamId = t.id as string;
     const playbook = playbookByTeam.get(teamId) ?? null;
-    const link = playbook ? linkInfoByPlaybook.get(playbook.id) : undefined;
+    const claimed = playbook ? claimedPlaybooks.has(playbook.id) : false;
+    const lastSentAt = playbook ? (sentInfo.get(playbook.id) ?? null) : null;
     const sendStatus: PlaybookDistributionRow["sendStatus"] = !playbook
       ? "no_playbook"
-      : !link
-        ? "not_sent"
-        : link.claimed
-          ? "claimed"
-          : "sent";
+      : claimed
+        ? "claimed"
+        : lastSentAt
+          ? "sent"
+          : "not_sent";
     return {
       teamId,
       teamName: t.name as string,
       headCoachEmail: (t.head_coach_email as string | null) ?? null,
       playbook,
       sendStatus,
-      lastSentAt: link?.lastSentAt ?? null,
+      lastSentAt,
+      distributions: distByTeam.get(teamId) ?? [],
     };
   });
 
   return { ok: true as const, rows };
 }
 
-/** Seed (and optionally email) every team in scope in one pass. A coach whose
- *  team already has an outstanding invite is never re-emailed by a batch run —
- *  only teams with zero copy-link history get one, so re-running this to catch
- *  stragglers never spams a coach who's already been invited. Use the per-team
- *  resend for that instead. */
+/** Seed (and optionally invite) every team in scope in one pass. A coach whose
+ *  team already has an outstanding invite or copy link is never re-emailed by
+ *  a batch run — use the per-team resend for that instead. */
 export async function distributePlaybooksToTeamsAction(
   leagueId: string,
   scope: DistributeScope,
@@ -258,11 +212,18 @@ export async function distributePlaybooksToTeamsAction(
   if (targetTeams.length === 0) return { ok: false as const, error: "No teams match." };
 
   const seededPlaybookIds = [...playbookIdByTeam.values()];
-  const { data: existingLinks } =
+  const [linksRes, invitesRes] = await Promise.all([
     seededPlaybookIds.length > 0
-      ? await admin.from("playbook_copy_links").select("playbook_id").in("playbook_id", seededPlaybookIds)
-      : { data: [] };
-  const alreadySentPlaybookIds = new Set((existingLinks ?? []).map((l) => l.playbook_id as string));
+      ? admin.from("playbook_copy_links").select("playbook_id").in("playbook_id", seededPlaybookIds)
+      : Promise.resolve({ data: [] }),
+    seededPlaybookIds.length > 0
+      ? admin.from("playbook_invites").select("playbook_id").in("playbook_id", seededPlaybookIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+  const alreadySentPlaybookIds = new Set([
+    ...(linksRes.data ?? []).map((l) => l.playbook_id as string),
+    ...(invitesRes.data ?? []).map((i) => i.playbook_id as string),
+  ]);
 
   let seeded = 0;
   let emailed = 0;
@@ -285,7 +246,7 @@ export async function distributePlaybooksToTeamsAction(
         skippedNoEmail += 1;
         continue;
       }
-      const sendR = await sendOneCoachCopy(admin, userId, r.playbook.id, teamName, coachEmail, leagueName);
+      const sendR = await sendCoachHandoffInvite(admin, userId, r.playbook.id, teamName, coachEmail, leagueName);
       if (sendR.ok) emailed += 1;
       else errors.push(`${teamName}: ${sendR.error}`);
     }
@@ -293,6 +254,133 @@ export async function distributePlaybooksToTeamsAction(
 
   revalidatePath(`/league/${leagueId}/playbooks`);
   return { ok: true as const, seeded, emailed, skippedNoEmail, errors, total: targetTeams.length };
+}
+
+function rowToLibraryItem(r: Record<string, unknown>): LibraryItem {
+  return {
+    id: r.id as string,
+    kind: r.kind as LibraryItemKind,
+    sourcePlaybookId: r.source_playbook_id as string,
+    sourceGroupId: (r.source_group_id as string | null) ?? null,
+    sourcePracticePlanId: (r.source_practice_plan_id as string | null) ?? null,
+    title: r.title as string,
+    sport: r.sport as string,
+    variant: r.variant as string,
+    tags: (r.tags as string[]) ?? [],
+    createdAt: r.created_at as string,
+  };
+}
+
+/** The league operator's library items — the distributable sources shown in
+ *  the batch panel. Owned by the league's OPERATOR (leagues.created_by), so a
+ *  delegated curriculum manager distributes from the org's library. */
+export async function listDistributableLibraryItemsAction(leagueId: string) {
+  const gate = await gateAdmin(leagueId);
+  if (!gate.ok) return { ok: false as const, error: gate.error, items: [] as LibraryItem[] };
+  const { data } = await gate.admin
+    .from("league_library_items")
+    .select("*")
+    .eq("owner_id", gate.operatorId)
+    .order("created_at", { ascending: false });
+  return { ok: true as const, items: (data ?? []).map(rowToLibraryItem) };
+}
+
+async function ensureTeamPlaybook(
+  admin: AdminClient,
+  teamId: string,
+  teamName: string,
+  variant: SportVariant,
+): Promise<{ ok: true; playbookId: string } | { ok: false; error: string }> {
+  const { data: existing } = await admin
+    .from("playbooks")
+    .select("id")
+    .eq("team_id", teamId)
+    .eq("is_archived", false)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (existing?.id) return { ok: true, playbookId: existing.id as string };
+  // No playbook yet → create an EMPTY one (no starter plays): the operator is
+  // distributing their own content, not the canned starter.
+  const { data: created, error } = await admin
+    .from("playbooks")
+    .insert({
+      team_id: teamId,
+      name: `${teamName} Playbook`,
+      sport_variant: variant,
+      settings: defaultSettingsForVariant(variant, null),
+    })
+    .select("id")
+    .single();
+  if (error || !created) return { ok: false, error: error?.message ?? "Could not create the playbook." };
+  return { ok: true, playbookId: created.id as string };
+}
+
+/** Distribute library items into team playbooks — snapshot copies, add-only
+ *  (a re-distribution lands as a version-suffixed group; nothing the coach
+ *  edited is ever touched). Writes one ledger row per item × team. */
+export async function distributeLibraryItemsAction(
+  leagueId: string,
+  itemIds: string[],
+  scope: "all" | string[],
+) {
+  const gate = await gateAdmin(leagueId);
+  if (!gate.ok) return gate;
+  const { admin, userId, operatorId, leagueVariant } = gate;
+  if (itemIds.length === 0) return { ok: false as const, error: "Pick something to distribute." };
+
+  const { data: itemRows } = await admin
+    .from("league_library_items")
+    .select("*")
+    .eq("owner_id", operatorId)
+    .in("id", itemIds);
+  const items = (itemRows ?? []).map(rowToLibraryItem);
+  if (items.length === 0) return { ok: false as const, error: "Those library items no longer exist." };
+
+  const { data: teams } = await admin
+    .from("teams")
+    .select("id, name")
+    .eq("league_id", leagueId)
+    .order("name", { ascending: true });
+  const targets = (teams ?? []).filter((t) => scope === "all" || scope.includes(t.id as string));
+  if (targets.length === 0) return { ok: false as const, error: "No teams match." };
+
+  let distributed = 0;
+  const errors: string[] = [];
+  for (const team of targets) {
+    const teamId = team.id as string;
+    const teamName = team.name as string;
+    const pb = await ensureTeamPlaybook(admin, teamId, teamName, leagueVariant);
+    if (!pb.ok) {
+      errors.push(`${teamName}: ${pb.error}`);
+      continue;
+    }
+    for (const item of items) {
+      const r =
+        item.kind === "play_group"
+          ? await distributePlayGroupToPlaybook(admin, item, pb.playbookId, userId)
+          : await distributePracticePlanToPlaybook(admin, item, pb.playbookId, userId);
+      if (!r.ok) {
+        errors.push(`${teamName} · ${item.title}: ${r.error}`);
+        continue;
+      }
+      distributed += 1;
+      await admin.from("league_distributions").insert({
+        owner_id: operatorId,
+        item_id: item.id,
+        kind: item.kind,
+        title_snapshot: item.title,
+        league_id: leagueId,
+        team_id: teamId,
+        target_playbook_id: pb.playbookId,
+        target_group_id: item.kind === "play_group" && "groupId" in r ? r.groupId : null,
+        distributed_by: userId,
+      });
+    }
+  }
+
+  revalidatePath(`/league/${leagueId}/playbooks`);
+  return { ok: true as const, distributed, teams: targets.length, errors };
 }
 
 /** Single-team seed — kept for the per-team fallback when a batch skips a team
@@ -320,8 +408,8 @@ export async function seedTeamPlaybookAction(leagueId: string, teamId: string, v
   return { ok: true as const, playbookId: r.playbook.id };
 }
 
-/** Mint a copy link for a seeded playbook and email it to the team's head coach
- *  — the explicit per-team "send"/"resend" action. */
+/** Invite the team's head coach onto their playbook (or re-send the invite) —
+ *  the explicit per-team "send"/"resend" action. */
 export async function sendCoachPlaybookCopyAction(leagueId: string, playbookId: string) {
   const gate = await gateAdmin(leagueId);
   if (!gate.ok) return gate;
@@ -350,7 +438,7 @@ export async function sendCoachPlaybookCopyAction(leagueId: string, playbookId: 
     };
   }
 
-  const res = await sendOneCoachCopy(
+  const res = await sendCoachHandoffInvite(
     admin,
     userId,
     playbookId,

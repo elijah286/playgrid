@@ -4,11 +4,13 @@ import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 
 import {
+  distributeLibraryItemsAction,
   distributePlaybooksToTeamsAction,
   listPlaybookDistributionAction,
   sendCoachPlaybookCopyAction,
 } from "@/app/actions/league-playbooks";
 import { SEEDABLE_VARIANTS, type PlaybookDistributionRow } from "@/lib/league/playbooks";
+import type { LibraryItem } from "@/lib/league/library";
 import type { SportVariant } from "@/domain/play/types";
 
 type Msg = { kind: "error" | "success"; text: string } | null;
@@ -44,9 +46,11 @@ function StatusBadge({ row }: { row: PlaybookDistributionRow }) {
 export function LeaguePlaybooksManager({
   leagueId,
   initialRows,
+  libraryItems,
 }: {
   leagueId: string;
   initialRows: PlaybookDistributionRow[];
+  libraryItems: LibraryItem[];
 }) {
   const [rows, setRows] = useState(initialRows);
   const unseededCount = useMemo(() => rows.filter((r) => !r.playbook).length, [rows]);
@@ -59,6 +63,9 @@ export function LeaguePlaybooksManager({
   const [msg, setMsg] = useState<Msg>(null);
   const [batchBusy, setBatchBusy] = useState(false);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
+  const [libItemId, setLibItemId] = useState("");
+  const [libTeamId, setLibTeamId] = useState<string>("all");
+  const [libBusy, setLibBusy] = useState(false);
   const [, startTransition] = useTransition();
 
   function refresh() {
@@ -101,7 +108,32 @@ export function LeaguePlaybooksManager({
         setMsg({ kind: "error", text: r.error });
         return;
       }
-      setMsg({ kind: "success", text: `Sent a copy link to ${r.email}.` });
+      setMsg({ kind: "success", text: `Invited ${r.email} to the playbook.` });
+      refresh();
+    });
+  }
+
+  function runLibraryDistribute() {
+    if (!libItemId) return;
+    setMsg(null);
+    setLibBusy(true);
+    startTransition(async () => {
+      const r = await distributeLibraryItemsAction(
+        leagueId,
+        [libItemId],
+        libTeamId === "all" ? "all" : [libTeamId],
+      );
+      setLibBusy(false);
+      if (!r.ok) {
+        setMsg({ kind: "error", text: r.error });
+        return;
+      }
+      setMsg({
+        kind: r.errors.length > 0 ? "error" : "success",
+        text:
+          `Distributed to ${r.distributed} of ${r.teams} team${r.teams === 1 ? "" : "s"}.` +
+          (r.errors.length > 0 ? ` Issues: ${r.errors.join("; ")}` : ""),
+      });
       refresh();
     });
   }
@@ -169,7 +201,7 @@ export function LeaguePlaybooksManager({
             onChange={(e) => setEmailCoaches(e.target.checked)}
             className="size-4"
           />
-          Email each head coach their copy link
+          Invite each head coach to their playbook by email
         </label>
         <div className="mt-3 flex justify-end">
           <button
@@ -186,6 +218,52 @@ export function LeaguePlaybooksManager({
           </button>
         </div>
       </div>
+
+      {libraryItems.length > 0 ? (
+        <div className="rounded-2xl border border-border bg-surface-raised p-4">
+          <div className="text-sm font-semibold text-foreground">Distribute from your library</div>
+          <p className="mt-0.5 text-xs text-muted">
+            Adds a snapshot of the item to each team&apos;s playbook — a play group lands as a new
+            section; re-sending later adds a versioned copy, never touching a coach&apos;s edits.
+          </p>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <select
+              value={libItemId}
+              onChange={(e) => setLibItemId(e.target.value)}
+              className="rounded-lg border border-border bg-surface px-2.5 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="">Choose a library item…</option>
+              {libraryItems.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.kind === "play_group" ? "Play group" : "Practice plan"}: {i.title}
+                </option>
+              ))}
+            </select>
+            <select
+              value={libTeamId}
+              onChange={(e) => setLibTeamId(e.target.value)}
+              className="rounded-lg border border-border bg-surface px-2.5 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="all">All teams ({rows.length})</option>
+              {rows.map((r) => (
+                <option key={r.teamId} value={r.teamId}>
+                  {r.teamName}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="mt-3 flex justify-end">
+            <button
+              type="button"
+              disabled={libBusy || !libItemId}
+              onClick={runLibraryDistribute}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
+            >
+              {libBusy ? "Distributing…" : "Distribute"}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {msg ? (
         <p
@@ -210,6 +288,11 @@ export function LeaguePlaybooksManager({
               <div className="text-xs text-muted">
                 {row.headCoachEmail ? row.headCoachEmail : "No head-coach email yet"}
               </div>
+              {row.distributions.length > 0 ? (
+                <div className="mt-1 truncate text-[11px] text-muted">
+                  Library: {row.distributions.map((d) => d.title).join(" · ")}
+                </div>
+              ) : null}
             </div>
             <div className="flex items-center gap-2">
               <StatusBadge row={row} />

@@ -4,7 +4,10 @@ import { notFound } from "next/navigation";
 import { resolveLeagueView } from "@/lib/league/authorize";
 import { getLeagueSport } from "@/lib/league/console";
 import { leagueHasPlaybooks } from "@/lib/league/sportConfig";
-import { listPlaybookDistributionAction } from "@/app/actions/league-playbooks";
+import {
+  listDistributableLibraryItemsAction,
+  listPlaybookDistributionAction,
+} from "@/app/actions/league-playbooks";
 import { LeaguePlaybooksManager } from "@/features/league/LeaguePlaybooksManager";
 
 export const metadata: Metadata = {
@@ -28,19 +31,26 @@ export default async function LeaguePlaybooksPage({
   // via the authorized client so a delegated member isn't blocked by RLS.
   if (!leagueHasPlaybooks(await getLeagueSport(leagueId, access.db))) notFound();
 
-  const res = await listPlaybookDistributionAction(leagueId);
+  const [res, lib] = await Promise.all([
+    listPlaybookDistributionAction(leagueId),
+    listDistributableLibraryItemsAction(leagueId),
+  ]);
   const rows = res.ok ? res.rows : [];
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-12 text-foreground sm:px-6">
       <h1 className="text-2xl font-extrabold tracking-tight">Playbooks</h1>
       <p className="mt-1 text-sm text-muted">
-        Seed teams a starter playbook and email each head coach their own copy — it lands in XO
-        Gridmaker ready to build on their team&apos;s plays.
+        Seed teams a starter playbook, distribute play groups and practice plans from your
+        library, and invite each head coach to their team&apos;s playbook.
       </p>
 
       <div className="mt-6">
-        <LeaguePlaybooksManager leagueId={leagueId} initialRows={rows} />
+        <LeaguePlaybooksManager
+          leagueId={leagueId}
+          initialRows={rows}
+          libraryItems={lib.ok ? lib.items : []}
+        />
       </div>
     </div>
   );

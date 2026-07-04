@@ -37,6 +37,22 @@ export type LibrarySourcePlaybook = {
   practicePlans: { id: string; title: string }[];
 };
 
+/** Map a league_library_items DB row to the shared shape. */
+export function libraryItemFromRow(r: Record<string, unknown>): LibraryItem {
+  return {
+    id: r.id as string,
+    kind: r.kind as LibraryItemKind,
+    sourcePlaybookId: r.source_playbook_id as string,
+    sourceGroupId: (r.source_group_id as string | null) ?? null,
+    sourcePracticePlanId: (r.source_practice_plan_id as string | null) ?? null,
+    title: r.title as string,
+    sport: r.sport as string,
+    variant: r.variant as string,
+    tags: (r.tags as string[]) ?? [],
+    createdAt: r.created_at as string,
+  };
+}
+
 /**
  * Which library items should seed a NEW team? Pure so Phase 2's hook and the
  * Library page's "applies to new teams" preview agree by construction.

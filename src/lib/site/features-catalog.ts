@@ -1764,7 +1764,7 @@ export const FEATURES: FeatureEntry[] = [
     id: "league-coach-playbook-distribution",
     name: "Coach playbook & practice-plan distribution",
     description:
-      "For football leagues, operators seed every team a starter playbook and email the head coach a personal copy that lands ready to build on in their own XO Gridmaker account — the same classic playbook experience coaches already use. Operators can also build a practice plan once and distribute it to every team's coach in one click.",
+      "For football leagues, every new team gets its playbook automatically — starter plays for the league's game type plus whatever library items the operator marked as defaults. Operators distribute more play groups and practice plans from their library at any time (each lands as a snapshot section in the team's playbook, never overwriting a coach's edits), and hand the playbook to the head coach with an email invite — the coach joins the team's playbook and roster directly, in the same classic playbook experience coaches already use.",
     category: "League operations",
     status: "beta",
     addedDate: "2026-06-21",
