@@ -7,7 +7,7 @@
  * paying-only mode).
  */
 import { describe, expect, it } from "vitest";
-import { selectGeoViews } from "./admin-geography";
+import { selectGeoViews } from "@/lib/admin/geo-views";
 
 type V = { session_id: string; user_id: string | null };
 
