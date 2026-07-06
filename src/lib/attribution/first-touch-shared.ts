@@ -21,4 +21,7 @@ export type FirstTouchPayload = {
   country: string | null;
   region: string | null;
   city: string | null;
+  /** Referral sender user id from a `?ref=<userId>` share link, captured at
+   *  first touch and resolved to profiles.referred_by at signup. */
+  ref: string | null;
 } & ClickIds;

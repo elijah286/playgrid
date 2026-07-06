@@ -17,7 +17,10 @@ import {
   copyPlaybookContents,
   copyPlaybookGameSessions,
 } from "@/lib/data/playbook-copy";
-import { awardReferralIfApplicable } from "@/lib/data/referral-award";
+import {
+  maybeAwardReferralOnActivation,
+  setReferredByIfEmpty,
+} from "@/lib/data/referral-award";
 import { getStoredResendConfig } from "@/lib/site/resend-config";
 
 const DEFAULT_FROM_EMAIL = "XO Gridmaker <onboarding@resend.dev>";
@@ -290,14 +293,15 @@ export async function acceptCopyLinkAction(
   }
 
   // Referral credit. Best-effort — never block the claim if this fails.
-  // Helper internally checks site config, idempotency, sender cap, and
-  // recipient-newness; safe to call unconditionally.
+  // Backfill the attribution edge (first referrer wins) so a coach who signed
+  // up without a ?ref= still credits the sender of the copy they claim, then
+  // try the award — claiming a copy is itself an activation.
   if (linkRow?.created_by && typeof linkRow.created_by === "string") {
     try {
-      await awardReferralIfApplicable(sourceAdmin, {
-        senderId: linkRow.created_by,
+      await setReferredByIfEmpty(sourceAdmin, user.id, linkRow.created_by);
+      await maybeAwardReferralOnActivation({
         recipientId: user.id,
-        recipientOwnedBeforeClaim,
+        trigger: "copy_claim",
       });
     } catch {
       /* never fail the claim on referral side-effects */

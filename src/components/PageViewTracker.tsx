@@ -63,6 +63,7 @@ export default function PageViewTracker() {
     let utmTerm: string | null = null;
     let landingPath: string | null = null;
     let clickIds: ClickIds | null = null;
+    let ref: string | null = null;
     if (isFirst) {
       try {
         referrer = document.referrer || null;
@@ -76,6 +77,7 @@ export default function PageViewTracker() {
         utmCampaign = q.get("utm_campaign");
         utmContent = q.get("utm_content");
         utmTerm = q.get("utm_term");
+        ref = q.get("ref");
         const ids: ClickIds = {};
         for (const k of CLICK_ID_PARAMS) {
           const v = q.get(k);
@@ -104,6 +106,7 @@ export default function PageViewTracker() {
         country: null,
         region: null,
         city: null,
+        ref,
         ...(clickIds || {}),
       });
     }
@@ -122,6 +125,7 @@ export default function PageViewTracker() {
       utmTerm,
       landingPath,
       clickIds,
+      ref,
       device,
       userAgent,
       isFirstSessionEvent: isFirst,

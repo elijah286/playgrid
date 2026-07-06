@@ -2,6 +2,61 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { classifySignupSource } from "@/lib/analytics/signup-source";
 import { readFirstTouchCookie } from "./first-touch";
+import type { FirstTouchPayload } from "./first-touch-shared";
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Resolve who referred a signing-up user from their first-touch payload:
+ *   1. an explicit `?ref=<userId>` on the share link, or
+ *   2. the creator of the copy-link / playbook-invite they landed through.
+ *
+ * Returns a real, non-self referrer user id, or null. Never throws — a bad
+ * ref must not block attribution. This is the sole writer of the canonical
+ * profiles.referred_by edge at signup time; later copy-claim / invite-accept
+ * flows backfill it only when still null (first referrer wins).
+ */
+export async function resolveReferrerUserId(
+  admin: ReturnType<typeof createServiceRoleClient>,
+  payload: Pick<FirstTouchPayload, "ref" | "landing_path">,
+  selfUserId: string,
+): Promise<string | null> {
+  // 1) Explicit ?ref= sender id.
+  const ref = (payload.ref ?? "").trim();
+  if (UUID_RE.test(ref) && ref !== selfUserId) {
+    const { data } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("id", ref)
+      .maybeSingle();
+    if (data?.id) return ref;
+  }
+
+  // 2) Copy-link / invite landing → the link creator.
+  const cls = classifySignupSource({ landingPath: payload.landing_path });
+  if (cls.shareToken) {
+    if (cls.kind === "copy_link") {
+      const { data } = await admin
+        .from("playbook_copy_links")
+        .select("created_by")
+        .eq("token", cls.shareToken)
+        .maybeSingle();
+      const creator = (data?.created_by as string | null) ?? null;
+      if (creator && creator !== selfUserId) return creator;
+    } else if (cls.kind === "playbook_invite") {
+      const { data } = await admin
+        .from("playbook_invites")
+        .select("created_by")
+        .eq("token", cls.shareToken)
+        .maybeSingle();
+      const creator = (data?.created_by as string | null) ?? null;
+      if (creator && creator !== selfUserId) return creator;
+    }
+  }
+
+  return null;
+}
 
 // Window after auth.users.created_at during which we still consider a sign-in
 // to be the "signup" event for attribution purposes. The OAuth roundtrip is
@@ -35,10 +90,17 @@ export async function snapshotFirstTouchToProfile(
       .maybeSingle();
     if (readErr || existing?.first_touch_at) return;
 
+    // Canonical referral edge, set once at signup. Best-effort — a failed
+    // resolution just leaves referred_by null (later flows can backfill).
+    const referredBy = await resolveReferrerUserId(admin, payload, userId).catch(
+      () => null,
+    );
+
     await admin
       .from("profiles")
       .update({
         first_touch_at: payload.ts,
+        referred_by: referredBy,
         first_utm_source: payload.utm_source,
         first_utm_medium: payload.utm_medium,
         first_utm_campaign: payload.utm_campaign,

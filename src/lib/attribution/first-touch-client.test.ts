@@ -20,6 +20,7 @@ const EMPTY_FIELDS = {
   country: null,
   region: null,
   city: null,
+  ref: null,
 };
 
 describe("first-touch-client", () => {

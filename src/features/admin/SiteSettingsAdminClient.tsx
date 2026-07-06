@@ -241,13 +241,24 @@ export function SiteSettingsAdminClient({
   const [referralDaysInput, setReferralDaysInput] = useState(
     String(initialReferralConfig.daysPerAward),
   );
-  const [referralCapNoCap, setReferralCapNoCap] = useState(
-    initialReferralConfig.capDays === null,
+  const [recipientTrialInput, setRecipientTrialInput] = useState(
+    String(initialReferralConfig.recipientTrialDays),
   );
-  const [referralCapInput, setReferralCapInput] = useState(
-    initialReferralConfig.capDays === null
-      ? "180"
-      : String(initialReferralConfig.capDays),
+  const [payerCreditAuto, setPayerCreditAuto] = useState(
+    initialReferralConfig.payerCreditCents === null,
+  );
+  const [payerCreditInput, setPayerCreditInput] = useState(
+    initialReferralConfig.payerCreditCents === null
+      ? "9"
+      : String(initialReferralConfig.payerCreditCents / 100),
+  );
+  const [capAwardsNoCap, setCapAwardsNoCap] = useState(
+    initialReferralConfig.capAwards === null,
+  );
+  const [capAwardsInput, setCapAwardsInput] = useState(
+    initialReferralConfig.capAwards === null
+      ? "24"
+      : String(initialReferralConfig.capAwards),
   );
   const [savedReferral, setSavedReferral] = useState<ReferralConfig>(
     initialReferralConfig,
@@ -256,27 +267,48 @@ export function SiteSettingsAdminClient({
   const referralDirty =
     referralEnabled !== savedReferral.enabled ||
     Number(referralDaysInput) !== savedReferral.daysPerAward ||
-    (referralCapNoCap ? null : Number(referralCapInput)) !== savedReferral.capDays;
+    Number(recipientTrialInput) !== savedReferral.recipientTrialDays ||
+    (payerCreditAuto ? null : Math.round(Number(payerCreditInput) * 100)) !==
+      savedReferral.payerCreditCents ||
+    (capAwardsNoCap ? null : Number(capAwardsInput)) !== savedReferral.capAwards;
 
   function saveReferral() {
     const days = Number(referralDaysInput);
     if (!Number.isFinite(days) || days < 1 || days > 3650) {
-      toast("Days per award must be between 1 and 3650.", "error");
+      toast("Free-sender days must be between 1 and 3650.", "error");
       return;
     }
-    let cap: number | null = null;
-    if (!referralCapNoCap) {
-      const c = Number(referralCapInput);
-      if (!Number.isFinite(c) || c < 1 || c > 3650) {
-        toast("Cap must be between 1 and 3650, or check 'No cap'.", "error");
+    const trial = Number(recipientTrialInput);
+    if (!Number.isFinite(trial) || trial < 0 || trial > 3650) {
+      toast("New-coach trial days must be between 0 and 3650.", "error");
+      return;
+    }
+    let payerCents: number | null = null;
+    if (!payerCreditAuto) {
+      const d = Number(payerCreditInput);
+      if (!Number.isFinite(d) || d < 0 || d > 1000) {
+        toast("Payer credit must be $0–$1000, or check 'Auto'.", "error");
         return;
       }
-      cap = Math.floor(c);
+      payerCents = Math.round(d * 100);
+    }
+    let capAwards: number | null = null;
+    if (!capAwardsNoCap) {
+      const c = Number(capAwardsInput);
+      if (!Number.isFinite(c) || c < 1 || c > 100000) {
+        toast("Referral cap must be 1–100000, or check 'No cap'.", "error");
+        return;
+      }
+      capAwards = Math.floor(c);
     }
     const next: ReferralConfig = {
       enabled: referralEnabled,
       daysPerAward: Math.floor(days),
-      capDays: cap,
+      // Legacy day-cap preserved as-is (superseded by the awards cap below).
+      capDays: savedReferral.capDays,
+      recipientTrialDays: Math.floor(trial),
+      payerCreditCents: payerCents,
+      capAwards,
     };
     startReferralTransition(async () => {
       const res = await setReferralConfigAction(next);
@@ -286,8 +318,14 @@ export function SiteSettingsAdminClient({
       }
       setSavedReferral(res.config);
       setReferralDaysInput(String(res.config.daysPerAward));
-      if (res.config.capDays !== null) {
-        setReferralCapInput(String(res.config.capDays));
+      setRecipientTrialInput(String(res.config.recipientTrialDays));
+      setPayerCreditAuto(res.config.payerCreditCents === null);
+      if (res.config.payerCreditCents !== null) {
+        setPayerCreditInput(String(res.config.payerCreditCents / 100));
+      }
+      setCapAwardsNoCap(res.config.capAwards === null);
+      if (res.config.capAwards !== null) {
+        setCapAwardsInput(String(res.config.capAwards));
       }
       toast("Referral rewards updated.", "success");
     });
@@ -803,11 +841,12 @@ export function SiteSettingsAdminClient({
               Referral rewards
             </p>
             <p className="mt-0.5 text-xs text-muted">
-              When a coach sends a copy of their playbook and a brand-new
-              user (zero owned playbooks) claims it, the sender earns Team
-              Coach days as a thank-you. Off by default. Same recipient
-              can only mint one reward; awards stack by extending the
-              sender&rsquo;s active referral grant.
+              When a coach refers a new user (via their share link, a copy
+              link, or a team invite) and that user activates — builds a play
+              or joins a team — the referrer is rewarded. Paying coaches get a
+              Stripe credit toward their next invoice; free coaches get Team
+              Coach days. The new coach gets a welcome trial. Off by default.
+              Each new coach can only mint one reward.
             </p>
           </div>
           <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 text-sm text-foreground">
@@ -825,7 +864,7 @@ export function SiteSettingsAdminClient({
         <div className="flex flex-wrap items-end gap-4 border-t border-border pt-3">
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-muted">
-              Days per award
+              Free-sender reward (days)
             </span>
             <input
               type="number"
@@ -841,17 +880,18 @@ export function SiteSettingsAdminClient({
 
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-muted">
-              Lifetime cap (days per sender)
+              Paying-sender credit ($)
             </span>
             <input
               type="number"
-              min={1}
-              max={3650}
+              min={0}
+              max={1000}
               step={1}
+              placeholder="Auto"
               className="w-24 rounded-md bg-surface px-3 py-1.5 text-sm ring-1 ring-border disabled:opacity-50"
-              value={referralCapInput}
-              disabled={referralPending || !referralEnabled || referralCapNoCap}
-              onChange={(e) => setReferralCapInput(e.target.value)}
+              value={payerCreditInput}
+              disabled={referralPending || !referralEnabled || payerCreditAuto}
+              onChange={(e) => setPayerCreditInput(e.target.value)}
             />
           </label>
 
@@ -859,9 +899,52 @@ export function SiteSettingsAdminClient({
             <input
               type="checkbox"
               className="size-4 accent-primary"
-              checked={referralCapNoCap}
+              checked={payerCreditAuto}
               disabled={referralPending || !referralEnabled}
-              onChange={(e) => setReferralCapNoCap(e.target.checked)}
+              onChange={(e) => setPayerCreditAuto(e.target.checked)}
+            />
+            <span>Auto (1 mo)</span>
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-muted">
+              New-coach trial (days)
+            </span>
+            <input
+              type="number"
+              min={0}
+              max={3650}
+              step={1}
+              className="w-24 rounded-md bg-surface px-3 py-1.5 text-sm ring-1 ring-border disabled:opacity-50"
+              value={recipientTrialInput}
+              disabled={referralPending || !referralEnabled}
+              onChange={(e) => setRecipientTrialInput(e.target.value)}
+            />
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-muted">
+              Lifetime cap (referrals per sender)
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={100000}
+              step={1}
+              className="w-24 rounded-md bg-surface px-3 py-1.5 text-sm ring-1 ring-border disabled:opacity-50"
+              value={capAwardsInput}
+              disabled={referralPending || !referralEnabled || capAwardsNoCap}
+              onChange={(e) => setCapAwardsInput(e.target.value)}
+            />
+          </label>
+
+          <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              className="size-4 accent-primary"
+              checked={capAwardsNoCap}
+              disabled={referralPending || !referralEnabled}
+              onChange={(e) => setCapAwardsNoCap(e.target.checked)}
             />
             <span>No cap</span>
           </label>

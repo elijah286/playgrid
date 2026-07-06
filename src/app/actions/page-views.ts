@@ -33,6 +33,8 @@ export type RecordPageViewInput = {
   utmTerm?: string | null;
   landingPath?: string | null;
   clickIds?: ClickIds | null;
+  /** Referral sender user id from a `?ref=` share link (first-touch only). */
+  ref?: string | null;
   device?: "mobile" | "tablet" | "desktop" | null;
   userAgent?: string | null;
   isFirstSessionEvent?: boolean;
@@ -152,6 +154,7 @@ export async function recordPageViewAction(input: RecordPageViewInput) {
         country: decodedCountry,
         region: decodedRegion,
         city: decodedCity,
+        ref: trim(input.ref, 64),
         ...clickIds,
       });
     }

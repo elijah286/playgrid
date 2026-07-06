@@ -10,6 +10,10 @@ import { getStoredResendConfig } from "@/lib/site/resend-config";
 import { getUserEntitlement } from "@/lib/billing/entitlement";
 import { canInviteCoachCollaborators, tierAtLeast } from "@/lib/billing/features";
 import { ensureSeatsAvailable } from "@/lib/billing/seats";
+import {
+  maybeAwardReferralOnActivation,
+  setReferredByIfEmpty,
+} from "@/lib/data/referral-award";
 import { sanitizeSharedPrefs, type PlaybookViewPrefs } from "@/domain/playbook/view-prefs";
 import { tagShareUrl } from "@/lib/share/tag-url";
 import { notifyPlaybookOwners } from "@/lib/notifications/inbox-dispatch";
@@ -832,7 +836,7 @@ export async function acceptInviteAction(
   // works even before the accept RPC completes.
   const { data: inviteRow } = await supabase
     .from("playbook_invites")
-    .select("playbook_id, filters_snapshot, role")
+    .select("playbook_id, filters_snapshot, role, created_by")
     .eq("token", token)
     .maybeSingle();
 
@@ -914,6 +918,21 @@ export async function acceptInviteAction(
       requesterId: user.id,
       kind: "membership",
     });
+  }
+
+  // Referral: an active team member is an activation. Backfill the attribution
+  // edge from the inviter (first referrer wins) and try the award. Best-effort.
+  if (status === "active" && typeof inviteRow?.created_by === "string") {
+    try {
+      const admin = createServiceRoleClient();
+      await setReferredByIfEmpty(admin, user.id, inviteRow.created_by);
+      await maybeAwardReferralOnActivation({
+        recipientId: user.id,
+        trigger: "invite_accept",
+      });
+    } catch {
+      /* never fail the accept on referral side-effects */
+    }
   }
 
   return { ok: true, playbookId, status };

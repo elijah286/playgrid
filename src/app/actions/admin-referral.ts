@@ -13,7 +13,14 @@ export async function getReferralConfigAction() {
   if (!hasSupabaseEnv()) {
     return {
       ok: true as const,
-      config: { enabled: false, daysPerAward: 30, capDays: null } satisfies ReferralConfig,
+      config: {
+        enabled: false,
+        daysPerAward: 30,
+        capDays: null,
+        recipientTrialDays: 14,
+        payerCreditCents: null,
+        capAwards: 24,
+      } satisfies ReferralConfig,
     };
   }
   const config = await getReferralConfig();

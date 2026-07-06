@@ -1,163 +1,435 @@
-// Award referral credit when a new user claims a sender's copy link.
+// Referral awards — minted when an ATTRIBUTED new user ACTIVATES.
 //
-// Idempotency: referral_awards.recipient_id is unique. If a recipient
-// has already minted any referral award (from any sender, any source),
-// no further award is created. This kills both farming paths:
-//   - sender re-sending to the same recipient
-//   - recipient claiming multiple copy links from different senders
-// First valid claim wins; later ones silently no-op.
+// Redesign (2026-07, per the referral audit). The old model awarded only on a
+// copy-link claim by a zero-playbook user, and paid the sender comp days that
+// were worthless to the ~10 paying coaches who were the only eligible senders.
+// This version fixes all three flaws:
 //
-// "New user" definition lives here, not the schema: a recipient counts
-// as new iff they own zero non-default playbooks at the moment they
-// claim. The new playbook from the claim hasn't been counted yet — the
-// caller invokes this AFTER inserting it. We pass the post-claim count
-// so we don't have to time the call against the insert.
+//   * Attribution — profiles.referred_by is the canonical sender edge, set once
+//     at signup (?ref= / copy-link / invite) or backfilled at first copy-claim
+//     / invite-accept (see setReferredByIfEmpty). One referrer per user.
 //
-// Self-referral guard: senders cannot earn credit by claiming their own
-// link. Hard-coded — no admin toggle, no edge case.
+//   * Qualifying event — the referred user ACTIVATES: owns >=1 non-tutorial
+//     play, or is an active member of a playbook they don't own (team-graph
+//     activation). Fires for copy links, ?ref= site links, AND invites — not
+//     just the rare zero-playbook copy claim.
+//
+//   * Reward — a PAYING sender (active Stripe sub) gets a Stripe balance credit
+//     (~one month); a comp grant would be worthless to them. A FREE sender gets
+//     comp Team Coach days (a real unlock). The recipient is double-sided: a new
+//     coach gets Team Coach trial days (time, not content).
+//
+// Idempotency: referral_awards.recipient_id is UNIQUE. We RESERVE that row
+// before any money moves, so a race or replay can never double-credit. First
+// activation wins; the unique constraint is the hard guarantee.
 
+import { createServiceRoleClient } from "@/lib/supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getReferralConfig } from "@/lib/site/referral-config";
+import { getStripeClient } from "@/lib/billing/stripe";
+import { getStripeConfig } from "@/lib/site/stripe-config";
+import { notifyUser } from "@/lib/notifications/inbox-dispatch";
+
+type Admin = SupabaseClient;
 
 export type ReferralAwardResult =
-  | { awarded: true; daysAdded: number; compGrantId: string }
+  | {
+      awarded: true;
+      rewardKind: "comp_days" | "stripe_credit";
+      senderDays: number;
+      senderCreditCents: number;
+      recipientDays: number;
+    }
   | { awarded: false; reason: string };
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
 /**
- * Try to award a referral credit. Safe to call after every successful
- * copy-link claim — silently no-ops when the feature is off, the
- * recipient isn't new, the pair has already minted an award, or the
- * sender has hit the lifetime cap.
- *
- * Must be called with a service-role client — the recipient lacks
- * permissions to insert into comp_grants or referral_awards. Awarding
- * runs after the claim finishes so a failure here never blocks the
- * recipient from getting their playbook.
+ * Set profiles.referred_by only if it's currently null (first referrer wins)
+ * and the referrer isn't the user themselves. Used by the copy-claim and
+ * invite-accept flows to backfill attribution for users who signed up without
+ * a ?ref= (e.g. via ChatGPT) and only later claimed a specific coach's link.
  */
-export async function awardReferralIfApplicable(
-  serviceClient: SupabaseClient,
-  args: {
-    senderId: string;
-    recipientId: string;
-    /** Owned non-default playbooks the recipient had BEFORE this claim. */
-    recipientOwnedBeforeClaim: number;
-  },
-): Promise<ReferralAwardResult> {
-  const { senderId, recipientId, recipientOwnedBeforeClaim } = args;
-
-  if (senderId === recipientId) {
-    return { awarded: false, reason: "self-referral" };
+export async function setReferredByIfEmpty(
+  admin: Admin,
+  userId: string,
+  referrerId: string | null | undefined,
+): Promise<void> {
+  if (!referrerId || referrerId === userId) return;
+  try {
+    await admin
+      .from("profiles")
+      .update({ referred_by: referrerId })
+      .eq("id", userId)
+      .is("referred_by", null);
+  } catch {
+    // Best-effort — attribution backfill must never block the claim/accept.
   }
+}
 
-  const config = await getReferralConfig();
-  if (!config.enabled) return { awarded: false, reason: "disabled" };
-
-  if (recipientOwnedBeforeClaim > 0) {
-    return { awarded: false, reason: "recipient-not-new" };
-  }
-
-  // Idempotent: the unique constraint will reject duplicates anyway, but
-  // checking first lets us return a clean reason instead of bubbling a
-  // 23505 error. Race: if two claims sneak through between check and
-  // insert, the unique constraint is the actual guarantee.
-  const existing = await serviceClient
-    .from("referral_awards")
+/** True iff the user has done something real: owns a non-tutorial play, or is
+ *  an active non-owner member of a playbook (invited coach / player). */
+async function isActivated(admin: Admin, userId: string): Promise<boolean> {
+  const { data: mem } = await admin
+    .from("playbook_members")
+    .select("playbook_id, role")
+    .eq("user_id", userId)
+    .eq("status", "active");
+  const rows = mem ?? [];
+  if (rows.some((r) => (r.role as string) !== "owner")) return true;
+  const ownedPlaybookIds = rows
+    .filter((r) => (r.role as string) === "owner")
+    .map((r) => r.playbook_id as string);
+  if (ownedPlaybookIds.length === 0) return false;
+  const { data: play } = await admin
+    .from("plays")
     .select("id")
-    .eq("recipient_id", recipientId)
+    .in("playbook_id", ownedPlaybookIds)
+    .eq("is_tutorial", false)
+    .limit(1)
     .maybeSingle();
-  if (existing.data) {
-    return { awarded: false, reason: "recipient-already-credited" };
-  }
+  return Boolean(play);
+}
 
-  // Cap check: cumulative days awarded to this sender so far.
-  let awardDays = config.daysPerAward;
-  if (config.capDays !== null) {
-    const totals = await serviceClient
-      .from("referral_awards")
-      .select("days_awarded")
-      .eq("sender_id", senderId);
-    const earned = (totals.data ?? []).reduce(
-      (acc, row: { days_awarded: number | null }) =>
-        acc + (row.days_awarded ?? 0),
-      0,
-    );
-    const remaining = config.capDays - earned;
-    if (remaining <= 0) {
-      return { awarded: false, reason: "sender-at-cap" };
-    }
-    awardDays = Math.min(config.daysPerAward, remaining);
-  }
+/** The sender's Stripe customer id iff they hold an active PAYING subscription
+ *  (so a balance credit will actually offset a future invoice). Null → treat as
+ *  a free sender and award comp days instead. */
+async function payingCustomerId(
+  admin: Admin,
+  senderId: string,
+): Promise<string | null> {
+  const { data } = await admin
+    .from("subscriptions")
+    .select("stripe_customer_id, tier, status, current_period_end")
+    .eq("user_id", senderId)
+    .in("status", ["active", "trialing", "past_due"])
+    .not("stripe_customer_id", "is", null)
+    .in("tier", ["coach", "coach_ai"])
+    .order("current_period_end", { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle();
+  return (data?.stripe_customer_id as string | null) ?? null;
+}
 
-  // Find the sender's most-distant active referral comp_grant. If one
-  // exists and isn't expired, extend it. Otherwise mint a new one. This
-  // keeps the entitlement view (which picks the latest expires_at)
-  // accurate and prevents earlier grants from going unused.
-  const nowIso = new Date().toISOString();
-  const existingGrant = await serviceClient
+/** One month of the coach monthly price, in cents, from Stripe. Null if the
+ *  price isn't configured or Stripe is unreachable. */
+async function coachMonthPriceCents(): Promise<number | null> {
+  try {
+    const cfg = await getStripeConfig();
+    const priceId = cfg.priceIds.coach_month;
+    if (!priceId) return null;
+    const { stripe } = await getStripeClient();
+    const price = await stripe.prices.retrieve(priceId);
+    return typeof price.unit_amount === "number" ? price.unit_amount : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Mint (or extend the latest active referral) comp_grant of Team Coach days.
+ *  Mirrors the pre-redesign stacking behavior for the free-sender branch. */
+async function grantCompDays(
+  admin: Admin,
+  userId: string,
+  days: number,
+  notedReason: string,
+): Promise<string | null> {
+  const addMs = days * MS_PER_DAY;
+  const { data: existing } = await admin
     .from("comp_grants")
     .select("id, expires_at")
-    .eq("user_id", senderId)
+    .eq("user_id", userId)
     .eq("tier", "coach")
     .is("revoked_at", null)
-    .like("note", "Referral credit%")
+    .like("note", `${notedReason}%`)
     .order("expires_at", { ascending: false, nullsFirst: false })
     .limit(1)
     .maybeSingle();
 
-  let compGrantId: string;
-  const addMs = awardDays * 24 * 60 * 60 * 1000;
-
   if (
-    existingGrant.data &&
-    existingGrant.data.expires_at &&
-    new Date(existingGrant.data.expires_at as string).getTime() > Date.now()
+    existing?.expires_at &&
+    new Date(existing.expires_at as string).getTime() > Date.now()
   ) {
     const newExpiry = new Date(
-      new Date(existingGrant.data.expires_at as string).getTime() + addMs,
+      new Date(existing.expires_at as string).getTime() + addMs,
     ).toISOString();
-    const { error: updErr } = await serviceClient
+    const { error } = await admin
       .from("comp_grants")
       .update({ expires_at: newExpiry })
-      .eq("id", existingGrant.data.id);
-    if (updErr) {
-      return { awarded: false, reason: `extend-grant-failed: ${updErr.message}` };
+      .eq("id", existing.id);
+    if (error) throw new Error(`extend-grant-failed: ${error.message}`);
+    return existing.id as string;
+  }
+
+  const { data: grant, error } = await admin
+    .from("comp_grants")
+    .insert({
+      user_id: userId,
+      tier: "coach",
+      note: `${notedReason} (+${days}d)`,
+      granted_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + addMs).toISOString(),
+    })
+    .select("id")
+    .single();
+  if (error || !grant) {
+    throw new Error(`insert-grant-failed: ${error?.message ?? "no row"}`);
+  }
+  return grant.id as string;
+}
+
+/**
+ * Attempt to award a referral because `recipientId` just activated. Safe to
+ * call after any activation event (play created, copy claimed, invite accepted)
+ * — no-ops when the feature is off, the user wasn't referred, they've already
+ * minted an award, they aren't actually activated, or the sender is at cap.
+ *
+ * Creates its own service-role client (comp_grants / referral_awards / Stripe
+ * are not reachable from an RLS session). Never throws — callers fire it
+ * best-effort so a reward failure can't block the user's action.
+ */
+export async function maybeAwardReferralOnActivation(args: {
+  recipientId: string;
+  /** Which activation fired this attempt — recorded as the award source for
+   *  the Virality tab. Defaults to "activation". */
+  trigger?: "play_created" | "copy_claim" | "invite_accept";
+}): Promise<ReferralAwardResult> {
+  const { recipientId, trigger } = args;
+  try {
+    const config = await getReferralConfig();
+    if (!config.enabled) return { awarded: false, reason: "disabled" };
+
+    const admin = createServiceRoleClient();
+
+    // Who referred this user?
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("referred_by")
+      .eq("id", recipientId)
+      .maybeSingle();
+    const senderId = (profile?.referred_by as string | null) ?? null;
+    if (!senderId) return { awarded: false, reason: "no-referrer" };
+    if (senderId === recipientId) return { awarded: false, reason: "self-referral" };
+
+    // Already credited? (recipient_id is unique — cheap pre-check for a clean
+    // reason; the constraint is the real guarantee at reserve time.)
+    const { data: existingAward } = await admin
+      .from("referral_awards")
+      .select("id")
+      .eq("recipient_id", recipientId)
+      .maybeSingle();
+    if (existingAward) return { awarded: false, reason: "already-credited" };
+
+    if (!(await isActivated(admin, recipientId))) {
+      return { awarded: false, reason: "not-activated" };
     }
-    compGrantId = existingGrant.data.id as string;
-  } else {
-    const newExpiry = new Date(Date.now() + addMs).toISOString();
-    const { data: grant, error: insErr } = await serviceClient
-      .from("comp_grants")
+
+    // Count cap (both reward kinds).
+    if (config.capAwards !== null) {
+      const { count } = await admin
+        .from("referral_awards")
+        .select("id", { count: "exact", head: true })
+        .eq("sender_id", senderId);
+      if ((count ?? 0) >= config.capAwards) {
+        return { awarded: false, reason: "sender-at-award-cap" };
+      }
+    }
+
+    // Decide the branch up-front so we can enforce the day cap (free branch)
+    // BEFORE reserving — a reserved-but-unrewarded slot would waste the
+    // recipient's one-shot.
+    const customerId = await payingCustomerId(admin, senderId);
+    let useStripe = customerId !== null;
+    let creditCents = 0;
+    if (useStripe) {
+      const amount =
+        config.payerCreditCents !== null
+          ? config.payerCreditCents
+          : await coachMonthPriceCents();
+      if (!amount || amount <= 0) {
+        // No usable price → fall back to comp days rather than a $0 credit.
+        useStripe = false;
+      } else {
+        creditCents = amount;
+      }
+    }
+
+    let compDays = 0;
+    if (!useStripe) {
+      compDays = config.daysPerAward;
+      if (config.capDays !== null) {
+        const { data: totals } = await admin
+          .from("referral_awards")
+          .select("days_awarded")
+          .eq("sender_id", senderId);
+        const earned = (totals ?? []).reduce(
+          (acc, r: { days_awarded: number | null }) => acc + (r.days_awarded ?? 0),
+          0,
+        );
+        const remaining = config.capDays - earned;
+        if (remaining <= 0) return { awarded: false, reason: "sender-at-day-cap" };
+        compDays = Math.min(config.daysPerAward, remaining);
+      }
+    }
+
+    const source = trigger ?? "activation";
+
+    // RESERVE the one-per-recipient slot before any money moves. A unique
+    // violation here means a concurrent activation beat us — bail cleanly.
+    const { data: reservation, error: reserveErr } = await admin
+      .from("referral_awards")
       .insert({
-        user_id: senderId,
-        tier: "coach",
-        note: `Referral credit (+${awardDays}d)`,
-        granted_at: nowIso,
-        expires_at: newExpiry,
+        sender_id: senderId,
+        recipient_id: recipientId,
+        days_awarded: 0,
+        source,
       })
       .select("id")
       .single();
-    if (insErr || !grant) {
-      return { awarded: false, reason: `insert-grant-failed: ${insErr?.message}` };
+    if (reserveErr || !reservation) {
+      return { awarded: false, reason: "reserve-failed-or-race" };
     }
-    compGrantId = grant.id as string;
-  }
 
-  const { error: awardErr } = await serviceClient
-    .from("referral_awards")
-    .insert({
-      sender_id: senderId,
+    let rewardCommitted = false;
+    try {
+      let compGrantId: string | null = null;
+      let stripeTxnId: string | null = null;
+
+      if (useStripe && customerId) {
+        const { stripe } = await getStripeClient();
+        const txn = await stripe.customers.createBalanceTransaction(customerId, {
+          amount: -creditCents, // negative = credit toward future invoices
+          currency: "usd",
+          description: "Referral reward — thanks for bringing a coach to XO Gridmaker",
+          metadata: {
+            reason: "referral_reward",
+            sender_id: senderId,
+            recipient_id: recipientId,
+          },
+        });
+        stripeTxnId = txn.id;
+        rewardCommitted = true; // money has moved — do NOT roll back past here
+      } else {
+        compGrantId = await grantCompDays(
+          admin,
+          senderId,
+          compDays,
+          "Referral credit",
+        );
+        rewardCommitted = true;
+      }
+
+      // Recipient side (double-sided). Non-fatal: a failure here shouldn't undo
+      // the sender's reward.
+      let recipientDays = 0;
+      let recipientGrantId: string | null = null;
+      if (config.recipientTrialDays > 0) {
+        try {
+          recipientGrantId = await grantCompDays(
+            admin,
+            recipientId,
+            config.recipientTrialDays,
+            "Referral welcome trial",
+          );
+          recipientDays = config.recipientTrialDays;
+        } catch {
+          recipientDays = 0;
+          recipientGrantId = null;
+        }
+      }
+
+      await admin
+        .from("referral_awards")
+        .update({
+          days_awarded: useStripe ? 0 : compDays,
+          reward_kind: useStripe ? "stripe_credit" : "comp_days",
+          credit_cents: useStripe ? creditCents : null,
+          stripe_balance_txn_id: stripeTxnId,
+          comp_grant_id: compGrantId,
+          recipient_days_awarded: recipientDays,
+          recipient_comp_grant_id: recipientGrantId,
+        })
+        .eq("id", reservation.id);
+
+      await notifyReferralMinted(admin, senderId, {
+        useStripe,
+        compDays,
+        creditCents,
+      }).catch(() => {});
+      await recordAwardEvent(admin, senderId, recipientId, {
+        useStripe,
+        compDays,
+        creditCents,
+        recipientDays,
+      }).catch(() => {});
+
+      return {
+        awarded: true,
+        rewardKind: useStripe ? "stripe_credit" : "comp_days",
+        senderDays: useStripe ? 0 : compDays,
+        senderCreditCents: useStripe ? creditCents : 0,
+        recipientDays,
+      };
+    } catch (err) {
+      // Only roll back the reservation if NO reward was committed — otherwise
+      // freeing the slot would let a retry double-spend the credit we just gave.
+      if (!rewardCommitted) {
+        try {
+          await admin.from("referral_awards").delete().eq("id", reservation.id);
+        } catch {
+          /* leave the reservation; a stuck slot is safer than a double-spend */
+        }
+      }
+      return {
+        awarded: false,
+        reason: `reward-failed: ${err instanceof Error ? err.message : "unknown"}`,
+      };
+    }
+  } catch {
+    return { awarded: false, reason: "unexpected-error" };
+  }
+}
+
+/** Best-effort push to the sender that a reward landed (R6). */
+async function notifyReferralMinted(
+  admin: Admin,
+  senderId: string,
+  reward: { useStripe: boolean; compDays: number; creditCents: number },
+): Promise<void> {
+  const body = reward.useStripe
+    ? `A coach you referred just got started — $${(reward.creditCents / 100).toFixed(0)} credit applied to your next invoice.`
+    : `A coach you referred just got started — ${reward.compDays} days of Team Coach added to your account.`;
+  await notifyUser({
+    admin,
+    userId: senderId,
+    category: "account",
+    message: { title: "Referral reward earned 🎉", body, link: "/account" },
+  });
+}
+
+/** Best-effort funnel event for the admin Virality tab (R7). */
+async function recordAwardEvent(
+  admin: Admin,
+  senderId: string,
+  recipientId: string,
+  reward: {
+    useStripe: boolean;
+    compDays: number;
+    creditCents: number;
+    recipientDays: number;
+  },
+): Promise<void> {
+  await admin.from("ui_events").insert({
+    session_id: `server:referral:${recipientId}`,
+    user_id: senderId,
+    path: "/account",
+    event_name: "referral_award_minted",
+    metadata: {
       recipient_id: recipientId,
-      days_awarded: awardDays,
-      comp_grant_id: compGrantId,
-      source: "copy_link",
-    });
-  if (awardErr) {
-    // Unique-violation on recipient_id means a concurrent claim beat us
-    // here. The grant we just minted is technically a leak, but small
-    // (one extension's worth of days) and only happens under a real
-    // race — not worth a transaction round-trip to compensate.
-    return { awarded: false, reason: `award-insert-failed: ${awardErr.message}` };
-  }
-
-  return { awarded: true, daysAdded: awardDays, compGrantId };
+      reward_kind: reward.useStripe ? "stripe_credit" : "comp_days",
+      sender_days: reward.useStripe ? 0 : reward.compDays,
+      sender_credit_cents: reward.useStripe ? reward.creditCents : 0,
+      recipient_days: reward.recipientDays,
+    },
+  });
 }

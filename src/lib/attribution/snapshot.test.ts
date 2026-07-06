@@ -75,6 +75,7 @@ const BASE_PAYLOAD = {
   country: null,
   region: null,
   city: null,
+  ref: null,
 };
 
 beforeEach(() => {

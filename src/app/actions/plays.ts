@@ -27,6 +27,7 @@ import { revalidateExampleSurfacesIfPublicPlaybook } from "@/lib/site/example-pl
 import { timed } from "@/lib/perf/timed";
 import { resolveOpponentHiddenOnLoad } from "@/lib/playbook/opponent-visibility";
 import { recordRatingTrigger } from "@/app/actions/rating-prompt";
+import { maybeAwardReferralOnActivation } from "@/lib/data/referral-award";
 
 /**
  * Returns true if the signed-in user has created at least one play in a
@@ -386,6 +387,14 @@ export async function createPlayAction(
     if (playCount === 3) {
       void recordRatingTrigger("third_play");
     }
+
+    // Referral activation: authoring a real play activates a referred new
+    // coach and mints their referrer's reward. Best-effort + fire-and-forget;
+    // no-ops when the user wasn't referred or the program is off.
+    void maybeAwardReferralOnActivation({
+      recipientId: user.id,
+      trigger: "play_created",
+    });
   }
 
   await revalidateExampleSurfacesIfPublicPlaybook(playbookId);
