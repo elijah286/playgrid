@@ -52,7 +52,12 @@ alter table public.site_settings
   -- rewarded for. NULL = uncapped. Applies to BOTH reward kinds — the legacy
   -- referral_cap_days only bounded comp days, which stripe-credit awards bypass.
   add column if not exists referral_cap_awards integer
-    check (referral_cap_awards is null or (referral_cap_awards >= 1 and referral_cap_awards <= 100000));
+    check (referral_cap_awards is null or (referral_cap_awards >= 1 and referral_cap_awards <= 100000)),
+  -- Staged-rollout allowlist: emails for whom the program is LIVE even while the
+  -- global toggle is off. Lets us validate the real reward paths (comp grants +
+  -- the Stripe credit call) with a few test accounts before enabling for all.
+  -- Mirrors analytics_excluded_emails; resolved email→user-id at award time.
+  add column if not exists referral_test_emails text[] not null default '{}';
 
 -- 4) Ship a bounded default cap on the live config row if none is set (audit
 --    R8: never expose an uncapped liability). 24 lifetime awards ≈ two years of

@@ -20,6 +20,7 @@ export async function getReferralConfigAction() {
         recipientTrialDays: 14,
         payerCreditCents: null,
         capAwards: 24,
+        testEmails: [],
       } satisfies ReferralConfig,
     };
   }

@@ -23,6 +23,9 @@ export type ReferralConfig = {
   /** Lifetime cap on the NUMBER of qualifying referrals a single sender can be
    *  rewarded for. Null = uncapped. Applies to both reward kinds. */
   capAwards: number | null;
+  /** Staged-rollout allowlist: emails for whom the program is live even while
+   *  `enabled` is false. Used to test the real reward paths before launch. */
+  testEmails: string[];
 };
 
 const DEFAULTS: ReferralConfig = {
@@ -32,7 +35,21 @@ const DEFAULTS: ReferralConfig = {
   recipientTrialDays: 14,
   payerCreditCents: null,
   capAwards: 24,
+  testEmails: [],
 };
+
+function normalizeEmails(input: readonly unknown[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of input) {
+    if (typeof raw !== "string") continue;
+    const e = raw.trim().toLowerCase();
+    if (!e || !e.includes("@") || seen.has(e)) continue;
+    seen.add(e);
+    out.push(e);
+  }
+  return out;
+}
 
 const fetchReferralConfig = unstable_cache(
   async (): Promise<ReferralConfig> => {
@@ -41,7 +58,7 @@ const fetchReferralConfig = unstable_cache(
       const { data, error } = await admin
         .from("site_settings")
         .select(
-          "referral_enabled, referral_days_per_award, referral_cap_days, referral_recipient_trial_days, referral_payer_credit_cents, referral_cap_awards",
+          "referral_enabled, referral_days_per_award, referral_cap_days, referral_recipient_trial_days, referral_payer_credit_cents, referral_cap_awards, referral_test_emails",
         )
         .eq("id", SITE_ROW_ID)
         .maybeSingle();
@@ -53,6 +70,7 @@ const fetchReferralConfig = unstable_cache(
         referral_recipient_trial_days: number | null;
         referral_payer_credit_cents: number | null;
         referral_cap_awards: number | null;
+        referral_test_emails: string[] | null;
       };
       return {
         enabled: row.referral_enabled ?? false,
@@ -62,6 +80,7 @@ const fetchReferralConfig = unstable_cache(
           row.referral_recipient_trial_days ?? DEFAULTS.recipientTrialDays,
         payerCreditCents: row.referral_payer_credit_cents,
         capAwards: row.referral_cap_awards,
+        testEmails: normalizeEmails(row.referral_test_emails ?? []),
       };
     } catch {
       return { ...DEFAULTS };
@@ -101,6 +120,7 @@ export async function setReferralConfig(
   ) {
     throw new Error("capAwards must be between 1 and 100000, or null for no cap.");
   }
+  const testEmails = normalizeEmails(next.testEmails);
   const admin = createServiceRoleClient();
   const { error } = await admin
     .from("site_settings")
@@ -113,9 +133,54 @@ export async function setReferralConfig(
         referral_recipient_trial_days: next.recipientTrialDays,
         referral_payer_credit_cents: next.payerCreditCents,
         referral_cap_awards: next.capAwards,
+        referral_test_emails: testEmails,
       },
       { onConflict: "id" },
     );
   if (error) throw new Error(error.message);
-  return next;
+  return { ...next, testEmails };
+}
+
+/**
+ * Resolve the test-cohort emails to auth user ids. Same walk as
+ * getAnalyticsExcludedUserIds. Only consulted during the staged-rollout window
+ * (global toggle off, test emails present), so the listUsers cost is bounded to
+ * low-volume test traffic. Returns an empty set on any error (fail closed).
+ */
+export async function getReferralTestUserIds(): Promise<Set<string>> {
+  const config = await getReferralConfig();
+  const wanted = new Set(config.testEmails);
+  if (wanted.size === 0) return new Set();
+  try {
+    const admin = createServiceRoleClient();
+    const ids = new Set<string>();
+    for (let page = 1; page <= 20; page++) {
+      const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
+      if (error) break;
+      const users = data?.users ?? [];
+      for (const u of users) {
+        const e = (u.email ?? "").toLowerCase();
+        if (e && wanted.has(e)) ids.add(u.id);
+      }
+      if (users.length < 1000) break;
+    }
+    return ids;
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * Is the referral program active for this specific user right now? True when
+ * the global program is on, OR the user is in the staged-rollout test cohort.
+ * `config` is passed in so hot paths that already loaded it don't re-fetch.
+ */
+export async function isReferralActiveForUser(
+  config: ReferralConfig,
+  userId: string | null | undefined,
+): Promise<boolean> {
+  if (config.enabled) return true;
+  if (!userId || config.testEmails.length === 0) return false;
+  const testIds = await getReferralTestUserIds();
+  return testIds.has(userId);
 }

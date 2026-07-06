@@ -260,17 +260,34 @@ export function SiteSettingsAdminClient({
       ? "24"
       : String(initialReferralConfig.capAwards),
   );
+  const [testEmailsInput, setTestEmailsInput] = useState(
+    initialReferralConfig.testEmails.join("\n"),
+  );
   const [savedReferral, setSavedReferral] = useState<ReferralConfig>(
     initialReferralConfig,
   );
   const [referralPending, startReferralTransition] = useTransition();
+  const parseTestEmails = (raw: string): string[] => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const part of raw.split(/[\s,]+/)) {
+      const e = part.trim().toLowerCase();
+      if (e && e.includes("@") && !seen.has(e)) {
+        seen.add(e);
+        out.push(e);
+      }
+    }
+    return out;
+  };
   const referralDirty =
     referralEnabled !== savedReferral.enabled ||
     Number(referralDaysInput) !== savedReferral.daysPerAward ||
     Number(recipientTrialInput) !== savedReferral.recipientTrialDays ||
     (payerCreditAuto ? null : Math.round(Number(payerCreditInput) * 100)) !==
       savedReferral.payerCreditCents ||
-    (capAwardsNoCap ? null : Number(capAwardsInput)) !== savedReferral.capAwards;
+    (capAwardsNoCap ? null : Number(capAwardsInput)) !== savedReferral.capAwards ||
+    parseTestEmails(testEmailsInput).join(",") !==
+      savedReferral.testEmails.join(",");
 
   function saveReferral() {
     const days = Number(referralDaysInput);
@@ -309,6 +326,7 @@ export function SiteSettingsAdminClient({
       recipientTrialDays: Math.floor(trial),
       payerCreditCents: payerCents,
       capAwards,
+      testEmails: parseTestEmails(testEmailsInput),
     };
     startReferralTransition(async () => {
       const res = await setReferralConfigAction(next);
@@ -327,6 +345,7 @@ export function SiteSettingsAdminClient({
       if (res.config.capAwards !== null) {
         setCapAwardsInput(String(res.config.capAwards));
       }
+      setTestEmailsInput(res.config.testEmails.join("\n"));
       toast("Referral rewards updated.", "success");
     });
   }
@@ -960,6 +979,26 @@ export function SiteSettingsAdminClient({
             Save
           </Button>
         </div>
+
+        <label className="flex flex-col gap-1 border-t border-border pt-3">
+          <span className="text-xs font-medium text-muted">
+            Test accounts (staged rollout)
+          </span>
+          <span className="text-[11px] text-muted/80">
+            Emails, one per line. The program runs LIVE for just these accounts
+            even while the toggle above is Off — use it to validate the real
+            reward paths (comp days + the Stripe credit) before enabling for
+            everyone. Leave empty for a normal launch.
+          </span>
+          <textarea
+            rows={3}
+            placeholder={"tester@example.com\ncoach@example.com"}
+            className="mt-1 w-full max-w-md rounded-md bg-surface px-3 py-1.5 font-mono text-xs text-foreground ring-1 ring-border"
+            value={testEmailsInput}
+            disabled={referralPending}
+            onChange={(e) => setTestEmailsInput(e.target.value)}
+          />
+        </label>
       </div>
     </div>
   );

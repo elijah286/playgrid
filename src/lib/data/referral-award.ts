@@ -25,7 +25,11 @@
 
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getReferralConfig, type ReferralConfig } from "@/lib/site/referral-config";
+import {
+  getReferralConfig,
+  isReferralActiveForUser,
+  type ReferralConfig,
+} from "@/lib/site/referral-config";
 import { getStripeClient } from "@/lib/billing/stripe";
 import { getStripeConfig } from "@/lib/site/stripe-config";
 import { notifyUser } from "@/lib/notifications/inbox-dispatch";
@@ -278,7 +282,11 @@ export async function maybeAwardReferralOnActivation(args: {
   const { recipientId, trigger } = args;
   try {
     const config = await getReferralConfig();
-    if (!config.enabled) return { awarded: false, reason: "disabled" };
+    // Fast path: fully off (no global toggle, no staged test cohort) → nothing
+    // to do, and no extra queries on the hot play-creation path.
+    if (!config.enabled && config.testEmails.length === 0) {
+      return { awarded: false, reason: "disabled" };
+    }
 
     const admin = createServiceRoleClient();
 
@@ -291,6 +299,13 @@ export async function maybeAwardReferralOnActivation(args: {
     const senderId = (profile?.referred_by as string | null) ?? null;
     if (!senderId) return { awarded: false, reason: "no-referrer" };
     if (senderId === recipientId) return { awarded: false, reason: "self-referral" };
+
+    // The program must be active for THIS sender: either globally enabled, or
+    // the sender is in the staged-rollout test cohort. Lets us validate the
+    // real reward paths with a few accounts before enabling for everyone.
+    if (!(await isReferralActiveForUser(config, senderId))) {
+      return { awarded: false, reason: "not-active-for-sender" };
+    }
 
     // Already credited? (recipient_id is unique — cheap pre-check for a clean
     // reason; the constraint is the real guarantee at reserve time.)

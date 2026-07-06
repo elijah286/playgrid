@@ -1,5 +1,8 @@
 import { createServiceRoleClient } from "@/lib/supabase/admin";
-import { getReferralConfig } from "@/lib/site/referral-config";
+import {
+  getReferralConfig,
+  isReferralActiveForUser,
+} from "@/lib/site/referral-config";
 import { tagShareUrl } from "@/lib/share/tag-url";
 
 const SITE_URL =
@@ -35,7 +38,9 @@ export async function getReferralSummaryForUser(
   userId: string,
 ): Promise<ReferralSummary | null> {
   const config = await getReferralConfig();
-  if (!config.enabled) return null;
+  // Show the card when the program is live for this user — globally, or because
+  // they're in the staged-rollout test cohort.
+  if (!(await isReferralActiveForUser(config, userId))) return null;
 
   const admin = createServiceRoleClient();
 

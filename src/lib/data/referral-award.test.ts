@@ -9,6 +9,7 @@ const BASE: ReferralConfig = {
   recipientTrialDays: 14,
   payerCreditCents: null,
   capAwards: 24,
+  testEmails: [],
 };
 
 const ctx = (over: Partial<Parameters<typeof decideReferralReward>[1]> = {}) => ({
