@@ -11,6 +11,10 @@ import { tierAtLeast } from "@/lib/billing/features";
 import { getSeatUsage, getSeatCollaborators, getPendingCoachInvites, type SeatUsage, type SeatCollaborator, type PendingCoachInvite } from "@/lib/billing/seats";
 import { DEVICE_ID_COOKIE } from "@/lib/auth/sessions";
 import { getAiFeedbackOptInAction } from "@/app/actions/coach-ai-feedback";
+import {
+  getReferralSummaryForUser,
+  type ReferralSummary,
+} from "@/lib/data/referral-summary";
 import { AccountClient, type AccountSession } from "./ui";
 
 export default async function AccountPage() {
@@ -69,6 +73,14 @@ export default async function AccountPage() {
 
   const aiFeedbackRes = await getAiFeedbackOptInAction();
   const aiFeedbackStatus = aiFeedbackRes.ok ? aiFeedbackRes.status : "unanswered";
+
+  // Referral standing — null when the program is disabled (card hidden).
+  let referral: ReferralSummary | null = null;
+  try {
+    referral = await getReferralSummaryForUser(user.id);
+  } catch {
+    /* best effort — card just won't render */
+  }
 
   try {
     const admin = createServiceRoleClient();
@@ -143,6 +155,7 @@ export default async function AccountPage() {
         freeMaxPlays={freeMaxPlays}
         pendingChange={pendingChange}
         pendingCancellation={pendingCancellation}
+        referral={referral}
       />
     </div>
   );

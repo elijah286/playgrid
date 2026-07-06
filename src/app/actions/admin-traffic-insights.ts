@@ -103,6 +103,15 @@ export type ViralitySummary = {
     channel: string | null;
     inboundVisits: number;
   }>;
+  /** Referral-program funnel over the window: attributed signups vs paid-out
+   *  rewards. Distinct from `shares` — this measures the incentivized loop. */
+  referral: {
+    referredSignups: number;
+    rewardedReferrals: number;
+    totalDaysAwarded: number;
+    totalCreditCents: number;
+    recipientTrialDaysAwarded: number;
+  };
 };
 
 type EOk<T> = { ok: true; summary: T };
@@ -294,6 +303,13 @@ function emptyVirality(windowDays: number): ViralitySummary {
     kFactor: 0,
     topSharers: [],
     recentShares: [],
+    referral: {
+      referredSignups: 0,
+      rewardedReferrals: 0,
+      totalDaysAwarded: 0,
+      totalCreditCents: 0,
+      recipientTrialDaysAwarded: 0,
+    },
   };
 }
 
@@ -855,6 +871,38 @@ export async function getViralitySummaryAction(
     );
     const kFactor = sharers > 0 ? totalInboundSignupsAttributed / sharers : 0;
 
+    // Referral-program funnel: attributed signups this window vs paid-out
+    // rewards. Counts sit alongside the raw-share K-factor above.
+    const [referredSignupRows, awardRows] = await Promise.all([
+      admin
+        .from("profiles")
+        .select("id", { count: "exact", head: true })
+        .not("referred_by", "is", null)
+        .gte("created_at", windowStart),
+      admin
+        .from("referral_awards")
+        .select("days_awarded, credit_cents, recipient_days_awarded")
+        .gte("awarded_at", windowStart),
+    ]);
+    const awards = awardRows.data ?? [];
+    const referral = {
+      referredSignups: referredSignupRows.count ?? 0,
+      rewardedReferrals: awards.length,
+      totalDaysAwarded: awards.reduce(
+        (a, r: { days_awarded: number | null }) => a + (r.days_awarded ?? 0),
+        0,
+      ),
+      totalCreditCents: awards.reduce(
+        (a, r: { credit_cents: number | null }) => a + (r.credit_cents ?? 0),
+        0,
+      ),
+      recipientTrialDaysAwarded: awards.reduce(
+        (a, r: { recipient_days_awarded: number | null }) =>
+          a + (r.recipient_days_awarded ?? 0),
+        0,
+      ),
+    };
+
     return {
       ok: true,
       summary: {
@@ -870,6 +918,7 @@ export async function getViralitySummaryAction(
         kFactor,
         topSharers,
         recentShares,
+        referral,
       },
     };
   } catch (e) {

@@ -245,6 +245,20 @@ export async function createInviteAction(input: {
 
   if (error) return { ok: false, error: error.message };
 
+  // Feed the Virality tab: an invite is a share. Copy links already record
+  // this; invites didn't, which starved the K-factor of the team-graph loop.
+  try {
+    await admin.from("share_events").insert({
+      actor_user_id: user.id,
+      share_kind: "playbook_invite",
+      resource_id: input.playbookId,
+      channel: "invite",
+      share_token: (data as { token?: string | null })?.token ?? null,
+    });
+  } catch {
+    /* best-effort telemetry — never fail the invite on it */
+  }
+
   // Rating prompt: fire the second-share trigger when the user creates their
   // 2nd invite link, indicating they've shared the playbook with a second person.
   const { count: inviteCount } = await admin

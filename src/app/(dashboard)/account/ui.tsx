@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { track } from "@/lib/analytics/track";
-import { AlertTriangle, Bell, Check, CreditCard, IdCard, KeyRound, Lock, LogOut, MessageSquareQuote, Monitor, Moon, Smartphone, Sun, Users, UserCircle } from "lucide-react";
+import { AlertTriangle, Bell, Check, Copy, CreditCard, Gift, IdCard, KeyRound, Lock, LogOut, MessageSquareQuote, Monitor, Moon, Smartphone, Sun, Users, UserCircle } from "lucide-react";
 import {
   changePasswordAction,
   deleteOwnAccountAction,
@@ -48,6 +48,7 @@ import { useIsNativeApp } from "@/lib/native/useIsNativeApp";
 import type { ColorSchemePreference } from "@/components/theme/colorModeStorage";
 import { cn } from "@/lib/utils";
 import { PASSWORD_RULES_LABEL, validatePassword } from "@/lib/auth/password";
+import type { ReferralSummary } from "@/lib/data/referral-summary";
 
 const THEME_OPTIONS: { value: ColorSchemePreference; label: string; icon: typeof Sun }[] = [
   { value: "light", label: "Light", icon: Sun },
@@ -83,6 +84,7 @@ export function AccountClient({
   freeMaxPlays,
   pendingChange,
   pendingCancellation,
+  referral,
 }: {
   email: string;
   displayName: string | null;
@@ -96,6 +98,7 @@ export function AccountClient({
   freeMaxPlays: number;
   pendingChange: { targetTier: SubscriptionTier; effectiveAt: string } | null;
   pendingCancellation: { effectiveAt: string } | null;
+  referral: ReferralSummary | null;
 }) {
   // Stripe redirects back here with ?checkout=success or ?checkout=cancel
   // after a checkout attempt. Record both as ui_events so the engagement
@@ -152,6 +155,15 @@ export function AccountClient({
           ) : null}
         </div>
       </Section>
+
+      {referral ? (
+        <Section
+          title="Refer coaches"
+          description="Share XO Gridmaker and earn rewards when a coach you send it to gets started."
+        >
+          <ReferralCard referral={referral} />
+        </Section>
+      ) : null}
 
       <Section
         title="Security"
@@ -326,6 +338,107 @@ function Card({
       {description && <p className="mt-1 text-xs text-muted">{description}</p>}
       <div className="mt-4">{children}</div>
     </section>
+  );
+}
+
+function ReferralCard({ referral }: { referral: ReferralSummary }) {
+  const [copied, setCopied] = useState(false);
+
+  // Promo impression — lets the Virality tab measure card views → link copies.
+  useEffect(() => {
+    track({ event: "referral_card_view", target: "account", metadata: null });
+  }, []);
+
+  async function copyLink() {
+    track({ event: "referral_link_copied", target: "account", metadata: null });
+    try {
+      await navigator.clipboard.writeText(referral.shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard blocked — the input is selectable as a fallback */
+    }
+  }
+
+  const capText =
+    referral.capAwards !== null
+      ? ` Up to ${referral.capAwards} rewarded referrals.`
+      : "";
+  const earnedText =
+    referral.rewardKind === "stripe_credit"
+      ? referral.totalCreditCents > 0
+        ? `$${(referral.totalCreditCents / 100).toFixed(0)} in account credit earned`
+        : "No credit earned yet"
+      : referral.totalDaysEarned > 0
+        ? `${referral.totalDaysEarned} days of Team Coach earned`
+        : "No days earned yet";
+
+  return (
+    <Card
+      icon={Gift}
+      title="Your referral link"
+      description={`Earn ${referral.perReferralLabel} for each coach who signs up from your link and gets started.${
+        referral.recipientTrialDays > 0
+          ? ` They start with ${referral.recipientTrialDays} days of Team Coach, too.`
+          : ""
+      }${capText}`}
+    >
+      <div className="space-y-4">
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            value={referral.shareUrl}
+            readOnly
+            onFocus={(e) => e.currentTarget.select()}
+            className="min-w-0 flex-1 rounded-lg bg-surface px-3 py-2 text-sm text-foreground ring-1 ring-border"
+            aria-label="Your referral link"
+          />
+          <button
+            type="button"
+            onClick={copyLink}
+            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90"
+          >
+            {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+            {copied ? "Copied!" : "Copy link"}
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <ReferralStat
+            label="Coaches referred"
+            value={String(referral.referredCount)}
+          />
+          <ReferralStat
+            label="Rewarded"
+            value={String(referral.rewardedCount)}
+          />
+          <ReferralStat label="Earned" value={earnedText} small />
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function ReferralStat({
+  label,
+  value,
+  small,
+}: {
+  label: string;
+  value: string;
+  small?: boolean;
+}) {
+  return (
+    <div className="rounded-lg bg-surface-inset px-3 py-2">
+      <p className="text-xs text-muted">{label}</p>
+      <p
+        className={cn(
+          "mt-0.5 font-semibold text-foreground",
+          small ? "text-xs" : "text-lg",
+        )}
+      >
+        {value}
+      </p>
+    </div>
   );
 }
 

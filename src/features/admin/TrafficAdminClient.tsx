@@ -1018,6 +1018,42 @@ function ViralityPanel({
         />
       </div>
 
+      <div>
+        <p className="mb-2 text-sm font-semibold text-foreground">
+          Referral program
+        </p>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <StatTile
+            label="Referred signups"
+            value={formatInt(data.referral.referredSignups)}
+            sub={`${data.windowDays}-day window`}
+            question="How many new users came in attributed to a referrer?"
+          />
+          <StatTile
+            label="Rewarded referrals"
+            value={formatInt(data.referral.rewardedReferrals)}
+            sub="activated & paid out"
+            question="How many attributed signups actually activated and paid out?"
+          />
+          <StatTile
+            label="Reward payout"
+            value={
+              data.referral.totalCreditCents > 0
+                ? `$${(data.referral.totalCreditCents / 100).toFixed(0)}`
+                : formatInt(data.referral.totalDaysAwarded) + "d"
+            }
+            sub={`$${(data.referral.totalCreditCents / 100).toFixed(0)} credit · ${formatInt(data.referral.totalDaysAwarded)} comp days`}
+            question="What has the program cost so far?"
+          />
+          <StatTile
+            label="New-coach trial days"
+            value={formatInt(data.referral.recipientTrialDaysAwarded)}
+            sub="granted to referred coaches"
+            question="How much recipient-side incentive went out?"
+          />
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <BarList
           title="Shares by kind"
