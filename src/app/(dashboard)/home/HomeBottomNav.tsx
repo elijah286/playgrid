@@ -8,6 +8,7 @@ import { CalNavButton } from "@/features/coach-ai/CalNavButton";
 import { useInboxBadge } from "@/features/dashboard/InboxBadgeContext";
 import { signOutAction } from "@/app/actions/auth";
 import { useIsNativeApp } from "@/lib/native/useIsNativeApp";
+import { useSoftKeyboardOpen } from "@/lib/native/useSoftKeyboardOpen";
 import { isOwnBottomBarRoute } from "./bottomNavRoutes";
 
 /**
@@ -48,6 +49,7 @@ export function HomeBottomNav({
   const searchParams = useSearchParams();
   const { count: inboxCount, urgent: inboxUrgent } = useInboxBadge();
   const native = useIsNativeApp();
+  const keyboardOpen = useSoftKeyboardOpen();
   const [moreOpen, setMoreOpen] = useState(false);
   useEffect(() => {
     if (!moreOpen) return;
@@ -88,12 +90,27 @@ export function HomeBottomNav({
     <>
       <nav
         aria-label="Primary"
+        // `inert` while it's slid away: removes the whole bar from pointer,
+        // focus, and the a11y tree in one shot, so a coach mid-message can't
+        // tab into or accidentally hit a nav item hidden behind the keyboard.
+        inert={keyboardOpen}
         // `left-0 w-screen` (instead of `inset-x-0`) so the toolbar
         // spans the full viewport width — including the scrollbar
         // gutter on html. Otherwise `right: 0` aligns to html's
         // content edge and a thin sliver of the page background
         // peeks through next to the toolbar where the scrollbar lives.
-        className="fixed left-0 bottom-0 z-40 flex w-screen items-stretch border-t border-border bg-surface-raised shadow-[0_-1px_0_0_rgba(0,0,0,0.02)] sm:hidden"
+        //
+        // While the soft keyboard is open we slide the whole bar down out
+        // of view (`translate-y-full`) instead of unmounting it: it would
+        // otherwise sit wedged between the composer and the keyboard, in the
+        // one strip the coach isn't navigating from, where a stray tap
+        // discards their draft. Native iOS/Android and every chat app hide
+        // bottom nav while composing — this matches that. Translating (vs
+        // unmounting) keeps the reserved footer clearance stable so the page
+        // doesn't reflow under the keyboard, and animates it back on blur.
+        className={`fixed left-0 bottom-0 z-40 flex w-screen items-stretch border-t border-border bg-surface-raised shadow-[0_-1px_0_0_rgba(0,0,0,0.02)] transition-transform duration-200 sm:hidden ${
+          keyboardOpen ? "translate-y-full" : "translate-y-0"
+        }`}
         style={{
           // Pad up by exactly the home-indicator safe area (no extra
           // cushion) so the tab row sits right above the indicator the way
