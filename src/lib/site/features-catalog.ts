@@ -608,7 +608,7 @@ export const FEATURES: FeatureEntry[] = [
     id: "referral-rewards",
     name: "Referral rewards (admin-controlled)",
     description:
-      "Optional growth lever: when a coach sends a copy of their playbook and a brand-new user (zero owned playbooks) claims it, the sender earns Team Coach days as a thank-you. Off by default. Site Admin → Site Settings exposes a toggle, days-per-award input, lifetime cap input, and a No-cap checkbox. Idempotent (each recipient can only mint one award) and self-referral-proof. Awards stack by extending the sender's active referral comp_grant. Surfaced to coaches via a small \"earn N days of Team Coach\" line on the Send-a-copy card in the Share dialog when enabled.",
+      "Optional growth lever: when a coach refers a new user — via their personal referral link (?ref=), a copy of their playbook, or a team invite — and that user activates (builds a play or joins a team), the referrer is rewarded. A paying coach receives a Stripe account credit toward their next invoice; a free coach earns Team Coach days. The new coach also gets a Team Coach welcome trial (double-sided). Attribution is captured at signup on a new referred_by edge; each new coach can only mint one reward; self-referral-proof; capped per sender. League-seeded copy links are excluded. Off by default. Site Admin → Site Settings exposes the toggle, free-sender days, paying-sender credit (or Auto = one month), new-coach trial days, and a per-sender lifetime cap. Coaches see their own referral link, reward, and earned stats on the Account page; the admin Traffic → Virality tab tracks referred signups, rewarded referrals, and payout.",
     category: "Billing & accounts",
     status: "ga",
     addedDate: "2026-04-28",

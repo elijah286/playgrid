@@ -108,13 +108,14 @@ export default function PrivacyPage() {
               are kept in a 30-day trash before being permanently removed.
             </li>
             <li>
-              <strong>Referral records:</strong> when you send another coach
-              a copy of your playbook and they claim it, we record the link
-              between your account and theirs along with the date so we can
-              credit your account if a referral reward is in effect. Each
-              recipient can only generate one such record. We don&apos;t
-              share the record with anyone outside our system, and you can
-              ask us to delete it at any time.
+              <strong>Referral records:</strong> when a new coach signs up
+              through your referral link, a copy of your playbook, or a team
+              invite and then gets started, we record the link between your
+              account and theirs along with the date so we can credit your
+              account if a referral reward is in effect. Each new coach can
+              only generate one such record. We don&apos;t share the record
+              with anyone outside our system, and you can ask us to delete it
+              at any time.
             </li>
             <li>
               <strong>Coach AI chat history:</strong> when you chat with
