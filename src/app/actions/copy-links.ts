@@ -296,13 +296,30 @@ export async function acceptCopyLinkAction(
   // Backfill the attribution edge (first referrer wins) so a coach who signed
   // up without a ?ref= still credits the sender of the copy they claim, then
   // try the award — claiming a copy is itself an activation.
+  //
+  // League-seeded copy links are excluded: the league platform mints those via
+  // service role with the operator as `created_by`, but the operator is NOT a
+  // member of the seeded playbook (they access it through org ownership, not
+  // playbook_members). Requiring the creator to be an active member of the
+  // SOURCE playbook cleanly separates a genuine peer share (owner/co-coach)
+  // from league distribution — no schema flag or league-code change needed.
   if (linkRow?.created_by && typeof linkRow.created_by === "string") {
     try {
-      await setReferredByIfEmpty(sourceAdmin, user.id, linkRow.created_by);
-      await maybeAwardReferralOnActivation({
-        recipientId: user.id,
-        trigger: "copy_claim",
-      });
+      const { data: creatorMem } = await sourceAdmin
+        .from("playbook_members")
+        .select("role")
+        .eq("playbook_id", preview.playbook_id)
+        .eq("user_id", linkRow.created_by)
+        .eq("status", "active")
+        .in("role", ["owner", "editor"])
+        .maybeSingle();
+      if (creatorMem) {
+        await setReferredByIfEmpty(sourceAdmin, user.id, linkRow.created_by);
+        await maybeAwardReferralOnActivation({
+          recipientId: user.id,
+          trigger: "copy_claim",
+        });
+      }
     } catch {
       /* never fail the claim on referral side-effects */
     }

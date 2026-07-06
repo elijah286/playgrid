@@ -25,7 +25,7 @@
 
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getReferralConfig } from "@/lib/site/referral-config";
+import { getReferralConfig, type ReferralConfig } from "@/lib/site/referral-config";
 import { getStripeClient } from "@/lib/billing/stripe";
 import { getStripeConfig } from "@/lib/site/stripe-config";
 import { notifyUser } from "@/lib/notifications/inbox-dispatch";
@@ -43,6 +43,87 @@ export type ReferralAwardResult =
   | { awarded: false; reason: string };
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+export type RewardDecision =
+  | { award: false; reason: string }
+  | {
+      award: true;
+      kind: "stripe_credit";
+      creditCents: number;
+      compDays: 0;
+      recipientDays: number;
+    }
+  | {
+      award: true;
+      kind: "comp_days";
+      creditCents: 0;
+      compDays: number;
+      recipientDays: number;
+    };
+
+/**
+ * Pure reward decision — no DB, no Stripe, fully unit-testable. Given the config
+ * and the sender's context, decide WHAT to award (or why not). The orchestrator
+ * gathers the context and executes the decision; this holds the money math so it
+ * can be tested in isolation.
+ *
+ * A paying sender earns a Stripe credit; a free sender earns comp days. If a
+ * payer has no usable credit amount (no fixed cents, no price), we fall back to
+ * comp days rather than award $0. Caps: capAwards bounds the count for both
+ * kinds; capDays additionally bounds cumulative comp days for the free branch.
+ */
+export function decideReferralReward(
+  config: ReferralConfig,
+  ctx: {
+    isPayer: boolean;
+    /** coach monthly price in cents, for a payer on the "auto" credit setting. */
+    autoPriceCents: number | null;
+    /** rewarded referrals this sender already has (for capAwards). */
+    priorAwardCount: number;
+    /** comp days this sender already earned (for the legacy capDays). */
+    priorCompDaysAwarded: number;
+  },
+): RewardDecision {
+  if (
+    config.capAwards !== null &&
+    ctx.priorAwardCount >= config.capAwards
+  ) {
+    return { award: false, reason: "sender-at-award-cap" };
+  }
+
+  const recipientDays = Math.max(0, config.recipientTrialDays);
+
+  if (ctx.isPayer) {
+    const amount =
+      config.payerCreditCents !== null
+        ? config.payerCreditCents
+        : ctx.autoPriceCents;
+    if (amount && amount > 0) {
+      return {
+        award: true,
+        kind: "stripe_credit",
+        creditCents: amount,
+        compDays: 0,
+        recipientDays,
+      };
+    }
+    // No usable price → fall through to comp days rather than a $0 credit.
+  }
+
+  let compDays = config.daysPerAward;
+  if (config.capDays !== null) {
+    const remaining = config.capDays - ctx.priorCompDaysAwarded;
+    if (remaining <= 0) return { award: false, reason: "sender-at-day-cap" };
+    compDays = Math.min(config.daysPerAward, remaining);
+  }
+  return {
+    award: true,
+    kind: "comp_days",
+    creditCents: 0,
+    compDays,
+    recipientDays,
+  };
+}
 
 /**
  * Set profiles.referred_by only if it's currently null (first referrer wins)
@@ -224,53 +305,44 @@ export async function maybeAwardReferralOnActivation(args: {
       return { awarded: false, reason: "not-activated" };
     }
 
-    // Count cap (both reward kinds).
+    // Gather context for the pure reward decision. Decide the branch (and
+    // enforce caps) BEFORE reserving — a reserved-but-unrewarded slot would
+    // waste the recipient's one-shot.
+    let priorAwardCount = 0;
     if (config.capAwards !== null) {
       const { count } = await admin
         .from("referral_awards")
         .select("id", { count: "exact", head: true })
         .eq("sender_id", senderId);
-      if ((count ?? 0) >= config.capAwards) {
-        return { awarded: false, reason: "sender-at-award-cap" };
-      }
+      priorAwardCount = count ?? 0;
     }
 
-    // Decide the branch up-front so we can enforce the day cap (free branch)
-    // BEFORE reserving — a reserved-but-unrewarded slot would waste the
-    // recipient's one-shot.
     const customerId = await payingCustomerId(admin, senderId);
-    let useStripe = customerId !== null;
-    let creditCents = 0;
-    if (useStripe) {
-      const amount =
-        config.payerCreditCents !== null
-          ? config.payerCreditCents
-          : await coachMonthPriceCents();
-      if (!amount || amount <= 0) {
-        // No usable price → fall back to comp days rather than a $0 credit.
-        useStripe = false;
-      } else {
-        creditCents = amount;
-      }
+    const isPayer = customerId !== null;
+    const autoPriceCents =
+      isPayer && config.payerCreditCents === null
+        ? await coachMonthPriceCents()
+        : null;
+
+    let priorCompDaysAwarded = 0;
+    if (!isPayer && config.capDays !== null) {
+      const { data: totals } = await admin
+        .from("referral_awards")
+        .select("days_awarded")
+        .eq("sender_id", senderId);
+      priorCompDaysAwarded = (totals ?? []).reduce(
+        (acc, r: { days_awarded: number | null }) => acc + (r.days_awarded ?? 0),
+        0,
+      );
     }
 
-    let compDays = 0;
-    if (!useStripe) {
-      compDays = config.daysPerAward;
-      if (config.capDays !== null) {
-        const { data: totals } = await admin
-          .from("referral_awards")
-          .select("days_awarded")
-          .eq("sender_id", senderId);
-        const earned = (totals ?? []).reduce(
-          (acc, r: { days_awarded: number | null }) => acc + (r.days_awarded ?? 0),
-          0,
-        );
-        const remaining = config.capDays - earned;
-        if (remaining <= 0) return { awarded: false, reason: "sender-at-day-cap" };
-        compDays = Math.min(config.daysPerAward, remaining);
-      }
-    }
+    const decision = decideReferralReward(config, {
+      isPayer,
+      autoPriceCents,
+      priorAwardCount,
+      priorCompDaysAwarded,
+    });
+    if (!decision.award) return { awarded: false, reason: decision.reason };
 
     const source = trigger ?? "activation";
 
@@ -290,6 +362,7 @@ export async function maybeAwardReferralOnActivation(args: {
       return { awarded: false, reason: "reserve-failed-or-race" };
     }
 
+    const useStripe = decision.kind === "stripe_credit";
     let rewardCommitted = false;
     try {
       let compGrantId: string | null = null;
@@ -298,7 +371,7 @@ export async function maybeAwardReferralOnActivation(args: {
       if (useStripe && customerId) {
         const { stripe } = await getStripeClient();
         const txn = await stripe.customers.createBalanceTransaction(customerId, {
-          amount: -creditCents, // negative = credit toward future invoices
+          amount: -decision.creditCents, // negative = credit toward future invoices
           currency: "usd",
           description: "Referral reward — thanks for bringing a coach to XO Gridmaker",
           metadata: {
@@ -313,7 +386,7 @@ export async function maybeAwardReferralOnActivation(args: {
         compGrantId = await grantCompDays(
           admin,
           senderId,
-          compDays,
+          decision.compDays,
           "Referral credit",
         );
         rewardCommitted = true;
@@ -323,15 +396,15 @@ export async function maybeAwardReferralOnActivation(args: {
       // the sender's reward.
       let recipientDays = 0;
       let recipientGrantId: string | null = null;
-      if (config.recipientTrialDays > 0) {
+      if (decision.recipientDays > 0) {
         try {
           recipientGrantId = await grantCompDays(
             admin,
             recipientId,
-            config.recipientTrialDays,
+            decision.recipientDays,
             "Referral welcome trial",
           );
-          recipientDays = config.recipientTrialDays;
+          recipientDays = decision.recipientDays;
         } catch {
           recipientDays = 0;
           recipientGrantId = null;
@@ -341,9 +414,9 @@ export async function maybeAwardReferralOnActivation(args: {
       await admin
         .from("referral_awards")
         .update({
-          days_awarded: useStripe ? 0 : compDays,
-          reward_kind: useStripe ? "stripe_credit" : "comp_days",
-          credit_cents: useStripe ? creditCents : null,
+          days_awarded: decision.compDays,
+          reward_kind: decision.kind,
+          credit_cents: useStripe ? decision.creditCents : null,
           stripe_balance_txn_id: stripeTxnId,
           comp_grant_id: compGrantId,
           recipient_days_awarded: recipientDays,
@@ -353,21 +426,21 @@ export async function maybeAwardReferralOnActivation(args: {
 
       await notifyReferralMinted(admin, senderId, {
         useStripe,
-        compDays,
-        creditCents,
+        compDays: decision.compDays,
+        creditCents: decision.creditCents,
       }).catch(() => {});
       await recordAwardEvent(admin, senderId, recipientId, {
         useStripe,
-        compDays,
-        creditCents,
+        compDays: decision.compDays,
+        creditCents: decision.creditCents,
         recipientDays,
       }).catch(() => {});
 
       return {
         awarded: true,
-        rewardKind: useStripe ? "stripe_credit" : "comp_days",
-        senderDays: useStripe ? 0 : compDays,
-        senderCreditCents: useStripe ? creditCents : 0,
+        rewardKind: decision.kind,
+        senderDays: decision.compDays,
+        senderCreditCents: useStripe ? decision.creditCents : 0,
         recipientDays,
       };
     } catch (err) {
