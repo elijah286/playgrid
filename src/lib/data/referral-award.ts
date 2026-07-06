@@ -33,6 +33,7 @@ import {
 import { getStripeClient } from "@/lib/billing/stripe";
 import { getStripeConfig } from "@/lib/site/stripe-config";
 import { notifyUser } from "@/lib/notifications/inbox-dispatch";
+import { stampEngagementPrompt } from "@/lib/notifications/engagement-prompt";
 
 type Admin = SupabaseClient;
 
@@ -444,6 +445,9 @@ export async function maybeAwardReferralOnActivation(args: {
         compDays: decision.compDays,
         creditCents: decision.creditCents,
       }).catch(() => {});
+      // The reward push is itself an interruption — stamp the shared cooldown so
+      // a review nudge won't stack on top of "you earned a reward" for 14 days.
+      await stampEngagementPrompt(admin, senderId);
       await recordAwardEvent(admin, senderId, recipientId, {
         useStripe,
         compDays: decision.compDays,

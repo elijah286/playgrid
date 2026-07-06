@@ -146,7 +146,7 @@ export function PlaybookHeader({
   showCoachCalPromo,
   coachAiEvalDays,
   isAdmin,
-  referralConfig,
+  referralPromo,
 }: {
   playbookId: string;
   name: string;
@@ -199,7 +199,7 @@ export function PlaybookHeader({
   coachAiEvalDays: number;
   isAdmin?: boolean;
   /** When set and enabled, the Share dialog surfaces a referral-credit promo. */
-  referralConfig?: import("@/lib/site/referral-config").ReferralConfig | null;
+  referralPromo?: import("@/lib/data/referral-summary").ReferralPromo | null;
 }) {
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -749,7 +749,7 @@ export function PlaybookHeader({
             setInviteOpen(false);
             openSendCopy();
           }}
-          referralConfig={referralConfig ?? null}
+          referralPromo={referralPromo ?? null}
           onClose={() => setInviteOpen(false)}
         />
       )}
@@ -2198,7 +2198,7 @@ export function InviteTeamMemberDialog({
   allowCoachDuplication = true,
   onToggleCoachDuplication = null,
   onSwitchToSendCopy = null,
-  referralConfig = null,
+  referralPromo = null,
   onClose,
 }: {
   playbookId: string;
@@ -2221,7 +2221,7 @@ export function InviteTeamMemberDialog({
   onSwitchToSendCopy?: (() => void) | null;
   /** When enabled in site settings, the Send-a-copy card surfaces a small
    *  "earn N days" promo so coaches know there's a referral reward. */
-  referralConfig?: import("@/lib/site/referral-config").ReferralConfig | null;
+  referralPromo?: import("@/lib/data/referral-summary").ReferralPromo | null;
   onClose: () => void;
 }) {
   const { toast } = useToast();
@@ -2512,8 +2512,8 @@ export function InviteTeamMemberDialog({
                     icon={<Send className="size-4" />}
                     title="Send a copy"
                     description={
-                      referralConfig?.enabled
-                        ? `Give another coach a starter playbook of their own. Earn ${referralConfig.daysPerAward} days of Team Coach when a new coach claims it.`
+                      referralPromo?.active
+                        ? `Give another coach a starter playbook of their own. Earn ${referralPromo.perReferralLabel} when they sign up and get started.`
                         : "Give another coach a starter playbook of their own. They become the owner — your playbook stays yours."
                     }
                     accent="primary"

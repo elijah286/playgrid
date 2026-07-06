@@ -5,7 +5,7 @@ import {
   ExamplePreviewProvider,
   useExamplePreview,
 } from "@/features/admin/ExamplePreviewContext";
-import type { ReferralConfig } from "@/lib/site/referral-config";
+import type { ReferralPromo } from "@/lib/data/referral-summary";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
 import { TutorialDeepLinkLauncher } from "@/features/tutorials/TutorialDeepLinkLauncher";
 import { track } from "@/lib/analytics/track";
@@ -464,8 +464,8 @@ function PlaybookDetailClientInner({
     showCoachCalPromo: boolean;
     /** Coach AI eval window length in days (admin-configurable). */
     coachAiEvalDays: number;
-    /** Surfaces the referral promo on the Share dialog when enabled. */
-    referralConfig: ReferralConfig;
+    /** Per-user referral promo for the Send-a-copy card (active + reward label). */
+    referralPromo: ReferralPromo;
   };
 }) {
   const searchParams = useSearchParams();
@@ -1469,7 +1469,7 @@ function PlaybookDetailClientInner({
           showCoachCalPromo={headerProps.showCoachCalPromo}
           coachAiEvalDays={headerProps.coachAiEvalDays}
           isAdmin={isAdmin}
-          referralConfig={headerProps.referralConfig}
+          referralPromo={headerProps.referralPromo}
         />
 
         <PendingApprovalsBanner

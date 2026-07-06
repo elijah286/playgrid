@@ -10,6 +10,10 @@ import {
   type RatingOutcome,
   type RatingSentiment,
 } from "@/lib/notifications/rating-prompt-notice";
+import {
+  isReferralAnnouncementOwed,
+  isWithinEngagementCooldown,
+} from "@/lib/notifications/engagement-prompt";
 
 export type RatingTrigger =
   | "cal_save"
@@ -85,7 +89,9 @@ export async function checkRatingEligibility(): Promise<boolean> {
     const admin = createServiceRoleClient();
     const { data: profile } = await admin
       .from("profiles")
-      .select("role, created_at, rating_triggers_fired, rating_prompt_shown_at")
+      .select(
+        "role, created_at, rating_triggers_fired, rating_prompt_shown_at, last_engagement_prompt_at, referral_announcement_seen_at",
+      )
       .eq("id", user.id)
       .single();
     if (!profile) return false;
@@ -107,6 +113,21 @@ export async function checkRatingEligibility(): Promise<boolean> {
           new Date(profile.rating_prompt_shown_at as string).getTime()) /
         86400000;
       if (daysSince < COOLDOWN_DAYS) return false;
+    }
+
+    // De-dupe with the referral asks: hold off if we interrupted this coach
+    // with any engagement prompt in the last 14 days, and let the one-time
+    // referral launch announcement go first while it's still owed.
+    if (isWithinEngagementCooldown(profile.last_engagement_prompt_at as string | null)) {
+      return false;
+    }
+    if (
+      await isReferralAnnouncementOwed(
+        user.id,
+        profile.referral_announcement_seen_at as string | null,
+      )
+    ) {
+      return false;
     }
 
     return true;
@@ -194,10 +215,16 @@ export async function recordRatingPromptShown(
     const admin = createServiceRoleClient();
 
     // Cooldown stamp first — this is the load-bearing part and must not be
-    // gated on the notice insert succeeding.
+    // gated on the notice insert succeeding. Stamp BOTH the review-specific
+    // 365-day cooldown and the shared 14-day engagement cooldown so a referral
+    // ask won't stack on top of this nudge.
+    const nowIso = new Date().toISOString();
     await admin
       .from("profiles")
-      .update({ rating_prompt_shown_at: new Date().toISOString() })
+      .update({
+        rating_prompt_shown_at: nowIso,
+        last_engagement_prompt_at: nowIso,
+      })
       .eq("id", user.id);
 
     // Then record the send as an admin-inbox event (best-effort telemetry).

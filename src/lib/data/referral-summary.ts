@@ -1,9 +1,68 @@
 import { createServiceRoleClient } from "@/lib/supabase/admin";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   getReferralConfig,
   isReferralActiveForUser,
+  type ReferralConfig,
 } from "@/lib/site/referral-config";
 import { tagShareUrl } from "@/lib/share/tag-url";
+
+/** Does this user hold an active PAYING subscription (→ Stripe-credit reward)? */
+async function isPayingUser(
+  admin: SupabaseClient,
+  userId: string,
+): Promise<boolean> {
+  const { data } = await admin
+    .from("subscriptions")
+    .select("stripe_customer_id")
+    .eq("user_id", userId)
+    .in("status", ["active", "trialing", "past_due"])
+    .not("stripe_customer_id", "is", null)
+    .limit(1)
+    .maybeSingle();
+  return Boolean(data?.stripe_customer_id);
+}
+
+/** Human label for the per-referral reward THIS user earns. */
+function promoLabel(config: ReferralConfig, isPayer: boolean): string {
+  if (isPayer) {
+    return config.payerCreditCents !== null
+      ? `$${(config.payerCreditCents / 100).toFixed(0)} account credit`
+      : "a one-month account credit";
+  }
+  return `${config.daysPerAward} days of Team Coach`;
+}
+
+/**
+ * Per-user, client-SAFE view of the referral program for promo surfaces (share
+ * dialog, send-a-copy card). Deliberately narrow — never returns the raw config
+ * (which carries the test-cohort emails). `active` respects the staged-rollout
+ * cohort so testers see accurate copy before the global launch.
+ */
+export type ReferralPromo = {
+  active: boolean;
+  /** e.g. "$9 account credit" or "30 days of Team Coach". Empty when inactive. */
+  perReferralLabel: string;
+  /** Trial days the referred coach receives. */
+  recipientTrialDays: number;
+};
+
+export async function getReferralPromo(
+  userId: string | null,
+): Promise<ReferralPromo> {
+  const config = await getReferralConfig();
+  const active = await isReferralActiveForUser(config, userId);
+  if (!active || !userId) {
+    return { active: false, perReferralLabel: "", recipientTrialDays: 0 };
+  }
+  const admin = createServiceRoleClient();
+  const isPayer = await isPayingUser(admin, userId);
+  return {
+    active: true,
+    perReferralLabel: promoLabel(config, isPayer),
+    recipientTrialDays: config.recipientTrialDays,
+  };
+}
 
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com";
@@ -45,15 +104,7 @@ export async function getReferralSummaryForUser(
   const admin = createServiceRoleClient();
 
   // Which reward branch this user falls into (paying → Stripe credit).
-  const { data: sub } = await admin
-    .from("subscriptions")
-    .select("stripe_customer_id")
-    .eq("user_id", userId)
-    .in("status", ["active", "trialing", "past_due"])
-    .not("stripe_customer_id", "is", null)
-    .limit(1)
-    .maybeSingle();
-  const isPayer = Boolean(sub?.stripe_customer_id);
+  const isPayer = await isPayingUser(admin, userId);
 
   const [{ count: referredCount }, { data: awards }] = await Promise.all([
     admin
@@ -76,11 +127,7 @@ export async function getReferralSummaryForUser(
     0,
   );
 
-  const perReferralLabel = isPayer
-    ? config.payerCreditCents !== null
-      ? `$${(config.payerCreditCents / 100).toFixed(0)} account credit`
-      : "a one-month account credit"
-    : `${config.daysPerAward} days of Team Coach`;
+  const perReferralLabel = promoLabel(config, isPayer);
 
   return {
     shareUrl: tagShareUrl(SITE_URL, {

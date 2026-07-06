@@ -8,7 +8,7 @@ import { Button, Input, useToast } from "@/components/ui";
 import { isNativeApp } from "@/lib/native/isNativeApp";
 import { nativeShare } from "@/lib/native/share";
 import { getReferralPromoAction } from "@/app/actions/share-promo";
-import type { ReferralConfig } from "@/lib/site/referral-config";
+import type { ReferralPromo } from "@/lib/data/referral-summary";
 import { tagShareUrl, type ShareChannel } from "@/lib/share/tag-url";
 import { track } from "@/lib/analytics/track";
 import { recordShareEventAction } from "@/app/actions/ui-events";
@@ -35,7 +35,7 @@ function buildShareUrl(userId: string | null, channel: ShareChannel): string {
 
 export function ShareDialog({ userId, onClose }: Props) {
   const { toast } = useToast();
-  const [referral, setReferral] = useState<ReferralConfig | null>(null);
+  const [referral, setReferral] = useState<ReferralPromo | null>(null);
   const [tab, setTab] = useState<"link" | "qr">("link");
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -118,7 +118,7 @@ export function ShareDialog({ userId, onClose }: Props) {
     }
   }
 
-  const promoActive = referral?.enabled === true;
+  const promoActive = referral?.active === true;
 
   // Portal to <body> so the dialog escapes any ancestor that creates a
   // containing block for fixed children (the site header uses
@@ -170,13 +170,13 @@ export function ShareDialog({ userId, onClose }: Props) {
             <Gift className="mt-0.5 size-4 shrink-0 text-primary" />
             <div className="min-w-0 flex-1 text-xs">
               <p className="font-semibold text-foreground">
-                Get <span className="text-primary">{referral.daysPerAward} days</span> of Team
-                Coach when they sign up and claim a copy from you.
+                Earn <span className="text-primary">{referral.perReferralLabel}</span> when a
+                coach signs up from your link and gets started.
               </p>
               <p className="mt-0.5 text-muted">
-                {referral.capDays
-                  ? `Up to ${referral.capDays} total days. No catch — they get the playbook, you get the months.`
-                  : "Stack credits with every coach you bring in."}
+                {referral.recipientTrialDays > 0
+                  ? `They start with ${referral.recipientTrialDays} days of Team Coach, too.`
+                  : "Share it with a coach who'd find it useful."}
               </p>
             </div>
           </div>

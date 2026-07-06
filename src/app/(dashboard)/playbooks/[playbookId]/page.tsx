@@ -30,7 +30,7 @@ import {
   getBetaFeatures,
   isBetaFeatureAvailable,
 } from "@/lib/site/beta-features-config";
-import { getReferralConfig } from "@/lib/site/referral-config";
+import { getReferralPromo } from "@/lib/data/referral-summary";
 import { withFullContext } from "@/lib/seo/ld-json";
 import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
 import { defaultClaimedPlaybookName } from "@/lib/playbook/default-name";
@@ -342,9 +342,9 @@ export default async function PlaybookDetailPage({ params }: Props) {
   const showCoachCalCta =
     !coachAiAvailable && user !== null && !isAdmin;
   const showCoachCalPromoInPlaybook = !coachAiAvailable && user !== null;
-  const referralConfig = await timed(
-    `playbook-page:referralConfig pb=${playbookId}`,
-    () => getReferralConfig(),
+  const referralPromo = await timed(
+    `playbook-page:referralPromo pb=${playbookId}`,
+    () => getReferralPromo(user?.id ?? null),
   );
   const coachAiEvalDays = await timed(
     `playbook-page:coachAiEvalDays pb=${playbookId}`,
@@ -588,7 +588,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
           coachAiAvailable,
           showCoachCalPromo: showCoachCalPromoInPlaybook,
           coachAiEvalDays,
-          referralConfig,
+          referralPromo,
         }}
       />
       {isExamplePreview && (

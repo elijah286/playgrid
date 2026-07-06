@@ -14,6 +14,7 @@ import { termsAcceptanceNeeded } from "@/lib/auth/terms";
 import { OfflineAutoRefreshMount } from "@/components/offline/OfflineAutoRefreshMount";
 import { NativeWelcomeSpotlight } from "@/components/native/NativeWelcomeSpotlight";
 import { RatingNudge } from "@/components/native/RatingNudge";
+import { ReferralAnnouncementNudge } from "@/components/referral/ReferralAnnouncementNudge";
 import { userSignedInWithApple } from "@/lib/auth/provider";
 import {
   getBetaFeatures,
@@ -100,7 +101,11 @@ export default async function DashboardLayout({
           cleared, so a new user never sees both modals stacked. */}
       <NameCapturePrompt needed={nameCaptureNeeded && !termsNeeded} />
       {user && <NativeWelcomeSpotlight />}
+      {/* Review nudge + referral announcement share one 14-day cooldown and the
+          review nudge defers while the announcement is owed, so a coach never
+          gets both asks at once (see engagement-prompt.ts). */}
       {user && <RatingNudge />}
+      {user && <ReferralAnnouncementNudge />}
       <TimeOnSiteTracker />
       {feedbackSettings.enabled && (
         <FeedbackWidget
