@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Gift, X } from "lucide-react";
 import {
@@ -9,6 +9,10 @@ import {
   type ReferralAnnouncement,
 } from "@/app/actions/referral";
 import { track } from "@/lib/analytics/track";
+import {
+  useFirstRunModalSlot,
+  FIRST_RUN_PRIORITY,
+} from "@/components/onboarding/FirstRunModalQueue";
 
 const SHOWN_KEY = "playgrid:referral-announcement-shown";
 
@@ -20,19 +24,24 @@ const SHOWN_KEY = "playgrid:referral-announcement-shown";
  * never seen before, and — critically — the shared 14-day engagement cooldown
  * that also gates the App Store review nudge. That shared cooldown, plus the
  * review nudge deferring while this announcement is still owed, is how a coach
- * never gets both asks at once. Marks itself seen on render so it fires exactly
- * once. The localStorage key prevents a double-show within a session before the
- * server timestamp lands.
+ * never gets both asks at once. The localStorage key prevents a double-show
+ * within a session before the server timestamp lands.
+ *
+ * Lowest-priority first-run modal: it defers through the queue behind the terms
+ * gate and the native welcome, and only stamps itself seen (server + local) when
+ * it actually reaches the screen — so being deferred never burns the one-shot.
  */
 export function ReferralAnnouncementNudge() {
   const pathname = usePathname();
   const router = useRouter();
   const [data, setData] = useState<ReferralAnnouncement | null>(null);
+  const markedRef = useRef(false);
 
+  // Eligibility only — do NOT mark seen here; the queue may keep us deferred.
   useEffect(() => {
     let cancelled = false;
 
-    async function checkAndMaybeShow() {
+    async function checkEligibility() {
       try {
         if (localStorage.getItem(SHOWN_KEY) === "1") return;
       } catch {
@@ -41,26 +50,35 @@ export function ReferralAnnouncementNudge() {
 
       const announcement = await getReferralAnnouncementAction();
       if (cancelled || !announcement) return;
-
       setData(announcement);
-      try {
-        localStorage.setItem(SHOWN_KEY, "1");
-      } catch {
-        /* ignore */
-      }
-      // Mark seen immediately on render so it fires exactly once and stamps the
-      // shared cooldown (defers the review nudge).
-      void markReferralAnnouncementSeenAction();
-      track({ event: "referral_announcement_view", target: "referral_announcement" });
     }
 
-    void checkAndMaybeShow();
+    void checkEligibility();
     return () => {
       cancelled = true;
     };
   }, [pathname]);
 
-  if (!data) return null;
+  const visible = useFirstRunModalSlot(
+    FIRST_RUN_PRIORITY.referralAnnouncement,
+    !!data,
+  );
+
+  // Stamp seen exactly once, and only when actually shown — this is what makes
+  // the one-shot fire on display rather than on eligibility.
+  useEffect(() => {
+    if (!visible || !data || markedRef.current) return;
+    markedRef.current = true;
+    try {
+      localStorage.setItem(SHOWN_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    void markReferralAnnouncementSeenAction();
+    track({ event: "referral_announcement_view", target: "referral_announcement" });
+  }, [visible, data]);
+
+  if (!visible || !data) return null;
 
   function dismiss() {
     track({ event: "referral_announcement_dismiss", target: "referral_announcement" });

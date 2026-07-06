@@ -4,6 +4,10 @@ import { useEffect, useState } from "react";
 import { Bell, CloudOff, Timer, X } from "lucide-react";
 import { isNativeApp } from "@/lib/native/isNativeApp";
 import { track } from "@/lib/analytics/track";
+import {
+  useFirstRunModalSlot,
+  FIRST_RUN_PRIORITY,
+} from "@/components/onboarding/FirstRunModalQueue";
 
 const SEEN_KEY = "playgrid:native-welcome-seen";
 
@@ -36,8 +40,9 @@ const FEATURES = [
  */
 export function NativeWelcomeSpotlight() {
   // undefined until the client checks run (native + storage need the browser),
-  // so we never flash the dialog during SSR/hydration.
-  const [show, setShow] = useState<boolean | undefined>(undefined);
+  // so we never flash the dialog during SSR/hydration. `want` = our own gating
+  // says show it; the queue decides whether it's actually our turn.
+  const [want, setWant] = useState<boolean | undefined>(undefined);
 
   useEffect(() => {
     let next = false;
@@ -49,18 +54,30 @@ export function NativeWelcomeSpotlight() {
         seen = false;
       }
       next = !seen;
-      if (next) {
-        track({ event: "native_welcome_view", target: "native_spotlight" });
-      }
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setShow(next);
+    setWant(next);
   }, []);
 
-  if (show !== true) return null;
+  // Only render when the queue says it's our turn (never on top of the terms
+  // gate, never simultaneously with the referral announcement).
+  const visible = useFirstRunModalSlot(
+    FIRST_RUN_PRIORITY.nativeWelcome,
+    want === true,
+  );
+
+  // Count the view when it actually reaches the screen, not when merely eligible
+  // (it may sit deferred behind the terms gate first).
+  useEffect(() => {
+    if (visible) {
+      track({ event: "native_welcome_view", target: "native_spotlight" });
+    }
+  }, [visible]);
+
+  if (!visible) return null;
 
   function dismiss() {
-    setShow(false);
+    setWant(false);
     try {
       localStorage.setItem(SEEN_KEY, "1");
     } catch {

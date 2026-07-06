@@ -15,6 +15,7 @@ import { OfflineAutoRefreshMount } from "@/components/offline/OfflineAutoRefresh
 import { NativeWelcomeSpotlight } from "@/components/native/NativeWelcomeSpotlight";
 import { RatingNudge } from "@/components/native/RatingNudge";
 import { ReferralAnnouncementNudge } from "@/components/referral/ReferralAnnouncementNudge";
+import { FirstRunModalQueueProvider } from "@/components/onboarding/FirstRunModalQueue";
 import { userSignedInWithApple } from "@/lib/auth/provider";
 import {
   getBetaFeatures,
@@ -100,12 +101,19 @@ export default async function DashboardLayout({
       {/* Defer the (dismissible) name prompt until the (blocking) terms gate is
           cleared, so a new user never sees both modals stacked. */}
       <NameCapturePrompt needed={nameCaptureNeeded && !termsNeeded} />
-      {user && <NativeWelcomeSpotlight />}
-      {/* Review nudge + referral announcement share one 14-day cooldown and the
-          review nudge defers while the announcement is owed, so a coach never
-          gets both asks at once (see engagement-prompt.ts). */}
-      {user && <RatingNudge />}
-      {user && <ReferralAnnouncementNudge />}
+      {/* First-run modal queue: shows one at a time, in priority order, and
+          nothing while the blocking terms/name gate is up. Without this, the
+          native welcome and the referral announcement both fired on a new
+          user's first authed load and stacked on top of the terms prompt —
+          three modals at once. `blocked` reserves the screen for those gates. */}
+      <FirstRunModalQueueProvider blocked={termsNeeded || nameCaptureNeeded}>
+        {user && <NativeWelcomeSpotlight />}
+        {/* Review nudge + referral announcement share one 14-day cooldown and the
+            review nudge defers while the announcement is owed, so a coach never
+            gets both asks at once (see engagement-prompt.ts). */}
+        {user && <RatingNudge />}
+        {user && <ReferralAnnouncementNudge />}
+      </FirstRunModalQueueProvider>
       <TimeOnSiteTracker />
       {feedbackSettings.enabled && (
         <FeedbackWidget
