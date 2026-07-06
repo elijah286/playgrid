@@ -4,7 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getReferralPromo } from "@/lib/data/referral-summary";
-import { isWithinEngagementCooldown } from "@/lib/notifications/engagement-prompt";
+import {
+  isWithinEngagementCooldown,
+  accountEligibleForReferralAnnouncement,
+} from "@/lib/notifications/engagement-prompt";
 
 export type ReferralAnnouncement = {
   perReferralLabel: string;
@@ -13,9 +16,9 @@ export type ReferralAnnouncement = {
 
 /**
  * The one-time referral launch announcement for the current user, or null when
- * it shouldn't show: program not live for them, already seen, or another
- * engagement prompt fired in the last 14 days (shared cooldown). Called by the
- * announcement nudge on mount.
+ * it shouldn't show: account is brand new (day-0 guard), program not live for
+ * them, already seen, or another engagement prompt fired in the last 14 days
+ * (shared cooldown). Called by the announcement nudge on mount.
  */
 export async function getReferralAnnouncementAction(): Promise<ReferralAnnouncement | null> {
   if (!hasSupabaseEnv()) return null;
@@ -25,6 +28,8 @@ export async function getReferralAnnouncementAction(): Promise<ReferralAnnouncem
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return null;
+    // Day-0 guard: never ask a brand-new coach to refer on their first session.
+    if (!accountEligibleForReferralAnnouncement(user.created_at)) return null;
 
     const admin = createServiceRoleClient();
     const { data: profile } = await admin
