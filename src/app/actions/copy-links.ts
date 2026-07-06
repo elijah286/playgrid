@@ -313,7 +313,10 @@ export async function acceptCopyLinkAction(
         .eq("status", "active")
         .in("role", ["owner", "editor"])
         .maybeSingle();
-      if (creatorMem) {
+      // Only a genuinely NEW coach (owned zero playbooks before this claim)
+      // earns their referrer a reward — never an existing coach who claims a
+      // shared copy, and never for team-building.
+      if (creatorMem && recipientOwnedBeforeClaim === 0) {
         await setReferredByIfEmpty(sourceAdmin, user.id, linkRow.created_by);
         await maybeAwardReferralOnActivation({
           recipientId: user.id,

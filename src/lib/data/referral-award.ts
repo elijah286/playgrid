@@ -153,19 +153,23 @@ export async function setReferredByIfEmpty(
   }
 }
 
-/** True iff the user has done something real: owns a non-tutorial play, or is
- *  an active non-owner member of a playbook (invited coach / player). */
+/** True iff the referred user became a real COACH: owns >=1 non-tutorial play
+ *  in a playbook they own.
+ *
+ *  Deliberately does NOT count merely being an active member of someone else's
+ *  playbook. Adding players / parents / co-coaches to your own team is
+ *  team-building, not a referral — rewarding it would hand coaches free months
+ *  for normal roster usage (and be trivially farmable with throwaway invites).
+ *  A referral only pays out when the person you brought in becomes an
+ *  independent, play-building coach. */
 async function isActivated(admin: Admin, userId: string): Promise<boolean> {
   const { data: mem } = await admin
     .from("playbook_members")
-    .select("playbook_id, role")
+    .select("playbook_id")
     .eq("user_id", userId)
-    .eq("status", "active");
-  const rows = mem ?? [];
-  if (rows.some((r) => (r.role as string) !== "owner")) return true;
-  const ownedPlaybookIds = rows
-    .filter((r) => (r.role as string) === "owner")
-    .map((r) => r.playbook_id as string);
+    .eq("status", "active")
+    .eq("role", "owner");
+  const ownedPlaybookIds = (mem ?? []).map((r) => r.playbook_id as string);
   if (ownedPlaybookIds.length === 0) return false;
   const { data: play } = await admin
     .from("plays")

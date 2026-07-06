@@ -10,10 +10,6 @@ import { getStoredResendConfig } from "@/lib/site/resend-config";
 import { getUserEntitlement } from "@/lib/billing/entitlement";
 import { canInviteCoachCollaborators, tierAtLeast } from "@/lib/billing/features";
 import { ensureSeatsAvailable } from "@/lib/billing/seats";
-import {
-  maybeAwardReferralOnActivation,
-  setReferredByIfEmpty,
-} from "@/lib/data/referral-award";
 import { sanitizeSharedPrefs, type PlaybookViewPrefs } from "@/domain/playbook/view-prefs";
 import { tagShareUrl } from "@/lib/share/tag-url";
 import { notifyPlaybookOwners } from "@/lib/notifications/inbox-dispatch";
@@ -934,20 +930,14 @@ export async function acceptInviteAction(
     });
   }
 
-  // Referral: an active team member is an activation. Backfill the attribution
-  // edge from the inviter (first referrer wins) and try the award. Best-effort.
-  if (status === "active" && typeof inviteRow?.created_by === "string") {
-    try {
-      const admin = createServiceRoleClient();
-      await setReferredByIfEmpty(admin, user.id, inviteRow.created_by);
-      await maybeAwardReferralOnActivation({
-        recipientId: user.id,
-        trigger: "invite_accept",
-      });
-    } catch {
-      /* never fail the accept on referral side-effects */
-    }
-  }
+  // NOTE: accepting a team invite intentionally does NOT mint a referral reward.
+  // Adding players / co-coaches to a playbook is team-building, not a referral —
+  // rewarding it would hand coaches free months for normal roster usage. A
+  // referral only pays out when a referred user becomes an independent coach who
+  // builds their own play (see maybeAwardReferralOnActivation, fired from
+  // createPlayAction). A new user who happens to sign up via an invite link is
+  // still attributed at signup (snapshot.ts) and can earn their inviter a reward
+  // later — but only by building their own playbook, never just by joining.
 
   return { ok: true, playbookId, status };
 }

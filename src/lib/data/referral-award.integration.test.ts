@@ -27,6 +27,7 @@ let awardInserts: Array<Record<string, unknown>>;
 let awardUpdates: Array<Record<string, unknown>>;
 // Test knobs.
 let paying: boolean;
+let ownsPlay: boolean; // does the recipient own a non-tutorial play (= a real coach)?
 
 vi.mock("@/lib/site/referral-config", () => ({
   getReferralConfig: () => Promise.resolve(config),
@@ -93,8 +94,10 @@ function selectArg(ops: unknown[][]): string {
 function resolver(table: string, ops: unknown[][]): unknown {
   if (table === "profiles") return { data: { referred_by: "sender-1" }, error: null };
   if (table === "playbook_members")
-    return { data: [{ playbook_id: "pb-1", role: "owner" }], error: null };
-  if (table === "plays") return { data: { id: "play-1" }, error: null };
+    // isActivated queries owned memberships (role=owner). A recipient who only
+    // joined someone else's playbook (a "player") owns none → empty.
+    return { data: ownsPlay ? [{ playbook_id: "pb-1" }] : [], error: null };
+  if (table === "plays") return { data: ownsPlay ? { id: "play-1" } : null, error: null };
   if (table === "subscriptions")
     return {
       data: paying ? { stripe_customer_id: "cus_test" } : null,
@@ -135,7 +138,21 @@ describe("maybeAwardReferralOnActivation — money plumbing", () => {
     createBalanceTransaction.mockClear();
     notifyUser.mockClear();
     paying = false;
+    ownsPlay = true;
     vi.resetModules();
+  });
+
+  it("recipient who only joined a playbook (a player) earns NOTHING", async () => {
+    // The whole point of the activation fix: adding players to your team must
+    // never mint a referral reward. They own no play → not activated.
+    ownsPlay = false;
+    const run = await loadFn();
+    const res = await run({ recipientId: "player-1", trigger: "invite_accept" });
+
+    expect(res).toEqual({ awarded: false, reason: "not-activated" });
+    expect(createBalanceTransaction).not.toHaveBeenCalled();
+    expect(compGrantInserts).toHaveLength(0);
+    expect(awardInserts).toHaveLength(0);
   });
 
   it("free sender → comp days, no Stripe charge", async () => {
