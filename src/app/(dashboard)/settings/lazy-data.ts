@@ -45,6 +45,7 @@ import { getCoachCalVersion } from "@/lib/site/coach-cal-version";
 import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
 import { getCoachCalFreePromptAllowance } from "@/lib/site/coach-cal-free-prompts-config";
 import { getSuggestReviews } from "@/lib/site/review-prompt-config";
+import { getExamplePromoMode } from "@/lib/site/example-promo-config";
 import {
   listOpexServicesAction,
   listOpexEntriesAction,
@@ -189,6 +190,7 @@ export async function loadSiteTabData() {
     coachAiEvalDays,
     coachCalFreePromptAllowance,
     suggestReviews,
+    examplePromoMode,
   ] = await Promise.all([
     getSeatDefaults(),
     listCoachBonusGrantsAction(),
@@ -205,6 +207,7 @@ export async function loadSiteTabData() {
     getCoachAiEvalDays(),
     getCoachCalFreePromptAllowance(),
     getSuggestReviews(),
+    getExamplePromoMode(),
   ]);
 
   return {
@@ -224,6 +227,7 @@ export async function loadSiteTabData() {
     coachAiEvalDays,
     coachCalFreePromptAllowance,
     suggestReviews,
+    examplePromoMode,
   };
 }
 

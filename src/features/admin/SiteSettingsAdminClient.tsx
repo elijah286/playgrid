@@ -17,6 +17,8 @@ import {
   resetRatingPromptForSelfAction,
 } from "@/app/actions/admin-review-prompt";
 import type { SuggestReviews } from "@/lib/site/review-prompt-config";
+import { setExamplePromoModeAction } from "@/app/actions/admin-example-promo";
+import type { ExamplePromoMode } from "@/lib/site/example-promo-config";
 import {
   COACH_AI_EVAL_DAYS_MIN,
   COACH_AI_EVAL_DAYS_MAX,
@@ -45,6 +47,7 @@ export function SiteSettingsAdminClient({
   initialCoachAiEvalDays,
   initialCoachCalFreePromptAllowance,
   initialSuggestReviews,
+  initialExamplePromoMode,
 }: {
   initialHideLobbyAnimation: boolean;
   initialExamplesPageEnabled: boolean;
@@ -59,6 +62,7 @@ export function SiteSettingsAdminClient({
   initialCoachAiEvalDays: number;
   initialCoachCalFreePromptAllowance: number;
   initialSuggestReviews: SuggestReviews;
+  initialExamplePromoMode: ExamplePromoMode;
 }) {
   const { toast } = useToast();
 
@@ -101,6 +105,8 @@ export function SiteSettingsAdminClient({
 
   const [suggestReviews, setSuggestReviews] = useState<SuggestReviews>(initialSuggestReviews);
   const [suggestReviewsPending, startSuggestReviewsTransition] = useTransition();
+  const [examplePromoMode, setExamplePromoMode] = useState<ExamplePromoMode>(initialExamplePromoMode);
+  const [examplePromoPending, startExamplePromoTransition] = useTransition();
   const [resetPending, startResetTransition] = useTransition();
 
   function saveEvalDays() {
@@ -460,6 +466,23 @@ export function SiteSettingsAdminClient({
     });
   }
 
+  function switchExamplePromo(next: ExamplePromoMode) {
+    const prev = examplePromoMode;
+    if (next === prev) return;
+    setExamplePromoMode(next);
+    startExamplePromoTransition(async () => {
+      const res = await setExamplePromoModeAction(next);
+      if (!res.ok) {
+        setExamplePromoMode(prev);
+        toast(res.error, "error");
+        return;
+      }
+      const label =
+        next === "everyone" ? "everyone" : next === "ab" ? "A/B test" : "off";
+      toast(`Example-playbook promotion: ${label}.`, "success");
+    });
+  }
+
   function toggleExamplesEnabled(next: boolean) {
     const prev = examplesEnabled;
     setExamplesEnabled(next);
@@ -515,6 +538,39 @@ export function SiteSettingsAdminClient({
                 : opt === "only_admins"
                   ? "Admins only"
                   : "Off"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface-raised p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-foreground">
+            Example-playbook promotion
+          </p>
+          <p className="mt-0.5 text-xs text-muted">
+            How prominently a new coach (no playbooks yet) is shown the{" "}
+            <strong>Start from an example</strong> CTA on their empty home
+            screen. <strong>Off</strong> = subtle text link (current).{" "}
+            <strong>A/B test</strong> = half get the prominent CTA, half the
+            link, so the activation lift is measurable (Traffic → Engagement).{" "}
+            <strong>Everyone</strong> = all new coaches get the prominent CTA.
+          </p>
+        </div>
+        <div className="inline-flex items-center gap-1 self-start rounded-lg bg-surface p-1 ring-1 ring-border sm:self-auto">
+          {(["off", "ab", "everyone"] as const).map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              className={`rounded-md px-3 py-1 text-sm transition-colors ${
+                examplePromoMode === opt
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted hover:text-foreground"
+              }`}
+              disabled={examplePromoPending}
+              onClick={() => switchExamplePromo(opt)}
+            >
+              {opt === "everyone" ? "Everyone" : opt === "ab" ? "A/B test" : "Off"}
             </button>
           ))}
         </div>

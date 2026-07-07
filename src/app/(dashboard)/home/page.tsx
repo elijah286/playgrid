@@ -16,6 +16,10 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { Trophy, ChevronRight } from "lucide-react";
 import { isLeagueOrganizer } from "@/lib/league/access";
+import {
+  getExamplePromoMode,
+  resolveExamplePromo,
+} from "@/lib/site/example-promo-config";
 import { DashboardClient } from "./ui";
 
 // Bound how long a single dashboard data fetch can stall before the page
@@ -144,6 +148,17 @@ async function DashboardData({
     welcome === "coach_pro" && entitlement?.tier === "coach_ai";
   const showTeamCoachWelcome =
     welcome === "team_coach" && entitlement?.tier === "coach";
+  // Example-playbook promotion for the new-user empty state (admin-controlled:
+  // off / A/B / everyone). Resolved per-user so the A/B bucket is stable.
+  const examplePromoMode = await withTimeout(
+    getExamplePromoMode(),
+    DATA_TIMEOUT_MS,
+    "off" as const,
+  );
+  const examplePromo = resolveExamplePromo(
+    examplePromoMode,
+    profileRes.user?.id ?? null,
+  );
   const inboxAlerts = inbox.ok ? inbox.alerts : [];
   const activityEntries = activity.ok ? activity.entries : [];
   const initialTab: "playbooks" | "calendar" | "inbox" =
@@ -197,6 +212,7 @@ async function DashboardData({
           inboxAlerts={inboxAlerts}
           activityEntries={activityEntries}
           initialTab={initialTab}
+          examplePromo={examplePromo}
           coachAiAvailable={coachAiAvailable}
           showCoachCalPromo={showCoachCalPromo}
           showCoachProWelcome={showCoachProWelcome}

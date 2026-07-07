@@ -25,6 +25,8 @@ import {
   X,
 } from "lucide-react";
 import { NativeUpgradeCta, useUpgradeHref } from "@/components/billing/NativeUpgradeCta";
+import { track } from "@/lib/analytics/track";
+import type { ExamplePromo } from "@/lib/site/example-promo-config";
 import {
   archivePlaybookAction,
   createPlaybookAction,
@@ -947,6 +949,70 @@ function CollaboratorOnlyBanner({ onCreate }: { onCreate: () => void }) {
  * PlaybookBookTile (opens on hover), but it's fake — samples preview plays,
  * a generic lion logo, and clicking opens the Create Playbook dialog.
  */
+/**
+ * New-user empty state: the "start fresh" playbook tile plus a path into the
+ * example playbooks. The example CTA's prominence is admin-controlled via
+ * `examplePromo` (off = subtle link, everyone/AB-treatment = a prominent
+ * bordered CTA). Fires an exposure event on mount (so the A/B lift is
+ * measurable) and a click event on either affordance.
+ */
+function EmptyStateStart({
+  examplePromo,
+  onCreate,
+}: {
+  examplePromo: ExamplePromo;
+  onCreate: () => void;
+}) {
+  useEffect(() => {
+    if (examplePromo.variant !== "none") {
+      track({
+        event: "example_promo_exposed",
+        target: "home_empty",
+        metadata: { variant: examplePromo.variant, mode: examplePromo.mode },
+      });
+    }
+  }, [examplePromo.variant, examplePromo.mode]);
+
+  const onCtaClick = () => {
+    if (examplePromo.variant !== "none") {
+      track({
+        event: "example_promo_cta_click",
+        target: "home_empty",
+        metadata: { variant: examplePromo.variant },
+      });
+    }
+  };
+
+  return (
+    <div className="mx-auto flex w-full max-w-sm flex-col items-center gap-4 pt-4">
+      <div className="w-60 sm:w-64">
+        <MarketingPlaybookTile onCreate={onCreate} />
+      </div>
+      {examplePromo.show ? (
+        <div className="flex w-full flex-col items-center gap-1.5">
+          <p className="text-xs text-muted">Not sure where to start?</p>
+          <Link
+            href="/examples"
+            onClick={onCtaClick}
+            className="inline-flex items-center gap-2 rounded-xl border-2 border-primary/25 bg-primary/5 px-5 py-3 text-sm font-bold text-primary shadow-sm transition-colors hover:bg-primary/10"
+          >
+            <Sparkles className="size-4" />
+            Start from an example playbook
+          </Link>
+        </div>
+      ) : (
+        <Link
+          href="/examples"
+          onClick={onCtaClick}
+          className="text-xs font-medium text-muted underline-offset-2 hover:text-foreground hover:underline"
+        >
+          Or browse example playbooks →
+        </Link>
+      )}
+    </div>
+  );
+}
+
 function MarketingPlaybookTile({ onCreate }: { onCreate: () => void }) {
   const color = "#B91C1C"; // Chiefs-ish red
   const thickness = 4;
@@ -1158,6 +1224,7 @@ export function DashboardClient({
   inboxAlerts = [],
   activityEntries = [],
   initialTab = "playbooks",
+  examplePromo = { show: false, variant: "none", mode: "off" },
   coachAiAvailable = false,
   showCoachCalPromo = false,
   showCoachProWelcome = false,
@@ -1171,6 +1238,7 @@ export function DashboardClient({
   inboxAlerts?: InboxAlert[];
   activityEntries?: ActivityEntry[];
   initialTab?: HomeTab;
+  examplePromo?: ExamplePromo;
   coachAiAvailable?: boolean;
   showCoachCalPromo?: boolean;
   /**
@@ -1786,15 +1854,10 @@ export function DashboardClient({
       )}
 
       {isEmpty ? (
-        <div className="mx-auto flex w-60 flex-col items-center gap-3 pt-4 sm:w-64">
-          <MarketingPlaybookTile onCreate={() => setShowCreate(true)} />
-          <Link
-            href="/examples"
-            className="text-xs font-medium text-muted underline-offset-2 hover:text-foreground hover:underline"
-          >
-            Or browse example playbooks →
-          </Link>
-        </div>
+        <EmptyStateStart
+          examplePromo={examplePromo}
+          onCreate={() => setShowCreate(true)}
+        />
       ) : view === "preview" ? (
         <section className="space-y-6">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">

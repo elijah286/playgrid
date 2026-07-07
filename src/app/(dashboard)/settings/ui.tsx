@@ -769,6 +769,7 @@ export function SettingsClient({
                     d.coachCalFreePromptAllowance
                   }
                   initialSuggestReviews={d.suggestReviews}
+                  initialExamplePromoMode={d.examplePromoMode}
                 />
               </div>
             )}
