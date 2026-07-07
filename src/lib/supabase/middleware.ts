@@ -62,6 +62,7 @@ const PUBLIC_PREFIXES = [
   "/api/calendar/", // Cron + ICS feed: auth via bearer secret / signed token.
   "/api/digest/", // Cron: auth via bearer CRON_SECRET.
   "/api/reengagement/", // Cron: auth via bearer CRON_SECRET.
+  "/api/invite-team/", // Cron: auto team-invite nudge. Auth via bearer CRON_SECRET.
   "/api/email/unsubscribe", // RFC 8058 one-click: mail clients POST without a session. Verifies HMAC token.
   "/api/trash/purge", // Cron: auth via bearer CRON_SECRET.
   "/api/auth/purge-unconfirmed", // Cron: auth via bearer CRON_SECRET.

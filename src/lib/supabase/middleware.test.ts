@@ -140,6 +140,25 @@ describe("updateSession public paths — metadata image routes", () => {
     expect(res.headers.get("location")).toBeNull();
   });
 
+  // Cron routes authenticate via bearer CRON_SECRET in their handler, so they
+  // must NOT be intercepted by session middleware — a redirect to /login means
+  // Cloud Scheduler (no session cookie) never reaches the handler.
+  const cronRoutes = [
+    "/api/invite-team/run",
+    "/api/digest/run",
+    "/api/reengagement/run",
+  ];
+  it.each(cronRoutes)(
+    "lets a session-less cron caller reach %s without a login redirect",
+    async (path) => {
+      const req = new NextRequest(`https://www.xogridmaker.com${path}`, {
+        headers: { host: "www.xogridmaker.com" },
+      });
+      const res = await updateSession(req);
+      expect(res.headers.get("location")).toBeNull();
+    },
+  );
+
   it("still gates a genuinely private route for anonymous callers", async () => {
     const req = new NextRequest("https://www.xogridmaker.com/home", {
       headers: { host: "www.xogridmaker.com" },
