@@ -139,6 +139,8 @@ function rateWithin(
 
 /** Cheap headline number for the admin overview card (sent touches, last 30d). */
 export async function getMarketingOverviewAction(): Promise<{ touchesLast30: number }> {
+  const gate = await assertAdmin();
+  if (!gate.ok) return { touchesLast30: 0 };
   try {
     const admin = createServiceRoleClient();
     const since = new Date(Date.now() - 30 * MS_DAY).toISOString();
