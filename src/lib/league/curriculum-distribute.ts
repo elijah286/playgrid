@@ -5,10 +5,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { PRACTICE_PLAN_SCHEMA_VERSION } from "@/domain/practice-plan/types";
 
 // Shared core for distributing a practice plan to every team in a league. Used
-// by BOTH the league-curriculum action and Leo's distribute tool, so the rules
-// (source ownership, one copy per team, self-contained document) live in one
-// place. The caller passes a service-role client; the operatorId is the verified
-// league admin acting.
+// by Leo's distribute tool (the Curriculum page merged into Playbooks —
+// Phase 4). The rules (source ownership, one copy per team, self-contained
+// document) live in one place. The caller passes a service-role client; the
+// operatorId is the verified league admin acting.
 
 export type DistributeResult =
   | {

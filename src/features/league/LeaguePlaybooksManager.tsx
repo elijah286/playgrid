@@ -138,6 +138,27 @@ export function LeaguePlaybooksManager({
     });
   }
 
+  function redistributeStale(teamId: string, itemIds: string[]) {
+    if (itemIds.length === 0) return;
+    setMsg(null);
+    setRowBusy(teamId);
+    startTransition(async () => {
+      const r = await distributeLibraryItemsAction(leagueId, itemIds, [teamId]);
+      setRowBusy(null);
+      if (!r.ok) {
+        setMsg({ kind: "error", text: r.error });
+        return;
+      }
+      setMsg({
+        kind: r.errors.length > 0 ? "error" : "success",
+        text:
+          `Refreshed ${r.distributed} item${r.distributed === 1 ? "" : "s"}.` +
+          (r.errors.length > 0 ? ` Issues: ${r.errors.join("; ")}` : ""),
+      });
+      refresh();
+    });
+  }
+
   if (rows.length === 0) {
     return (
       <p className="rounded-2xl border border-border px-4 py-8 text-center text-sm text-muted">
@@ -289,8 +310,21 @@ export function LeaguePlaybooksManager({
                 {row.headCoachEmail ? row.headCoachEmail : "No head-coach email yet"}
               </div>
               {row.distributions.length > 0 ? (
-                <div className="mt-1 truncate text-[11px] text-muted">
-                  Library: {row.distributions.map((d) => d.title).join(" · ")}
+                <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px]">
+                  <span className="text-muted">Library:</span>
+                  {row.distributions.map((d) => (
+                    <span
+                      key={d.itemId ?? d.title}
+                      className={
+                        d.updateAvailable
+                          ? "rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
+                          : "text-muted"
+                      }
+                    >
+                      {d.title}
+                      {d.updateAvailable ? " · update" : ""}
+                    </span>
+                  ))}
                 </div>
               ) : null}
             </div>
@@ -306,6 +340,23 @@ export function LeaguePlaybooksManager({
                   >
                     Open ↗
                   </Link>
+                  {row.distributions.some((d) => d.updateAvailable) ? (
+                    <button
+                      type="button"
+                      disabled={rowBusy === row.teamId}
+                      onClick={() =>
+                        redistributeStale(
+                          row.teamId,
+                          row.distributions
+                            .filter((d) => d.updateAvailable && d.itemId)
+                            .map((d) => d.itemId as string),
+                        )
+                      }
+                      className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+                    >
+                      {rowBusy === row.teamId ? "Refreshing…" : "Refresh updates"}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     disabled={rowBusy === row.playbook.id || !row.headCoachEmail}

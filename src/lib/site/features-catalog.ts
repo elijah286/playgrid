@@ -1764,7 +1764,7 @@ export const FEATURES: FeatureEntry[] = [
     id: "league-coach-playbook-distribution",
     name: "Coach playbook & practice-plan distribution",
     description:
-      "For football leagues, every new team gets its playbook automatically — starter plays for the league's game type plus whatever library items the operator marked as defaults. Operators distribute more play groups and practice plans from their library at any time (each lands as a snapshot section in the team's playbook, never overwriting a coach's edits), and hand the playbook to the head coach with an email invite — the coach joins the team's playbook and roster directly, in the same classic playbook experience coaches already use.",
+      "For football leagues, every new team gets its playbook automatically — starter plays for the league's game type plus whatever library items the operator marked as defaults. Operators distribute more play groups and practice plans from their library at any time (each lands as a snapshot section in the team's playbook, never overwriting a coach's edits), and hand the playbook to the head coach with an email invite — the coach joins the team's playbook and roster directly, in the same classic playbook experience coaches already use. Distribution status shows per team; when a library item's source changes, affected teams flag \"update available\" and a one-click refresh re-sends the newer version as an add-on section (never overwriting a coach's edits). Practice plans and playbooks share one Distribute surface per league.",
     category: "League operations",
     status: "beta",
     addedDate: "2026-06-21",

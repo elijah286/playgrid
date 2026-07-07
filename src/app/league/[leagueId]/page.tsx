@@ -296,13 +296,6 @@ export default async function LeagueDashboardPage({
             href={`/league/${leagueId}/playbooks`}
           />
         ) : null}
-        {hasPlaybooks ? (
-          <MoreItem
-            icon={<ClipboardList className="size-4" />}
-            label="Curriculum"
-            href={`/league/${leagueId}/curriculum`}
-          />
-        ) : null}
         <MoreItem icon={<Palette className="size-4" />} label="Branding" />
         {!access.viaGrant || access.capabilities.includes("manage_store") ? (
           <MoreItem

@@ -21,6 +21,7 @@ import type { SportVariant } from "@/domain/play/types";
 import type { LibraryItem, LibraryItemKind } from "@/lib/league/library";
 import {
   SEEDABLE_VARIANTS,
+  markStaleDistributions,
   type DistributeScope,
   type PlaybookDistributionRow,
 } from "@/lib/league/playbooks";
@@ -115,7 +116,7 @@ export async function listPlaybookDistributionAction(leagueId: string) {
     teamIds.length > 0
       ? admin
           .from("league_distributions")
-          .select("team_id, title_snapshot, created_at")
+          .select("team_id, item_id, title_snapshot, created_at")
           .in("team_id", teamIds)
           .order("created_at", { ascending: true })
       : Promise.resolve({ data: [] }),
@@ -139,11 +140,60 @@ export async function listPlaybookDistributionAction(leagueId: string) {
     if (!i.revoked_at && (i.expires_at as string) > nowIso) note(i.playbook_id as string, i.created_at as string);
   }
 
-  const distByTeam = new Map<string, { title: string; at: string }[]>();
+  const distByTeam = new Map<string, { itemId: string | null; title: string; at: string }[]>();
+  const ledgerItemIds = new Set<string>();
   for (const d of ledgerRes.data ?? []) {
+    const itemId = (d.item_id as string | null) ?? null;
+    if (itemId) ledgerItemIds.add(itemId);
     const list = distByTeam.get(d.team_id as string) ?? [];
-    list.push({ title: d.title_snapshot as string, at: d.created_at as string });
+    list.push({ itemId, title: d.title_snapshot as string, at: d.created_at as string });
     distByTeam.set(d.team_id as string, list);
+  }
+
+  // When was each distributed library item's SOURCE last edited? A team whose
+  // latest copy predates that is a redistribute candidate (Phase 4). Play
+  // group → newest source-play edit; practice plan → its updated_at.
+  const sourceUpdatedAtByItem = new Map<string, string>();
+  if (ledgerItemIds.size > 0) {
+    const { data: items } = await admin
+      .from("league_library_items")
+      .select("id, kind, source_group_id, source_practice_plan_id")
+      .in("id", [...ledgerItemIds]);
+    const groupItems = (items ?? []).filter((i) => i.source_group_id);
+    const planItems = (items ?? []).filter((i) => i.source_practice_plan_id);
+    const groupIds = groupItems.map((i) => i.source_group_id as string);
+    const planIds = planItems.map((i) => i.source_practice_plan_id as string);
+    const [playsRes, plansRes] = await Promise.all([
+      groupIds.length > 0
+        ? admin
+            .from("plays")
+            .select("group_id, updated_at")
+            .in("group_id", groupIds)
+            .eq("is_archived", false)
+            .is("deleted_at", null)
+        : Promise.resolve({ data: [] }),
+      planIds.length > 0
+        ? admin.from("practice_plans").select("id, updated_at").in("id", planIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+    const newestPlayByGroup = new Map<string, string>();
+    for (const pl of playsRes.data ?? []) {
+      const g = pl.group_id as string;
+      const at = pl.updated_at as string;
+      const cur = newestPlayByGroup.get(g);
+      if (!cur || at > cur) newestPlayByGroup.set(g, at);
+    }
+    const planUpdatedById = new Map(
+      (plansRes.data ?? []).map((pl) => [pl.id as string, pl.updated_at as string]),
+    );
+    for (const it of groupItems) {
+      const at = newestPlayByGroup.get(it.source_group_id as string);
+      if (at) sourceUpdatedAtByItem.set(it.id as string, at);
+    }
+    for (const it of planItems) {
+      const at = planUpdatedById.get(it.source_practice_plan_id as string);
+      if (at) sourceUpdatedAtByItem.set(it.id as string, at);
+    }
   }
 
   const rows: PlaybookDistributionRow[] = allTeams.map((t) => {
@@ -165,7 +215,7 @@ export async function listPlaybookDistributionAction(leagueId: string) {
       playbook,
       sendStatus,
       lastSentAt,
-      distributions: distByTeam.get(teamId) ?? [],
+      distributions: markStaleDistributions(distByTeam.get(teamId) ?? [], sourceUpdatedAtByItem),
     };
   });
 

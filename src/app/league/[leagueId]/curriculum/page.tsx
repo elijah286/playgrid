@@ -1,43 +1,13 @@
-import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { redirect } from "next/navigation";
 
-import { getLeagueSettingsAction } from "@/app/actions/league-settings";
-import { listLeagueCurriculumAction } from "@/app/actions/league-curriculum";
-import { leagueHasPlaybooks } from "@/lib/league/sportConfig";
-import { LeagueCurriculumManager } from "@/features/league/LeagueCurriculumManager";
-
-export const metadata: Metadata = {
-  title: "Curriculum · League Console · XO Gridmaker",
-};
-
-export default async function CurriculumPage({
+/** Practice-plan distribution merged into the Playbooks page (library plan,
+ *  Phase 4) — one distribution surface per league. This route sticks around
+ *  as a redirect so old links, bookmarks, and Leo replies keep working. */
+export default async function CurriculumRedirect({
   params,
 }: {
   params: Promise<{ leagueId: string }>;
 }) {
   const { leagueId } = await params;
-
-  // Admin-gated (getLeagueSettingsAction returns null for non-admins) and, like
-  // the playbook bridge, football-only for now since distribution targets team
-  // playbooks.
-  const settings = await getLeagueSettingsAction(leagueId);
-  if (!settings) notFound();
-  if (!leagueHasPlaybooks(settings.sport)) notFound();
-
-  const res = await listLeagueCurriculumAction(leagueId);
-  const overview = res.ok ? res.data : { plans: [], teamsTotal: 0, teamsWithPlaybook: 0 };
-
-  return (
-    <div className="mx-auto max-w-2xl px-4 py-12 text-foreground sm:px-6">
-      <h1 className="text-2xl font-extrabold tracking-tight">Curriculum</h1>
-      <p className="mt-1 text-sm text-muted">
-        Build a practice plan in your playbook, then share it with every team&apos;s coach in one
-        click — it lands in their playbook ready to run.
-      </p>
-
-      <div className="mt-6">
-        <LeagueCurriculumManager leagueId={leagueId} initial={overview} />
-      </div>
-    </div>
-  );
+  redirect(`/league/${leagueId}/playbooks`);
 }

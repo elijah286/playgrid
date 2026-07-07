@@ -26,5 +26,40 @@ export type PlaybookDistributionRow = {
   /** Most recent invite (or legacy copy-link) sent for this team's playbook. */
   lastSentAt: string | null;
   /** Library items snapshotted into this team's playbook (from the ledger). */
-  distributions: { title: string; at: string }[];
+  distributions: TeamDistribution[];
 };
+
+export type TeamDistribution = {
+  itemId: string | null;
+  title: string;
+  at: string;
+  /** The library item's SOURCE changed after this team's latest copy — a
+   *  redistribute would deliver a newer version (as an add-only "(v2)"
+   *  group; nothing the coach edited is touched). */
+  updateAvailable: boolean;
+};
+
+/**
+ * Collapse raw ledger rows to one entry per item (latest copy wins) and flag
+ * staleness against the source's last-modified time. Pure so the action and
+ * any UI preview agree by construction.
+ */
+export function markStaleDistributions(
+  rows: { itemId: string | null; title: string; at: string }[],
+  sourceUpdatedAtByItem: Map<string, string>,
+): TeamDistribution[] {
+  const latest = new Map<string, { itemId: string | null; title: string; at: string }>();
+  for (const r of rows) {
+    const key = r.itemId ?? `removed:${r.title}`;
+    const cur = latest.get(key);
+    if (!cur || r.at > cur.at) latest.set(key, r);
+  }
+  return [...latest.values()]
+    .sort((a, b) => a.at.localeCompare(b.at))
+    .map((r) => ({
+      ...r,
+      updateAvailable:
+        r.itemId !== null &&
+        (sourceUpdatedAtByItem.get(r.itemId) ?? "") > r.at,
+    }));
+}

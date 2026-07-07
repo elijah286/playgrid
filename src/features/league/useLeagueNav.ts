@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  BookOpen,
   Calendar,
   ClipboardList,
   DollarSign,
@@ -61,8 +60,9 @@ export function leagueSections(
     { path: "/financials", label: "Financials", icon: DollarSign, capability: "view_financials" },
   ];
   if (leagueHasPlaybooks(sport)) {
+    // One distribution surface: practice plans merged into Playbooks (Phase 4);
+    // /curriculum redirects there.
     items.push({ path: "/playbooks", label: "Playbooks", icon: Layers, capability: "manage_curriculum" });
-    items.push({ path: "/curriculum", label: "Curriculum", icon: BookOpen, capability: "manage_curriculum" });
   }
   if (leoEnabled) items.push({ path: "/assistant", label: "Leo", icon: Sparkles });
   items.push({ path: "/settings", label: "Settings", icon: Settings, capability: "manage_settings" });
