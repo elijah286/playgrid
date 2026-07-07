@@ -16,6 +16,10 @@ vi.mock("@/lib/notifications/coach-playbook-email", () => ({
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createServiceRoleClient: vi.fn() }));
 vi.mock("@/lib/data/playbook-copy", () => ({ copyPlaybookContents: vi.fn() }));
+const ensureSeatsMock = vi.fn();
+vi.mock("@/lib/billing/seats", () => ({
+  ensureSeatsAvailable: (...args: unknown[]) => ensureSeatsMock(...args),
+}));
 
 import { leagueVariantToSportVariant, sendCoachHandoffInvite } from "./team-playbook";
 
@@ -33,6 +37,8 @@ beforeEach(() => {
   inserted.length = 0;
   sendEmailMock.mockReset();
   sendEmailMock.mockResolvedValue({ sent: true });
+  ensureSeatsMock.mockReset();
+  ensureSeatsMock.mockResolvedValue({ ok: true, usage: { used: 0, included: 3, purchased: 0, available: 3 } });
 });
 
 describe("sendCoachHandoffInvite", () => {
@@ -44,6 +50,7 @@ describe("sendCoachHandoffInvite", () => {
       "Wolves 12U",
       "coach@example.com",
       "Austin 7v7",
+      "operator-1",
     );
     expect(r.ok).toBe(true);
     const invite = inserted.find((i) => i.table === "playbook_invites");
@@ -56,6 +63,27 @@ describe("sendCoachHandoffInvite", () => {
     // The emailed link is the invite-accept URL, not a copy link.
     const call = sendEmailMock.mock.calls[0]?.[0] as { claimUrl: string };
     expect(call.claimUrl).toMatch(/\/invite\//);
+  });
+
+  it("fails fast at send when the operator has no seats left", async () => {
+    ensureSeatsMock.mockResolvedValue({
+      ok: false,
+      usage: { used: 3, included: 3, purchased: 0, available: 0 },
+      error: "Coach seat limit reached.",
+    });
+    const r = await sendCoachHandoffInvite(
+      adminMock as never,
+      "operator-1",
+      "pb-1",
+      "Wolves 12U",
+      "coach@example.com",
+      "Austin 7v7",
+      "operator-1",
+    );
+    expect(r.ok).toBe(false);
+    expect(ensureSeatsMock).toHaveBeenCalledWith("operator-1", 1);
+    expect(inserted.find((i) => i.table === "playbook_invites")).toBeUndefined();
+    expect(sendEmailMock).not.toHaveBeenCalled();
   });
 });
 

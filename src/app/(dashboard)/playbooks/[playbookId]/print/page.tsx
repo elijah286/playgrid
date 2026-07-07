@@ -6,8 +6,7 @@ import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { loadPlaybookPrintPackAction } from "@/app/actions/plays";
 import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { SportVariant } from "@/domain/play/types";
-import { getCurrentEntitlement } from "@/lib/billing/entitlement";
-import { getPlaybookOwnerEntitlement } from "@/lib/billing/owner-entitlement";
+import { getPlaybookFeatureEntitlement, getPlaybookOwnerEntitlement } from "@/lib/billing/owner-entitlement";
 import { canRemovePlaysheetWatermark, canUseWristbands } from "@/lib/billing/features";
 import { PrintPlaybookClient } from "./ui";
 import { StickyExampleCta } from "@/features/marketing/StickyExampleCta";
@@ -108,7 +107,9 @@ export default async function PlaybookPrintPage({ params }: Props) {
         logoUrl={(book.logo_url as string | null) ?? null}
         headCoachName={coachName}
         canUseWristbands={
-          isExamplePreview ? true : canUseWristbands(await getCurrentEntitlement())
+          isExamplePreview
+            ? true
+            : canUseWristbands(await getPlaybookFeatureEntitlement(playbookId))
         }
         canRemovePlaysheetWatermark={
           isExamplePreview

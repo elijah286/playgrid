@@ -65,6 +65,44 @@ export async function ensureSeatsAvailable(
   };
 }
 
+
+/**
+ * Every playbook whose seats bill against this owner: playbooks they hold an
+ * owner-member row on, PLUS org-owned league team playbooks (which have no
+ * owner-member row by design — playbook → team → league.created_by). Keeps
+ * the ledger, the collaborator list, and the pending-invite list agreeing on
+ * one definition (library plan, Phase 3).
+ */
+async function ownerBilledPlaybookIds(
+  admin: ReturnType<typeof createServiceRoleClient>,
+  ownerId: string,
+): Promise<string[]> {
+  const [{ data: ownedRows }, { data: leagueRows }] = await Promise.all([
+    admin
+      .from("playbook_members")
+      .select("playbook_id")
+      .eq("user_id", ownerId)
+      .eq("role", "owner")
+      .eq("status", "active"),
+    admin.from("leagues").select("id").eq("created_by", ownerId),
+  ]);
+  const ids = new Set((ownedRows ?? []).map((r) => r.playbook_id as string));
+  const leagueIds = (leagueRows ?? []).map((l) => l.id as string);
+  if (leagueIds.length > 0) {
+    const { data: teams } = await admin.from("teams").select("id").in("league_id", leagueIds);
+    const teamIds = (teams ?? []).map((t) => t.id as string);
+    if (teamIds.length > 0) {
+      const { data: pbs } = await admin
+        .from("playbooks")
+        .select("id")
+        .in("team_id", teamIds)
+        .eq("is_archived", false);
+      for (const pb of pbs ?? []) ids.add(pb.id as string);
+    }
+  }
+  return [...ids];
+}
+
 export type SeatCollaborator = {
   userId: string;
   displayName: string | null;
@@ -91,14 +129,8 @@ export async function getSeatCollaborators(
   if (!tierAtLeast(ownerEntitlement, "coach")) return [];
 
   const admin = createServiceRoleClient();
-  // Owner's playbooks, then memberships on those playbooks.
-  const { data: ownedRows } = await admin
-    .from("playbook_members")
-    .select("playbook_id")
-    .eq("user_id", ownerId)
-    .eq("role", "owner")
-    .eq("status", "active");
-  const ownedIds = (ownedRows ?? []).map((r) => r.playbook_id as string);
+  // Owner's playbooks (owned + league team playbooks), then memberships.
+  const ownedIds = await ownerBilledPlaybookIds(admin, ownerId);
   if (ownedIds.length === 0) return [];
 
   const { data: memberRows } = await admin
@@ -182,13 +214,7 @@ export async function getPendingCoachInvites(
   if (!tierAtLeast(ownerEntitlement, "coach")) return [];
 
   const admin = createServiceRoleClient();
-  const { data: ownedRows } = await admin
-    .from("playbook_members")
-    .select("playbook_id")
-    .eq("user_id", ownerId)
-    .eq("role", "owner")
-    .eq("status", "active");
-  const ownedIds = (ownedRows ?? []).map((r) => r.playbook_id as string);
+  const ownedIds = await ownerBilledPlaybookIds(admin, ownerId);
   if (ownedIds.length === 0) return [];
 
   const nowIso = new Date().toISOString();

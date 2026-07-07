@@ -4,6 +4,7 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { copyPlaybookContents } from "@/lib/data/playbook-copy";
 import { defaultSettingsForVariant } from "@/domain/playbook/settings";
 import { sendCoachPlaybookInvite } from "@/lib/notifications/coach-playbook-email";
+import { ensureSeatsAvailable } from "@/lib/billing/seats";
 import { leagueHasPlaybooks } from "@/lib/league/sportConfig";
 import { defaultsForNewTeam, libraryItemFromRow } from "@/lib/league/library";
 import {
@@ -105,7 +106,15 @@ export async function sendCoachHandoffInvite(
   teamName: string,
   coachEmail: string,
   leagueName: string,
+  operatorId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  // Send-time seat guard, mirroring the coach product's invite flow: don't
+  // mint an editor invite the operator has no seat for. The hard enforcement
+  // stays at ACCEPT (decision: seat consumed on accept) — a Coach+ invitee
+  // still rides free there — this just fails fast at send.
+  const seatCheck = await ensureSeatsAvailable(operatorId, 1);
+  if (!seatCheck.ok) return { ok: false, error: seatCheck.error };
+
   const token = randomBytes(18).toString("base64url");
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
   const { error: invErr } = await admin.from("playbook_invites").insert({

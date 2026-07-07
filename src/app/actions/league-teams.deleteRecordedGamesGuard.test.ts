@@ -39,7 +39,13 @@ vi.mock("@/lib/league/authorize", () => ({
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/supabase/config", () => ({ hasSupabaseEnv: () => true }));
 vi.mock("@/lib/data/workspace", () => ({ ensureDefaultWorkspace: vi.fn() }));
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/cache", () => ({
+  revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
+  // Passthrough: seat-defaults-config wraps its fetcher in unstable_cache at
+  // module load (pulled in via team-playbook -> seats since Phase 3).
+  unstable_cache: (fn: (...args: unknown[]) => unknown) => fn,
+}));
 
 import { deleteLeagueTeamAction } from "./league-teams";
 

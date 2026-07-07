@@ -10,6 +10,7 @@ import { getStoredResendConfig } from "@/lib/site/resend-config";
 import { getUserEntitlement } from "@/lib/billing/entitlement";
 import { canInviteCoachCollaborators, tierAtLeast } from "@/lib/billing/features";
 import { ensureSeatsAvailable } from "@/lib/billing/seats";
+import { getPlaybookOwnerId } from "@/lib/billing/owner-entitlement";
 import { sanitizeSharedPrefs, type PlaybookViewPrefs } from "@/domain/playbook/view-prefs";
 import { tagShareUrl } from "@/lib/share/tag-url";
 import { notifyPlaybookOwners } from "@/lib/notifications/inbox-dispatch";
@@ -525,15 +526,10 @@ export async function sharePlaybookWithEmailsAction(input: {
 
   // Resolve the playbook owner. Seat math is scoped to the owner, not the
   // caller — an editor-tier collaborator inviting more people still bills
-  // against the head coach's seat allowance.
-  const { data: ownerRow } = await admin
-    .from("playbook_members")
-    .select("user_id")
-    .eq("playbook_id", input.playbookId)
-    .eq("role", "owner")
-    .eq("status", "active")
-    .maybeSingle();
-  const ownerId = (ownerRow?.user_id as string | null) ?? null;
+  // against the head coach's seat allowance. getPlaybookOwnerId also resolves
+  // org-owned league team playbooks (no owner-member row) to the league
+  // operator, so league invites bill the operator's seats (Phase 3).
+  const ownerId = await getPlaybookOwnerId(input.playbookId);
 
   for (const email of cleaned) {
     try {
@@ -843,15 +839,10 @@ export async function acceptInviteAction(
   // (re-accepting their own link doesn't consume a new seat).
   if (inviteRow?.role === "editor") {
     const admin = createServiceRoleClient();
-    const { data: ownerRow } = await admin
-      .from("playbook_members")
-      .select("user_id")
-      .eq("playbook_id", inviteRow.playbook_id as string)
-      .eq("role", "owner")
-      .eq("status", "active")
-      .limit(1)
-      .maybeSingle();
-    const ownerId = (ownerRow?.user_id as string | null) ?? null;
+    // League team playbooks have no owner-member row; getPlaybookOwnerId
+    // falls back to the league operator so accepting a league coach invite
+    // consumes (and is guarded by) the operator's seats (Phase 3).
+    const ownerId = await getPlaybookOwnerId(inviteRow.playbook_id as string);
     const { data: existingMember } = await admin
       .from("playbook_members")
       .select("role")

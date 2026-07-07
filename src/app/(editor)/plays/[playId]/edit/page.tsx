@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getMobileEditingEnabled } from "@/lib/site/mobile-editing-config";
 import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
 import { getCurrentEntitlement, hasUsedCoachProTrial } from "@/lib/billing/entitlement";
+import { getPlaybookFeatureEntitlement } from "@/lib/billing/owner-entitlement";
 import { canUseAiFeatures, canUseGameMode } from "@/lib/billing/features";
 import { hasFreeCalPromptsRemaining } from "@/lib/billing/coach-cal-free-prompts";
 import {
@@ -198,7 +199,10 @@ export default async function PlayEditPage({ params }: Props) {
     { isAdmin, isEntitled: isCoachInPlaybook },
   );
   const practicePlansAvailable = isCoachInPlaybook;
-  const viewerCanUseGameMode = isAdmin || canUseGameMode(editorEntitlement);
+  // Game Mode blends viewer/owner plans (league + collaborator seats);
+  // Coach Cal below deliberately stays keyed to the viewer's own plan.
+  const viewerCanUseGameMode =
+    isAdmin || canUseGameMode(await getPlaybookFeatureEntitlement(res.play.playbook_id));
   const coachAiEntitled = isAdmin || canUseAiFeatures(editorEntitlement);
   // Free users with trial prompts left get the real launcher, not the promo
   // (mirrors SiteHeader / the playbook page).

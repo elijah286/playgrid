@@ -183,7 +183,7 @@ export async function distributePlaybooksToTeamsAction(
 ) {
   const gate = await gateAdmin(leagueId);
   if (!gate.ok) return gate;
-  const { admin, userId, leagueName } = gate;
+  const { admin, userId, leagueName, operatorId } = gate;
   if (!SEEDABLE_VARIANTS.some((v) => v.value === variant)) {
     return { ok: false as const, error: "Unsupported format." };
   }
@@ -246,7 +246,7 @@ export async function distributePlaybooksToTeamsAction(
         skippedNoEmail += 1;
         continue;
       }
-      const sendR = await sendCoachHandoffInvite(admin, userId, r.playbook.id, teamName, coachEmail, leagueName);
+      const sendR = await sendCoachHandoffInvite(admin, userId, r.playbook.id, teamName, coachEmail, leagueName, operatorId);
       if (sendR.ok) emailed += 1;
       else errors.push(`${teamName}: ${sendR.error}`);
     }
@@ -413,7 +413,7 @@ export async function seedTeamPlaybookAction(leagueId: string, teamId: string, v
 export async function sendCoachPlaybookCopyAction(leagueId: string, playbookId: string) {
   const gate = await gateAdmin(leagueId);
   if (!gate.ok) return gate;
-  const { admin, userId, leagueName } = gate;
+  const { admin, userId, leagueName, operatorId } = gate;
 
   const { data: pb } = await admin
     .from("playbooks")
@@ -445,6 +445,7 @@ export async function sendCoachPlaybookCopyAction(leagueId: string, playbookId: 
     (team.name as string) ?? "your team",
     coachEmail,
     leagueName,
+    operatorId,
   );
   if (!res.ok) return { ok: false as const, error: res.error };
   revalidatePath(`/league/${leagueId}/playbooks`);

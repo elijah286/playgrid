@@ -62,7 +62,13 @@ vi.mock("@/lib/data/playbook-copy", () => ({
 vi.mock("@/lib/notifications/coach-playbook-email", () => ({
   sendCoachPlaybookInvite: vi.fn(),
 }));
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/cache", () => ({
+  revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
+  // Passthrough: seat-defaults-config wraps its fetcher in unstable_cache at
+  // module load (pulled in via team-playbook -> seats since Phase 3).
+  unstable_cache: (fn: (...args: unknown[]) => unknown) => fn,
+}));
 
 import { seedTeamPlaybookAction } from "./league-playbooks";
 

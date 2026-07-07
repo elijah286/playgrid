@@ -25,7 +25,7 @@ import { getCurrentEntitlement, hasUsedCoachProTrial } from "@/lib/billing/entit
 import { canUseAiFeatures, canUseGameMode, tierAtLeast } from "@/lib/billing/features";
 import { hasFreeCalPromptsRemaining } from "@/lib/billing/coach-cal-free-prompts";
 import { getFreePlayCapForOwner } from "@/lib/site/free-plays-config";
-import { getPlaybookOwnerId } from "@/lib/billing/owner-entitlement";
+import { getPlaybookFeatureEntitlement, getPlaybookOwnerId } from "@/lib/billing/owner-entitlement";
 import {
   getBetaFeatures,
   isBetaFeatureAvailable,
@@ -289,9 +289,17 @@ export default async function PlaybookDetailPage({ params }: Props) {
     `playbook-page:getEntitlement pb=${playbookId}`,
     () => getCurrentEntitlement(),
   );
-  const viewerIsCoach = tierAtLeast(viewerEntitlement, "coach");
-  const viewerCanUseGameMode = canUseGameMode(viewerEntitlement);
-  const viewerCanUseTeamFeatures = tierAtLeast(viewerEntitlement, "coach");
+  // Playbook-scoped features blend the viewer's plan with the playbook
+  // owner's (invited assistants and league coaches inherit the owner's
+  // unlocks HERE). Coach Cal below stays keyed to viewerEntitlement — Cal is
+  // per-user by design.
+  const featureEntitlement = await timed(
+    `playbook-page:getFeatureEntitlement pb=${playbookId}`,
+    () => getPlaybookFeatureEntitlement(playbookId),
+  );
+  const viewerIsCoach = tierAtLeast(featureEntitlement, "coach");
+  const viewerCanUseGameMode = canUseGameMode(featureEntitlement);
+  const viewerCanUseTeamFeatures = tierAtLeast(featureEntitlement, "coach");
 
   // Site admins get two extra action menu items: "Use as Example"
   // (toggle is_example) and "Publish / Unpublish" (toggle

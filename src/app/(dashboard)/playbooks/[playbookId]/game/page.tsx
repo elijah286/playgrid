@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { getCurrentEntitlement } from "@/lib/billing/entitlement";
+import { getPlaybookFeatureEntitlement } from "@/lib/billing/owner-entitlement";
 import { canUseGameMode } from "@/lib/billing/features";
 import { listPlaysAction } from "@/app/actions/plays";
 import type { PlayDocument } from "@/domain/play/types";
@@ -98,7 +98,10 @@ export default async function GameModePage({ params, searchParams }: Props) {
   // Tier gate: Game Mode is a Team Coach feature. Admins bypass so they can
   // QA without a paid seat. Non-entitled users hitting the URL directly land
   // on /pricing with an upgrade hint instead of silently back on the playbook.
-  const entitlement = await getCurrentEntitlement();
+  // Blend: the viewer's plan OR the playbook owner's (a league coach on an
+  // operator-seat playbook, or a free assistant of a paying owner, gets Game
+  // Mode here without their own subscription).
+  const entitlement = await getPlaybookFeatureEntitlement(playbookId);
   if (!isAdmin && !canUseGameMode(entitlement)) {
     redirect("/pricing?upgrade=game-mode");
   }
