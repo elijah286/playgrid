@@ -26,6 +26,10 @@ import {
   getOpenAIAdminKeyStatusAction,
 } from "@/app/actions/admin-integrations";
 import { getResendStatusAction } from "@/app/actions/admin-resend";
+import {
+  getMarketingSummaryAction,
+  getInviteTeamEmailEnabledAction,
+} from "@/app/actions/admin-marketing";
 import { getGoogleMapsStatusAction } from "@/app/actions/admin-google-maps";
 import { getMaxMindStatusAction } from "@/app/actions/admin-maxmind";
 import { getRedditPixelStatusAction } from "@/app/actions/admin-reddit-pixel";
@@ -263,6 +267,19 @@ export async function loadRevenueTabData() {
 /** Cal usage tab — Coach Cal token/cost usage summary. */
 export async function loadTokenUsageTabData() {
   return listCoachAiTokenUsageAction();
+}
+
+/** Marketing tab — per-campaign touches, conversion, retention lift. */
+export async function loadMarketingTabData() {
+  const [summaryRes, inviteEnabled] = await Promise.all([
+    getMarketingSummaryAction(),
+    getInviteTeamEmailEnabledAction(),
+  ]);
+  return {
+    summary: summaryRes.ok ? summaryRes.summary : null,
+    error: summaryRes.ok ? null : summaryRes.error,
+    inviteEnabled,
+  };
 }
 
 /** Playbook seeds tab. */

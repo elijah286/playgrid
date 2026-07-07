@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -12,6 +12,7 @@ import {
   CreditCard,
   DollarSign,
   Globe,
+  Mail,
   MessageCircle,
   Share2,
   Ticket,
@@ -31,6 +32,7 @@ import type {
   MonetizationSummary,
 } from "@/app/actions/admin-activation";
 import type { StripeConfigStatus } from "@/lib/site/stripe-config";
+import { getMarketingOverviewAction } from "@/app/actions/admin-marketing";
 import { cn } from "@/lib/utils";
 
 export type OverviewWindow = "7d" | "30d" | "90d" | "all";
@@ -42,7 +44,8 @@ export type OverviewJumpTarget =
   | "revenue"
   | "payments"
   | "feedback"
-  | "ai_feedback";
+  | "ai_feedback"
+  | "marketing";
 
 type OverviewProps = {
   window: OverviewWindow;
@@ -118,6 +121,18 @@ export function OverviewAdminClient({
 }: OverviewProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+
+  // Marketing touches: fetched after mount so the overview paints immediately.
+  const [touches, setTouches] = useState<number | null>(null);
+  useEffect(() => {
+    let alive = true;
+    getMarketingOverviewAction()
+      .then((r) => alive && setTouches(r.touchesLast30))
+      .catch(() => alive && setTouches(null));
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   function setWindow(next: OverviewWindow) {
     const params = new URLSearchParams(
@@ -206,6 +221,13 @@ export function OverviewAdminClient({
           }
           tone="emerald"
           onClick={() => onJump("revenue")}
+        />
+        <HeroKpi
+          icon={Mail}
+          label="Email touches"
+          value={touches == null ? "…" : formatInt(touches)}
+          sub="sent in last 30d · conversion inside"
+          onClick={() => onJump("marketing")}
         />
       </HeroKpiGrid>
 

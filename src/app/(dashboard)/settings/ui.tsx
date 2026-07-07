@@ -15,6 +15,7 @@ import {
   Gauge,
   Globe,
   KeyRound,
+  Megaphone,
   Menu as MenuIcon,
   MessageCircle,
   Settings as SettingsIcon,
@@ -40,6 +41,7 @@ import { RedditPixelSettingsClient } from "@/features/admin/RedditPixelSettingsC
 import { MetaPixelSettingsClient } from "@/features/admin/MetaPixelSettingsClient";
 import { GoogleNativeSigninSettingsClient } from "@/features/admin/GoogleNativeSigninSettingsClient";
 import { RevenueAdminClient } from "@/features/admin/RevenueAdminClient";
+import { MarketingAdminClient } from "@/features/admin/MarketingAdminClient";
 import { FeedbackAdminClient } from "@/features/admin/FeedbackAdminClient";
 import { ReportsAdminClient } from "@/features/admin/ReportsAdminClient";
 import { CoachAiFeedbackTabs } from "@/features/admin/CoachAiFeedbackTabs";
@@ -93,6 +95,7 @@ import {
   loadAppMetricsTabData,
   loadFunctionalTestsTabData,
   loadRevenueTabData,
+  loadMarketingTabData,
   loadTokenUsageTabData,
   loadSeedsTabData,
   loadBetaTabData,
@@ -109,6 +112,7 @@ type Tab =
   | "invites"
   | "revenue"
   | "payments"
+  | "marketing"
   | "feedback"
   | "ai_feedback"
   | "reports"
@@ -135,6 +139,7 @@ function isTab(value: string | null | undefined): value is Tab {
     value === "invites" ||
     value === "revenue" ||
     value === "payments" ||
+    value === "marketing" ||
     value === "feedback" ||
     value === "ai_feedback" ||
     value === "reports" ||
@@ -235,6 +240,7 @@ export function SettingsClient({
     loadFunctionalTestsTabData,
   );
   const revenueData = useLazyData(tab === "revenue", loadRevenueTabData);
+  const marketingData = useLazyData(tab === "marketing", loadMarketingTabData);
   const tokenUsageData = useLazyData(tab === "ai_usage", loadTokenUsageTabData);
   const seedsData = useLazyData(tab === "seeds", loadSeedsTabData);
   const betaData = useLazyData(tab === "beta", loadBetaTabData);
@@ -325,6 +331,7 @@ export function SettingsClient({
       items: [
         { value: "revenue", label: "Revenue", icon: TrendingUp },
         { value: "payments", label: "Payments", icon: CreditCard },
+        { value: "marketing", label: "Marketing", icon: Megaphone },
       ],
     },
     {
@@ -506,6 +513,23 @@ export function SettingsClient({
             {(d) => (
               <RevenueAdminClient breakdown={d.breakdown} error={d.error} />
             )}
+          </LazyContent>
+        )}
+
+        {tab === "marketing" && (
+          <LazyContent state={marketingData}>
+            {(d) =>
+              d.summary ? (
+                <MarketingAdminClient
+                  initialSummary={d.summary}
+                  initialInviteTeamEnabled={d.inviteEnabled}
+                />
+              ) : (
+                <p className="rounded-2xl border border-border bg-surface-raised p-6 text-sm text-danger">
+                  {d.error ?? "Failed to load marketing data."}
+                </p>
+              )
+            }
           </LazyContent>
         )}
 

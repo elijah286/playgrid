@@ -17,6 +17,7 @@ import {
   type SignupSourceKind,
 } from "@/lib/analytics/signup-source";
 import { getAttributedSignupsByUserAction } from "./admin-traffic-insights";
+import { campaignDef } from "@/lib/marketing/campaigns";
 import {
   buildFormerSubscriptionMap,
   type FormerSubscription,
@@ -899,6 +900,54 @@ export async function getAdminUserActivityAction(
       },
     },
   };
+}
+
+export type AdminUserEmailEvent = {
+  campaign: string;
+  variant: string;
+  status: string;
+  sentAt: string;
+};
+
+/**
+ * Every lifecycle email this user has received (or been held out of), across the
+ * unified marketing log + the legacy per-campaign tables, newest first. Powers
+ * the "Emails" card in the per-user admin panel so you can see what touched them.
+ */
+export async function getAdminUserEmailHistoryAction(
+  userId: string,
+): Promise<{ ok: true; events: AdminUserEmailEvent[] } | { ok: false; error: string }> {
+  const gate = await assertAdmin();
+  if (!gate.ok) return gate;
+  const admin = createServiceRoleClient();
+  const events: AdminUserEmailEvent[] = [];
+  try {
+    // marketing_email_sends already folds in referral_announcement_sends (via
+    // the backfill), so the only legacy tables to add are re-engagement + digest.
+    const [mkt, reeng, dig] = await Promise.all([
+      admin
+        .from("marketing_email_sends")
+        .select("campaign, variant, status, sent_at")
+        .eq("user_id", userId),
+      admin.from("reengagement_sends").select("sent_at").eq("user_id", userId),
+      admin.from("digest_sends").select("sent_at").eq("user_id", userId),
+    ]);
+    for (const r of mkt.data ?? [])
+      events.push({
+        campaign: campaignDef(r.campaign as string)?.label ?? (r.campaign as string),
+        variant: r.variant as string,
+        status: r.status as string,
+        sentAt: r.sent_at as string,
+      });
+    for (const r of reeng.data ?? [])
+      events.push({ campaign: campaignDef("reengagement")?.label ?? "Re-engagement", variant: "treatment", status: "sent", sentAt: r.sent_at as string });
+    for (const r of dig.data ?? [])
+      events.push({ campaign: campaignDef("digest")?.label ?? "Weekly digest", variant: "treatment", status: "sent", sentAt: r.sent_at as string });
+    events.sort((a, b) => (a.sentAt < b.sentAt ? 1 : -1));
+    return { ok: true as const, events };
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : "Failed to load email history." };
+  }
 }
 
 export async function deleteUserAsAdminAction(userId: string) {

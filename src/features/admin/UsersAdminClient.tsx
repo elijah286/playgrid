@@ -16,11 +16,13 @@ import {
   createUserAsAdminAction,
   deleteUserAsAdminAction,
   getAdminUserActivityAction,
+  getAdminUserEmailHistoryAction,
   getAdminUserStatsAction,
   listUsersForAdminAction,
   setUserPasswordAsAdminAction,
   updateUserAsAdminAction,
   type AdminUserActivity,
+  type AdminUserEmailEvent,
   type AdminUserStats,
 } from "@/app/actions/admin-users";
 import {
@@ -1439,6 +1441,7 @@ function UserStatsPanel({ userId }: { userId: string }) {
   const [activity, setActivity] = useState<AdminUserActivity | null>(null);
   const [activityError, setActivityError] = useState<string | null>(null);
   const [showRecent, setShowRecent] = useState(false);
+  const [emails, setEmails] = useState<AdminUserEmailEvent[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1447,6 +1450,7 @@ function UserStatsPanel({ userId }: { userId: string }) {
     setActivity(null);
     setActivityError(null);
     setShowRecent(false);
+    setEmails(null);
     getAdminUserStatsAction(userId).then((res) => {
       if (cancelled) return;
       if (res.ok) setStats(res.stats);
@@ -1456,6 +1460,10 @@ function UserStatsPanel({ userId }: { userId: string }) {
       if (cancelled) return;
       if (res.ok) setActivity(res.activity);
       else setActivityError(res.error);
+    });
+    getAdminUserEmailHistoryAction(userId).then((res) => {
+      if (cancelled) return;
+      if (res.ok) setEmails(res.events);
     });
     return () => {
       cancelled = true;
@@ -1777,6 +1785,34 @@ function UserStatsPanel({ userId }: { userId: string }) {
                 </li>
               );
             })}
+          </ul>
+        </div>
+      )}
+      {emails && emails.length > 0 && (
+        <div className="rounded-lg border border-border bg-surface px-3 py-2">
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
+            Emails ({emails.length})
+          </p>
+          <ul className="space-y-0.5 text-xs text-foreground">
+            {emails.map((e, i) => (
+              <li key={i} className="flex flex-wrap items-center justify-between gap-2 tabular-nums">
+                <span className="font-medium">{e.campaign}</span>
+                <span className="flex items-center gap-2 text-muted">
+                  <span
+                    className={`rounded-full px-1.5 py-0.5 text-[10px] ${
+                      e.variant === "holdout"
+                        ? "bg-surface-inset text-muted"
+                        : e.status === "failed"
+                          ? "bg-danger/10 text-danger"
+                          : "bg-primary/10 text-primary"
+                    }`}
+                  >
+                    {e.variant === "holdout" ? "holdout" : e.status}
+                  </span>
+                  {new Date(e.sentAt).toLocaleDateString()}
+                </span>
+              </li>
+            ))}
           </ul>
         </div>
       )}
