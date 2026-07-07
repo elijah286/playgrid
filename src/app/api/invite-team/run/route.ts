@@ -14,13 +14,24 @@ const CAMPAIGN = "team_invite_nudge";
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com";
 const MAX_PER_RUN = 150;
 
+export type InviteTeamNudgeResult = {
+  enabled: boolean;
+  processed: number;
+  sent: number;
+  holdout: number;
+  failed: number;
+};
+
 /**
  * Auto-triggered "invite your team" nudge. Targets SOLO coaches who've built a
  * starter playbook (hit the 3rd-play milestone) and then paused for a day — the
  * re-engagement moment. Eligible coaches are split treatment/holdout so the
  * lift is measurable. Idempotent via marketing_email_sends(unique user,campaign).
  *
- * Cron: hit hourly with `Authorization: Bearer $CRON_SECRET`. Gated by
+ * This route exists for manual/isolated triggering (and a dedicated Cloud
+ * Scheduler job if ever wanted), but the batch also runs on the re-engagement
+ * cron's hourly tick via `runInviteTeamNudge` — so it needs no job of its own.
+ * Auth: `Authorization: Bearer $CRON_SECRET`. Gated by
  * site_settings.invite_team_email_enabled (off by default).
  */
 async function handle(req: NextRequest): Promise<NextResponse> {
@@ -32,14 +43,27 @@ async function handle(req: NextRequest): Promise<NextResponse> {
     }
   }
   const admin = createServiceRoleClient();
+  const result = await runInviteTeamNudge(admin);
+  return NextResponse.json({ ok: true, ...result });
+}
 
+/**
+ * The batch itself — extracted so the re-engagement cron can piggyback on its
+ * existing hourly Cloud Scheduler tick (no separate job needed). Independently
+ * gated by site_settings.invite_team_email_enabled, so it's safe to call on
+ * every tick; it no-ops until the toggle is flipped. Never throws for the
+ * common "nothing to do" paths — returns zero counts instead.
+ */
+export async function runInviteTeamNudge(
+  admin: ReturnType<typeof createServiceRoleClient>,
+): Promise<InviteTeamNudgeResult> {
   const { data: settings } = await admin
     .from("site_settings")
     .select("invite_team_email_enabled")
     .eq("id", "default")
     .maybeSingle();
   if ((settings as { invite_team_email_enabled?: boolean } | null)?.invite_team_email_enabled !== true) {
-    return NextResponse.json({ ok: true, enabled: false, processed: 0, sent: 0, holdout: 0 });
+    return { enabled: false, processed: 0, sent: 0, holdout: 0, failed: 0 };
   }
 
   const now = Date.now();
@@ -57,7 +81,7 @@ async function handle(req: NextRequest): Promise<NextResponse> {
     .limit(2000);
   let candidates = (cands ?? []) as Array<{ id: string; display_name: string | null }>;
   if (!candidates.length) {
-    return NextResponse.json({ ok: true, enabled: true, processed: 0, sent: 0, holdout: 0 });
+    return { enabled: true, processed: 0, sent: 0, holdout: 0, failed: 0 };
   }
   const ids = candidates.map((c) => c.id);
 
@@ -71,7 +95,7 @@ async function handle(req: NextRequest): Promise<NextResponse> {
   const optedOut = new Set((opts ?? []).map((r) => r.user_id as string));
   candidates = candidates.filter((c) => !done.has(c.id) && !optedOut.has(c.id) && !excluded.has(c.id));
   if (!candidates.length) {
-    return NextResponse.json({ ok: true, enabled: true, processed: 0, sent: 0, holdout: 0 });
+    return { enabled: true, processed: 0, sent: 0, holdout: 0, failed: 0 };
   }
 
   // Solo gate: owns ≥1 playbook with NO active non-owner member.
@@ -107,7 +131,7 @@ async function handle(req: NextRequest): Promise<NextResponse> {
     return pbs.length > 0 && pbs.every((pb) => !sharedPb.has(pb));
   });
   if (!solo.length) {
-    return NextResponse.json({ ok: true, enabled: true, processed: candidates.length, sent: 0, holdout: 0 });
+    return { enabled: true, processed: candidates.length, sent: 0, holdout: 0, failed: 0 };
   }
 
   // Play counts + a playbook to link to (name), for the treatment email.
@@ -165,7 +189,12 @@ async function handle(req: NextRequest): Promise<NextResponse> {
     await new Promise((r) => setTimeout(r, 180));
   }
 
-  return NextResponse.json({ ok: true, enabled: true, processed: targets.length, sent, holdout, failed });
+  if (sent || holdout || failed) {
+    console.log(
+      `[invite-team] nudge ran — processed=${targets.length} sent=${sent} holdout=${holdout} failed=${failed}`,
+    );
+  }
+  return { enabled: true, processed: targets.length, sent, holdout, failed };
 }
 
 export async function POST(req: NextRequest) {

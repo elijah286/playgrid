@@ -8,6 +8,7 @@ import {
   type ReengagementKind,
 } from "@/lib/notifications/reengagement-email";
 import { buildRecommendations } from "@/lib/notifications/reengagement-recs";
+import { runInviteTeamNudge } from "@/app/api/invite-team/run/route";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,6 +50,17 @@ async function handle(req: Request): Promise<NextResponse> {
   }
 
   const admin = createServiceRoleClient();
+
+  // Piggyback the team-invite nudge on this hourly lifecycle tick so it needs
+  // no Cloud Scheduler job of its own. Fully isolated: it's independently gated
+  // by invite_team_email_enabled (no-ops while off) and wrapped so a failure
+  // here never affects the re-engagement run. Runs BEFORE the reengagement
+  // kill-switch check so it fires even when reengagement itself is disabled.
+  try {
+    await runInviteTeamNudge(admin);
+  } catch (e) {
+    console.error("[invite-team] piggyback run failed:", e instanceof Error ? e.message : e);
+  }
 
   // Kill-switch check. While `reengagement_enabled` is false we report
   // ok with zero counts so the cron tick is observable in logs without
