@@ -9,6 +9,7 @@ import { isNativeApp } from "@/lib/native/isNativeApp";
 import { nativeShare } from "@/lib/native/share";
 import { getReferralPromoAction } from "@/app/actions/share-promo";
 import type { ReferralPromo } from "@/lib/data/referral-summary";
+import { ReferralTerms } from "@/components/referral/ReferralTerms";
 import { tagShareUrl, type ShareChannel } from "@/lib/share/tag-url";
 import { track } from "@/lib/analytics/track";
 import { recordShareEventAction } from "@/app/actions/ui-events";
@@ -171,13 +172,19 @@ export function ShareDialog({ userId, onClose }: Props) {
             <div className="min-w-0 flex-1 text-xs">
               <p className="font-semibold text-foreground">
                 Earn <span className="text-primary">{referral.perReferralLabel}</span> when a
-                coach signs up from your link and gets started.
+                coach signs up from your link and creates their first play.
               </p>
               <p className="mt-0.5 text-muted">
                 {referral.recipientTrialDays > 0
                   ? `They start with ${referral.recipientTrialDays} days of Team Coach, too.`
                   : "Share it with a coach who'd find it useful."}
               </p>
+              <ReferralTerms
+                perReferralLabel={referral.perReferralLabel}
+                recipientTrialDays={referral.recipientTrialDays}
+                capAwards={referral.capAwards}
+                className="mt-1.5"
+              />
             </div>
           </div>
         )}

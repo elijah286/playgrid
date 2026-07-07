@@ -34,7 +34,7 @@ const DEFAULTS: ReferralConfig = {
   capDays: null,
   recipientTrialDays: 14,
   payerCreditCents: null,
-  capAwards: 24,
+  capAwards: 10,
   testEmails: [],
 };
 

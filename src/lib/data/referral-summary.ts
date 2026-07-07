@@ -45,6 +45,9 @@ export type ReferralPromo = {
   perReferralLabel: string;
   /** Trial days the referred coach receives. */
   recipientTrialDays: number;
+  /** Lifetime cap on rewarded referrals, or null for uncapped. Drives the
+   *  terms disclosure so promo surfaces state the same cap the awarder enforces. */
+  capAwards: number | null;
 };
 
 export async function getReferralPromo(
@@ -53,7 +56,7 @@ export async function getReferralPromo(
   const config = await getReferralConfig();
   const active = await isReferralActiveForUser(config, userId);
   if (!active || !userId) {
-    return { active: false, perReferralLabel: "", recipientTrialDays: 0 };
+    return { active: false, perReferralLabel: "", recipientTrialDays: 0, capAwards: null };
   }
   const admin = createServiceRoleClient();
   const isPayer = await isPayingUser(admin, userId);
@@ -61,6 +64,7 @@ export async function getReferralPromo(
     active: true,
     perReferralLabel: promoLabel(config, isPayer),
     recipientTrialDays: config.recipientTrialDays,
+    capAwards: config.capAwards,
   };
 }
 

@@ -49,6 +49,7 @@ import type { ColorSchemePreference } from "@/components/theme/colorModeStorage"
 import { cn } from "@/lib/utils";
 import { PASSWORD_RULES_LABEL, validatePassword } from "@/lib/auth/password";
 import type { ReferralSummary } from "@/lib/data/referral-summary";
+import { ReferralTerms } from "@/components/referral/ReferralTerms";
 
 const THEME_OPTIONS: { value: ColorSchemePreference; label: string; icon: typeof Sun }[] = [
   { value: "light", label: "Light", icon: Sun },
@@ -377,7 +378,7 @@ function ReferralCard({ referral }: { referral: ReferralSummary }) {
     <Card
       icon={Gift}
       title="Your referral link"
-      description={`Earn ${referral.perReferralLabel} for each coach who signs up from your link and gets started.${
+      description={`Earn ${referral.perReferralLabel} for each coach who signs up from your link and creates their first play.${
         referral.recipientTrialDays > 0
           ? ` They start with ${referral.recipientTrialDays} days of Team Coach, too.`
           : ""
@@ -413,6 +414,12 @@ function ReferralCard({ referral }: { referral: ReferralSummary }) {
           />
           <ReferralStat label="Earned" value={earnedText} small />
         </div>
+
+        <ReferralTerms
+          perReferralLabel={referral.perReferralLabel}
+          recipientTrialDays={referral.recipientTrialDays}
+          capAwards={referral.capAwards}
+        />
       </div>
     </Card>
   );
