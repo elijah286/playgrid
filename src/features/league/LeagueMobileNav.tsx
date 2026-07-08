@@ -85,7 +85,7 @@ export function LeagueMobileNav({
     <>
       <nav
         aria-label="League"
-        className="fixed bottom-0 left-0 z-40 flex w-screen items-stretch border-t border-border bg-surface-raised md:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-border bg-surface-raised md:hidden"
         style={{
           paddingBottom: "env(safe-area-inset-bottom, 0px)",
           paddingLeft: "env(safe-area-inset-left, 0px)",

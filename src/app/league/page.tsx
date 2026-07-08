@@ -30,11 +30,15 @@ function Kpi({ label, value, sub }: { label: string; value: string; sub: string 
 }
 
 function Attn({ n, label, href }: { n: number; label: string; href?: string }) {
-  const cls = "flex items-center gap-2.5 border-l border-border px-4 py-2.5 first:border-l-0";
+  // Dividers come from the grid's 1px gap over a bg-border track (see below), so
+  // each cell just paints its own background — this stays correct whether the grid
+  // is 2×2 (mobile) or 1×4 (desktop), unlike a border-l/first: scheme that only
+  // works for a single row.
+  const cls = "flex items-center gap-2.5 bg-surface-inset px-4 py-2.5";
   const content = (
     <>
-      <span className="text-xl font-semibold tabular-nums text-foreground">{n}</span>
-      <span className="text-xs leading-tight text-muted">{label}</span>
+      <span className="shrink-0 text-xl font-semibold tabular-nums text-foreground">{n}</span>
+      <span className="min-w-0 text-xs leading-tight text-muted">{label}</span>
     </>
   );
   return href ? (
@@ -145,9 +149,9 @@ export default async function LeagueHomePage() {
       </div>
 
       {/* needs attention */}
-      <div className="mt-4 overflow-hidden rounded-xl bg-surface-inset">
-        <div className="px-4 pb-1 pt-2.5 text-[11px] uppercase tracking-wide text-muted">Needs attention</div>
-        <div className="grid grid-cols-2 sm:grid-cols-4">
+      <div className="mt-4 overflow-hidden rounded-xl border border-border">
+        <div className="bg-surface-inset px-4 pb-1 pt-2.5 text-[11px] uppercase tracking-wide text-muted">Needs attention</div>
+        <div className="grid grid-cols-2 gap-px border-t border-border bg-border sm:grid-cols-4">
           <Attn n={totals.needsReview} label="registrations to approve" href={needsReviewHref} />
           <Attn n={totals.teamsWithoutCoach} label="teams without a coach" href={noCoachHref} />
           <Attn n={totals.unrostered} label="approved, not yet rostered" href={unrosteredHref} />

@@ -131,7 +131,95 @@ export function PortfolioLeagueTable({ leagues }: { leagues: PortfolioLeagueRow[
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-border">
+      {/* Mobile: a tappable card per league. A 9-column table can only be read on
+          a phone by scrolling it sideways, so below sm we swap to cards that fit the
+          viewport. Sorting/filtering share the same `rows`; the header sort buttons
+          have no home here, so a compact sort control stands in for them. */}
+      <div className="sm:hidden">
+        <div className="mb-2 flex items-center gap-2">
+          <label htmlFor="league-sort" className="text-xs text-muted">Sort</label>
+          <select
+            id="league-sort"
+            value={sortKey}
+            onChange={(e) => sortBy(e.target.value as SortKey)}
+            className={`${selectCls} flex-1`}
+          >
+            <option value="registrations">Registrations</option>
+            <option value="name">Name</option>
+            <option value="teams">Teams</option>
+            <option value="fillPct">Fill rate</option>
+            <option value="revenuePaidCents">Revenue</option>
+            <option value="attention">Needs attention</option>
+          </select>
+          <button
+            type="button"
+            onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+            className="rounded-full border border-border bg-surface px-3 py-1.5 text-xs text-foreground hover:bg-foreground/5"
+            aria-label={`Sort ${sortDir === "asc" ? "ascending" : "descending"}`}
+          >
+            {sortDir === "asc" ? "↑" : "↓"}
+          </button>
+        </div>
+        {rows.length === 0 ? (
+          <p className="rounded-2xl border border-border px-4 py-10 text-center text-sm text-muted">
+            No leagues match these filters.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {rows.map((l) => {
+              const sm = STATUS_META[l.status];
+              return (
+                <li key={l.id}>
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/league/${l.id}`)}
+                    className="flex w-full flex-col gap-2 rounded-2xl border border-border bg-surface-raised p-4 text-left transition hover:bg-foreground/[0.03]"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate font-medium text-foreground">{l.name}</div>
+                        <div className="truncate text-xs text-muted">
+                          {(l.location ?? "—")} · {sportLabel(l)}
+                        </div>
+                      </div>
+                      <span className="flex shrink-0 items-center gap-1 text-xs">
+                        <span className={sm.cls}>●</span>
+                        <span className="text-foreground">{sm.label}</span>
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+                      <span>
+                        <span className="font-medium tabular-nums text-foreground">{l.teams}</span> teams
+                      </span>
+                      <span>
+                        <span className="font-medium tabular-nums text-foreground">{l.registrations}</span> reg.
+                      </span>
+                      <span>
+                        <span className="font-medium tabular-nums text-foreground">
+                          {l.capacity > 0 ? `${Math.round(l.fillPct * 100)}%` : "—"}
+                        </span>{" "}
+                        fill
+                      </span>
+                      <span className="font-medium tabular-nums text-foreground">
+                        {money(l.revenuePaidCents)}
+                      </span>
+                      {l.attention > 0 ? (
+                        <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+                          ⚑ {l.attention}
+                        </span>
+                      ) : null}
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      {/* Desktop: the full sortable table, kept behind sm so it never forces the
+          page to scroll sideways on a phone. */}
+      <div className="hidden overflow-x-auto rounded-2xl border border-border sm:block">
         <table className="w-full min-w-[760px] text-left text-[13px]">
           <thead className="bg-surface-raised text-xs text-muted">
             <tr>

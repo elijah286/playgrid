@@ -23,7 +23,7 @@ export default async function DivisionsPage({
   const res = await listDivisionsAction(leagueId);
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-12 text-foreground">
+    <div className="mx-auto max-w-3xl px-4 py-12 text-foreground sm:px-6">
       <h1 className="text-2xl font-extrabold tracking-tight">Divisions</h1>
       <p className="mt-1 text-sm text-muted">
         Age groups for this league. Co-ed is pre-filled — turn on Boys/Girls per age, mark which run

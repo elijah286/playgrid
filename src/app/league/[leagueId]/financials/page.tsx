@@ -62,7 +62,7 @@ export default async function FinancialsPage({
       </div>
 
       <h2 className="mb-2 mt-8 text-sm font-semibold">Collected breakdown</h2>
-      <div className="overflow-hidden rounded-2xl border border-border">
+      <div className="overflow-x-auto rounded-2xl border border-border">
         <table className="w-full text-left text-sm">
           <tbody className="divide-y divide-border">
             <tr>
