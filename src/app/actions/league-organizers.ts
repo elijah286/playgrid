@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { getRequestUser } from "@/lib/supabase/request-user";
 
 export type LeagueOrganizerRow = {
   userId: string;
@@ -19,11 +20,10 @@ async function assertAdmin() {
   if (!hasSupabaseEnv()) {
     return { ok: false as const, error: "Supabase is not configured." };
   }
+  const auth = await getRequestUser();
+  if (auth.kind !== "ok" || !auth.user) return { ok: false as const, error: "Not signed in." };
+  const user = auth.user;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false as const, error: "Not signed in." };
   const { data: profile } = await supabase
     .from("profiles")
     .select("role")

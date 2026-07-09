@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { getRequestUser } from "@/lib/supabase/request-user";
 import { isLeagueOrganizer } from "@/lib/league/access";
 import { sendGroupBroadcast } from "@/lib/league/group-broadcast";
 
@@ -15,15 +16,13 @@ export type GroupAudienceKind = "everyone" | "families" | "coaches";
 
 async function gateOperator() {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false as const, error: "Not signed in." };
+  const auth = await getRequestUser();
+  if (auth.kind !== "ok" || !auth.user) return { ok: false as const, error: "Not signed in." };
   if (!(await isLeagueOrganizer())) {
     return { ok: false as const, error: "You're not a league organizer." };
   }
-  return { ok: true as const, supabase, userId: user.id };
+  const supabase = await createClient();
+  return { ok: true as const, supabase, userId: auth.user.id };
 }
 
 export async function listLeagueGroupsAction(): Promise<LeagueGroup[]> {

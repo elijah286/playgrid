@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import { notFound, redirect } from "next/navigation";
 
-import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { getRequestUser } from "@/lib/supabase/request-user";
 import { hasLeagueAccess, leagueOpsEnabled, leagueAiEnabled } from "@/lib/league/access";
-import { capabilitiesForLeague } from "@/lib/league/authorize";
+import { capabilitiesForLeagues } from "@/lib/league/authorize";
 import { getLeagueNavData } from "@/lib/league/console";
 import { LeagueRail } from "@/features/league/LeagueRail";
 import { LeagueMobileNav } from "@/features/league/LeagueMobileNav";
@@ -28,11 +28,9 @@ export default async function LeagueLayout({
   if (!leagueOpsEnabled()) notFound();
   if (!hasSupabaseEnv()) redirect("/login");
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const auth = await getRequestUser();
+  if (auth.kind !== "ok" || !auth.user) redirect("/login");
+  const user = auth.user;
 
   if (!(await hasLeagueAccess())) notFound();
 
@@ -42,19 +40,22 @@ export default async function LeagueLayout({
 
   // Per-league capabilities drive the rail's section filtering: a member (roles
   // present) gets null → the full rail; a delegated member (no roles) gets exactly
-  // their granted capabilities → only the sections they can actually use.
-  const railLeagues = (
-    await Promise.all(
-      leagues.map(async (l) => ({
-        id: l.id,
-        name: l.name,
-        sport: l.sport,
-        location: l.location,
-        capabilities:
-          l.roles.length > 0 ? null : await capabilitiesForLeague(user.email ?? null, l.id),
-      })),
-    )
-  ).sort((a, b) => a.name.localeCompare(b.name));
+  // their granted capabilities → only the sections they can actually use. One
+  // batched lookup for all delegated leagues, not a query fan-out per league.
+  const delegatedIds = leagues.filter((l) => l.roles.length === 0).map((l) => l.id);
+  const delegatedCaps =
+    delegatedIds.length > 0
+      ? await capabilitiesForLeagues(user.email ?? null, delegatedIds)
+      : new Map<string, never[]>();
+  const railLeagues = leagues
+    .map((l) => ({
+      id: l.id,
+      name: l.name,
+      sport: l.sport,
+      location: l.location,
+      capabilities: l.roles.length > 0 ? null : (delegatedCaps.get(l.id) ?? []),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
   const leoOn = leagueAiEnabled();
 
   return (

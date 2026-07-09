@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { getRequestUser } from "@/lib/supabase/request-user";
 import { hasLeagueAccess } from "@/lib/league/access";
 import { ownOrgLeagues } from "@/lib/league/console";
 import {
@@ -46,13 +47,11 @@ export type AccessOverview = {
 
 async function gate() {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false as const, error: "Not signed in." };
+  const auth = await getRequestUser();
+  if (auth.kind !== "ok" || !auth.user) return { ok: false as const, error: "Not signed in." };
   if (!(await hasLeagueAccess())) return { ok: false as const, error: "Not a league operator." };
-  return { ok: true as const, supabase, userId: user.id };
+  const supabase = await createClient();
+  return { ok: true as const, supabase, userId: auth.user.id };
 }
 
 type GrantDbRow = {

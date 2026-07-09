@@ -1,8 +1,11 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { getRequestUser } from "@/lib/supabase/request-user";
 
 /**
  * League platform access layer (Wave 0).
@@ -71,39 +74,44 @@ export function isLeagueAdminRole(role: LeagueMemberRole): boolean {
  * Every league membership for the current user. Returns [] when the kill switch
  * is off, Supabase isn't configured, or the user is signed out — i.e. the
  * surface is fully inert by default.
+ *
+ * Request-memoized: a league page render calls this via `resolveLeagueView`
+ * AND via each server action's gate, so without `cache()` one navigation
+ * repeated the identical auth + membership round-trips 3-4×. Auth resolves
+ * through `getRequestUser` (itself cached, and time-bounded so a hung token
+ * refresh can't stall navigation).
  */
-export async function getCurrentLeagueMemberships(): Promise<LeagueMembership[]> {
-  if (!leagueOpsEnabled() || !hasSupabaseEnv()) return [];
+export const getCurrentLeagueMemberships = cache(
+  async function getCurrentLeagueMemberships(): Promise<LeagueMembership[]> {
+    if (!leagueOpsEnabled() || !hasSupabaseEnv()) return [];
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return [];
+    const auth = await getRequestUser();
+    if (auth.kind !== "ok" || !auth.user) return [];
 
-  const { data } = await supabase
-    .from("league_members")
-    .select("league_id, role")
-    .eq("user_id", user.id);
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("league_members")
+      .select("league_id, role")
+      .eq("user_id", auth.user.id);
 
-  return (data ?? []).map((row) => ({
-    leagueId: row.league_id as string,
-    role: row.role as LeagueMemberRole,
-  }));
-}
+    return (data ?? []).map((row) => ({
+      leagueId: row.league_id as string,
+      role: row.role as LeagueMemberRole,
+    }));
+  },
+);
 
 /**
  * Layer-1 gate: is the current user a league organizer? A SITE ADMIN grants this
  * (a row in league_organizers); it is independent of league_members. Returns
  * false when the kill switch is off, Supabase isn't configured, or signed out.
  */
-export async function isLeagueOrganizer(): Promise<boolean> {
+export const isLeagueOrganizer = cache(async function isLeagueOrganizer(): Promise<boolean> {
   if (!leagueOpsEnabled() || !hasSupabaseEnv()) return false;
+  const auth = await getRequestUser();
+  if (auth.kind !== "ok" || !auth.user) return false;
+  const user = auth.user;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return false;
 
   // 1. Site-admin-marked organizer (the original path).
   const { data: marked } = await supabase
@@ -129,7 +137,7 @@ export async function isLeagueOrganizer(): Promise<boolean> {
     if ((grants?.length ?? 0) > 0) return true;
   }
   return false;
-}
+});
 
 /**
  * The surface gate: does the current user get to see the league product at all?

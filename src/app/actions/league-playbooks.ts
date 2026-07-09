@@ -2,9 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 
-import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { getRequestUser } from "@/lib/supabase/request-user";
 import { can } from "@/lib/league/authorize";
 import { leagueHasPlaybooks } from "@/lib/league/sportConfig";
 import {
@@ -35,11 +35,9 @@ import {
 
 async function gateAdmin(leagueId: string) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false as const, error: "Not signed in." };
+  const auth = await getRequestUser();
+  if (auth.kind !== "ok" || !auth.user) return { ok: false as const, error: "Not signed in." };
+  const user = auth.user;
   // Owner/admin OR a delegated member holding manage_curriculum (playbooks are
   // the curriculum bridge). Data access still runs via the service role below.
   if (!(await can("manage_curriculum", leagueId))) {

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { getRequestUser } from "@/lib/supabase/request-user";
 import { gateLeagueCapability, resolveLeagueView } from "@/lib/league/authorize";
 import { sendLeagueBroadcast } from "@/lib/notifications/league-broadcast-email";
 import { sendPushToUsers } from "@/lib/notifications/push";
@@ -178,10 +179,8 @@ export async function sendBroadcastTestAction(
   const b = input.body.trim();
   if (!t || !b) return { ok: false as const, error: "Add a subject and message first." };
 
-  const {
-    data: { user },
-  } = await gate.supabase.auth.getUser();
-  const email = user?.email ?? null;
+  const auth = await getRequestUser();
+  const email = auth.kind === "ok" ? (auth.user?.email ?? null) : null;
 
   const { data: league } = await gate.supabase
     .from("leagues")

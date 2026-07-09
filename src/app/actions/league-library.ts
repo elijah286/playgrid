@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { getRequestUser } from "@/lib/supabase/request-user";
 import { leagueOpsEnabled } from "@/lib/league/access";
 import type {
   LibraryDefault,
@@ -22,12 +23,10 @@ async function gate() {
   if (!leagueOpsEnabled() || !hasSupabaseEnv()) {
     return { ok: false as const, error: "Not available." };
   }
+  const auth = await getRequestUser();
+  if (auth.kind !== "ok" || !auth.user) return { ok: false as const, error: "Not signed in." };
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false as const, error: "Not signed in." };
-  return { ok: true as const, supabase, userId: user.id };
+  return { ok: true as const, supabase, userId: auth.user.id };
 }
 
 function rowToItem(r: Record<string, unknown>): LibraryItem {

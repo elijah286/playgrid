@@ -2,9 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 
-import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { getRequestUser } from "@/lib/supabase/request-user";
 import { gateLeagueCapability, resolveLeagueView } from "@/lib/league/authorize";
 
 export type StoreItemRow = {
@@ -68,11 +68,9 @@ const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "i
  *  league-admin-gated by create/updateStoreItemAction). */
 export async function uploadStoreImageAction(formData: FormData) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false as const, error: "Not signed in." };
+  const auth = await getRequestUser();
+  if (auth.kind !== "ok" || !auth.user) return { ok: false as const, error: "Not signed in." };
+  const user = auth.user;
 
   const file = formData.get("file");
   if (!(file instanceof File)) return { ok: false as const, error: "No file provided." };

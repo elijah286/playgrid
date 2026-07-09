@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { ACTIVE_ORG_COOKIE, getAccessibleOrgs } from "@/lib/league/console";
-import { createClient } from "@/lib/supabase/server";
+import { getRequestUser } from "@/lib/supabase/request-user";
 
 /**
  * Switch the active organization context. Validates that the caller actually has
@@ -13,11 +13,9 @@ import { createClient } from "@/lib/supabase/server";
  * Lands the operator on the portfolio dashboard, now scoped to the new org.
  */
 export async function setActiveOrgAction(ownerId: string): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const auth = await getRequestUser();
+  if (auth.kind !== "ok" || !auth.user) redirect("/login");
+  const user = auth.user;
 
   const orgs = await getAccessibleOrgs(user.id, user.email ?? null);
   if (!orgs.some((o) => o.ownerId === ownerId)) redirect("/league");

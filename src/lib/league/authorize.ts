@@ -1,8 +1,11 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { getRequestUser } from "@/lib/supabase/request-user";
 import {
   getCurrentLeagueMemberships,
   isLeagueAdmin,
@@ -28,7 +31,7 @@ export type LeagueGate =
  * A grant applies when its owner owns the league, the email matches, the grant
  * is active, it includes the capability, and its scope covers the league.
  */
-export async function hasCapabilityViaGrant(
+export const hasCapabilityViaGrant = cache(async function hasCapabilityViaGrant(
   email: string | null | undefined,
   capability: Capability,
   leagueId: string,
@@ -63,63 +66,90 @@ export async function hasCapabilityViaGrant(
     scope: scopeFromColumns(g as Parameters<typeof scopeFromColumns>[0]),
   }));
   return grantsCover(grants, capability, { id: leagueId, sport: league.sport as string, groupIds });
-}
+});
 
 /** The union of capabilities this email holds on `leagueId` through active grants
- *  (empty if none). Used to scope Leo's tools for a delegated member. */
-export async function capabilitiesForLeague(
+ *  (empty if none). Used to scope Leo's tools for a delegated member.
+ *  Request-memoized: the page resolver and each action gate ask the same
+ *  question during one render. */
+export const capabilitiesForLeague = cache(async function capabilitiesForLeague(
   email: string | null | undefined,
   leagueId: string,
 ): Promise<Capability[]> {
+  const byLeague = await capabilitiesForLeagues(email, [leagueId]);
+  return byLeague.get(leagueId) ?? [];
+});
+
+/**
+ * Batched form of `capabilitiesForLeague` — resolves a delegate's capabilities
+ * for many leagues in three constant queries (leagues, grants, group members)
+ * instead of three PER league. The rail renders on every hard navigation, so
+ * for a delegate with N leagues the per-league form was a 3×N query fan-out.
+ */
+export async function capabilitiesForLeagues(
+  email: string | null | undefined,
+  leagueIds: string[],
+): Promise<Map<string, Capability[]>> {
+  const result = new Map<string, Capability[]>();
   const e = (email ?? "").trim().toLowerCase();
-  if (!e) return [];
+  if (!e || leagueIds.length === 0) return result;
   const admin = createServiceRoleClient();
 
-  const { data: league } = await admin
+  const { data: leagues } = await admin
     .from("leagues")
-    .select("created_by, sport")
-    .eq("id", leagueId)
-    .maybeSingle();
-  if (!league?.created_by) return [];
+    .select("id, created_by, sport")
+    .in("id", leagueIds);
+  const owned = (leagues ?? []).filter((l) => l.created_by);
+  if (owned.length === 0) return result;
 
-  const { data: grantRows } = await admin
-    .from("league_access_grants")
-    .select("capabilities, scope_kind, scope_leagues, scope_sport, scope_group_id")
-    .eq("owner_id", league.created_by as string)
-    .eq("member_email", e)
-    .eq("status", "active");
-  if (!grantRows || grantRows.length === 0) return [];
+  const ownerIds = [...new Set(owned.map((l) => l.created_by as string))];
+  const [{ data: grantRows }, { data: gm }] = await Promise.all([
+    admin
+      .from("league_access_grants")
+      .select("owner_id, capabilities, scope_kind, scope_leagues, scope_sport, scope_group_id")
+      .in("owner_id", ownerIds)
+      .eq("member_email", e)
+      .eq("status", "active"),
+    admin
+      .from("league_group_members")
+      .select("group_id, league_id")
+      .in("league_id", owned.map((l) => l.id as string)),
+  ]);
+  if (!grantRows || grantRows.length === 0) return result;
 
-  const { data: gm } = await admin
-    .from("league_group_members")
-    .select("group_id")
-    .eq("league_id", leagueId);
-  const leagueFacts = {
-    id: leagueId,
-    sport: league.sport as string,
-    groupIds: (gm ?? []).map((x) => x.group_id as string),
-  };
-
-  const caps = new Set<Capability>();
-  for (const g of grantRows) {
-    const scope = scopeFromColumns(g as Parameters<typeof scopeFromColumns>[0]);
-    if (scopeIncludesLeague(scope, leagueFacts)) {
-      for (const c of (g.capabilities as string[]) ?? []) if (isCapability(c)) caps.add(c);
-    }
+  const groupsByLeague = new Map<string, string[]>();
+  for (const row of gm ?? []) {
+    const lid = row.league_id as string;
+    groupsByLeague.set(lid, [...(groupsByLeague.get(lid) ?? []), row.group_id as string]);
   }
-  return [...caps];
+
+  for (const league of owned) {
+    const leagueId = league.id as string;
+    const leagueFacts = {
+      id: leagueId,
+      sport: league.sport as string,
+      groupIds: groupsByLeague.get(leagueId) ?? [],
+    };
+    const caps = new Set<Capability>();
+    for (const g of grantRows) {
+      if ((g.owner_id as string) !== (league.created_by as string)) continue;
+      const scope = scopeFromColumns(g as Parameters<typeof scopeFromColumns>[0]);
+      if (scopeIncludesLeague(scope, leagueFacts)) {
+        for (const c of (g.capabilities as string[]) ?? []) if (isCapability(c)) caps.add(c);
+      }
+    }
+    result.set(leagueId, [...caps]);
+  }
+  return result;
 }
 
 /** True if the current user may perform `capability` on `leagueId` — the owner/
  *  operator always can (backward-compatible); others only via a matching grant. */
 export async function can(capability: Capability, leagueId: string): Promise<boolean> {
   if (await isLeagueAdmin(leagueId)) return true;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return false;
-  return hasCapabilityViaGrant(user.email, capability, leagueId);
+  const auth = await getRequestUser();
+  if (auth.kind !== "ok" || !auth.user) return false;
+  return hasCapabilityViaGrant(auth.user.email, capability, leagueId);
 }
 
 /**
@@ -133,11 +163,10 @@ export async function gateLeagueCapability(
   capability: Capability,
 ): Promise<LeagueGate> {
   if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const auth = await getRequestUser();
+  if (auth.kind !== "ok" || !auth.user) return { ok: false, error: "Not signed in." };
+  const user = auth.user;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
 
   if (await isLeagueAdmin(leagueId)) {
     return { ok: true, supabase, userId: user.id, viaGrant: false };
@@ -189,11 +218,10 @@ export async function resolveLeagueView(
   opts?: { memberAdminOnly?: boolean; delegateCapability?: Capability },
 ): Promise<LeagueViewAccess | null> {
   if (!hasSupabaseEnv()) return null;
+  const auth = await getRequestUser();
+  if (auth.kind !== "ok" || !auth.user) return null;
+  const user = auth.user;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
 
   const memberships = await getCurrentLeagueMemberships();
   const membership = memberships.find((m) => m.leagueId === leagueId);

@@ -2,9 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 
-import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { getRequestUser } from "@/lib/supabase/request-user";
 import { isLeagueAdmin } from "@/lib/league/access";
 import { getStripeClient } from "@/lib/billing/stripe";
 
@@ -17,11 +17,8 @@ export type LeaguePaymentStatus = {
 
 async function gateAdmin(leagueId: string) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false as const, error: "Not signed in." };
+  const auth = await getRequestUser();
+  if (auth.kind !== "ok" || !auth.user) return { ok: false as const, error: "Not signed in." };
   if (!(await isLeagueAdmin(leagueId))) {
     return { ok: false as const, error: "You don't administer this league." };
   }

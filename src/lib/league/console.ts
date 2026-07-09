@@ -1,9 +1,11 @@
 import "server-only";
 
+import { cache } from "react";
 import { cookies } from "next/headers";
 
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
+import { getRequestUser } from "@/lib/supabase/request-user";
 import { scopeFromColumns, scopeIncludesLeague } from "./access-control";
 import { isUnrostered, type RegistrationStatus } from "./registration";
 
@@ -165,8 +167,11 @@ export async function getAccessibleOrgs(
   return orgs;
 }
 
-/** Resolve the active org from the cookie (+ defaults), alongside the full list. */
-export async function resolveActiveOrg(
+/** Resolve the active org from the cookie (+ defaults), alongside the full list.
+ *  Request-memoized: the layout (nav data) and the portfolio page (summary) both
+ *  resolve the org during one render — without `cache()` that re-ran the whole
+ *  grant/org lookup fan-out twice per navigation. */
+export const resolveActiveOrg = cache(async function resolveActiveOrg(
   userId: string,
   email: string | null,
 ): Promise<{ activeOrgId: string | null; orgs: LeagueOrg[] }> {
@@ -175,7 +180,7 @@ export async function resolveActiveOrg(
   const wanted = cookieStore.get(ACTIVE_ORG_COOKIE)?.value ?? null;
   const active = pickActiveOrg(orgs, wanted);
   return { activeOrgId: active?.ownerId ?? null, orgs };
-}
+});
 
 /**
  * League ids the user can access WITHIN one organization. For the user's own org
@@ -183,7 +188,7 @@ export async function resolveActiveOrg(
  * owner's leagues which the user's grants from that owner scope to. Service-role
  * because a delegate isn't a league_member and can't RLS-read those leagues.
  */
-export async function accessibleLeaguesInOrg(
+export const accessibleLeaguesInOrg = cache(async function accessibleLeaguesInOrg(
   userId: string,
   email: string | null,
   orgOwnerId: string | null,
@@ -252,7 +257,7 @@ export async function accessibleLeaguesInOrg(
     }
   }
   return { leagueIds: ids, rolesByLeague };
-}
+});
 
 /**
  * League ids the user can access in the ACTIVE org (cookie-resolved). This is the
@@ -288,11 +293,9 @@ async function hydrateLeagues(
 
 /** Leagues the current user can access in the ACTIVE org, with their roles. */
 export async function getMyLeagues(): Promise<LeagueListItem[]> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return [];
+  const auth = await getRequestUser();
+  if (auth.kind !== "ok" || !auth.user) return [];
+  const user = auth.user;
 
   const { leagueIds, rolesByLeague } = await accessibleLeagues(user.id, user.email ?? null);
   return hydrateLeagues(leagueIds, rolesByLeague);
@@ -308,11 +311,9 @@ export async function getLeagueNavData(): Promise<{
   activeOrgId: string | null;
   leagues: LeagueListItem[];
 }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { orgs: [], activeOrgId: null, leagues: [] };
+  const auth = await getRequestUser();
+  if (auth.kind !== "ok" || !auth.user) return { orgs: [], activeOrgId: null, leagues: [] };
+  const user = auth.user;
 
   const { activeOrgId, orgs } = await resolveActiveOrg(user.id, user.email ?? null);
   const { leagueIds, rolesByLeague } = await accessibleLeaguesInOrg(
@@ -330,11 +331,9 @@ export async function getLeagueNavData(): Promise<{
  * the leagues you own, never to a delegated org's leagues.
  */
 export async function ownOrgLeagues(): Promise<LeagueListItem[]> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return [];
+  const auth = await getRequestUser();
+  if (auth.kind !== "ok" || !auth.user) return [];
+  const user = auth.user;
 
   const admin = createServiceRoleClient();
   const { data: leagues } = await admin
@@ -524,11 +523,9 @@ export function buildPortfolioSummary(input: PortfolioInput, nowMs: number): Por
  * GROUP BY into a Postgres RPC; this function's return shape stays identical.)
  */
 export async function getPortfolioSummary(): Promise<PortfolioSummary> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { leagues: [], totals: emptyTotals() };
+  const auth = await getRequestUser();
+  if (auth.kind !== "ok" || !auth.user) return { leagues: [], totals: emptyTotals() };
+  const user = auth.user;
 
   // Accessible leagues in the ACTIVE org. Service-role for the data fetches
   // because grant-only (delegated) leagues aren't readable under the delegate's
