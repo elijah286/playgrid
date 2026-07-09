@@ -1728,7 +1728,7 @@ export const FEATURES: FeatureEntry[] = [
     id: "league-content-library",
     name: "League content library",
     description:
-      "Operators build an org-level library of their own play groups and practice plans — authored in the classic playbook editor, tagged into custom collections like \"new coaches\" or \"advanced\" — and mark items as defaults so every new team of that game type starts with them, org-wide or per league.",
+      "Operators build an org-level library of their own play groups and practice plans — authored in the classic playbook editor, tagged into custom collections like \"new coaches\" or \"advanced\" — and mark items as defaults so every new team of that game type starts with them, org-wide or per league. The library is fully visual: play groups render their real play diagrams and practice plans their timed block timeline — in the library, in the add-from-playbook picker, in the per-league distribution panel, and on the Teams page, where operators see exactly what a new team will be seeded with before creating it and get a what-was-seeded confirmation (with coach-invite and roster next steps) after.",
     category: "League operations",
     status: "beta",
     addedDate: "2026-07-03",
