@@ -49,18 +49,20 @@ export function LeaguePlaybooksManager({
   initialRows,
   libraryItems,
   libraryPreviews = [],
+  initialVariant,
 }: {
   leagueId: string;
   initialRows: PlaybookDistributionRow[];
   libraryItems: LibraryItem[];
   libraryPreviews?: LibraryItemPreview[];
+  initialVariant?: SportVariant;
 }) {
   const [rows, setRows] = useState(initialRows);
   const unseededCount = useMemo(() => rows.filter((r) => !r.playbook).length, [rows]);
   const claimedCount = useMemo(() => rows.filter((r) => r.sendStatus === "claimed").length, [rows]);
   const seededCount = rows.length - unseededCount;
 
-  const [variant, setVariant] = useState<SportVariant>("flag_7v7");
+  const [variant, setVariant] = useState<SportVariant>(initialVariant ?? "flag_7v7");
   const [scope, setScope] = useState<"unseeded" | "all">(unseededCount > 0 ? "unseeded" : "all");
   const [emailCoaches, setEmailCoaches] = useState(true);
   const [msg, setMsg] = useState<Msg>(null);

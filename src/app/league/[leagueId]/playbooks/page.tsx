@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { resolveLeagueView } from "@/lib/league/authorize";
 import { getLeagueSport } from "@/lib/league/console";
 import { leagueHasPlaybooks } from "@/lib/league/sportConfig";
+import { leagueVariantToSportVariant } from "@/lib/league/team-playbook";
 import {
   listDistributableLibraryItemsAction,
   listDistributableLibraryPreviewsAction,
@@ -32,12 +33,18 @@ export default async function LeaguePlaybooksPage({
   // via the authorized client so a delegated member isn't blocked by RLS.
   if (!leagueHasPlaybooks(await getLeagueSport(leagueId, access.db))) notFound();
 
-  const [res, lib, libPreviews] = await Promise.all([
+  const [res, lib, libPreviews, { data: leagueRow }] = await Promise.all([
     listPlaybookDistributionAction(leagueId),
     listDistributableLibraryItemsAction(leagueId),
     listDistributableLibraryPreviewsAction(leagueId),
+    access.db.from("leagues").select("settings").eq("id", leagueId).maybeSingle(),
   ]);
   const rows = res.ok ? res.rows : [];
+  // The batch seeder should default to this league's own game type, not a
+  // hardcoded format the operator has to correct every time.
+  const leagueVariant = leagueVariantToSportVariant(
+    ((leagueRow?.settings ?? {}) as { variant?: string }).variant ?? null,
+  );
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-12 text-foreground sm:px-6">
@@ -53,6 +60,7 @@ export default async function LeaguePlaybooksPage({
           initialRows={rows}
           libraryItems={lib.ok ? lib.items : []}
           libraryPreviews={libPreviews.ok ? libPreviews.previews : []}
+          initialVariant={leagueVariant}
         />
       </div>
     </div>
