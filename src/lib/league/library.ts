@@ -4,7 +4,53 @@
 // types are shared by the actions, the Library page, and (Phase 2) the
 // team-creation auto-seed hook.
 
+import type { Player, Route, Zone } from "@/domain/play/types";
+
 export type LibraryItemKind = "play_group" | "practice_plan";
+
+/** Exactly what PlayThumbnail renders — the layer slices of a PlayDocument. */
+export type PlayPreviewData = {
+  players: Player[];
+  routes: Route[];
+  zones: Zone[];
+  lineOfScrimmageY: number;
+};
+
+export type LibraryPlayPreview = {
+  id: string;
+  name: string;
+  preview: PlayPreviewData;
+};
+
+export type LibraryPlanBlock = {
+  title: string;
+  durationMinutes: number;
+  laneCount: number;
+};
+
+/**
+ * The visual payload for one library item: real diagrams of what a team
+ * receives. For a play group, `plays` holds the group's plays (capped —
+ * `totalPlays` is the true count). For a practice plan, `plan` holds the
+ * timeline summary and `plays` holds any embedded drill diagrams.
+ */
+export type LibraryItemPreview = {
+  itemId: string;
+  plays: LibraryPlayPreview[];
+  totalPlays: number;
+  plan: { totalDurationMinutes: number; blocks: LibraryPlanBlock[] } | null;
+  /** Distinct teams this item has been distributed to (the ledger). */
+  teamsReached: number;
+};
+
+/** Group/plan previews for one source playbook — the "Add to library" picker. */
+export type SourcePlaybookPreviews = {
+  groups: Record<string, { plays: LibraryPlayPreview[]; totalPlays: number }>;
+  plans: Record<
+    string,
+    { totalDurationMinutes: number; blocks: LibraryPlanBlock[]; drills: LibraryPlayPreview[] }
+  >;
+};
 
 export type LibraryItem = {
   id: string;

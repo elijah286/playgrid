@@ -18,7 +18,8 @@ import {
 } from "@/lib/league/distribute";
 import { defaultSettingsForVariant } from "@/domain/playbook/settings";
 import type { SportVariant } from "@/domain/play/types";
-import type { LibraryItem, LibraryItemKind } from "@/lib/league/library";
+import type { LibraryItem, LibraryItemKind, LibraryItemPreview } from "@/lib/league/library";
+import { buildLibraryItemPreviews } from "@/lib/league/library-previews";
 import {
   SEEDABLE_VARIANTS,
   markStaleDistributions,
@@ -331,6 +332,47 @@ export async function listDistributableLibraryItemsAction(leagueId: string) {
     .eq("owner_id", gate.operatorId)
     .order("created_at", { ascending: false });
   return { ok: true as const, items: (data ?? []).map(rowToLibraryItem) };
+}
+
+/** Diagram previews for the operator's library items, with reach scoped to
+ *  THIS league — the distribute panel shows exactly what a team would get. */
+export async function listDistributableLibraryPreviewsAction(leagueId: string) {
+  const gate = await gateAdmin(leagueId);
+  if (!gate.ok) {
+    return { ok: false as const, error: gate.error, previews: [] as LibraryItemPreview[] };
+  }
+  const [{ data: items }, { data: ledger }] = await Promise.all([
+    gate.admin
+      .from("league_library_items")
+      .select("id, kind, source_group_id, source_practice_plan_id")
+      .eq("owner_id", gate.operatorId),
+    gate.admin
+      .from("league_distributions")
+      .select("item_id, team_id")
+      .eq("owner_id", gate.operatorId)
+      .eq("league_id", leagueId),
+  ]);
+  if (!items || items.length === 0) return { ok: true as const, previews: [] as LibraryItemPreview[] };
+
+  const teamsByItem = new Map<string, Set<string>>();
+  for (const row of ledger ?? []) {
+    const itemId = row.item_id as string | null;
+    if (!itemId) continue;
+    if (!teamsByItem.has(itemId)) teamsByItem.set(itemId, new Set());
+    teamsByItem.get(itemId)!.add(row.team_id as string);
+  }
+
+  const previews = await buildLibraryItemPreviews(
+    gate.admin,
+    items.map((i) => ({
+      id: i.id as string,
+      kind: i.kind as string,
+      source_group_id: (i.source_group_id as string | null) ?? null,
+      source_practice_plan_id: (i.source_practice_plan_id as string | null) ?? null,
+    })),
+    new Map([...teamsByItem].map(([id, teams]) => [id, teams.size])),
+  );
+  return { ok: true as const, previews };
 }
 
 async function ensureTeamPlaybook(

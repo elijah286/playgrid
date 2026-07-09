@@ -10,8 +10,9 @@ import {
   sendCoachPlaybookCopyAction,
 } from "@/app/actions/league-playbooks";
 import { SEEDABLE_VARIANTS, type PlaybookDistributionRow } from "@/lib/league/playbooks";
-import type { LibraryItem } from "@/lib/league/library";
+import type { LibraryItem, LibraryItemPreview } from "@/lib/league/library";
 import type { SportVariant } from "@/domain/play/types";
+import { PlanTimeline, PlayThumbStrip } from "./LibraryPreview";
 
 type Msg = { kind: "error" | "success"; text: string } | null;
 
@@ -47,10 +48,12 @@ export function LeaguePlaybooksManager({
   leagueId,
   initialRows,
   libraryItems,
+  libraryPreviews = [],
 }: {
   leagueId: string;
   initialRows: PlaybookDistributionRow[];
   libraryItems: LibraryItem[];
+  libraryPreviews?: LibraryItemPreview[];
 }) {
   const [rows, setRows] = useState(initialRows);
   const unseededCount = useMemo(() => rows.filter((r) => !r.playbook).length, [rows]);
@@ -247,19 +250,55 @@ export function LeaguePlaybooksManager({
             Adds a snapshot of the item to each team&apos;s playbook — a play group lands as a new
             section; re-sending later adds a versioned copy, never touching a coach&apos;s edits.
           </p>
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <select
-              value={libItemId}
-              onChange={(e) => setLibItemId(e.target.value)}
-              className="rounded-lg border border-border bg-surface px-2.5 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-            >
-              <option value="">Choose a library item…</option>
-              {libraryItems.map((i) => (
-                <option key={i.id} value={i.id}>
-                  {i.kind === "play_group" ? "Play group" : "Practice plan"}: {i.title}
-                </option>
-              ))}
-            </select>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {libraryItems.map((i) => {
+              const preview = libraryPreviews.find((p) => p.itemId === i.id);
+              const selected = libItemId === i.id;
+              return (
+                <button
+                  key={i.id}
+                  type="button"
+                  onClick={() => setLibItemId(selected ? "" : i.id)}
+                  className={`rounded-xl border p-3 text-left transition-colors ${
+                    selected ? "border-primary ring-1 ring-primary" : "border-border hover:border-primary/40"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 text-sm">
+                    <span className="min-w-0 truncate font-medium text-foreground">{i.title}</span>
+                    <span className="shrink-0 rounded-full bg-surface-inset px-2 py-0.5 text-[10px] text-muted">
+                      {i.kind === "play_group" ? "Play group" : "Practice plan"}
+                    </span>
+                  </div>
+                  {preview ? (
+                    <div className="mt-2">
+                      {preview.plan ? (
+                        <PlanTimeline
+                          blocks={preview.plan.blocks}
+                          totalDurationMinutes={preview.plan.totalDurationMinutes}
+                        />
+                      ) : (
+                        <PlayThumbStrip
+                          plays={preview.plays}
+                          totalPlays={preview.totalPlays}
+                          max={4}
+                          size="sm"
+                        />
+                      )}
+                      <div className="mt-1.5 text-[11px] text-muted">
+                        {preview.plan
+                          ? `${preview.plan.totalDurationMinutes} min · ${preview.plan.blocks.length} blocks`
+                          : `${preview.totalPlays} plays`}
+                        {preview.teamsReached > 0
+                          ? ` · sent to ${preview.teamsReached} team${preview.teamsReached === 1 ? "" : "s"} here`
+                          : ""}
+                      </div>
+                    </div>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-end gap-3">
             <select
               value={libTeamId}
               onChange={(e) => setLibTeamId(e.target.value)}
@@ -272,8 +311,6 @@ export function LeaguePlaybooksManager({
                 </option>
               ))}
             </select>
-          </div>
-          <div className="mt-3 flex justify-end">
             <button
               type="button"
               disabled={libBusy || !libItemId}

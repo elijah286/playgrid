@@ -10,8 +10,15 @@ import type {
   LibraryDefault,
   LibraryItem,
   LibraryItemKind,
+  LibraryItemPreview,
   LibrarySourcePlaybook,
+  SourcePlaybookPreviews,
 } from "@/lib/league/library";
+import {
+  buildLibraryItemPreviews,
+  groupPlayPreviews,
+  planPreviews,
+} from "@/lib/league/library-previews";
 
 // The library is the OPERATOR'S own registry (owner-scoped RLS): every query
 // here runs on the cookie client as the signed-in user, so RLS enforces both
@@ -107,6 +114,83 @@ export async function listLibrarySourcesAction() {
       .map((pl) => ({ id: pl.id as string, title: (pl.title as string) ?? "Practice plan" })),
   }));
   return { ok: true as const, playbooks: result };
+}
+
+/**
+ * The visual payload for every library item the operator owns: real play
+ * diagrams for play groups, timeline + drill diagrams for practice plans,
+ * and how many teams each item has reached. RLS scopes everything — plays
+ * via playbook membership, the ledger via owner_id.
+ */
+export async function listLibraryPreviewsAction(): Promise<{
+  ok: boolean;
+  error?: string;
+  previews: LibraryItemPreview[];
+}> {
+  const g = await gate();
+  if (!g.ok) return { ok: false, error: g.error, previews: [] };
+
+  const [{ data: items }, { data: ledger }] = await Promise.all([
+    g.supabase
+      .from("league_library_items")
+      .select("id, kind, source_group_id, source_practice_plan_id"),
+    g.supabase.from("league_distributions").select("item_id, team_id"),
+  ]);
+  if (!items || items.length === 0) return { ok: true, previews: [] };
+
+  const teamsByItem = new Map<string, Set<string>>();
+  for (const row of ledger ?? []) {
+    const itemId = row.item_id as string | null;
+    if (!itemId) continue;
+    if (!teamsByItem.has(itemId)) teamsByItem.set(itemId, new Set());
+    teamsByItem.get(itemId)!.add(row.team_id as string);
+  }
+
+  const previews = await buildLibraryItemPreviews(
+    g.supabase,
+    items.map((i) => ({
+      id: i.id as string,
+      kind: i.kind as string,
+      source_group_id: (i.source_group_id as string | null) ?? null,
+      source_practice_plan_id: (i.source_practice_plan_id as string | null) ?? null,
+    })),
+    new Map([...teamsByItem].map(([id, teams]) => [id, teams.size])),
+  );
+  return { ok: true, previews };
+}
+
+/**
+ * Previews for everything in ONE of the operator's playbooks — the visual
+ * "Add to library" picker. RLS proves playbook membership (same contract as
+ * registerLibraryItemAction).
+ */
+export async function getSourcePlaybookPreviewsAction(playbookId: string): Promise<{
+  ok: boolean;
+  error?: string;
+  previews: SourcePlaybookPreviews;
+}> {
+  const empty: SourcePlaybookPreviews = { groups: {}, plans: {} };
+  const g = await gate();
+  if (!g.ok) return { ok: false, error: g.error, previews: empty };
+
+  const [{ data: groups }, { data: plans }] = await Promise.all([
+    g.supabase.from("playbook_groups").select("id").eq("playbook_id", playbookId),
+    g.supabase
+      .from("practice_plans")
+      .select("id")
+      .eq("playbook_id", playbookId)
+      .is("deleted_at", null),
+  ]);
+
+  const [groupMap, planMap] = await Promise.all([
+    groupPlayPreviews(g.supabase, (groups ?? []).map((r) => r.id as string)),
+    planPreviews(g.supabase, (plans ?? []).map((r) => r.id as string)),
+  ]);
+
+  const previews: SourcePlaybookPreviews = { groups: {}, plans: {} };
+  for (const [id, v] of groupMap) previews.groups[id] = v;
+  for (const [id, v] of planMap) previews.plans[id] = v;
+  return { ok: true, previews };
 }
 
 export async function registerLibraryItemAction(input: {
