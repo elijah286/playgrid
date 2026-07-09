@@ -7,7 +7,18 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { gateLeagueCapability, resolveLeagueView } from "@/lib/league/authorize";
 import { ensureDefaultWorkspace } from "@/lib/data/workspace";
-import { autoSeedNewTeam } from "@/lib/league/team-playbook";
+import {
+  autoSeedNewTeam,
+  leagueVariantToSportVariant,
+  type NewTeamSeedSummary,
+} from "@/lib/league/team-playbook";
+import { leagueHasPlaybooks } from "@/lib/league/sportConfig";
+import {
+  defaultsForNewTeam,
+  libraryItemFromRow,
+  type LibraryItemPreview,
+} from "@/lib/league/library";
+import { buildLibraryItemPreviews } from "@/lib/league/library-previews";
 
 export type LeagueTeamRow = {
   id: string;
@@ -97,22 +108,116 @@ export async function createLeagueTeamAction(leagueId: string, input: LeagueTeam
   // New teams get their playbook immediately: starter plays + the operator's
   // library defaults for this game type (library plan, Phase 2). Best-effort —
   // the team exists even if seeding hiccups; warnings surface in the UI.
-  let warnings: string[] = [];
+  let seeded: NewTeamSeedSummary = { warnings: [], playbook: null, applied: [] };
   try {
-    const seeded = await autoSeedNewTeam(createServiceRoleClient(), {
+    seeded = await autoSeedNewTeam(createServiceRoleClient(), {
       leagueId,
       teamId: created.id as string,
       teamName: created.name as string,
       userId: gate.userId,
     });
-    warnings = seeded.warnings;
   } catch (e) {
-    warnings = [e instanceof Error ? e.message : "Playbook seeding failed."];
+    seeded.warnings = [e instanceof Error ? e.message : "Playbook seeding failed."];
   }
 
   revalidatePath(`/league/${leagueId}/teams`);
   revalidatePath(`/league/${leagueId}/playbooks`);
-  return { ok: true as const, warnings };
+  return {
+    ok: true as const,
+    teamId: created.id as string,
+    teamName: created.name as string,
+    warnings: seeded.warnings,
+    seeded: { playbook: seeded.playbook, applied: seeded.applied },
+  };
+}
+
+export type TeamSeedPreview = {
+  /** False for sports without the playbook bridge — the panel hides. */
+  enabled: boolean;
+  variant: string;
+  starterAvailable: boolean;
+  defaults: { id: string; title: string; kind: string }[];
+  previews: LibraryItemPreview[];
+};
+
+/**
+ * What a NEW team in this league will start with — the same decision
+ * (defaultsForNewTeam) the create hook applies, computed ahead of time so
+ * the operator sees the seed contents (with diagrams) BEFORE creating.
+ */
+export async function getTeamSeedPreviewAction(leagueId: string): Promise<{
+  ok: boolean;
+  error?: string;
+  preview: TeamSeedPreview;
+}> {
+  const inert: TeamSeedPreview = {
+    enabled: false,
+    variant: "flag_7v7",
+    starterAvailable: false,
+    defaults: [],
+    previews: [],
+  };
+  const gate = await gateAdmin(leagueId);
+  if (!gate.ok) return { ok: false, error: gate.error, preview: inert };
+
+  const admin = createServiceRoleClient();
+  const { data: league } = await admin
+    .from("leagues")
+    .select("sport, created_by, settings")
+    .eq("id", leagueId)
+    .maybeSingle();
+  if (!league || !leagueHasPlaybooks((league.sport as string | null) ?? null)) {
+    return { ok: true, preview: inert };
+  }
+  const operatorId = league.created_by as string;
+  const variant = leagueVariantToSportVariant(
+    ((league.settings ?? {}) as { variant?: string }).variant ?? null,
+  );
+
+  const [{ data: starter }, { data: itemRows }, { data: defaultRows }] = await Promise.all([
+    admin
+      .from("playbooks")
+      .select("id")
+      .eq("is_public_example", true)
+      .eq("sport_variant", variant)
+      .limit(1)
+      .maybeSingle(),
+    admin.from("league_library_items").select("*").eq("owner_id", operatorId),
+    admin
+      .from("league_library_defaults")
+      .select("id, item_id, league_id")
+      .eq("owner_id", operatorId),
+  ]);
+
+  const items = (itemRows ?? []).map(libraryItemFromRow);
+  const defaults = (defaultRows ?? []).map((r) => ({
+    id: r.id as string,
+    itemId: r.item_id as string,
+    leagueId: (r.league_id as string | null) ?? null,
+  }));
+  const applying = defaultsForNewTeam(items, defaults, leagueId, variant);
+
+  const previews = await buildLibraryItemPreviews(
+    admin,
+    applying.map((i) => ({
+      id: i.id,
+      kind: i.kind,
+      source_group_id: i.sourceGroupId,
+      source_practice_plan_id: i.sourcePracticePlanId,
+    })),
+    new Map(),
+  );
+
+  return {
+    ok: true,
+    preview: {
+      enabled: true,
+      variant,
+      starterAvailable: !!starter?.id,
+      defaults: applying.map((i) => ({ id: i.id, title: i.title, kind: i.kind })),
+      previews,
+    },
+  };
 }
 
 export async function updateLeagueTeamAction(

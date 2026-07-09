@@ -129,6 +129,14 @@ export async function sendCoachHandoffInvite(
   return { ok: true };
 }
 
+/** What a new team actually received — the Teams page shows this back to the
+ *  operator so seeding is a visible step, not an invisible side effect. */
+export type NewTeamSeedSummary = {
+  warnings: string[];
+  playbook: LeagueTeamPlaybook | null;
+  applied: { id: string; title: string; kind: string }[];
+};
+
 /**
  * Team-creation hook (Phase 2): every new team in a playbook-capable league
  * gets its playbook immediately — starter plays for the league's game type,
@@ -140,15 +148,16 @@ export async function sendCoachHandoffInvite(
 export async function autoSeedNewTeam(
   admin: AdminClient,
   args: { leagueId: string; teamId: string; teamName: string; userId: string },
-): Promise<{ warnings: string[] }> {
+): Promise<NewTeamSeedSummary> {
   const warnings: string[] = [];
+  const applied: NewTeamSeedSummary["applied"] = [];
   const { data: league } = await admin
     .from("leagues")
     .select("sport, created_by, settings")
     .eq("id", args.leagueId)
     .maybeSingle();
   if (!league || !leagueHasPlaybooks((league.sport as string | null) ?? null)) {
-    return { warnings };
+    return { warnings, playbook: null, applied };
   }
   const operatorId = league.created_by as string;
   const settings = (league.settings ?? {}) as { variant?: string };
@@ -157,7 +166,7 @@ export async function autoSeedNewTeam(
   const seeded = await seedOneTeam(admin, args.userId, args.teamId, args.teamName, variant);
   if (!seeded.ok) {
     warnings.push(`Playbook not seeded: ${seeded.error}`);
-    return { warnings };
+    return { warnings, playbook: null, applied };
   }
 
   const [{ data: itemRows }, { data: defaultRows }] = await Promise.all([
@@ -180,6 +189,7 @@ export async function autoSeedNewTeam(
       warnings.push(`${item.title}: ${r.error}`);
       continue;
     }
+    applied.push({ id: item.id, title: item.title, kind: item.kind });
     await admin.from("league_distributions").insert({
       owner_id: operatorId,
       item_id: item.id,
@@ -192,5 +202,5 @@ export async function autoSeedNewTeam(
       distributed_by: args.userId,
     });
   }
-  return { warnings };
+  return { warnings, playbook: seeded.playbook, applied };
 }

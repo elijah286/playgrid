@@ -8,6 +8,17 @@ import type { Player, Route, Zone } from "@/domain/play/types";
 
 export type LibraryItemKind = "play_group" | "practice_plan";
 
+/** Display names for the coach product's sport variants (game types). */
+export const VARIANT_LABEL: Record<string, string> = {
+  flag_4v4: "Flag 4v4",
+  flag_5v5: "Flag 5v5",
+  flag_6v6: "Flag 6v6",
+  flag_7v7: "Flag 7v7",
+  touch_7v7: "Touch 7v7",
+  tackle_11: "Tackle 11v11",
+  other: "Custom",
+};
+
 /** Exactly what PlayThumbnail renders — the layer slices of a PlayDocument. */
 export type PlayPreviewData = {
   players: Player[];
