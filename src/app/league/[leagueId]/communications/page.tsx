@@ -33,7 +33,7 @@ export default async function CommunicationsPage({
     : { families: 0, coaches: 0, everyone: 0, teams: [] };
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-12 text-foreground sm:px-6">
+    <div className="mx-auto max-w-5xl px-4 py-12 text-foreground sm:px-6">
       <h1 className="text-2xl font-extrabold tracking-tight">Communications</h1>
       <p className="mt-1 text-sm text-muted">
         Send announcements by email — to everyone, all families, a single team, or your coaches.

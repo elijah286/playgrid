@@ -25,7 +25,7 @@ export default async function LeagueStorePage({
   const store = await listStoreItemsAction(leagueId);
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-12 text-foreground sm:px-6">
+    <div className="mx-auto max-w-6xl px-4 py-12 text-foreground sm:px-6">
       <h1 className="text-2xl font-extrabold tracking-tight">Store</h1>
       <p className="mt-1 text-sm text-muted">
         Jerseys, equipment, or add-on fees families can purchase during registration.

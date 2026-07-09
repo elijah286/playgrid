@@ -136,6 +136,13 @@ export async function listStoreItemsAction(leagueId: string) {
   return { ok: true as const, items };
 }
 
+// Store items surface on the admin Store page AND inside the public
+// registration form (as add-ons), so writes revalidate both.
+function revalidateStore(leagueId: string) {
+  revalidatePath(`/league/${leagueId}/store`);
+  revalidatePath(`/league/${leagueId}/registration`);
+}
+
 export async function createStoreItemAction(leagueId: string, input: StoreItemInput) {
   const gate = await gateAdmin(leagueId);
   if (!gate.ok) return gate;
@@ -143,7 +150,7 @@ export async function createStoreItemAction(leagueId: string, input: StoreItemIn
   if (!f.name) return { ok: false as const, error: "Item name is required." };
   const { error } = await gate.supabase.from("league_store_items").insert({ league_id: leagueId, ...f });
   if (error) return { ok: false as const, error: error.message };
-  revalidatePath(`/league/${leagueId}/registration`);
+  revalidateStore(leagueId);
   return { ok: true as const };
 }
 
@@ -158,7 +165,21 @@ export async function updateStoreItemAction(leagueId: string, id: string, input:
     .eq("id", id)
     .eq("league_id", leagueId);
   if (error) return { ok: false as const, error: error.message };
-  revalidatePath(`/league/${leagueId}/registration`);
+  revalidateStore(leagueId);
+  return { ok: true as const };
+}
+
+/** Show/hide an item in the family-facing store without touching its fields. */
+export async function setStoreItemActiveAction(leagueId: string, id: string, active: boolean) {
+  const gate = await gateAdmin(leagueId);
+  if (!gate.ok) return gate;
+  const { error } = await gate.supabase
+    .from("league_store_items")
+    .update({ active })
+    .eq("id", id)
+    .eq("league_id", leagueId);
+  if (error) return { ok: false as const, error: error.message };
+  revalidateStore(leagueId);
   return { ok: true as const };
 }
 
@@ -171,6 +192,56 @@ export async function deleteStoreItemAction(leagueId: string, id: string) {
     .eq("id", id)
     .eq("league_id", leagueId);
   if (error) return { ok: false as const, error: error.message };
-  revalidatePath(`/league/${leagueId}/registration`);
+  revalidateStore(leagueId);
   return { ok: true as const };
+}
+
+/** Typical youth-league items, added inactive-free and fully editable — a
+ *  one-click way to see the store populated and learn the shape of an item. */
+const SAMPLE_ITEMS: StoreItemInput[] = [
+  {
+    name: "Team Jersey",
+    description: "Game jersey in team colors with printed number.",
+    priceCents: 2500,
+    sizes: ["Youth S", "Youth M", "Youth L", "Adult S", "Adult M", "Adult L"],
+  },
+  {
+    name: "Practice Tee",
+    description: "Lightweight moisture-wicking tee for practices.",
+    priceCents: 1400,
+    sizes: ["Youth S", "Youth M", "Youth L", "Adult M", "Adult L"],
+  },
+  {
+    name: "Mouthguard",
+    description: "Boil-and-bite protective mouthguard.",
+    priceCents: 600,
+  },
+  {
+    name: "Team Photo Package",
+    description: "Individual and team photo prints, delivered mid-season.",
+    priceCents: 1800,
+  },
+];
+
+export async function addSampleStoreItemsAction(leagueId: string) {
+  const gate = await gateAdmin(leagueId);
+  if (!gate.ok) return gate;
+
+  const { data: existing } = await gate.supabase
+    .from("league_store_items")
+    .select("name")
+    .eq("league_id", leagueId);
+  const taken = new Set((existing ?? []).map((r) => (r.name as string).toLowerCase()));
+
+  const rows = SAMPLE_ITEMS.filter((s) => !taken.has(s.name.toLowerCase())).map((s, i) => ({
+    league_id: leagueId,
+    ...fields(s),
+    sort_order: i,
+  }));
+  if (rows.length === 0) return { ok: true as const, added: 0 };
+
+  const { error } = await gate.supabase.from("league_store_items").insert(rows);
+  if (error) return { ok: false as const, error: error.message };
+  revalidateStore(leagueId);
+  return { ok: true as const, added: rows.length };
 }

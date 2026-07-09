@@ -48,7 +48,7 @@ export default async function RegistrationPage({
   const regItems = registrations.ok ? registrations.items : [];
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-12 text-foreground sm:px-6">
+    <div className="mx-auto max-w-5xl px-4 py-12 text-foreground sm:px-6">
       <h1 className="text-2xl font-extrabold tracking-tight">Registration</h1>
       <p className="mt-1 text-sm text-muted">
         Configure registration and share your sign-up link with families.

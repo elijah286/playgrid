@@ -145,7 +145,7 @@ export function RosterBoard({
       <section>
         <h2 className="mb-2 text-sm font-semibold text-foreground">Teams</h2>
         {noTeams ? null : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {board.teams.map((t) => (
               <div key={t.id} className="rounded-2xl border border-border p-4">
                 <div className="flex items-baseline justify-between gap-2">

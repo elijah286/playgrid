@@ -22,7 +22,7 @@ export default async function SchedulePage({
   const res = await listLeagueEventsAction(leagueId);
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-12 text-foreground sm:px-6">
+    <div className="mx-auto max-w-5xl px-4 py-12 text-foreground sm:px-6">
       <h1 className="text-2xl font-extrabold tracking-tight">Schedule</h1>
       <p className="mt-1 text-sm text-muted">
         Games, practices, and events. Upcoming items appear on your dashboard.

@@ -29,7 +29,7 @@ export default async function GamesPage({
   const terms = sportTerms(board.sport);
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-12 text-foreground sm:px-6">
+    <div className="mx-auto max-w-5xl px-4 py-12 text-foreground sm:px-6">
       <h1 className="text-2xl font-extrabold tracking-tight">{terms.Games} &amp; Standings</h1>
       <p className="mt-1 text-sm text-muted">
         Schedule {terms.games} between your teams, enter scores, and standings update automatically.

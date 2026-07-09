@@ -30,7 +30,7 @@ export default async function RosterPage({
   const board = res.ok && res.board ? res.board : { teams: [], unrostered: [], waitlistedCount: 0 };
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-12 text-foreground sm:px-6">
+    <div className="mx-auto max-w-6xl px-4 py-12 text-foreground sm:px-6">
       <h1 className="text-2xl font-extrabold tracking-tight">Rostering</h1>
       <p className="mt-1 text-sm text-muted">
         Place approved players onto teams. Approve registrations in the{" "}
