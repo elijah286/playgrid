@@ -40,6 +40,9 @@ export type LeagueSection = {
   /** Capability a delegated member needs to see this section. Sections without one
    *  (Overview, Leo) are always shown. Ignored for members, who have full access. */
   capability?: Capability;
+  /** Rail group heading. Ungrouped sections (Overview, Leo, Settings) render
+   *  outside the labeled groups. The mobile nav ignores grouping. */
+  group?: string;
 };
 
 export function leagueSections(
@@ -49,22 +52,26 @@ export function leagueSections(
 ): LeagueSection[] {
   const items: LeagueSection[] = [
     { path: "", label: "Overview", icon: LayoutDashboard, exact: true },
-    { path: "/registration", label: "Registration", icon: ClipboardList, capability: "manage_registration" },
-    { path: "/store", label: "Store", icon: ShoppingBag, capability: "manage_store" },
-    { path: "/teams", label: "Teams", icon: Users, capability: "manage_teams" },
-    { path: "/roster", label: "Roster", icon: UserPlus, capability: "manage_rosters" },
-    { path: "/divisions", label: "Divisions", icon: Rows3, capability: "manage_teams" },
-    { path: "/schedule", label: "Schedule", icon: Calendar, capability: "manage_schedule" },
-    { path: "/games", label: "Games", icon: Trophy, capability: "manage_schedule" },
-    { path: "/communications", label: "Communications", icon: Megaphone, capability: "manage_communications" },
-    { path: "/financials", label: "Financials", icon: DollarSign, capability: "view_financials" },
   ];
+  if (leoEnabled) items.push({ path: "/assistant", label: "Leo", icon: Sparkles });
+  items.push(
+    { path: "/registration", label: "Registration", icon: ClipboardList, capability: "manage_registration", group: "People" },
+    { path: "/teams", label: "Teams", icon: Users, capability: "manage_teams", group: "People" },
+    { path: "/roster", label: "Roster", icon: UserPlus, capability: "manage_rosters", group: "People" },
+    { path: "/divisions", label: "Divisions", icon: Rows3, capability: "manage_teams", group: "People" },
+    { path: "/schedule", label: "Schedule", icon: Calendar, capability: "manage_schedule", group: "Season" },
+    { path: "/games", label: "Games", icon: Trophy, capability: "manage_schedule", group: "Season" },
+    { path: "/communications", label: "Communications", icon: Megaphone, capability: "manage_communications", group: "Season" },
+  );
   if (leagueHasPlaybooks(sport)) {
     // One distribution surface: practice plans merged into Playbooks (Phase 4);
     // /curriculum redirects there.
-    items.push({ path: "/playbooks", label: "Playbooks", icon: Layers, capability: "manage_curriculum" });
+    items.push({ path: "/playbooks", label: "Playbooks", icon: Layers, capability: "manage_curriculum", group: "Coaching" });
   }
-  if (leoEnabled) items.push({ path: "/assistant", label: "Leo", icon: Sparkles });
+  items.push(
+    { path: "/store", label: "Store", icon: ShoppingBag, capability: "manage_store", group: "Business" },
+    { path: "/financials", label: "Financials", icon: DollarSign, capability: "view_financials", group: "Business" },
+  );
   items.push({ path: "/settings", label: "Settings", icon: Settings, capability: "manage_settings" });
 
   // Members/owners (capabilities == null) see every section; a delegated member
