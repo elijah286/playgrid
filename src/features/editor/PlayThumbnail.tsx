@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { Player, Route, Zone } from "@/domain/play/types";
 import { resolveEndDecoration, resolveRouteStroke } from "@/domain/play/factory";
 import { routeToRenderedSegments } from "@/domain/play/geometry";
@@ -24,7 +25,7 @@ const HIGHLIGHT_COLOR: Record<ThumbnailHighlightKind, string> = {
   modified: "rgba(245,158,11,0.85)",
 };
 
-export function PlayThumbnail({
+function PlayThumbnailImpl({
   preview,
   thin,
   light,
@@ -304,3 +305,11 @@ export function PlayThumbnail({
     </div>
   );
 }
+
+// Memoized: play thumbnails are pure functions of their `preview`, and the
+// playbook view keeps the same `preview` reference for plays that didn't
+// change. Without this, every thumbnail in every section re-rendered on each
+// drag-over / search-filter keystroke — the dominant INP cost on the playbook
+// route. Shallow prop compare is sufficient (preview/highlights refs are
+// stable per play; thin/light are primitives).
+export const PlayThumbnail = memo(PlayThumbnailImpl);

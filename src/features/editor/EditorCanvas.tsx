@@ -429,14 +429,38 @@ function EditorCanvasImpl({
   // startInteraction can reach them without a circular useCallback dep.
   const pointerMoveRef = useRef<((e: PointerEvent) => void) | null>(null);
   const pointerEndRef = useRef<((e: PointerEvent) => void) | null>(null);
+  // Coalesce pointermove processing to one per animation frame. Trackpads and
+  // touchscreens emit pointermove at 120Hz+; each event ran the full doc
+  // reducer + a canvas re-render synchronously, so events backlogged faster
+  // than React could paint — the dominant source of the multi-second INP tail
+  // seen while dragging players/nodes/segments. We keep only the newest event
+  // and process it on the next frame. The final event is flushed on pointerup
+  // (see the end handler) so the committed release position stays exact.
+  const pendingMoveRef = useRef<PointerEvent | null>(null);
+  const moveRafRef = useRef<number | null>(null);
+  const flushPendingMove = useCallback(() => {
+    moveRafRef.current = null;
+    const ev = pendingMoveRef.current;
+    if (!ev) return;
+    pendingMoveRef.current = null;
+    pointerMoveRef.current?.(ev);
+  }, []);
+  const cancelPendingMove = useCallback(() => {
+    if (moveRafRef.current != null) {
+      cancelAnimationFrame(moveRafRef.current);
+      moveRafRef.current = null;
+    }
+    pendingMoveRef.current = null;
+  }, []);
   const detachWindowListeners = useCallback(() => {
+    cancelPendingMove();
     const l = windowListenersRef.current;
     if (!l) return;
     window.removeEventListener("pointermove", l.move);
     window.removeEventListener("pointerup", l.end);
     window.removeEventListener("pointercancel", l.end);
     windowListenersRef.current = null;
-  }, []);
+  }, [cancelPendingMove]);
   useEffect(() => detachWindowListeners, [detachWindowListeners]);
   useEffect(() => {
     interactionRef.current = interaction;
@@ -1051,11 +1075,26 @@ function EditorCanvasImpl({
       const capturedPointerId = e.pointerId;
       const moveHandler = (ev: PointerEvent) => {
         if (ev.pointerId !== capturedPointerId) return;
+        // preventDefault must run synchronously in the raw handler — it can't
+        // be deferred into the rAF. Only the (expensive) state processing is
+        // coalesced to the next frame; we keep just the newest event.
         if (interactionRef.current.type !== "idle") ev.preventDefault();
-        pointerMoveRef.current?.(ev);
+        pendingMoveRef.current = ev;
+        if (moveRafRef.current == null) {
+          moveRafRef.current = requestAnimationFrame(flushPendingMove);
+        }
       };
       const endHandler = (ev: PointerEvent) => {
         if (ev.pointerId !== capturedPointerId) return;
+        // Flush the last coalesced move synchronously so the committed release
+        // position matches the pointer's final location, then finish.
+        if (moveRafRef.current != null) {
+          cancelAnimationFrame(moveRafRef.current);
+          moveRafRef.current = null;
+        }
+        const pending = pendingMoveRef.current;
+        pendingMoveRef.current = null;
+        if (pending) pointerMoveRef.current?.(pending);
         pointerEndRef.current?.(ev);
       };
       window.addEventListener("pointermove", moveHandler, { passive: false });
@@ -1151,7 +1190,7 @@ function EditorCanvasImpl({
         longPressRef.current = { timer, pointerId: capturedId };
       }
     },
-    [toNorm, onSelectPlayer, onSelectRoute, onSelectNode, onSelectSegment, onSelectZone, cancelLongPress, detachWindowListeners, activeSide, onActivateSide],
+    [toNorm, onSelectPlayer, onSelectRoute, onSelectNode, onSelectSegment, onSelectZone, cancelLongPress, detachWindowListeners, activeSide, onActivateSide, flushPendingMove],
   );
 
   const handlePointerDown = useCallback(

@@ -234,7 +234,22 @@ function walkToSvgD(
   return parts.join(" ");
 }
 
+// Reference-keyed memo cache — same rationale as geometry's
+// renderedSegmentsCache. flattenRoute is a pure function of the immutable
+// route, and the reducer preserves route references for routes that didn't
+// change, so during a player drag only the dragged carrier's route re-flattens
+// instead of every route on the field every frame. `.has()` gate so a cached
+// `null` (degenerate route) is a hit, not a recompute.
+const flattenRouteCache = new WeakMap<Route, FlatRoute | null>();
+
 export function flattenRoute(route: Route): FlatRoute | null {
+  if (flattenRouteCache.has(route)) return flattenRouteCache.get(route) ?? null;
+  const computed = computeFlattenRoute(route);
+  flattenRouteCache.set(route, computed);
+  return computed;
+}
+
+function computeFlattenRoute(route: Route): FlatRoute | null {
   if (route.nodes.length < 2 || route.segments.length === 0) return null;
 
   const nodeMap = new Map(route.nodes.map((n) => [n.id, n]));

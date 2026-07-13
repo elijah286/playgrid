@@ -198,7 +198,24 @@ export type RenderedSegment = {
   dash: string | undefined;
 };
 
+// Reference-keyed memo cache. RenderedSegment output depends solely on the
+// (immutable) route object — the reducer produces a new Route reference only
+// when that route actually changes, and returns the same reference otherwise
+// (see reducer `player.move`, which leaves non-carrier routes untouched). So
+// keying on the object identity is safe and makes re-renders during a drag
+// O(routes-that-changed) instead of O(all-routes). WeakMap → entries are
+// collected when a route object is dropped; no manual eviction needed.
+const renderedSegmentsCache = new WeakMap<Route, RenderedSegment[]>();
+
 export function routeToRenderedSegments(route: Route): RenderedSegment[] {
+  const cached = renderedSegmentsCache.get(route);
+  if (cached) return cached;
+  const computed = computeRouteToRenderedSegments(route);
+  renderedSegmentsCache.set(route, computed);
+  return computed;
+}
+
+function computeRouteToRenderedSegments(route: Route): RenderedSegment[] {
   const nodeMap = new Map(route.nodes.map((n) => [n.id, n]));
 
   // Build adjacency for Catmull-Rom neighbour lookup.
