@@ -10,10 +10,7 @@ import {
   type RatingOutcome,
   type RatingSentiment,
 } from "@/lib/notifications/rating-prompt-notice";
-import {
-  isReferralAnnouncementOwed,
-  isWithinEngagementCooldown,
-} from "@/lib/notifications/engagement-prompt";
+import { isWithinEngagementCooldown } from "@/lib/notifications/engagement-prompt";
 
 export type RatingTrigger =
   | "cal_save"
@@ -23,6 +20,9 @@ export type RatingTrigger =
 
 const ACCOUNT_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const COOLDOWN_DAYS = 365;
+// Fallback engagement signal when no explicit rating trigger has fired: a coach
+// who has created this many plays is engaged enough to ask for a review.
+const RATING_MIN_PLAYS = 3;
 
 /**
  * Record that a rating-prompt trigger has fired for the current user.
@@ -72,7 +72,8 @@ export async function recordRatingTrigger(trigger: RatingTrigger): Promise<void>
  *  2. If setting is 'only_admins', user must be a site admin
  *  3. Account age ≥ 7 days
  *  4. No show in the last 365 days (or never shown)
- *  5. At least one trigger has been recorded
+ *  5. Not within the shared 14-day engagement-prompt cooldown
+ *  6. Engaged: ≥1 rating trigger recorded OR ≥3 created plays
  */
 export async function checkRatingEligibility(): Promise<boolean> {
   if (!hasSupabaseEnv()) return false;
@@ -90,7 +91,7 @@ export async function checkRatingEligibility(): Promise<boolean> {
     const { data: profile } = await admin
       .from("profiles")
       .select(
-        "role, created_at, rating_triggers_fired, rating_prompt_shown_at, last_engagement_prompt_at, referral_announcement_seen_at",
+        "role, created_at, rating_triggers_fired, rating_prompt_shown_at, last_engagement_prompt_at",
       )
       .eq("id", user.id)
       .single();
@@ -99,9 +100,6 @@ export async function checkRatingEligibility(): Promise<boolean> {
     if (setting === "only_admins" && (profile.role as string) !== "admin") {
       return false;
     }
-
-    const fired = (profile.rating_triggers_fired as string[]) ?? [];
-    if (fired.length === 0) return false;
 
     const ageMs =
       Date.now() - new Date(profile.created_at as string).getTime();
@@ -115,19 +113,33 @@ export async function checkRatingEligibility(): Promise<boolean> {
       if (daysSince < COOLDOWN_DAYS) return false;
     }
 
-    // De-dupe with the referral asks: hold off if we interrupted this coach
-    // with any engagement prompt in the last 14 days, and let the one-time
-    // referral launch announcement go first while it's still owed.
+    // De-dupe with the other engagement asks via the SHARED 14-day cooldown —
+    // that alone prevents stacking a review ask on top of a referral ask in the
+    // same window. We deliberately do NOT also defer to "referral announcement
+    // owed first": with referral_enabled=true that predicate is true for every
+    // coach who hasn't seen the announcement yet, so it permanently pre-empted
+    // the review prompt (0 shown, ever). The announcement was meant to go first
+    // during launch week, not to starve reviews forever; the 14-day cooldown is
+    // the correct, sufficient de-dup. Whichever ask a coach reaches first wins,
+    // and the other holds for 14 days.
     if (isWithinEngagementCooldown(profile.last_engagement_prompt_at as string | null)) {
       return false;
     }
-    if (
-      await isReferralAnnouncementOwed(
-        user.id,
-        profile.referral_announcement_seen_at as string | null,
-      )
-    ) {
-      return false;
+
+    // Engagement signal (checked LAST so the play-count query only runs for
+    // coaches who already passed every cheaper gate). Either an explicit
+    // "delight moment" trigger fired, OR the coach has built a real playbook
+    // (≥3 created plays). The trigger events (third_play/first_print/cal_save/
+    // second_share) are sparse and were introduced late without a backfill, so
+    // requiring one starved the prompt; play count is the durable signal.
+    const fired = (profile.rating_triggers_fired as string[]) ?? [];
+    if (fired.length === 0) {
+      const { count } = await admin
+        .from("play_versions")
+        .select("id", { count: "exact", head: true })
+        .eq("created_by", user.id)
+        .eq("kind", "create");
+      if ((count ?? 0) < RATING_MIN_PLAYS) return false;
     }
 
     return true;
