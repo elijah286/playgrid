@@ -423,6 +423,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-28",
   },
   {
+    id: "app-icon-notification-badge",
+    name: "App icon notification badge",
+    description:
+      "The iOS app icon shows a red badge with the number of items waiting in the coach's inbox — the exact same count as the in-app inbox bell (pending join and coach-access requests, roster claims, RSVP reminders, shared playbooks, and billing alerts), so a coach knows something needs attention before they even open the app. The number updates with every push and clears as items are handled. Android launchers that support numeric badges (e.g. Samsung) show the same count; others show the standard notification dot.",
+    category: "Calendar & scheduling",
+    status: "beta",
+    addedDate: "2026-07-13",
+  },
+  {
     id: "calendar-bulk-rsvp",
     name: "Bulk RSVP and series rollup",
     description:

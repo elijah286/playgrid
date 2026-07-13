@@ -105,6 +105,39 @@ describe("buildApnsPayload", () => {
     expect(payload.aps.sound).toBeUndefined();
     expect(payload.kind).toBe("token_refresh");
   });
+
+  it("sets aps.badge to the supplied count on a visible alert", () => {
+    const payload = JSON.parse(
+      buildApnsPayload({ title: "New request", body: "Tap to review", badge: 3 }),
+    );
+    expect(payload.aps.badge).toBe(3);
+    expect(payload.aps.alert).toEqual({ title: "New request", body: "Tap to review" });
+  });
+
+  it("sets aps.badge to 0 to clear the icon (0 is a real value, not omitted)", () => {
+    const payload = JSON.parse(
+      buildApnsPayload({ title: "T", body: "B", badge: 0 }),
+    );
+    expect(payload.aps.badge).toBe(0);
+  });
+
+  it("omits aps.badge entirely when no badge is supplied (leaves it untouched)", () => {
+    const payload = JSON.parse(buildApnsPayload({ title: "T", body: "B" }));
+    expect("badge" in payload.aps).toBe(false);
+  });
+
+  it("carries a badge update on a silent push (badge without alert)", () => {
+    const payload = JSON.parse(
+      buildApnsPayload({ title: "", body: "", contentAvailable: true, badge: 5 }),
+    );
+    expect(payload.aps.badge).toBe(5);
+    expect(payload.aps.alert).toBeUndefined();
+  });
+
+  it("clamps a negative or fractional badge to a non-negative integer", () => {
+    expect(JSON.parse(buildApnsPayload({ title: "T", body: "B", badge: -4 })).aps.badge).toBe(0);
+    expect(JSON.parse(buildApnsPayload({ title: "T", body: "B", badge: 2.9 })).aps.badge).toBe(2);
+  });
 });
 
 describe("classifyApnsResponse", () => {

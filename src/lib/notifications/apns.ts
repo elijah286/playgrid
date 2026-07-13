@@ -53,6 +53,14 @@ export type ApnsMessage = {
    * banner. Apple throttles these and won't wake a force-quit app on demand.
    */
   contentAvailable?: boolean;
+  /**
+   * Absolute value for the app-icon badge (aps.badge). iOS renders this on the
+   * home-screen icon with zero app-side code — set it to the recipient's live
+   * inbox count so the badge matches the in-app bell. `0` explicitly clears the
+   * badge; `undefined` leaves whatever badge is already showing untouched.
+   * APNs has no increment — the sender always supplies the absolute number.
+   */
+  badge?: number;
 };
 
 export type ApnsConfig = {
@@ -103,6 +111,13 @@ export function mintApnsJwt(
 export function buildApnsPayload(message: ApnsMessage): string {
   const aps: Record<string, unknown> = {};
   if (message.contentAvailable) aps["content-available"] = 1;
+  // Set the app-icon badge whenever a number is supplied — including 0, which
+  // clears it. Independent of the alert block: a silent (content-available)
+  // push can still carry a badge update. Omitted → key absent → iOS leaves the
+  // current badge as-is.
+  if (typeof message.badge === "number") {
+    aps.badge = Math.max(0, Math.trunc(message.badge));
+  }
   // Only attach a visible alert when there's something to show; a pure silent
   // refresh push has neither title nor body.
   if (message.title || message.body) {
@@ -270,21 +285,35 @@ async function sendOneApns(
  */
 export async function sendApnsToTokens(
   cfg: ApnsConfig,
-  tokens: { id: string; token: string }[],
+  tokens: { id: string; token: string; badge?: number }[],
   message: ApnsMessage,
 ): Promise<{ delivered: number; deadTokenIds: string[] }> {
   if (tokens.length === 0) return { delivered: 0, deadTokenIds: [] };
 
   const nowSeconds = Math.floor(Date.now() / 1000);
   const jwt = mintApnsJwt(cfg, nowSeconds);
-  const body = buildApnsPayload(message);
   const pushType: "alert" | "background" = message.contentAvailable ? "background" : "alert";
+
+  // The badge is per-recipient (each user has a different inbox count), so the
+  // payload is built per token. Everything else is identical; when no token
+  // carries a badge this collapses to a single reused body via the cache below.
+  const bodyCache = new Map<number | "none", string>();
+  const bodyFor = (badge: number | undefined): string => {
+    const key = typeof badge === "number" ? badge : "none";
+    const cached = bodyCache.get(key);
+    if (cached) return cached;
+    const built = buildApnsPayload(
+      typeof badge === "number" ? { ...message, badge } : message,
+    );
+    bodyCache.set(key, built);
+    return built;
+  };
 
   const deadTokenIds: string[] = [];
   let delivered = 0;
   await Promise.all(
     tokens.map(async (t) => {
-      const r = await sendOneApns(cfg, jwt, t.token, body, nowSeconds, pushType);
+      const r = await sendOneApns(cfg, jwt, t.token, bodyFor(t.badge), nowSeconds, pushType);
       if (r.ok) delivered += 1;
       else if (r.dead) deadTokenIds.push(t.id);
     }),
