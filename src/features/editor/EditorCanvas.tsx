@@ -1076,9 +1076,19 @@ function EditorCanvasImpl({
       const moveHandler = (ev: PointerEvent) => {
         if (ev.pointerId !== capturedPointerId) return;
         // preventDefault must run synchronously in the raw handler — it can't
-        // be deferred into the rAF. Only the (expensive) state processing is
-        // coalesced to the next frame; we keep just the newest event.
+        // be deferred into the rAF.
         if (interactionRef.current.type !== "idle") ev.preventDefault();
+        // Freehand drawing ACCUMULATES a waypoint per event (points: [...,p]),
+        // so coalescing would decimate the drawn shape — a fast squiggle would
+        // lose its corners. Process those synchronously (this is the original,
+        // pre-coalescing behavior, and drawing was never the INP bottleneck).
+        // Only the position-REPLACE drag states — each of which fires a full
+        // doc-reducer dispatch + canvas re-render — need to be coalesced to one
+        // per animation frame; we keep just the newest event for those.
+        if (interactionRef.current.type === "drawing_route") {
+          pointerMoveRef.current?.(ev);
+          return;
+        }
         pendingMoveRef.current = ev;
         if (moveRafRef.current == null) {
           moveRafRef.current = requestAnimationFrame(flushPendingMove);

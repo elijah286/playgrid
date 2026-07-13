@@ -208,8 +208,11 @@ export type RenderedSegment = {
 const renderedSegmentsCache = new WeakMap<Route, RenderedSegment[]>();
 
 export function routeToRenderedSegments(route: Route): RenderedSegment[] {
+  // `.has()` gate (rather than truthiness) so this stays a cache hit even if
+  // the computed result is ever a falsy value — matches flattenRoute's cache
+  // and can't silently recompute-every-call if the return type changes.
   const cached = renderedSegmentsCache.get(route);
-  if (cached) return cached;
+  if (cached !== undefined) return cached;
   const computed = computeRouteToRenderedSegments(route);
   renderedSegmentsCache.set(route, computed);
   return computed;
