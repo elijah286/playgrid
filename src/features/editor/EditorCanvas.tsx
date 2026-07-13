@@ -1211,6 +1211,58 @@ function EditorCanvasImpl({
 
       if (state.type === "idle") return;
 
+      // Apply one drag frame for an already-armed drag. Extracted so the
+      // pending→dragging transition can commit the move for the SAME event it
+      // arms on. Without this, a fast flick — or any drag whose pointermoves
+      // all arrive within a single animation frame, now that moves are
+      // rAF-coalesced — would arm the drag and then commit nothing, leaving the
+      // player/node exactly where it started (the "selected but didn't move"
+      // bug). Subsequent frames call this too, so there's one source of truth.
+      const applyDrag = (st: Interaction): void => {
+        if (st.type === "dragging_player") {
+          // Offensive players can't cross the LOS into defensive territory;
+          // defensive players can't cross the LOS into offensive territory.
+          const raw = toNorm(e);
+          const isDefender =
+            doc.metadata.playType === "defense" ||
+            doc.layers.players.find((p) => p.id === st.playerId)?.role === "DL" ||
+            doc.layers.players.find((p) => p.id === st.playerId)?.role === "LB" ||
+            doc.layers.players.find((p) => p.id === st.playerId)?.role === "CB" ||
+            doc.layers.players.find((p) => p.id === st.playerId)?.role === "S" ||
+            doc.layers.players.find((p) => p.id === st.playerId)?.role === "NB";
+          const clamped: Point2 = {
+            x: raw.x,
+            y: isDefender ? Math.max(raw.y, losY) : Math.min(raw.y, losY),
+          };
+          dispatch({ type: "player.move", playerId: st.playerId, position: clamped });
+          notifyTutorialAction("player-moved");
+          return;
+        }
+        if (st.type === "dragging_node") {
+          const raw = toNorm(e);
+          const route = doc.layers.routes.find((r) => r.id === st.routeId);
+          const isAnchor = route?.nodes[0]?.id === st.nodeId;
+          const carrier = route
+            ? doc.layers.players.find((p) => p.id === route.carrierPlayerId)
+            : null;
+          const position =
+            !isAnchor && carrier ? snapOutsidePlayer(raw, carrier.position) : raw;
+          dispatch({ type: "route.moveNode", routeId: st.routeId, nodeId: st.nodeId, position });
+          notifyTutorialAction("anchor-dragged");
+          return;
+        }
+        if (st.type === "dragging_segment") {
+          // Only allow the drag-to-bend gesture when the user is actively in
+          // curve mode. In straight/dashed/etc. modes, dragging a segment
+          // should not silently convert it to a curve.
+          if (activeShape !== "curve") return;
+          const p = toNorm(e);
+          dispatch({ type: "route.setSegmentShape", routeId: st.routeId, segmentId: st.segmentId, shape: "curve" });
+          dispatch({ type: "route.setSegmentControl", routeId: st.routeId, segmentId: st.segmentId, controlOffset: p });
+          return;
+        }
+      };
+
       if (state.type === "pending") {
         const dx = e.clientX - state.screenX;
         const dy = e.clientY - state.screenY;
@@ -1230,6 +1282,7 @@ function EditorCanvasImpl({
           interactionRef.current = next;
           // Tactile tick when a player is picked up (native only; no-op on web).
           void hapticSelection();
+          applyDrag(next); // commit this same event's move (see applyDrag note)
           return;
         }
 
@@ -1241,6 +1294,7 @@ function EditorCanvasImpl({
           };
           setInteraction(next);
           interactionRef.current = next;
+          applyDrag(next);
           return;
         }
 
@@ -1252,6 +1306,7 @@ function EditorCanvasImpl({
           };
           setInteraction(next);
           interactionRef.current = next;
+          applyDrag(next);
           return;
         }
 
@@ -1316,73 +1371,6 @@ function EditorCanvasImpl({
         return;
       }
 
-      if (state.type === "dragging_player") {
-        // Offensive players can't cross the LOS into defensive territory;
-        // defensive players can't cross the LOS into offensive territory.
-        const raw = toNorm(e);
-        const isDefender =
-          doc.metadata.playType === "defense" ||
-          doc.layers.players.find((p) => p.id === state.playerId)?.role === "DL" ||
-          doc.layers.players.find((p) => p.id === state.playerId)?.role === "LB" ||
-          doc.layers.players.find((p) => p.id === state.playerId)?.role === "CB" ||
-          doc.layers.players.find((p) => p.id === state.playerId)?.role === "S" ||
-          doc.layers.players.find((p) => p.id === state.playerId)?.role === "NB";
-        const clamped: Point2 = {
-          x: raw.x,
-          y: isDefender ? Math.max(raw.y, losY) : Math.min(raw.y, losY),
-        };
-        dispatch({
-          type: "player.move",
-          playerId: state.playerId,
-          position: clamped,
-        });
-        notifyTutorialAction("player-moved");
-        return;
-      }
-
-      if (state.type === "dragging_node") {
-        const raw = toNorm(e);
-        const route = doc.layers.routes.find((r) => r.id === state.routeId);
-        const isAnchor = route?.nodes[0]?.id === state.nodeId;
-        const carrier = route
-          ? doc.layers.players.find((p) => p.id === route.carrierPlayerId)
-          : null;
-        const position =
-          !isAnchor && carrier
-            ? snapOutsidePlayer(raw, carrier.position)
-            : raw;
-        dispatch({
-          type: "route.moveNode",
-          routeId: state.routeId,
-          nodeId: state.nodeId,
-          position,
-        });
-        notifyTutorialAction("anchor-dragged");
-        return;
-      }
-
-      if (state.type === "dragging_segment") {
-        // Only allow the drag-to-bend gesture when the user is actively in
-        // curve mode. In straight/dashed/etc. modes, dragging a segment
-        // should not silently convert it to a curve — that surprised users
-        // who expected the active line type to be respected.
-        if (activeShape !== "curve") return;
-        const p = toNorm(e);
-        dispatch({
-          type: "route.setSegmentShape",
-          routeId: state.routeId,
-          segmentId: state.segmentId,
-          shape: "curve",
-        });
-        dispatch({
-          type: "route.setSegmentControl",
-          routeId: state.routeId,
-          segmentId: state.segmentId,
-          controlOffset: p,
-        });
-        return;
-      }
-
       if (state.type === "drawing_route") {
         const p = toNorm(e);
         const next: Interaction = { ...state, points: [...state.points, p] };
@@ -1390,6 +1378,9 @@ function EditorCanvasImpl({
         interactionRef.current = next;
         return;
       }
+
+      // dragging_player / dragging_node / dragging_segment — one drag frame.
+      applyDrag(state);
     },
     [toNorm, dispatch, selectedPlayerId, selectedOpponentPlayerId, opponentPlayers, opponentEditable, onCommitOpponentRoute, doc.layers.players, doc.layers.routes, getAnchor, mode, losY, activeShape, cancelLongPress],
   );
