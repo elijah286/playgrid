@@ -866,6 +866,15 @@ export function CoachAiLauncher({
               target: "header_chat",
               metadata: { surface: "header_chat", path: pathname ?? null },
             });
+          } else {
+            // Close the measurement gap: entitled coaches opening Cal from the
+            // header icon previously emitted no event, so real Cal opens were
+            // undercounted (only the promo path was instrumented).
+            track({
+              event: "coach_cal_cta_click",
+              target: "header_chat",
+              metadata: { surface: "header_chat", path: pathname ?? null },
+            });
           }
         }}
         aria-label={entitled ? "Open Coach Cal" : "Try Coach Cal — your AI coaching partner"}

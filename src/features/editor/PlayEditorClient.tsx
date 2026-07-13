@@ -42,6 +42,12 @@ import {
 } from "@/features/playbooks/MovePlayToGroupDialog";
 import { TagsCard } from "./TagsCard";
 import { CoachCalCTA } from "@/features/coach-ai/CoachCalCTA";
+import { EditorCalNudge } from "./EditorCalNudge";
+
+// Show the empty-editor "build with Cal" nudge only while a coach's first
+// playbook is this small — a proxy for "new coach on their first plays." Past
+// this they've established a workflow (with or without Cal) and don't need it.
+const NEW_COACH_PLAY_LIMIT = 3;
 import { publishLivePlayDoc, clearLivePlayDoc } from "@/lib/coach-ai/live-play-doc";
 import { useToast } from "@/components/ui";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
@@ -161,6 +167,9 @@ type Props = {
    *  SiteHeader: entitled = available, otherwise show the promo. */
   coachAiAvailable?: boolean;
   showCoachCalPromo?: boolean;
+  /** Remaining free Cal prompts for a non-entitled coach; null when entitled
+   *  (unlimited) or unknown. Drives the empty-editor "build with Cal" nudge. */
+  coachCalFreePromptsRemaining?: number | null;
   /** Drives which links appear in the editor footer's "More" sheet —
    *  same beta-feature flags the playbook page uses to decide which
    *  tabs render. The editor doesn't host these tabs itself; the sheet
@@ -273,6 +282,7 @@ function PlayEditorClientInner({
   canUseGameMode = false,
   coachAiAvailable = false,
   showCoachCalPromo = false,
+  coachCalFreePromptsRemaining = null,
   teamCalendarAvailable = false,
   teamMessagingAvailable = false,
   gameResultsAvailable = false,
@@ -2165,6 +2175,25 @@ function PlayEditorClientInner({
       {isTutorialPlay && !isPlayArchived && !isExamplePreview && (
         <TutorialPlayBanner playId={playId} playbookId={playbookId} />
       )}
+      {/* Empty-editor Cal discovery nudge. Targeted at NEW coaches: a free coach
+          who still has prompts (coachCalFreePromptsRemaining is a positive
+          number — null for entitled coaches, who don't need the "free prompts"
+          pitch), early in their first playbook (≤ NEW_COACH_PLAY_LIMIT plays so
+          we don't nag a veteran who opens the odd blank play), on a genuinely
+          blank play (no routes drawn), where they can actually edit. Self-
+          dismisses once opened or closed. */}
+      {canEdit &&
+        !isExamplePreview &&
+        !isTutorialPlay &&
+        !isPlayArchived &&
+        !libraryMode &&
+        coachAiAvailable &&
+        typeof coachCalFreePromptsRemaining === "number" &&
+        coachCalFreePromptsRemaining > 0 &&
+        initialNav.length <= NEW_COACH_PLAY_LIMIT &&
+        doc.layers.routes.length === 0 && (
+          <EditorCalNudge freePromptsRemaining={coachCalFreePromptsRemaining} />
+        )}
       {/* Tutorial gate signal: present in the DOM whenever the play has
           at least one route drawn. The "Draw a route" tour step watches
           for this via querySelector to gate its Next button. Visually

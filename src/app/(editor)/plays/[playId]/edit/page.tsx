@@ -10,7 +10,7 @@ import { getMobileEditingEnabled } from "@/lib/site/mobile-editing-config";
 import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
 import { getCurrentEntitlement, hasUsedCoachProTrial } from "@/lib/billing/entitlement";
 import { canUseAiFeatures, canUseGameMode } from "@/lib/billing/features";
-import { hasFreeCalPromptsRemaining } from "@/lib/billing/coach-cal-free-prompts";
+import { getCoachCalFreePromptState } from "@/lib/billing/coach-cal-free-prompts";
 import {
   getBetaFeatures,
   isBetaFeatureAvailable,
@@ -202,10 +202,16 @@ export default async function PlayEditPage({ params }: Props) {
   const coachAiEntitled = isAdmin || canUseAiFeatures(editorEntitlement);
   // Free users with trial prompts left get the real launcher, not the promo
   // (mirrors SiteHeader / the playbook page).
-  const hasFreeCalPrompts =
+  const freeCalState =
     !coachAiEntitled && user !== null
-      ? await hasFreeCalPromptsRemaining(user.id)
-      : false;
+      ? await getCoachCalFreePromptState(user.id)
+      : null;
+  const hasFreeCalPrompts = freeCalState?.hasRemaining ?? false;
+  // Remaining free prompts for the empty-editor Cal nudge — null for entitled
+  // coaches (unlimited; the nudge's "free prompts" pitch doesn't apply to them).
+  const coachCalFreePromptsRemaining = coachAiEntitled
+    ? null
+    : freeCalState?.remaining ?? 0;
   const coachAiAvailable = coachAiEntitled || hasFreeCalPrompts;
   const showCoachCalCta = !coachAiAvailable && user !== null && !isAdmin;
   // Cal launcher promo: only logged-in users without entitlement (and out of
@@ -263,6 +269,7 @@ export default async function PlayEditPage({ params }: Props) {
       canUseGameMode={viewerCanUseGameMode}
       coachAiAvailable={coachAiAvailable}
       showCoachCalPromo={showCoachCalPromo}
+      coachCalFreePromptsRemaining={coachCalFreePromptsRemaining}
       teamCalendarAvailable={teamCalendarAvailable}
       teamMessagingAvailable={teamMessagingAvailable}
       gameResultsAvailable={gameResultsAvailable}

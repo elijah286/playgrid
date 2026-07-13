@@ -13,7 +13,8 @@ export type CoachCalEntryPointId =
   | "play_suggest_counter"
   | "playbook_generate_starter"
   | "playbook_generate_practice_plan"
-  | "playbook_schedule_season";
+  | "playbook_schedule_season"
+  | "editor_build_play";
 
 export type EntryPointContext = {
   /** Replacement values for ${name} tokens in the prompt template. */
@@ -141,6 +142,23 @@ export const ENTRY_POINTS: Record<CoachCalEntryPointId, EntryPointConfig> = {
       ctaLabelTemplate: "Start ${evalDays}-day free trial",
     },
     ctaLabel: "Schedule the season",
+  },
+  editor_build_play: {
+    id: "editor_build_play",
+    promptTemplate:
+      "I've got a blank play open in the editor. Help me design it — ask me about my team's age, skill level, and league/variant, and what I'm trying to accomplish (a specific look, a situation, a play type), then build the play and add it to my playbook.",
+    preview: {
+      leadIn:
+        "Coach Cal can turn a blank play into a finished one — it interviews you about your team and what you want, then designs the formation, routes, QB reads, and coaching notes for you.",
+      capabilities: [
+        "Design a play from a blank editor — formation, routes, reads, and notes",
+        "Generate plays tailored to your team's age, skill, and league rules",
+        "Suggest counters when a defense is giving your offense trouble",
+        "Build out an entire starter playbook from a few questions",
+      ],
+      ctaLabelTemplate: "Start ${evalDays}-day free trial",
+    },
+    ctaLabel: "Build this play with Cal",
   },
 };
 
