@@ -132,28 +132,31 @@ describe("computeInboxBadgeCount", () => {
     expect(await computeInboxBadgeCount(client, "owner1")).toBe(1);
   });
 
-  it("excludes site-admin operational notices from the icon badge", async () => {
-    // Even if system_notices has rows, the badge path derives with
-    // isSiteAdmin:false so they never load — count stays at the 3 coach items.
-    const client = makeClient(
-      fixture({
-        system_notices: [
-          {
-            id: "n1",
-            kind: "user_signup",
-            severity: "info",
-            user_id: "x",
-            user_display_name: "New Coach",
-            user_email: "n@x.com",
-            body: "signed up",
-            href: null,
-            detail: null,
-            created_at: "2026-01-04T00:00:00Z",
-          },
-        ],
-      }),
+  it("includes site-admin operational notices for a site admin (matches the bell)", async () => {
+    const notice = {
+      id: "n1",
+      kind: "user_signup",
+      severity: "info",
+      user_id: "x",
+      user_display_name: "New Coach",
+      user_email: "n@x.com",
+      body: "signed up",
+      href: null,
+      detail: null,
+      created_at: "2026-01-04T00:00:00Z",
+    };
+    // Site admin → 3 coach items + 1 admin notice = 4.
+    const asAdmin = makeClient(
+      fixture({ profiles: [{ role: "admin" }], system_notices: [notice] }),
     );
-    expect(await computeInboxBadgeCount(client, "owner1")).toBe(3);
+    expect(await computeInboxBadgeCount(asAdmin, "owner1")).toBe(4);
+
+    // Non-admin → admin notices never load, so the count is just the 3 coach
+    // items even if a system_notice row happens to exist.
+    const asCoach = makeClient(
+      fixture({ profiles: [{ role: "viewer" }], system_notices: [notice] }),
+    );
+    expect(await computeInboxBadgeCount(asCoach, "owner1")).toBe(3);
   });
 
   it("returns 0 (not null) for a user with an empty inbox", async () => {
@@ -179,6 +182,9 @@ describe("computeInboxBadgeCount", () => {
         gt() { return this; },
         order() { return this; },
         limit() { return this; },
+        // profiles role lookup resolves cleanly (non-admin) …
+        maybeSingle() { return Promise.resolve({ data: null, error: null }); },
+        // … then the first alert query errors → deriveInboxAlerts !ok → null.
         then(res: (v: { data: null; error: { message: string } }) => void) {
           res({ data: null, error: { message: "boom" } });
         },

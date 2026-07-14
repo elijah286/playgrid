@@ -19,7 +19,8 @@ import type {
  *   2. The native-push badge path (src/lib/notifications/*) passes a
  *      service-role client + an arbitrary recipient's id — so the iOS app-icon
  *      badge (`aps.badge`) and Android `notification_count` reflect the EXACT
- *      same count a coach sees on the bell, with no second, drift-prone counter.
+ *      same count the user sees on the bell (including the admin operational
+ *      feed for site admins), with no second, drift-prone counter.
  *
  * Every query below scopes explicitly (`.eq("user_id", …)`, `.in("playbook_id",
  * ownedIds)`, `.eq("recipient_user_id", …)`), so it returns identical rows under
@@ -518,9 +519,10 @@ export async function deriveInboxAlerts(
 
 /**
  * The number rendered on the native app icon (`aps.badge` / Android
- * `notification_count`) for `userId`: the count of *active* inbox items,
- * excluding site-admin operational notices (per product decision — the icon
- * badge mirrors the coach-facing bell, not the admin feed).
+ * `notification_count`) for `userId`: the count of *active* inbox items —
+ * exactly what the in-app inbox bell shows. For a site admin that includes the
+ * admin operational feed (signups/purchases/etc.), matching the bell; a
+ * non-admin never has those rows, so the flag is a no-op for them.
  *
  * Best-effort: returns `null` on any derivation error so the caller simply
  * omits the badge rather than failing the push. Never throws.
@@ -530,7 +532,15 @@ export async function computeInboxBadgeCount(
   userId: string,
 ): Promise<number | null> {
   try {
-    const res = await deriveInboxAlerts(client, userId, { isSiteAdmin: false });
+    // Determine site-admin status the same way listInboxAlertsAction does, so
+    // the icon badge and the bell agree for admins too.
+    const { data: profile } = await client
+      .from("profiles")
+      .select("role")
+      .eq("id", userId)
+      .maybeSingle();
+    const isSiteAdmin = (profile as { role?: string } | null)?.role === "admin";
+    const res = await deriveInboxAlerts(client, userId, { isSiteAdmin });
     if (!res.ok) return null;
     return res.alerts.filter((a) => a.status === "active").length;
   } catch {
