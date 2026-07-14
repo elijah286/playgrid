@@ -184,6 +184,7 @@ import { NativeUpgradeCta } from "@/components/billing/NativeUpgradeCta";
 import { PlaybookAnchorPublisher } from "@/features/coach-ai/PlaybookAnchorPublisher";
 import { CoachCalCTA } from "@/features/coach-ai/CoachCalCTA";
 import { openCoachCal } from "@/features/coach-ai/openCoachCal";
+import { CoachAiIcon } from "@/features/coach-ai/CoachAiIcon";
 import type { PlaybookSettings } from "@/domain/playbook/settings";
 import { firstNameCased } from "@/lib/format/name";
 
@@ -347,6 +348,8 @@ function PlaybookDetailClientInner({
   freeMaxPlays,
   gameModeAvailable = false,
   photoImportAvailable = false,
+  newPlaySheet = false,
+  coachCalFreePromptsRemaining = null,
   canUseGameMode = false,
   gameResultsAvailable = false,
   teamCalendarAvailable = false,
@@ -382,6 +385,10 @@ function PlaybookDetailClientInner({
   gameModeAvailable?: boolean;
   /** When true, show the "Import play from photo" entry (photo_play_import beta). */
   photoImportAvailable?: boolean;
+  /** New two-door "Start a new play" sheet (new_play_sheet beta). */
+  newPlaySheet?: boolean;
+  /** Remaining free Cal prompts (null when entitled) — drives the Cal door copy. */
+  coachCalFreePromptsRemaining?: number | null;
   /** When true, show the "Games" tab for reviewing past game results. */
   gameResultsAvailable?: boolean;
   /** When true, show the "Calendar" tab gated by the team_calendar beta. */
@@ -766,6 +773,10 @@ function PlaybookDetailClientInner({
   const [creating, setCreating] = useState(false);
   const [showViewerCreateHint, setShowViewerCreateHint] = useState(false);
   const [openSection, setOpenSection] = useState<PlayType>("offense");
+  // New two-door sheet (newPlaySheet beta): "choose" shows the Cal / formation
+  // doors; "formation" reveals the existing formation grid. Ignored when the
+  // flag is off (the sheet renders its classic single-step layout).
+  const [newPlayStep, setNewPlayStep] = useState<"choose" | "formation">("choose");
   const defenseTemplates = useMemo(
     () => defenseTemplatesForVariant(variant),
     [variant],
@@ -1020,6 +1031,7 @@ function PlaybookDetailClientInner({
       void createWithFormation();
       return;
     }
+    setNewPlayStep("choose");
     setShowFormationPicker(true);
     setLoadingFormations(true);
     listFormationsAction().then((res) => {
@@ -2760,18 +2772,39 @@ function PlaybookDetailClientInner({
           >
             <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-6 py-4">
               <div className="min-w-0">
-                <h2 className="text-base font-bold text-foreground">
-                  Start a new play
-                </h2>
-                <p className="mt-0.5 text-xs text-muted">
-                  Choose a formation to begin with, or start blank.
-                </p>
+                {newPlaySheet && newPlayStep === "formation" ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setNewPlayStep("choose")}
+                      className="mb-0.5 inline-flex items-center gap-1 text-xs font-medium text-muted transition-colors hover:text-foreground"
+                    >
+                      ‹ Back
+                    </button>
+                    <h2 className="text-base font-bold text-foreground">
+                      Choose a formation
+                    </h2>
+                  </>
+                ) : (
+                  <>
+                    <h2 className="text-base font-bold text-foreground">
+                      Start a new play
+                    </h2>
+                    <p className="mt-0.5 text-xs text-muted">
+                      {newPlaySheet
+                        ? "How do you want to begin?"
+                        : "Choose a formation to begin with, or start blank."}
+                    </p>
+                  </>
+                )}
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <CoachCalCTA
-                  entryPoint="playbook_generate_play"
-                  afterClick={() => setShowFormationPicker(false)}
-                />
+                {!newPlaySheet && (
+                  <CoachCalCTA
+                    entryPoint="playbook_generate_play"
+                    afterClick={() => setShowFormationPicker(false)}
+                  />
+                )}
                 <button
                   type="button"
                   className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-inset hover:text-foreground disabled:opacity-40"
@@ -2783,6 +2816,21 @@ function PlaybookDetailClientInner({
               </div>
             </div>
 
+            {newPlaySheet && newPlayStep === "choose" && (
+              <NewPlayChooseStep
+                coachAiAvailable={headerProps.coachAiAvailable}
+                freePromptsRemaining={coachCalFreePromptsRemaining}
+                onOpenCal={() => {
+                  openCoachCal("playbook_generate_play");
+                  setShowFormationPicker(false);
+                }}
+                onFormation={() => setNewPlayStep("formation")}
+                onBlank={() => void createWithFormation()}
+              />
+            )}
+
+            {(!newPlaySheet || newPlayStep === "formation") && (
+              <>
             {photoImportAvailable && !isViewer && (
               // Photo import's mobile home (the toolbar entry is
               // desktop-only): coaches on phones reach it through the
@@ -2999,6 +3047,8 @@ function PlaybookDetailClientInner({
                 </div>
               )}
             </div>
+              </>
+            )}
             {creating && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-2xl bg-surface-raised/80 backdrop-blur-sm">
                 <Loader2 className="size-8 animate-spin text-primary" />
@@ -5319,6 +5369,106 @@ function TypeFilterMenu({
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Two-door body for the "Start a new play" sheet (new_play_sheet beta). The Cal
+ * door is entitlement-aware: it advertises the coach's remaining free prompts,
+ * then flips to a Team Coach upsell once they're spent (the highest-intent
+ * conversion moment — they've felt the value and hit the wall). The formation
+ * grid stays hidden until the coach picks the formation door; a quiet text link
+ * offers a blank canvas for the coach who just wants to draw.
+ */
+function NewPlayChooseStep({
+  coachAiAvailable,
+  freePromptsRemaining,
+  onOpenCal,
+  onFormation,
+  onBlank,
+}: {
+  coachAiAvailable: boolean;
+  freePromptsRemaining: number | null;
+  onOpenCal: () => void;
+  onFormation: () => void;
+  onBlank: () => void;
+}) {
+  const entitled = freePromptsRemaining === null;
+  const outOfPrompts = !coachAiAvailable;
+  useEffect(() => {
+    track({
+      event: "coach_cal_cta_impression",
+      target: "new_play_cal_door",
+      metadata: { surface: "new_play_sheet" },
+    });
+  }, []);
+  const promptWord = freePromptsRemaining === 1 ? "free prompt" : "free";
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-4 p-4">
+      <div className="grid gap-3 sm:grid-cols-2">
+        {/* Cal door — the loud, done-for-you path. Entitlement-aware copy. */}
+        <button
+          type="button"
+          onClick={onOpenCal}
+          className="flex flex-col rounded-xl border border-indigo-400/30 bg-gradient-to-br from-indigo-500/[0.12] to-violet-500/[0.08] p-4 text-left transition-colors hover:border-indigo-400/60"
+        >
+          <span
+            className="flex size-9 items-center justify-center rounded-lg"
+            style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)" }}
+          >
+            <CoachAiIcon className="size-5" />
+          </span>
+          <h3 className="mt-3 text-[15px] font-bold text-foreground">
+            {outOfPrompts ? "Keep building with Cal" : "Generate with Cal"}
+            <span className="ml-1.5 rounded border border-violet-400/40 bg-violet-500/15 px-1.5 py-px align-[2px] text-[10px] font-extrabold tracking-wide text-violet-300">
+              AI
+            </span>
+          </h3>
+          <p className="mt-1 flex-1 text-xs leading-snug text-muted">
+            {outOfPrompts
+              ? "You’ve used all your free prompts — unlock unlimited on Team Coach."
+              : "Answer a couple questions and Cal’s AI drafts a ready-to-tweak play."}
+          </p>
+          <span className="mt-3 text-sm font-bold text-violet-300">
+            {outOfPrompts
+              ? "Get Team Coach →"
+              : entitled
+                ? "Start →"
+                : `Start → ${freePromptsRemaining} ${promptWord}`}
+          </span>
+        </button>
+        {/* Formation door — the drawer's path. Reveals the grid on tap. */}
+        <button
+          type="button"
+          onClick={onFormation}
+          className="flex flex-col rounded-xl border border-border bg-surface-inset p-4 text-left transition-colors hover:border-primary hover:bg-primary/5"
+        >
+          <span className="flex size-9 items-center justify-center rounded-lg bg-surface-raised text-muted">
+            <Pencil className="size-5" />
+          </span>
+          <h3 className="mt-3 text-[15px] font-bold text-foreground">
+            Start from a formation
+          </h3>
+          <p className="mt-1 flex-1 text-xs leading-snug text-muted">
+            Pick one of your sets and draw the play yourself.
+          </p>
+          <span className="mt-3 text-sm font-semibold text-muted">Choose →</span>
+        </button>
+      </div>
+      <div className="text-center">
+        <button
+          type="button"
+          onClick={onBlank}
+          className="rounded-md px-2 py-1 text-sm text-muted transition-colors hover:text-foreground"
+        >
+          or start from a{" "}
+          <span className="underline decoration-border underline-offset-2">
+            blank canvas
+          </span>{" "}
+          →
+        </button>
+      </div>
     </div>
   );
 }

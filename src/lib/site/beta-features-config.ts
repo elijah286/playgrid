@@ -14,7 +14,8 @@ export type BetaFeatureKey =
   | "coach_ai_image_upload"
   | "football_library"
   | "offline_auto_cache"
-  | "photo_play_import";
+  | "photo_play_import"
+  | "new_play_sheet";
 export type BetaFeatureScope = "off" | "me" | "all" | "custom";
 
 export type BetaFeatures = Record<BetaFeatureKey, BetaFeatureScope>;
@@ -48,6 +49,11 @@ const DEFAULTS: BetaFeatures = {
   // Defaults "me" (site admins only) for prod testing; widen from the
   // admin Beta features panel once the eval bar is met.
   photo_play_import: "me",
+  // New "Start a new play" sheet (2026-07): two-door layout — Generate with
+  // Cal (AI, entitlement-aware upsell) vs Start from a formation (grid hidden
+  // until chosen) + a blank-canvas escape hatch. Ships dark; "me" = site admins
+  // preview in prod, widen to "all" from the Beta features panel once verified.
+  new_play_sheet: "me",
 };
 
 /** Safe "everything off" fallback for callers that need a value even when

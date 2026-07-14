@@ -23,7 +23,7 @@ import type { SportVariant } from "@/domain/play/types";
 import { normalizePlaybookSettings } from "@/domain/playbook/settings";
 import { getCurrentEntitlement, hasUsedCoachProTrial } from "@/lib/billing/entitlement";
 import { canUseAiFeatures, canUseGameMode, tierAtLeast } from "@/lib/billing/features";
-import { hasFreeCalPromptsRemaining } from "@/lib/billing/coach-cal-free-prompts";
+import { getCoachCalFreePromptState } from "@/lib/billing/coach-cal-free-prompts";
 import { getFreePlayCapForOwner } from "@/lib/site/free-plays-config";
 import { getPlaybookOwnerId } from "@/lib/billing/owner-entitlement";
 import {
@@ -334,10 +334,16 @@ export default async function PlaybookDetailPage({ params }: Props) {
   const coachAiEntitled = isAdmin || canUseAiFeatures(viewerEntitlement);
   // Free users with trial prompts left get the real launcher, not the promo
   // (see SiteHeader for the canonical version of this gate).
-  const hasFreeCalPrompts =
+  const freeCalState =
     !coachAiEntitled && user !== null
-      ? await hasFreeCalPromptsRemaining(user.id)
-      : false;
+      ? await getCoachCalFreePromptState(user.id)
+      : null;
+  const hasFreeCalPrompts = freeCalState?.hasRemaining ?? false;
+  // Remaining free Cal prompts for the new-play sheet's Cal door; null when
+  // entitled (unlimited — the "N free" pitch doesn't apply).
+  const coachCalFreePromptsRemaining = coachAiEntitled
+    ? null
+    : freeCalState?.remaining ?? 0;
   const coachAiAvailable = coachAiEntitled || hasFreeCalPrompts;
   const showCoachCalCta =
     !coachAiAvailable && user !== null && !isAdmin;
@@ -352,6 +358,12 @@ export default async function PlaybookDetailPage({ params }: Props) {
   );
   const isCoachInPlaybook =
     effectiveRole === "owner" || effectiveRole === "editor";
+  // New two-door "Start a new play" sheet, behind the beta gate. "me" = admins
+  // preview in prod; widen to "all" from the Beta features panel when verified.
+  const newPlaySheet = isBetaFeatureAvailable(betaFeatures.new_play_sheet, {
+    isAdmin,
+    isEntitled: isCoachInPlaybook,
+  });
   // Game Mode: example previewers and any coach in the playbook can use it.
   // The /game route renders a preview client for example visitors that keeps
   // everything in local state — nothing persists.
@@ -528,6 +540,8 @@ export default async function PlaybookDetailPage({ params }: Props) {
         freeMaxPlays={freeMaxPlays}
         gameModeAvailable={gameModeAvailable}
         photoImportAvailable={photoImportAvailable}
+        newPlaySheet={newPlaySheet}
+        coachCalFreePromptsRemaining={coachCalFreePromptsRemaining}
         gameResultsAvailable={gameResultsAvailable}
         teamCalendarAvailable={teamCalendarAvailable}
         versionHistoryAvailable={versionHistoryAvailable}

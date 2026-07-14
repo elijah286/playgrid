@@ -25,6 +25,7 @@ const DEFAULTS: BetaFeatures = {
   football_library: "all",
   offline_auto_cache: "off",
   photo_play_import: "me",
+  new_play_sheet: "me",
 };
 
 export async function getBetaFeaturesAction() {
