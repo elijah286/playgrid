@@ -12,7 +12,10 @@ import { sendPushToUsers, __resetPushTokenCacheForTests } from "./push";
 
 type TableData = {
   push_opt_outs?: Array<{ user_id: string }>;
-  device_tokens?: Array<{ id: string; token: string }>;
+  device_tokens?: Array<{ id: string; token: string; user_id?: string; platform?: string }>;
+  // Optional inbox-derivation tables, so a test can drive a non-zero app-icon
+  // badge count through the fan-out.
+  playbook_copy_link_sends?: unknown[];
 };
 
 function makeAdmin(data: TableData) {
@@ -25,6 +28,13 @@ function makeAdmin(data: TableData) {
       select() { return builder; },
       eq() { return builder; },
       is() { return builder; },
+      // Query operators the shared inbox derivation uses (for the app-icon
+      // badge count). No-ops here — the mock resolves rows purely by table.
+      or() { return builder; },
+      lt() { return builder; },
+      gt() { return builder; },
+      order() { return builder; },
+      limit() { return builder; },
       in(_col: string, ids: string[]) { inIds = ids; return builder; },
       update(p: Record<string, unknown>) { op = "update"; payload = p; return builder; },
       // Single-row reads (e.g. loadApnsConfig on site_settings). Absent table
@@ -159,6 +169,46 @@ describe("sendPushToUsers", () => {
     expect(admin.__updates[0].table).toBe("device_tokens");
     expect(admin.__updates[0].ids).toEqual(["t2"]);
     expect(admin.__updates[0].payload.disabled_reason).toBe("fcm_unregistered");
+  });
+
+  it("threads each recipient's inbox count into the FCM notification_count badge", async () => {
+    setServiceAccount();
+    // One copy-share invite in the recipient's inbox → badge count 1.
+    const admin = makeAdmin({
+      device_tokens: [{ id: "t1", token: "tok1", user_id: "u1", platform: "android" }],
+      playbook_copy_link_sends: [
+        {
+          id: "cs1",
+          sent_at: "2026-01-03T00:00:00Z",
+          link: {
+            token: "shTok",
+            expires_at: "2999-01-01T00:00:00Z",
+            revoked_at: null,
+            playbook: { id: "pb2", name: "Shared", logo_url: null, color: null, is_archived: false },
+          },
+          sender: { display_name: "Dee" },
+        },
+      ],
+    });
+    const fetchSpy = vi.fn(async (url: string, _init?: RequestInit) => {
+      if (url.includes("oauth2.googleapis.com")) {
+        return new Response(JSON.stringify({ access_token: "ya29", expires_in: 3600 }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ name: "ok" }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchSpy as unknown as typeof fetch);
+
+    const res = await sendPushToUsers({
+      admin,
+      userIds: ["u1"],
+      category: "shares_mentions",
+      message: { title: "New share", body: "Dee sent you a copy" },
+    });
+
+    expect(res.delivered).toBe(1);
+    const sendCall = fetchSpy.mock.calls.find(([u]) => String(u).includes("fcm.googleapis.com"));
+    const sentBody = JSON.parse((sendCall?.[1] as RequestInit).body as string);
+    expect(sentBody.message.android.notification.notification_count).toBe(1);
   });
 
   it("does not send when all recipients are opted out", async () => {

@@ -3,6 +3,7 @@ import type { createServiceRoleClient } from "@/lib/supabase/admin";
 import { sendApnsToTokens } from "@/lib/notifications/apns";
 import { loadApnsConfig } from "@/lib/site/apns-config";
 import type { PushCategory } from "@/lib/notifications/categories";
+import { computeInboxBadgeCount } from "@/lib/inbox/derive";
 
 type Admin = ReturnType<typeof createServiceRoleClient>;
 
@@ -180,7 +181,7 @@ async function getAuth(): Promise<{ accessToken: string; projectId: string } | n
   return { accessToken: minted.value, projectId };
 }
 
-type TokenRow = { id: string; token: string; platform: string | null };
+type TokenRow = { id: string; token: string; platform: string | null; user_id: string };
 
 async function activeTokensForUsers(
   admin: Admin,
@@ -189,10 +190,40 @@ async function activeTokensForUsers(
   if (userIds.length === 0) return [];
   const { data } = await admin
     .from("device_tokens")
-    .select("id, token, platform")
+    .select("id, token, platform, user_id")
     .in("user_id", userIds)
     .is("disabled_at", null);
   return (data ?? []) as TokenRow[];
+}
+
+// Cap on how many recipients we'll compute a live badge count for in one
+// fan-out. Each count is a small handful of indexed queries; typical inbox
+// pushes target 1–3 owners, so this only trips on wide broadcasts (e.g. a
+// league-wide announcement) where the exact per-user badge isn't worth N
+// derivations. Above the cap we skip badges for the send — the count self-heals
+// on the next targeted push (and, once shipped, the native set-on-open path).
+const MAX_BADGE_RECIPIENTS = 50;
+
+/**
+ * Map each recipient user id → their live inbox badge count (or omit them when
+ * the count can't be derived). Runs the shared inbox derivation once per user,
+ * concurrently. Returns an empty map — i.e. no badges — when the recipient set
+ * is larger than MAX_BADGE_RECIPIENTS, so a wide broadcast never triggers N
+ * derivations. Always resolves; never throws (each count is itself best-effort).
+ */
+async function resolveBadgeCounts(
+  admin: Admin,
+  userIds: string[],
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (userIds.length === 0 || userIds.length > MAX_BADGE_RECIPIENTS) return out;
+  await Promise.all(
+    userIds.map(async (uid) => {
+      const count = await computeInboxBadgeCount(admin, uid);
+      if (typeof count === "number") out.set(uid, count);
+    }),
+  );
+  return out;
 }
 
 /** True when the FCM (Android) send path can authenticate in this env. */
@@ -228,9 +259,19 @@ async function sendOne(opts: {
   accessToken: string;
   token: string;
   message: PushMessage;
+  /** Absolute app-icon badge for this recipient (Android best-effort). */
+  badge?: number;
 }): Promise<{ ok: true } | { ok: false; dead: boolean }> {
   const data: Record<string, string> = { ...(opts.message.data ?? {}) };
   if (opts.message.link) data.link = opts.message.link;
+
+  // Android has no OS-level "set badge to N" API; launchers that support
+  // badging (Samsung One UI, some others) read AndroidNotification.notification_count.
+  // Best-effort — most launchers show a dot regardless and ignore this.
+  const androidNotification: Record<string, unknown> = { default_sound: true };
+  if (typeof opts.badge === "number") {
+    androidNotification.notification_count = Math.max(0, Math.trunc(opts.badge));
+  }
 
   // Hard timeout: a stalled FCM call must never hang the request. Without
   // this, a single slow send could block the whole push fan-out (and, when
@@ -255,7 +296,7 @@ async function sendOne(opts: {
               body: opts.message.body,
             },
             data,
-            android: { priority: "high", notification: { default_sound: true } },
+            android: { priority: "high", notification: androidNotification },
             apns: {
               payload: { aps: { sound: "default" } },
             },
@@ -316,6 +357,18 @@ export async function sendPushToUsers(opts: {
   const iosTokens = tokens.filter((t) => t.platform === "ios");
   const fcmTokens = tokens.filter((t) => t.platform !== "ios");
 
+  // Resolve each recipient's live app-icon badge (their current inbox count) so
+  // aps.badge / notification_count match the in-app bell. Derived from the same
+  // code path as the bell (src/lib/inbox/derive.ts) — no separate counter to
+  // drift. Skipped on wide broadcasts (see MAX_BADGE_RECIPIENTS) and always
+  // best-effort: a null count just omits the badge, never blocks the push.
+  const badgeByUser = await resolveBadgeCounts(
+    opts.admin,
+    Array.from(new Set(tokens.map((t) => t.user_id))),
+  );
+  const badgeFor = (userId: string): number | undefined =>
+    badgeByUser.get(userId) ?? undefined;
+
   const deadFcmIds: string[] = [];
   const deadApnsIds: string[] = [];
 
@@ -335,6 +388,7 @@ export async function sendPushToUsers(opts: {
           accessToken: auth.accessToken,
           token: t.token,
           message: opts.message,
+          badge: badgeFor(t.user_id),
         });
         if (r.ok) n += 1;
         else if (r.dead) deadFcmIds.push(t.id);
@@ -347,7 +401,7 @@ export async function sendPushToUsers(opts: {
     if (!apnsCfg || iosTokens.length === 0) return 0;
     const r = await sendApnsToTokens(
       apnsCfg,
-      iosTokens.map((t) => ({ id: t.id, token: t.token })),
+      iosTokens.map((t) => ({ id: t.id, token: t.token, badge: badgeFor(t.user_id) })),
       opts.message,
     );
     deadApnsIds.push(...r.deadTokenIds);
