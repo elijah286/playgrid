@@ -28,6 +28,7 @@ import { getCachedUserRole } from "@/lib/auth/profile-cache";
 import { listInboxAlertsAction } from "@/app/actions/inbox";
 import { InboxBadgeProvider } from "@/features/dashboard/InboxBadgeContext";
 import { InboxBadgeRefresher } from "@/components/layout/InboxBadgeRefresher";
+import { NativeBadgeSync } from "@/components/native/NativeBadgeSync";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -278,6 +279,7 @@ export default async function RootLayout({
                 <OfflineStatusBanner />
                 <ConnectionRecovery />
                 {isAuthed && <InboxBadgeRefresher />}
+                {isAuthed && <NativeBadgeSync />}
               </InboxBadgeProvider>
             </TutorialProvider>
           </ToastProvider>
