@@ -131,6 +131,9 @@ self.addEventListener("activate", (event) => {
 });
 
 function isStaticAsset(url) {
+  // Never cache-first the worker's own script — it must always come from the
+  // network so updates aren't masked by a stale cached copy.
+  if (url.pathname === "/sw.js") return false;
   return (
     url.pathname.startsWith("/_next/static/") ||
     url.pathname.startsWith("/brand/") ||
@@ -156,15 +159,16 @@ function isOfflineNav(url) {
  * identical to how /home has always worked.
  */
 function isCachedAppRoute(url) {
-  // /playbooks/[id] renders fully offline from its cached payload (verified).
-  // The play EDITOR (/plays/[id]/edit) is NOT included yet: it has a
-  // mount-time network dependency in its (editor) layout that throws "Load
-  // failed" offline, which would surface the error boundary instead of a
-  // useful page. Until that's isolated + made offline-safe, the editor stays
-  // out of the offline allowlist (offline nav there falls back like before).
+  // Real app pages served from cache offline. Client-side navigation to these
+  // works once their RSC payload is cached (see cacheKeyFor — the `_rsc`
+  // cache-buster is normalized so offline requests hit). The play editor is
+  // included: on client-side nav its cached RSC renders the real editor
+  // offline. (A cold-boot FULL load directly to an editor URL can still hit a
+  // mount-time server-action failure — that path is handled separately by the
+  // read-only affordance; the in-session client-nav flow is the common one.)
   return (
     /^\/playbooks\/[^/]+$/.test(url.pathname) ||
-    /^\/plays\/[^/]+\/edit$/.test(url.pathname) // TEMP: diagnosing editor offline
+    /^\/plays\/[^/]+\/edit$/.test(url.pathname)
   );
 }
 
@@ -287,8 +291,26 @@ function offlineFallbackResponse() {
   });
 }
 
+// Client-side navigations (next/link, router.push) fetch an RSC payload with
+// a per-request `_rsc` cache-buster query param whose value changes every
+// time. Caching/serving those by full URL therefore always MISSES offline —
+// the value cached online never matches the value requested offline, so
+// client-side navigation to a cached page silently fails and the transition
+// stalls. Normalize `_rsc` to a constant so the online-cached RSC and the
+// offline request map to the same key. We keep the param (rather than delete
+// it) so the RSC entry stays distinct from the HTML page's cache entry for
+// the same pathname; other params (e.g. ?tab=) are preserved so each variant
+// caches separately.
+function cacheKeyFor(request) {
+  const url = new URL(request.url);
+  if (!url.searchParams.has("_rsc")) return request;
+  url.searchParams.set("_rsc", "swcache");
+  return new Request(url.toString(), { headers: request.headers });
+}
+
 async function networkFirstWithCacheFallback(cacheName, request, htmlFallback = false) {
   const cache = await caches.open(cacheName);
+  const key = cacheKeyFor(request);
   try {
     const res = await fetchWithTimeout(request, NAV_FETCH_TIMEOUT_MS);
     // Same rule as the precache: a redirected response means we did NOT get
@@ -296,7 +318,7 @@ async function networkFirstWithCacheFallback(cacheName, request, htmlFallback = 
     // sign-out) — caching it would replace good offline content with a
     // login wall that can't submit without signal.
     if (res && res.ok && !res.redirected) {
-      cache.put(request, res.clone()).catch(() => {});
+      cache.put(key, res.clone()).catch(() => {});
       // Fire-and-forget: pull this page's chunk set into the static cache
       // so the just-refreshed HTML stays openable offline (see
       // precacheReferencedAssets).
@@ -304,7 +326,7 @@ async function networkFirstWithCacheFallback(cacheName, request, htmlFallback = 
     }
     return res;
   } catch {
-    const cached = await cache.match(request);
+    const cached = await cache.match(key);
     if (cached) return cached;
     const url = new URL(request.url);
     if (url.pathname !== "/offline") {
