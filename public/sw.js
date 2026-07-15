@@ -162,7 +162,10 @@ function isCachedAppRoute(url) {
   // failed" offline, which would surface the error boundary instead of a
   // useful page. Until that's isolated + made offline-safe, the editor stays
   // out of the offline allowlist (offline nav there falls back like before).
-  return /^\/playbooks\/[^/]+$/.test(url.pathname);
+  return (
+    /^\/playbooks\/[^/]+$/.test(url.pathname) ||
+    /^\/plays\/[^/]+\/edit$/.test(url.pathname) // TEMP: diagnosing editor offline
+  );
 }
 
 /**
