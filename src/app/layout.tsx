@@ -248,6 +248,21 @@ export default async function RootLayout({
           />
           <div className="bar" />
         </div>
+        {/* Overlay watchdog. Dismissal normally comes from NativeAppShell
+            AFTER hydration — but on an offline cold boot a missing JS chunk
+            (cached HTML from a newer build than the cached chunk set) means
+            hydration never runs, and the coach stares at the loading bar
+            forever. Inline + dependency-free so it works with zero network
+            and zero React: after 8s, reveal the server-rendered page. Plain
+            <a> navigation still works unhydrated, so the playbook list and
+            offline viewer remain reachable. No-op when hydration already
+            added .native-ready. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "setTimeout(function(){document.documentElement.classList.add('native-ready')},8000);",
+          }}
+        />
         <ThemeProvider forceLight={!isAuthed}>
           <FieldBackdrop />
           <ToastProvider>

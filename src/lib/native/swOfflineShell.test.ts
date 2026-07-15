@@ -36,7 +36,7 @@ type FakeResponse = {
 
 function res(
   path: string,
-  { redirected = false, finalPath = path, ok = true, status = 200 } = {},
+  { redirected = false, finalPath = path, ok = true, status = 200, body = "" } = {},
 ): FakeResponse {
   const r: FakeResponse = {
     ok,
@@ -46,9 +46,12 @@ function res(
     type: "basic",
     headers: { get: () => null },
     clone: () => r,
+    text: async () => body,
   };
   return r;
 }
+
+const STATIC_CACHE = "xog-shell-v4-static";
 
 class FakeCache {
   store = new Map<string, FakeResponse>();
@@ -200,6 +203,89 @@ describe("sw.js PRECACHE_URLS message", () => {
     const nav = sw.cachesByName.get(NAV_CACHE)!;
     expect(await nav.match("/offline/pb-1")).toBeUndefined();
     expect(await nav.match("/offline/pb-2")).toBeDefined();
+  });
+});
+
+describe("sw.js referenced-asset precache (chunk skew fix, 2026-07-15)", () => {
+  // The offline viewer for a downloaded playbook needs its route JS chunks.
+  // The download only precached the page HTML; the chunks were cached lazily
+  // (cache-first) and so were absent after a deploy or on a device that
+  // never opened a play online — producing "Couldn't open the offline
+  // viewer." The SW must cache a page's referenced /_next/static assets
+  // atomically WITH the page so cached HTML can never reference an uncached
+  // chunk.
+  const VIEWER_HTML = `<!doctype html><html><head>
+    <link rel="stylesheet" href="/_next/static/chunks/abc.css"/>
+    <script src="/_next/static/chunks/def.js"></script>
+    <link rel="modulepreload" href="/_next/static/chunks/ghi.js"/>
+    </head><body>viewer</body></html>`;
+  const CHUNKS = [
+    "/_next/static/chunks/abc.css",
+    "/_next/static/chunks/def.js",
+    "/_next/static/chunks/ghi.js",
+  ];
+
+  function workerServingHtml(htmlForPath: string) {
+    return loadWorker(async (url) => {
+      const path = String(url);
+      if (path === htmlForPath) return res(path, { body: VIEWER_HTML });
+      return res(path);
+    });
+  }
+
+  it("caches a per-playbook page's referenced chunks on PRECACHE_URLS", async () => {
+    const sw = workerServingHtml("/offline/pb-1");
+    await sw.fire(
+      "message",
+      waitableEvent({ data: { type: "PRECACHE_URLS", urls: ["/offline/pb-1"] } }),
+    );
+    const nav = sw.cachesByName.get(NAV_CACHE)!;
+    const stat = sw.cachesByName.get(STATIC_CACHE)!;
+    expect(await nav.match("/offline/pb-1")).toBeDefined();
+    for (const c of CHUNKS) expect(await stat.match(c)).toBeDefined();
+  });
+
+  it("caches shell chunks at install time too", async () => {
+    const sw = workerServingHtml("/home");
+    await sw.fire("install", waitableEvent());
+    const stat = sw.cachesByName.get(STATIC_CACHE)!;
+    for (const c of CHUNKS) expect(await stat.match(c)).toBeDefined();
+  });
+
+  it("does not re-fetch a chunk already in the static cache (immutable)", async () => {
+    let chunkFetches = 0;
+    const sw = loadWorker(async (url) => {
+      const path = String(url);
+      if (path === "/offline/pb-1") return res(path, { body: VIEWER_HTML });
+      if (path.startsWith("/_next/static/")) chunkFetches++;
+      return res(path);
+    });
+    const stat = new FakeCache();
+    await stat.put("/_next/static/chunks/def.js", res("/_next/static/chunks/def.js"));
+    sw.cachesByName.set(STATIC_CACHE, stat);
+
+    await sw.fire(
+      "message",
+      waitableEvent({ data: { type: "PRECACHE_URLS", urls: ["/offline/pb-1"] } }),
+    );
+    // abc.css + ghi.js fetched; def.js was already cached and skipped.
+    expect(chunkFetches).toBe(2);
+  });
+
+  it("does not cache chunks for a page that redirected to /login", async () => {
+    const sw = loadWorker(async (url) => {
+      const path = String(url);
+      if (path === "/offline/pb-1") {
+        return res(path, { redirected: true, finalPath: "/login", body: VIEWER_HTML });
+      }
+      return res(path);
+    });
+    await sw.fire(
+      "message",
+      waitableEvent({ data: { type: "PRECACHE_URLS", urls: ["/offline/pb-1"] } }),
+    );
+    const stat = sw.cachesByName.get(STATIC_CACHE);
+    for (const c of CHUNKS) expect(await stat?.match(c)).toBeFalsy();
   });
 });
 

@@ -26,6 +26,42 @@ const SHELL_VERSION = "xog-shell-v4";
 const STATIC_CACHE = `${SHELL_VERSION}-static`;
 const NAV_CACHE = `${SHELL_VERSION}-nav`;
 
+/**
+ * Cache every /_next/static asset a just-cached page references, so the
+ * cached page is COMPLETE. Static assets are cached lazily (cache-first),
+ * so after a deploy a freshly re-cached page's new hashed chunks aren't in
+ * the cache until each is requested online. Offline, those chunk loads
+ * fail: hydration never runs (the boot overlay spins forever) or a route
+ * segment's chunk throws into its error boundary ("Couldn't open the
+ * offline viewer"). Chunks are content-hashed/immutable, so anything
+ * already cached is skipped; stale chunks from older builds stay cached
+ * and keep older cached pages working.
+ */
+async function precacheReferencedAssets(res) {
+  try {
+    const text = await res.clone().text();
+    const urls = new Set();
+    const re = /\/_next\/static\/[^"'\s\\<>]+/g;
+    let m;
+    while ((m = re.exec(text))) urls.add(m[0]);
+    if (urls.size === 0) return;
+    const cache = await caches.open(STATIC_CACHE);
+    await Promise.all(
+      [...urls].map(async (u) => {
+        try {
+          if (await cache.match(u)) return;
+          const r = await fetch(u);
+          if (r.ok && !r.redirected) await cache.put(u, r.clone());
+        } catch {
+          // best-effort — the page itself will request what it needs online
+        }
+      }),
+    );
+  } catch {
+    // parsing is best-effort; never let it break the nav path
+  }
+}
+
 // Precached at install time so first offline boot has somewhere to land.
 // Anything else gets cached lazily as the user visits it online — including
 // per-playbook offline routes, which the download flow primes via
@@ -49,7 +85,10 @@ self.addEventListener("install", (event) => {
             // `!res.redirected`: logged-out fetches of authed shell routes
             // 307 to /login and resolve as a 200 — caching that under the
             // shell key would serve a login wall on offline boots.
-            if (res.ok && !res.redirected) await cache.put(url, res.clone());
+            if (res.ok && !res.redirected) {
+              await cache.put(url, res.clone());
+              await precacheReferencedAssets(res);
+            }
           } catch {
             // Precache is best-effort. If the user installs offline the
             // first time, this fails silently and we'll fill in later.
@@ -233,6 +272,10 @@ async function networkFirstWithCacheFallback(cacheName, request, htmlFallback = 
     // login wall that can't submit without signal.
     if (res && res.ok && !res.redirected) {
       cache.put(request, res.clone()).catch(() => {});
+      // Fire-and-forget: pull this page's chunk set into the static cache
+      // so the just-refreshed HTML stays openable offline (see
+      // precacheReferencedAssets).
+      precacheReferencedAssets(res).catch(() => {});
     }
     return res;
   } catch {
@@ -334,7 +377,10 @@ self.addEventListener("message", (event) => {
             const res = await fetch(u, { cache: "no-cache" });
             // See install precache: never cache a login redirect under a
             // shell/playbook key.
-            if (res.ok && !res.redirected) await cache.put(u, res.clone());
+            if (res.ok && !res.redirected) {
+              await cache.put(u, res.clone());
+              await precacheReferencedAssets(res);
+            }
           } catch {
             // best-effort
           }
