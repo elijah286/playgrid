@@ -156,10 +156,13 @@ function isOfflineNav(url) {
  * identical to how /home has always worked.
  */
 function isCachedAppRoute(url) {
-  return (
-    /^\/playbooks\/[^/]+$/.test(url.pathname) ||
-    /^\/plays\/[^/]+\/edit$/.test(url.pathname)
-  );
+  // /playbooks/[id] renders fully offline from its cached payload (verified).
+  // The play EDITOR (/plays/[id]/edit) is NOT included yet: it has a
+  // mount-time network dependency in its (editor) layout that throws "Load
+  // failed" offline, which would surface the error boundary instead of a
+  // useful page. Until that's isolated + made offline-safe, the editor stays
+  // out of the offline allowlist (offline nav there falls back like before).
+  return /^\/playbooks\/[^/]+$/.test(url.pathname);
 }
 
 /**
