@@ -9,6 +9,7 @@ import { InboxBell } from "@/components/layout/InboxBell";
 import { ResourcesDropdown } from "@/components/layout/ResourcesDropdown";
 import { MobileNavMenu } from "@/components/layout/MobileNavMenu";
 import { FeedbackTrigger } from "@/components/feedback/FeedbackTrigger";
+import { hideSiteHeaderOnMobile } from "@/components/layout/siteHeaderRoutes";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
 
 type Props = {
@@ -54,20 +55,13 @@ type Props = {
   feedbackEnabled?: boolean;
 };
 
-// Routes where the playbook banner takes over the top of the screen on
-// mobile — hide the global header there so mobile isn't stuck with two
-// stacked headers. Desktop always shows both.
-const PLAYBOOK_DETAIL_RE = /^\/playbooks\/[^/]+(?:\/.*)?$/;
-// ...except the print sub-route. It has no playbook banner of its own —
-// just a back-link row — so hiding the global header there leaves nothing
-// to push content below the iOS status bar (the back button ends up under
-// the clock) and removes the header the user expects. Keep it visible.
-const PLAYBOOK_PRINT_RE = /^\/playbooks\/[^/]+\/print(?:\/|$)/;
-
 export function SiteHeaderShell({ user, isAdmin, canDebugCal, displayName, avatarUrl, coachAiAvailable, showCoachCalPromo, coachAiEvalDays, coachAiImageUploadAvailable, userTier, coachProTrialUsed, footballLibraryAvailable, leagueAccess, feedbackEnabled }: Props) {
   const pathname = usePathname();
-  const hideOnMobile =
-    PLAYBOOK_DETAIL_RE.test(pathname) && !PLAYBOOK_PRINT_RE.test(pathname);
+  // Routes that render their own top banner (playbook detail, play editor)
+  // hide the global header on mobile so the two don't stack — see
+  // `siteHeaderRoutes.ts`. Driven off `usePathname` at render time so the
+  // hide is deterministic on the first paint, not a frame-late effect.
+  const hideOnMobile = hideSiteHeaderOnMobile(pathname);
   // Pricing is a top-level nav affordance on every public page — the
   // earlier homepage-only gate hid Pricing on /learn and similar surfaces
   // and coaches lost track of where to find it.
