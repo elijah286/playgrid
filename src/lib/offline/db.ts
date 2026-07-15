@@ -202,6 +202,25 @@ export async function getCachedPlayDocument(playId: string): Promise<unknown | n
   return row?.document ?? null;
 }
 
+/**
+ * All cached play documents for a playbook, keyed by playId. The offline
+ * playbook view renders a thumbnail grid (one mini-diagram per play), so it
+ * needs every play's document up front rather than lazily one at a time.
+ */
+export async function getCachedPlayDocuments(
+  playbookId: string,
+): Promise<Map<string, unknown>> {
+  const db = await openDb();
+  const t = tx(db, [STORE_DOCUMENTS], "readonly");
+  const rows = await promisify<CachedPlayDocument[]>(
+    t
+      .objectStore(STORE_DOCUMENTS)
+      .index("playbookId")
+      .getAll(IDBKeyRange.only(playbookId)),
+  );
+  return new Map(rows.map((r) => [r.playId, r.document]));
+}
+
 export async function removeCachedPlaybook(playbookId: string): Promise<void> {
   const db = await openDb();
   const t = tx(db, [STORE_PLAYBOOKS, STORE_PLAYS, STORE_DOCUMENTS], "readwrite");

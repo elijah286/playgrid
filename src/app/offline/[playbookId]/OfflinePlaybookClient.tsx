@@ -7,10 +7,11 @@ import { Button, Input } from "@/components/ui";
 import {
   getCachedPlaybookMeta,
   getCachedPlays,
-  getCachedPlayDocument,
+  getCachedPlayDocuments,
   type CachedPlaybookMeta,
   type CachedPlayRow,
 } from "@/lib/offline/db";
+import { PlayThumbnail, type PlayThumbnailInput } from "@/features/editor/PlayThumbnail";
 import { PlayDocRender } from "@/features/coach-ai/PlayDiagramEmbed";
 
 type Props = { playbookId: string };
@@ -22,12 +23,56 @@ const KIND_LABELS: Record<PlayKind, string> = {
   defense: "Defense",
   special_teams: "Special teams",
 };
+const KIND_BADGE: Record<string, string> = {
+  defense: "Defense",
+  special_teams: "ST",
+};
+
+/** Build the thumbnail input from a cached PlayDocument (same shape the
+ *  online playbook grid feeds PlayThumbnail). */
+function previewFromDoc(doc: PlayDocument | undefined): PlayThumbnailInput | null {
+  if (!doc?.layers) return null;
+  return {
+    players: doc.layers.players ?? [],
+    routes: doc.layers.routes ?? [],
+    zones: doc.layers.zones ?? [],
+    lineOfScrimmageY: doc.lineOfScrimmageY ?? 0.5,
+  };
+}
+
+/** Team logo when it's available offline (cached image), else the colored
+ *  initial tile — mirrors the playbook's identity on the online page. */
+function PlaybookMark({ meta, size }: { meta: CachedPlaybookMeta; size: number }) {
+  const [imgOk, setImgOk] = useState(true);
+  const px = { width: size, height: size };
+  if (meta.logoUrl && imgOk) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={meta.logoUrl}
+        alt=""
+        style={px}
+        onError={() => setImgOk(false)}
+        className="shrink-0 rounded-lg object-contain"
+      />
+    );
+  }
+  return (
+    <div
+      className="flex shrink-0 items-center justify-center rounded-lg text-white"
+      style={{ ...px, backgroundColor: meta.color }}
+    >
+      <span className="text-sm font-bold">{(meta.name[0] ?? "?").toUpperCase()}</span>
+    </div>
+  );
+}
 
 export function OfflinePlaybookClient({ playbookId }: Props) {
   const [meta, setMeta] = useState<CachedPlaybookMeta | null>(null);
   const [plays, setPlays] = useState<CachedPlayRow[] | null>(null);
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [activeDoc, setActiveDoc] = useState<PlayDocument | null>(null);
+  const [docsById, setDocsById] = useState<Map<string, PlayDocument>>(new Map());
+  // null → grid view; a play id → that play's full diagram (detail view).
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [kind, setKind] = useState<PlayKind>("all");
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -37,13 +82,13 @@ export function OfflinePlaybookClient({ playbookId }: Props) {
     void Promise.all([
       getCachedPlaybookMeta(playbookId),
       getCachedPlays(playbookId),
+      getCachedPlayDocuments(playbookId),
     ])
-      .then(([m, ps]) => {
+      .then(([m, ps, docs]) => {
         if (!alive) return;
         setMeta(m);
-        const sorted = [...ps].sort((a, b) => a.name.localeCompare(b.name));
-        setPlays(sorted);
-        if (sorted.length > 0) setActiveId(sorted[0].id);
+        setPlays([...ps].sort((a, b) => a.name.localeCompare(b.name)));
+        setDocsById(docs as Map<string, PlayDocument>);
       })
       .catch((e) => {
         if (alive) setLoadError(e instanceof Error ? e.message : "Couldn't load.");
@@ -52,28 +97,6 @@ export function OfflinePlaybookClient({ playbookId }: Props) {
       alive = false;
     };
   }, [playbookId]);
-
-  useEffect(() => {
-    if (!activeId) {
-      setActiveDoc(null);
-      return;
-    }
-    let alive = true;
-    void getCachedPlayDocument(activeId)
-      .then((d) => {
-        if (alive) setActiveDoc((d as PlayDocument | null) ?? null);
-      })
-      // A rejected read (e.g. WKWebView's storage service refusing IndexedDB
-      // connections right after a cold launch) must not escape as an
-      // unhandled rejection — degrade to the "Select a play" empty state;
-      // picking a play again retries the read.
-      .catch(() => {
-        if (alive) setActiveDoc(null);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [activeId]);
 
   const filtered = useMemo(() => {
     if (!plays) return [];
@@ -116,10 +139,8 @@ export function OfflinePlaybookClient({ playbookId }: Props) {
             onClick={() => {
               setLoadError(null);
               setPlays(null);
-              // useEffect re-runs because `plays` was reset to null and the
-              // playbookId dep didn't change — instead, force a remount-ish
-              // reload by reloading the route. This is offline-safe because
-              // the SW serves the cached HTML.
+              // The SW serves the cached HTML, so a reload is offline-safe and
+              // re-runs the IndexedDB reads from scratch.
               window.location.reload();
             }}
           >
@@ -129,8 +150,7 @@ export function OfflinePlaybookClient({ playbookId }: Props) {
             href="/offline"
             className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface-raised px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-surface-inset"
           >
-            <ArrowLeft className="size-4" />
-            Offline library
+            Back
           </a>
         </div>
       </div>
@@ -139,9 +159,13 @@ export function OfflinePlaybookClient({ playbookId }: Props) {
 
   if (plays === null) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-6">
+      <div className="mx-auto max-w-5xl px-4 py-6">
         <div className="h-10 w-1/3 animate-pulse rounded bg-surface-inset" />
-        <div className="mt-4 h-64 animate-pulse rounded-xl bg-surface-inset" />
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="aspect-[16/10] animate-pulse rounded-lg bg-surface-inset" />
+          ))}
+        </div>
       </div>
     );
   }
@@ -168,6 +192,47 @@ export function OfflinePlaybookClient({ playbookId }: Props) {
     );
   }
 
+  // ── Detail view: the tapped play's full canonical diagram ─────────────────
+  const selectedPlay = selectedId ? plays.find((p) => p.id === selectedId) : null;
+  const selectedDoc = selectedId ? docsById.get(selectedId) : undefined;
+  if (selectedPlay) {
+    return (
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-4">
+        <button
+          type="button"
+          onClick={() => setSelectedId(null)}
+          className="inline-flex w-fit items-center gap-1.5 text-sm text-muted hover:text-foreground"
+        >
+          <ArrowLeft className="size-4" />
+          <span>{meta.name}</span>
+        </button>
+        <div className="flex items-baseline justify-between gap-3">
+          <h1 className="text-lg font-bold text-foreground">{selectedPlay.name}</h1>
+          {selectedPlay.wristbandCode && (
+            <span className="shrink-0 rounded-md bg-primary px-2 py-0.5 text-xs font-bold text-white">
+              {selectedPlay.wristbandCode}
+            </span>
+          )}
+        </div>
+        <div className="rounded-xl border border-border bg-surface-raised p-3">
+          {selectedDoc ? (
+            <PlayRenderBoundary key={selectedId}>
+              <div className="flex justify-center">
+                <PlayDocRender doc={selectedDoc} />
+              </div>
+            </PlayRenderBoundary>
+          ) : (
+            <div className="flex h-64 items-center justify-center text-center text-sm text-muted">
+              This play&rsquo;s diagram isn&rsquo;t in the offline copy. Re-download
+              the playbook when you&rsquo;re back online.
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Grid view: mirrors the online playbook page ───────────────────────────
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-4">
       <div className="flex items-center justify-between gap-3">
@@ -185,14 +250,7 @@ export function OfflinePlaybookClient({ playbookId }: Props) {
       </div>
 
       <div className="flex items-center gap-3">
-        <div
-          className="flex size-10 shrink-0 items-center justify-center rounded-lg text-white"
-          style={{ backgroundColor: meta.color }}
-        >
-          <span className="text-sm font-bold">
-            {(meta.name[0] ?? "?").toUpperCase()}
-          </span>
-        </div>
+        <PlaybookMark meta={meta} size={40} />
         <div className="min-w-0">
           <h1 className="truncate text-lg font-bold text-foreground">{meta.name}</h1>
           <p className="text-xs text-muted">
@@ -202,87 +260,74 @@ export function OfflinePlaybookClient({ playbookId }: Props) {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-[260px_1fr]">
-        <div className="flex flex-col gap-2">
-          <Input
-            leftIcon={Search}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search plays"
-          />
-          {availableKinds.length > 2 && (
-            <div className="-mx-0.5 flex gap-1 overflow-x-auto pb-0.5">
-              {availableKinds.map((k) => (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => setKind(k)}
-                  className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                    kind === k
-                      ? "bg-primary text-white"
-                      : "bg-surface-inset text-muted hover:text-foreground"
-                  }`}
-                >
-                  {KIND_LABELS[k]}
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="max-h-[60vh] overflow-y-auto rounded-xl border border-border bg-surface-raised p-1.5">
-            <ul className="space-y-0.5">
-              {filtered.map((p) => (
-                <li key={p.id}>
-                  <button
-                    type="button"
-                    onClick={() => setActiveId(p.id)}
-                    className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                      p.id === activeId
-                        ? "bg-primary text-white font-medium"
-                        : "text-foreground hover:bg-surface-inset"
-                    }`}
-                  >
-                    <span className="truncate">{p.name}</span>
-                    {p.wristbandCode && (
-                      <span className="shrink-0 text-xs opacity-70">
-                        {p.wristbandCode}
-                      </span>
-                    )}
-                  </button>
-                </li>
-              ))}
-              {filtered.length === 0 && (
-                <li className="px-3 py-6 text-center text-xs text-muted">
-                  No plays match.
-                </li>
-              )}
-            </ul>
-          </div>
+      <Input
+        leftIcon={Search}
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Search plays"
+      />
+      {availableKinds.length > 2 && (
+        <div className="-mx-0.5 flex gap-1 overflow-x-auto pb-0.5">
+          {availableKinds.map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setKind(k)}
+              className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                kind === k
+                  ? "bg-primary text-white"
+                  : "bg-surface-inset text-muted hover:text-foreground"
+              }`}
+            >
+              {KIND_LABELS[k]}
+            </button>
+          ))}
         </div>
+      )}
 
-        <div className="rounded-xl border border-border bg-surface-raised p-3">
-          {activeDoc ? (
-            // Per-play boundary so a single corrupt cached document
-            // (e.g. downloaded before a PlayDocument schema migration)
-            // doesn't take the whole offline shell down to /app/error.tsx
-            // — coaches were stuck on "Something went wrong" with no way
-            // to pick a different play.
-            //
-            // Renders through the SHARED canonical PlayDocRender so an
-            // offline play looks identical to the online editor / Cal
-            // diagram — full field chrome, colored player tokens, route
-            // arrowheads, motion — not the old stripped-down field.
-            <PlayRenderBoundary key={activeId}>
-              <div className="flex justify-center">
-                <PlayDocRender doc={activeDoc} />
-              </div>
-            </PlayRenderBoundary>
-          ) : (
-            <div className="flex h-64 items-center justify-center text-sm text-muted">
-              Select a play to view it.
-            </div>
-          )}
+      {filtered.length === 0 ? (
+        <div className="rounded-xl border border-border bg-surface-raised px-3 py-10 text-center text-sm text-muted">
+          No plays match.
         </div>
-      </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+          {filtered.map((p) => {
+            const preview = previewFromDoc(docsById.get(p.id));
+            const badge = KIND_BADGE[p.playType];
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setSelectedId(p.id)}
+                className="group relative flex flex-col overflow-hidden rounded-xl border border-border bg-surface-raised p-2 text-left transition-colors hover:border-primary/50 hover:bg-surface-inset"
+              >
+                {preview ? (
+                  <PlayThumbnail preview={preview} />
+                ) : (
+                  <div className="flex aspect-[16/10] items-center justify-center rounded-lg border border-border bg-surface-inset text-[11px] text-muted">
+                    No diagram
+                  </div>
+                )}
+                <div className="mt-1.5 flex items-center justify-between gap-1.5">
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
+                    {p.name}
+                  </span>
+                  {p.wristbandCode && (
+                    <span className="shrink-0 text-xs font-medium text-muted">
+                      {p.wristbandCode}
+                    </span>
+                  )}
+                </div>
+                {badge && (
+                  <span className="pointer-events-none absolute right-2 top-2 rounded-full bg-foreground/80 px-1.5 py-0.5 text-[10px] font-semibold text-surface">
+                    {badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
