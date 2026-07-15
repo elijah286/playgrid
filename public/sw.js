@@ -147,12 +147,31 @@ function isOfflineNav(url) {
 }
 
 /**
+ * The REAL app pages we render offline (local-first Phase 2): the playbook
+ * detail page and the play editor. Their client components take all their
+ * data as props from the server-rendered payload and make NO on-mount
+ * server reads — so serving the cached HTML/RSC offline renders the exact
+ * same page a coach sees online, with no separate offline surface. Handled
+ * network-first (fresh online, cached copy only when the network is gone),
+ * identical to how /home has always worked.
+ */
+function isCachedAppRoute(url) {
+  return (
+    /^\/playbooks\/[^/]+$/.test(url.pathname) ||
+    /^\/plays\/[^/]+\/edit$/.test(url.pathname)
+  );
+}
+
+/**
  * Routes that must work offline. /home is the graceful-degrade landing
  * page (downloaded tiles still tappable, others greyed), /offline/* is
- * the dedicated viewer for downloaded playbooks.
+ * the cold-boot downloaded-playbook library, and the real playbook/play
+ * pages render from cache so going offline mid-session is seamless.
  */
 function isShellNav(url) {
-  return url.pathname === "/home" || isOfflineNav(url);
+  return (
+    url.pathname === "/home" || isOfflineNav(url) || isCachedAppRoute(url)
+  );
 }
 
 function isShellRsc(url, req) {
