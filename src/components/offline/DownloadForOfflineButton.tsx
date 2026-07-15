@@ -80,7 +80,7 @@ export function DownloadForOfflineButton({ playbookId, className, onAction }: Pr
       setMeta(res.bundle.meta);
       void hapticSuccess();
       toast(
-        meta ? "Playbook refreshed for offline." : "Playbook saved for offline.",
+        meta ? "Offline copy updated." : "Now available offline on this device.",
         "success",
       );
       onAction?.();
@@ -128,30 +128,33 @@ export function DownloadForOfflineButton({ playbookId, className, onAction }: Pr
         ) : (
           <Download className="size-4 shrink-0" />
         )}
-        <span>{busy === "download" ? "Downloading…" : "Download for offline"}</span>
+        <span>{busy === "download" ? "Saving for offline…" : "Make available offline"}</span>
       </button>
     );
   }
 
   return (
     <>
+      {/* Persistent status: this playbook is kept on THIS device and refreshed
+          automatically in the background. Non-interactive — the actions below
+          manage it. */}
+      <div className="flex w-full items-center gap-2 px-3 py-2 text-sm text-emerald-600 dark:text-emerald-400">
+        <Check className="size-4 shrink-0" />
+        <span className="flex-1 font-medium">Available offline</span>
+        {busy === "download" && (
+          <Loader2 className="size-3.5 shrink-0 animate-spin text-muted" />
+        )}
+      </div>
       <button
         type="button"
         role="menuitem"
         disabled={busy != null || offline}
         onClick={handleDownload}
-        title={offline ? offlineReason : undefined}
+        title={offline ? offlineReason : "Kept up to date automatically — tap to update now"}
         className={cls}
       >
-        {busy === "download" ? (
-          <Loader2 className="size-4 shrink-0 animate-spin" />
-        ) : (
-          <RefreshCw className="size-4 shrink-0" />
-        )}
-        <span className="flex-1">
-          {busy === "download" ? "Refreshing…" : "Refresh offline copy"}
-        </span>
-        <Check className="size-3.5 shrink-0 text-emerald-500" aria-label="Downloaded" />
+        <RefreshCw className="size-4 shrink-0" />
+        <span>{busy === "download" ? "Updating…" : "Update now"}</span>
       </button>
       <button
         type="button"
@@ -165,7 +168,7 @@ export function DownloadForOfflineButton({ playbookId, className, onAction }: Pr
         ) : (
           <Trash2 className="size-4 shrink-0" />
         )}
-        <span>Remove offline copy</span>
+        <span>Remove from offline</span>
       </button>
     </>
   );

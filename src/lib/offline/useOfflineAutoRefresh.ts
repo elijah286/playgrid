@@ -6,6 +6,7 @@ import {
   getPlaybookOfflineSignatureAction,
   listOfflinePlaybookIdsAction,
 } from "@/app/actions/offline";
+import { getConnectivitySnapshot, subscribeConnectivity } from "./connectivity";
 import { listCachedPlaybooks, putPlaybookBundle } from "./db";
 
 /** How often the loop wakes itself up while the tab stays open. */
@@ -43,11 +44,18 @@ export function useOfflineAutoRefresh(autoCache = false): void {
 
   useEffect(() => {
     let alive = true;
+    // Ensure the connectivity store is live so getConnectivitySnapshot() below
+    // reflects real network state (idempotent; shared with useOfflineState).
+    const unsubConnectivity = subscribeConnectivity(() => {});
 
     async function runRefresh(): Promise<void> {
       if (!alive) return;
       if (inFlightRef.current) return;
-      if (typeof navigator !== "undefined" && !navigator.onLine) return;
+      // Use the debounced connectivity store, not the WKWebView-unreliable
+      // navigator.onLine — the same flag that flipped the app to "offline"
+      // under load. A stale "offline" reading here just skips a refresh pass
+      // (harmless); the next tick retries.
+      if (!getConnectivitySnapshot()) return;
       const now = Date.now();
       if (now - lastRunRef.current < MIN_GAP_MS) return;
       lastRunRef.current = now;
@@ -70,7 +78,7 @@ export function useOfflineAutoRefresh(autoCache = false): void {
 
         for (const id of ids) {
           if (!alive) return;
-          if (typeof navigator !== "undefined" && !navigator.onLine) return;
+          if (!getConnectivitySnapshot()) return; // stop the sweep if we drop
           try {
             const sig = await getPlaybookOfflineSignatureAction(id);
             if (!sig.ok) continue;
@@ -124,6 +132,7 @@ export function useOfflineAutoRefresh(autoCache = false): void {
       clearInterval(intervalTimer);
       window.removeEventListener("online", onOnline);
       document.removeEventListener("visibilitychange", onVisible);
+      unsubConnectivity();
     };
   }, [autoCache]);
 }
