@@ -392,7 +392,7 @@ function LockedOverlay() {
  * All animation is GPU-cheap: `transform` + `opacity` only, driven by CSS
  * `group-hover` with a custom property. No JS per frame.
  */
-function PlaybookBookTile({
+export function PlaybookBookTile({
   tile,
   actions,
 }: {
@@ -404,12 +404,31 @@ function PlaybookBookTile({
   const isDownloaded = downloadedIds.has(tile.id);
   const offlineUnavailable = native && !isOnline && !isDownloaded;
 
+  // Branch by swapping COMPONENTS, never by early-returning above hooks.
+  // `isOnline` flips at runtime (the connectivity probe resolves ~1s after
+  // hydration on an offline cold boot), and an early return before
+  // InteractiveBookTile's hooks changed the hook count between renders —
+  // React #300, which took the whole /home segment down to the error
+  // boundary right when an offline coach needed it (2026-07-15).
   if (tile.is_locked) {
     return <LockedBookTile tile={tile} />;
   }
   if (offlineUnavailable) {
     return <OfflineUnavailableBookTile tile={tile} />;
   }
+  return <InteractiveBookTile tile={tile} actions={actions} />;
+}
+
+function InteractiveBookTile({
+  tile,
+  actions,
+}: {
+  tile: DashboardPlaybookTile;
+  actions: ActionMenuItem[];
+}) {
+  const native = useIsNativeApp();
+  const { isOnline, downloadedIds } = useOfflineState();
+  const isDownloaded = downloadedIds.has(tile.id);
   const color = colorFor(tile);
   const initials = tile.name
     .split(/\s+/)
