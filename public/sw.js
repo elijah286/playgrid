@@ -46,17 +46,17 @@ async function precacheReferencedAssets(res) {
     while ((m = re.exec(text))) urls.add(m[0]);
     if (urls.size === 0) return;
     const cache = await caches.open(STATIC_CACHE);
-    await Promise.all(
-      [...urls].map(async (u) => {
-        try {
-          if (await cache.match(u)) return;
-          const r = await fetch(u);
-          if (r.ok && !r.redirected) await cache.put(u, r.clone());
-        } catch {
-          // best-effort — the page itself will request what it needs online
-        }
-      }),
-    );
+    // Throttled (runLimited): a page can reference hundreds of chunks — fetching
+    // them all at once would flood the connection.
+    await runLimited([...urls], 6, async (u) => {
+      try {
+        if (await cache.match(u)) return;
+        const r = await fetch(u);
+        if (r.ok && !r.redirected) await cache.put(u, r.clone());
+      } catch {
+        // best-effort — the page itself will request what it needs online
+      }
+    });
   } catch {
     // parsing is best-effort; never let it break the nav path
   }
@@ -471,30 +471,41 @@ async function precacheRsc(url) {
 // playbook's play routes so an old download's play pages land on-device
 // WITHOUT a manual re-download, staying cheap on repeat launches. The
 // download button omits dedupe so a "Refresh offline copy" re-fetches fresh.
+// Run async work over a list with a hard concurrency cap so precaching can
+// never fan out into a fetch storm that saturates the connection (which times
+// out the connectivity probe and makes the ONLINE app feel offline).
+async function runLimited(items, limit, fn) {
+  const queue = items.slice();
+  const worker = async () => {
+    while (queue.length) await fn(queue.shift());
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(limit, queue.length) }, worker),
+  );
+}
+
 self.addEventListener("message", (event) => {
   const data = event.data;
   if (!data || data.type !== "PRECACHE_URLS" || !Array.isArray(data.urls)) return;
   event.waitUntil(
     (async () => {
       const cache = await caches.open(NAV_CACHE);
-      await Promise.all(
-        data.urls.map(async (u) => {
-          try {
-            if (data.dedupe && (await cache.match(u))) return; // already cached
-            const res = await fetch(u, { cache: "no-cache" });
-            // See install precache: never cache a login redirect under a
-            // shell/playbook key.
-            if (res.ok && !res.redirected) {
-              await cache.put(u, res.clone());
-              await precacheReferencedAssets(res);
-              // Also prime the RSC so client-side nav to it works offline.
-              await precacheRsc(u);
-            }
-          } catch {
-            // best-effort
+      await runLimited(data.urls, 3, async (u) => {
+        try {
+          if (data.dedupe && (await cache.match(u))) return; // already cached
+          const res = await fetch(u, { cache: "no-cache" });
+          // See install precache: never cache a login redirect under a
+          // shell/playbook key.
+          if (res.ok && !res.redirected) {
+            await cache.put(u, res.clone());
+            await precacheReferencedAssets(res);
+            // Also prime the RSC so client-side nav to it works offline.
+            await precacheRsc(u);
           }
-        }),
-      );
+        } catch {
+          // best-effort
+        }
+      });
     })(),
   );
 });
