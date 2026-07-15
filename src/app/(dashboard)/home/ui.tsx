@@ -231,14 +231,11 @@ function PlaybookTile({
     .slice(0, 2) || "PB";
 
   const locked = tile.is_locked;
-  // Offline route is offense + defense + ST viewer for the cached bundle;
-  // online route is the regular dashboard. When offline + downloaded we
-  // hand a hard `<a href>` so the SW-cached HTML serves cleanly without
-  // an RSC round-trip.
-  const href =
-    native && !isOnline && isDownloaded
-      ? `/offline/${tile.id}`
-      : `/playbooks/${tile.id}`;
+  // Always the REAL playbook page — online and offline. Offline it renders
+  // from the SW cache (precached at download), so there's no separate offline
+  // surface. When offline + downloaded we hand a hard `<a href>` so the
+  // SW-cached HTML serves cleanly without depending on an RSC round-trip.
+  const href = `/playbooks/${tile.id}`;
 
   const inner = (
     <div className="flex h-full flex-col">
@@ -581,11 +578,7 @@ function InteractiveBookTile({
         }}
       >
       <Link
-        href={
-          native && !isOnline && isDownloaded
-            ? `/offline/${tile.id}`
-            : `/playbooks/${tile.id}`
-        }
+        href={`/playbooks/${tile.id}`}
         className="relative block aspect-[3/4] w-full"
       >
         {/* ------------------------------------------------------------ */}

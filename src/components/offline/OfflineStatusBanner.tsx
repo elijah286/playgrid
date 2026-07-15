@@ -46,9 +46,9 @@ export function OfflineStatusBanner() {
       style={{ top: "calc(env(safe-area-inset-top, 0px) + 0.5rem)" }}
     >
       {interactive ? (
-        // Use a hard <a> rather than next/link so the SW-cached /offline shell
-        // serves cleanly without an RSC round-trip that would fail offline.
-        <a href="/offline" aria-label="Open offline library" className={pillClasses}>
+        // Hard <a> to the real /home so the SW-cached shell serves cleanly
+        // offline — downloaded playbooks live there, no separate surface.
+        <a href="/home" aria-label="Go to your playbooks" className={pillClasses}>
           <WifiOff className="size-3" />
           <span>{label}</span>
         </a>

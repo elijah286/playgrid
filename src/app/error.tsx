@@ -1,36 +1,9 @@
 "use client";
 
 import * as Sentry from "@sentry/nextjs";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { unstable_isUnrecognizedActionError } from "next/navigation";
 import { Button } from "@/components/ui";
-import { isNativeApp } from "@/lib/native/isNativeApp";
-import { probeConnectivity } from "@/lib/offline/connectivity";
-
-/**
- * Offline safety net: a coach without signal who reaches a playbook's
- * ONLINE route (/playbooks/<id>) errors here when the data fetch fails. If
- * that playbook is downloaded, the right answer isn't an error screen —
- * it's the offline copy. Verified with a real probe (never the unreliable
- * `navigator.onLine`) so an online crash on the same route still shows the
- * normal error UI instead of bouncing a connected coach to the viewer.
- * Returns true if a redirect was issued.
- */
-async function redirectToOfflineCopyIfAvailable(): Promise<boolean> {
-  if (!isNativeApp()) return false;
-  const match = window.location.pathname.match(/^\/playbooks\/([^/]+)/);
-  if (!match) return false;
-  try {
-    const { getCachedPlaybookMeta } = await import("@/lib/offline/db");
-    const meta = await getCachedPlaybookMeta(match[1]!);
-    if (!meta) return false;
-    if (await probeConnectivity()) return false;
-    window.location.replace(`/offline/${match[1]}`);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 export default function RouteError({
   error,
@@ -44,7 +17,6 @@ export default function RouteError({
   // this as UnrecognizedActionError. The fix is a hard reload so the
   // browser fetches the new JS; the next click then matches.
   const isStaleClient = unstable_isUnrecognizedActionError(error);
-  const [redirecting, setRedirecting] = useState(false);
 
   useEffect(() => {
     if (isStaleClient) {
@@ -53,36 +25,23 @@ export default function RouteError({
       window.location.reload();
       return;
     }
-    void redirectToOfflineCopyIfAvailable().then((redirected) => {
-      if (redirected) setRedirecting(true);
-    });
     Sentry.captureException(error);
   }, [error, isStaleClient]);
 
-  // "Go home" needs to actually go somewhere when the device is offline.
-  // /home isn't always in the SW cache (first launch with no signal, or
-  // after a fresh install), so landing there can produce the WebView's
-  // generic "This page couldn't load" page. /offline is precached at SW
-  // install and always serves the downloaded-playbook library — a much
-  // better last resort than a dead end. Probe rather than trust
-  // navigator.onLine (WKWebView reports true in airplane mode).
+  // "Go home" always goes to the real /home — it's precached and renders
+  // offline (the SW serves the cached shell), so it's the right landing
+  // whether or not there's signal.
   const goHome = () => {
-    void probeConnectivity().then((online) => {
-      window.location.href = online ? "/home" : "/offline";
-    });
+    window.location.href = "/home";
   };
 
-  if (isStaleClient || redirecting) {
-    // Reload/redirect is firing in useEffect; render a quiet placeholder so
+  if (isStaleClient) {
+    // Reload is firing in useEffect; render a quiet placeholder so
     // the user doesn't see a flash of "Something went wrong" before the
     // browser navigates away.
     return (
       <div className="mx-auto max-w-lg px-6 py-16 text-center">
-        <p className="text-sm text-muted">
-          {redirecting
-            ? "Opening your downloaded playbook…"
-            : "Updating to the latest version…"}
-        </p>
+        <p className="text-sm text-muted">Updating to the latest version…</p>
       </div>
     );
   }

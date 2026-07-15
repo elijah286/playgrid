@@ -46,20 +46,23 @@ export async function precacheUrls(urls: string[]): Promise<void> {
  *    where a coach downloads playbooks and drives to the field) would end
  *    with no SW and no cached shell.
  * 3. Playbooks already saved to IndexedDB may predate the registration (the
- *    download button's precache no-ops without a SW), so their /offline/<id>
- *    routes are re-primed from the local DB — self-healing for devices that
- *    downloaded playbooks while the SW was unregistered.
+ *    download button's precache no-ops without a SW), so the REAL
+ *    /playbooks/<id> routes are re-primed from the local DB — self-healing
+ *    for devices that downloaded playbooks while the SW was unregistered.
+ *
+ * Primes the REAL app routes (/home, /playbooks/<id>) so offline navigation
+ * lands on the standard pages — there is no separate offline surface.
  */
 export async function primeOfflineShell(): Promise<void> {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
   await registerOfflineServiceWorker();
-  const urls = ["/home", "/offline"];
+  const urls = ["/home"];
   try {
     const { listCachedPlaybooks } = await import("@/lib/offline/db");
     const cached = await listCachedPlaybooks();
-    urls.push(...cached.map((m) => `/offline/${m.id}`));
+    urls.push(...cached.map((m) => `/playbooks/${m.id}`));
   } catch {
-    // IndexedDB unavailable/cold — shell routes still get primed.
+    // IndexedDB unavailable/cold — /home still gets primed.
   }
   await precacheUrls(urls);
 }

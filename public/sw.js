@@ -329,14 +329,16 @@ async function networkFirstWithCacheFallback(cacheName, request, htmlFallback = 
     const cached = await cache.match(key);
     if (cached) return cached;
     const url = new URL(request.url);
-    if (url.pathname !== "/offline") {
-      const offlineFallback = await cache.match("/offline");
-      if (offlineFallback) return Response.redirect("/offline", 302);
+    // Fall back to the cached /home shell (the standard app view) — never a
+    // separate offline surface. If /home isn't cached either, serve the
+    // self-contained inline retry page so a navigation never ends on a blank
+    // network error (black WebView). Non-navigation callers (RSC payloads)
+    // get Response.error() — HTML is the wrong content type and the client
+    // handles a failed RSC fetch gracefully.
+    if (htmlFallback && url.pathname !== "/home") {
+      const homeFallback = await cache.match("/home");
+      if (homeFallback) return Response.redirect("/home", 302);
     }
-    // A navigation must never end on a blank network error (black WebView):
-    // serve the self-contained inline retry page. Non-navigation callers
-    // (RSC payloads) still get Response.error() — HTML is the wrong content
-    // type for them, and the client handles a failed RSC fetch gracefully.
     return htmlFallback ? offlineFallbackResponse() : Response.error();
   }
 }
@@ -354,19 +356,15 @@ async function handleNavigation(request) {
   }
 
   // Everything else: network-first. If it fails (or stalls past the
-  // timeout), redirect to /home so coaches land on the tile list
-  // (downloaded ones are still tappable). If /home isn't cached, try
-  // /offline. Only fall through to Response.error when both shells
-  // are missing — that's the case the user described as "this page
-  // couldn't load," so we serve the cached offline shell whenever
-  // it's available rather than returning a broken response.
+  // timeout), redirect to the cached /home shell (the standard app view) so
+  // coaches land on their tile list — downloaded ones are still tappable.
+  // Only fall through to the inline retry page when /home isn't cached
+  // either.
   try {
     return await fetchWithTimeout(request, NAV_FETCH_TIMEOUT_MS);
   } catch {
     const homeFallback = await cache.match("/home");
     if (homeFallback) return Response.redirect("/home", 302);
-    const offlineFallback = await cache.match("/offline");
-    if (offlineFallback) return Response.redirect("/offline", 302);
     // Last resort: the self-contained inline retry page, never a blank
     // Response.error() — that rendered as the black WebView we're fixing.
     return offlineFallbackResponse();
@@ -409,9 +407,32 @@ self.addEventListener("fetch", (event) => {
   }
 });
 
+// Precache the RSC payload for a route so CLIENT-SIDE navigation to it works
+// offline (not just a full page load). Next serves the RSC when the request
+// carries the `RSC: 1` header; we store it under the same normalized `_rsc`
+// key the fetch handler reads (cacheKeyFor), so an offline client-nav — whose
+// `_rsc` value differs — still hits. Best-effort.
+async function precacheRsc(url) {
+  try {
+    const rscUrl = url + (url.includes("?") ? "&" : "?") + "_rsc=swcache";
+    const res = await fetch(rscUrl, {
+      cache: "no-cache",
+      headers: { RSC: "1" },
+    });
+    if (res.ok && !res.redirected) {
+      const cache = await caches.open(NAV_CACHE);
+      await cache.put(new Request(rscUrl), res.clone());
+      await precacheReferencedAssets(res);
+    }
+  } catch {
+    // best-effort — client-nav will fall back to a full load offline
+  }
+}
+
 // Allow the page to nudge the worker into precaching a specific URL — used
-// after a coach downloads a playbook so the per-playbook /offline/<id> route
-// is in the cache before they actually need it.
+// after a coach downloads a playbook so the real /playbooks/<id> +
+// /plays/<id>/edit routes (HTML + RSC + chunks) are in the cache before they
+// need them offline.
 self.addEventListener("message", (event) => {
   const data = event.data;
   if (!data || data.type !== "PRECACHE_URLS" || !Array.isArray(data.urls)) return;
@@ -427,6 +448,8 @@ self.addEventListener("message", (event) => {
             if (res.ok && !res.redirected) {
               await cache.put(u, res.clone());
               await precacheReferencedAssets(res);
+              // Also prime the RSC so client-side nav to it works offline.
+              await precacheRsc(u);
             }
           } catch {
             // best-effort

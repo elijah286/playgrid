@@ -68,11 +68,15 @@ export function DownloadForOfflineButton({ playbookId, className, onAction }: Pr
         plays: res.bundle.plays,
         documents: res.bundle.documents,
       });
-      // Prime the SW cache so the per-playbook offline view loads without
-      // signal. Without this the data is in IndexedDB but the page that
-      // displays it has never been fetched, so airplane-mode visits hit
-      // a stalled navigation.
-      void precacheUrls(["/offline", `/offline/${playbookId}`]);
+      // Prime the SW cache with the REAL app routes so they load offline —
+      // the playbook page and every play's editor (HTML + RSC + chunks). No
+      // separate offline surface: the coach navigates the standard pages
+      // without signal. Without this the data is in IndexedDB but the pages
+      // that render it were never fetched, so offline visits stall.
+      void precacheUrls([
+        `/playbooks/${playbookId}`,
+        ...res.bundle.plays.map((p) => `/plays/${p.id}/edit`),
+      ]);
       setMeta(res.bundle.meta);
       void hapticSuccess();
       toast(
