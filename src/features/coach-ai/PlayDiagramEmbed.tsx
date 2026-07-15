@@ -573,8 +573,17 @@ export function PlayDiagramEmbed({ json }: { json: string }) {
 /** Render-from-doc primitive shared by PlayDiagramEmbed (model-supplied
  *  JSON) and PlayDiagramRef (saved play fetched by id). When a saved
  *  play is being shown, `linkTo` carries its name + id so the heading
- *  above the diagram becomes a clickable shortcut into the play editor. */
-function PlayDocRender({
+ *  above the diagram becomes a clickable shortcut into the play editor.
+ *
+ *  Exported as the ONE canonical read-only play renderer: the offline
+ *  viewer and the mobile /m/play carousel render through this exact
+ *  component so a play looks identical everywhere (same field chrome —
+ *  yard lines, numbers, hash marks, LOS, zones, colored/shaped player
+ *  tokens, route decorations, motion) whether online or offline. It is
+ *  pure (usePlayAnimation + domain helpers only) and needs no network or
+ *  server data — just a cached PlayDocument. Do NOT add a parallel play
+ *  renderer; extend this one. */
+export function PlayDocRender({
   doc,
   linkTo,
 }: {

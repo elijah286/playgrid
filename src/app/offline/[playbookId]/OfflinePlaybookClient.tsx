@@ -11,7 +11,7 @@ import {
   type CachedPlaybookMeta,
   type CachedPlayRow,
 } from "@/lib/offline/db";
-import { OfflinePlayView } from "./OfflinePlayView";
+import { PlayDocRender } from "@/features/coach-ai/PlayDiagramEmbed";
 
 type Props = { playbookId: string };
 
@@ -266,8 +266,15 @@ export function OfflinePlaybookClient({ playbookId }: Props) {
             // doesn't take the whole offline shell down to /app/error.tsx
             // — coaches were stuck on "Something went wrong" with no way
             // to pick a different play.
+            //
+            // Renders through the SHARED canonical PlayDocRender so an
+            // offline play looks identical to the online editor / Cal
+            // diagram — full field chrome, colored player tokens, route
+            // arrowheads, motion — not the old stripped-down field.
             <PlayRenderBoundary key={activeId}>
-              <OfflinePlayView document={activeDoc} />
+              <div className="flex justify-center">
+                <PlayDocRender doc={activeDoc} />
+              </div>
             </PlayRenderBoundary>
           ) : (
             <div className="flex h-64 items-center justify-center text-sm text-muted">
