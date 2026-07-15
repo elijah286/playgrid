@@ -326,7 +326,13 @@ async function networkFirstWithCacheFallback(cacheName, request, htmlFallback = 
     }
     return res;
   } catch {
-    const cached = await cache.match(key);
+    // ignoreVary: RSC responses carry `Vary: RSC, Next-Router-State-Tree, …`,
+    // and the router state tree differs between the request that populated the
+    // cache and the offline request. Without ignoreVary the match fails on
+    // that header mismatch, the fetch falls through to the (unreachable)
+    // network, and the client-side navigation throws "Load failed". Matching
+    // by URL only serves the route's cached RSC regardless of state-tree.
+    const cached = await cache.match(key, { ignoreVary: true });
     if (cached) return cached;
     const url = new URL(request.url);
     // Fall back to the cached /home shell (the standard app view) — never a
