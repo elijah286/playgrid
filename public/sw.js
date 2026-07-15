@@ -46,7 +46,10 @@ self.addEventListener("install", (event) => {
         PRECACHE_URLS.map(async (url) => {
           try {
             const res = await fetch(url, { cache: "no-cache" });
-            if (res.ok) await cache.put(url, res.clone());
+            // `!res.redirected`: logged-out fetches of authed shell routes
+            // 307 to /login and resolve as a 200 — caching that under the
+            // shell key would serve a login wall on offline boots.
+            if (res.ok && !res.redirected) await cache.put(url, res.clone());
           } catch {
             // Precache is best-effort. If the user installs offline the
             // first time, this fails silently and we'll fill in later.
@@ -66,6 +69,22 @@ self.addEventListener("activate", (event) => {
         names
           .filter((n) => !n.startsWith(SHELL_VERSION))
           .map((n) => caches.delete(n)),
+      );
+      // Heal poisoned nav entries from before the `!res.redirected` guards:
+      // a shell route fetched while logged out cached the /login page under
+      // the shell key. Deleting (not re-fetching) is enough — the install
+      // precache and authed navigations repopulate with real content.
+      const nav = await caches.open(NAV_CACHE);
+      const entries = await nav.keys();
+      await Promise.all(
+        entries.map(async (req) => {
+          const res = await nav.match(req);
+          if (!res) return;
+          const finalPath = res.url ? new URL(res.url).pathname : null;
+          if (res.redirected || finalPath === "/login") {
+            await nav.delete(req);
+          }
+        }),
       );
       await self.clients.claim();
     })(),
@@ -208,7 +227,13 @@ async function networkFirstWithCacheFallback(cacheName, request, htmlFallback = 
   const cache = await caches.open(cacheName);
   try {
     const res = await fetchWithTimeout(request, NAV_FETCH_TIMEOUT_MS);
-    if (res && res.ok) cache.put(request, res.clone()).catch(() => {});
+    // Same rule as the precache: a redirected response means we did NOT get
+    // the shell route we asked for (usually a bounce to /login after
+    // sign-out) — caching it would replace good offline content with a
+    // login wall that can't submit without signal.
+    if (res && res.ok && !res.redirected) {
+      cache.put(request, res.clone()).catch(() => {});
+    }
     return res;
   } catch {
     const cached = await cache.match(request);
@@ -307,7 +332,9 @@ self.addEventListener("message", (event) => {
         data.urls.map(async (u) => {
           try {
             const res = await fetch(u, { cache: "no-cache" });
-            if (res.ok) await cache.put(u, res.clone());
+            // See install precache: never cache a login redirect under a
+            // shell/playbook key.
+            if (res.ok && !res.redirected) await cache.put(u, res.clone());
           } catch {
             // best-effort
           }

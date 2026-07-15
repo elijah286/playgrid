@@ -31,3 +31,35 @@ export async function precacheUrls(urls: string[]): Promise<void> {
   if (!worker) return;
   worker.postMessage({ type: "PRECACHE_URLS", urls });
 }
+
+/**
+ * Post-auth offline priming. Runs when a session becomes available (not just
+ * at mount) because:
+ *
+ * 1. The mount-time registration can fail — it runs on the pre-login landing
+ *    page for fresh installs, and any /sw.js fetch that bounces through a
+ *    redirect makes registration throw SecurityError (SW script fetches use
+ *    redirect mode "error"). Re-registering here is idempotent and succeeds
+ *    once a session exists.
+ * 2. Login is usually a client-side navigation, so NativeAppShell does NOT
+ *    remount after auth — without this hook the first app session (the one
+ *    where a coach downloads playbooks and drives to the field) would end
+ *    with no SW and no cached shell.
+ * 3. Playbooks already saved to IndexedDB may predate the registration (the
+ *    download button's precache no-ops without a SW), so their /offline/<id>
+ *    routes are re-primed from the local DB — self-healing for devices that
+ *    downloaded playbooks while the SW was unregistered.
+ */
+export async function primeOfflineShell(): Promise<void> {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+  await registerOfflineServiceWorker();
+  const urls = ["/home", "/offline"];
+  try {
+    const { listCachedPlaybooks } = await import("@/lib/offline/db");
+    const cached = await listCachedPlaybooks();
+    urls.push(...cached.map((m) => `/offline/${m.id}`));
+  } catch {
+    // IndexedDB unavailable/cold — shell routes still get primed.
+  }
+  await precacheUrls(urls);
+}

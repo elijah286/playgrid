@@ -95,6 +95,36 @@ describe("updateSession eviction (signed_out_elsewhere)", () => {
   });
 });
 
+describe("updateSession public paths — offline service worker script", () => {
+  // Regression (2026-07-15 "offline playbooks broken on 1.0.1"): /sw.js was
+  // auth-gated, and a service worker script fetch hard-fails on ANY redirect
+  // (spec redirect mode "error"). Fresh installs of the native app register
+  // from the pre-login landing page, so registration threw SecurityError on
+  // every new device — no SW, no offline shell, dead app at the field.
+  beforeEach(() => {
+    vi.mocked(getUserWithTimeout).mockResolvedValue({
+      kind: "ok",
+      user: null,
+    });
+  });
+
+  it("lets a logged-out WebView fetch /sw.js without a login redirect", async () => {
+    const req = new NextRequest("https://www.xogridmaker.com/sw.js", {
+      headers: { host: "www.xogridmaker.com" },
+    });
+    const res = await updateSession(req);
+    expect(res.headers.get("location")).toBeNull();
+  });
+
+  it("still gates a protected route for anonymous callers (allowlist stays narrow)", async () => {
+    const req = new NextRequest("https://www.xogridmaker.com/home", {
+      headers: { host: "www.xogridmaker.com" },
+    });
+    const res = await updateSession(req);
+    expect(res.headers.get("location")).toContain("/login");
+  });
+});
+
 describe("updateSession public paths — metadata image routes", () => {
   // Regression: link-preview crawlers (iMessage, Slack, Facebook) fetch the
   // file-based metadata image routes with no session. These routes exist at

@@ -2,7 +2,10 @@
 
 import { useEffect } from "react";
 import { isNativeApp, nativePlatform } from "@/lib/native/isNativeApp";
-import { registerOfflineServiceWorker } from "@/lib/native/registerServiceWorker";
+import {
+  primeOfflineShell,
+  registerOfflineServiceWorker,
+} from "@/lib/native/registerServiceWorker";
 import { registerPush, unregisterPush } from "@/lib/native/registerPush";
 import { registerAppOpen } from "@/lib/native/registerAppOpen";
 import {
@@ -134,6 +137,14 @@ export function NativeAppShell() {
       // user is attached to this install (the mount call may have run while
       // still logged out).
       void registerAppOpen();
+      // Re-register the offline SW and prime the shell caches now that a
+      // session exists. The mount-time registration runs pre-login on fresh
+      // installs and can fail (a redirected /sw.js fetch = SecurityError);
+      // login is a client-side nav, so without this retry the first session
+      // — the one where a coach downloads playbooks — ends with no offline
+      // shell at all. Also re-primes /offline/<id> for playbooks already in
+      // IndexedDB whose download-time precache no-oped.
+      void primeOfflineShell();
       void registerPush().then((fn) => {
         if (cancelled) fn?.();
         else teardownPush = fn;

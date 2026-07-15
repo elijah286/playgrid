@@ -37,6 +37,13 @@ const PUBLIC_EXACT = new Set<string>([
   "/sitemap.xml",
   "/manifest.webmanifest",
   "/opengraph-image",
+  // Offline-shell service worker script. A service worker script fetch
+  // hard-fails on ANY redirect (spec: redirect mode "error"), so gating this
+  // behind auth made registration throw SecurityError for every logged-out
+  // context — i.e. every fresh install of the native app, which registers
+  // from the pre-login landing page. The script is a static public asset
+  // with no secrets; it MUST stay reachable without a session.
+  "/sw.js",
 ]);
 
 const PUBLIC_PREFIXES = [
