@@ -32,11 +32,25 @@ const PROBE_URL = "/api/health";
 const PROBE_TIMEOUT_MS = 2500;
 /** Re-probe cadence while offline, so recovery is noticed promptly. */
 const OFFLINE_REPROBE_MS = 8000;
+/**
+ * Consecutive failed probes required to flip online→offline. A single failed
+ * probe is NOT enough: under transient device-side congestion (e.g. a burst
+ * of background fetches saturating the radio) even a healthy /api/health can
+ * time out once, and flipping the whole app to "offline" on that one blip is
+ * exactly the false-offline that stranded users during the precache storm.
+ * Recovery (offline→online) is still immediate on the first success. The OS
+ * `offline` event stays trusted-immediately for genuine airplane-mode.
+ */
+const FAILURE_THRESHOLD = 2;
+/** Quick re-probe to confirm a suspected drop before committing to offline. */
+const CONFIRM_REPROBE_MS = 1200;
 
 let online = true;
 let started = false;
 let probeInFlight: Promise<boolean> | null = null;
 let reprobeTimer: ReturnType<typeof setTimeout> | null = null;
+let confirmTimer: ReturnType<typeof setTimeout> | null = null;
+let consecutiveFailures = 0;
 const listeners = new Set<() => void>();
 
 function emit(next: boolean) {
@@ -53,9 +67,19 @@ function scheduleReprobe() {
   }, OFFLINE_REPROBE_MS);
 }
 
+/** A short confirmation re-probe after a first failure while still online. */
+function scheduleConfirmReprobe() {
+  if (confirmTimer || reprobeTimer) return;
+  confirmTimer = setTimeout(() => {
+    confirmTimer = null;
+    void probeConnectivity();
+  }, CONFIRM_REPROBE_MS);
+}
+
 /**
- * Ask the network, not the flag. Resolves with the (possibly updated)
- * online state. Concurrent callers share one in-flight probe.
+ * Ask the network, not the flag. Resolves with the (debounced) online state —
+ * NOT the raw single-probe result — so imperative callers don't act offline on
+ * a blip. Concurrent callers share one in-flight probe.
  */
 export function probeConnectivity(): Promise<boolean> {
   if (typeof fetch === "undefined") return Promise.resolve(online);
@@ -72,9 +96,30 @@ export function probeConnectivity(): Promise<boolean> {
     .then((ok) => {
       clearTimeout(timer);
       probeInFlight = null;
-      emit(ok);
-      if (!ok) scheduleReprobe();
-      return ok;
+      if (ok) {
+        // Any successful probe clears the failure streak and restores online
+        // immediately — recovery should never lag.
+        consecutiveFailures = 0;
+        if (confirmTimer) {
+          clearTimeout(confirmTimer);
+          confirmTimer = null;
+        }
+        emit(true);
+      } else {
+        consecutiveFailures += 1;
+        if (online && consecutiveFailures < FAILURE_THRESHOLD) {
+          // Suspected drop, not confirmed — hold online and re-probe soon.
+          scheduleConfirmReprobe();
+        } else {
+          if (confirmTimer) {
+            clearTimeout(confirmTimer);
+            confirmTimer = null;
+          }
+          emit(false);
+          scheduleReprobe();
+        }
+      }
+      return online;
     });
   return probeInFlight;
 }
@@ -85,7 +130,14 @@ function start() {
   online = typeof navigator === "undefined" ? true : navigator.onLine;
 
   window.addEventListener("offline", () => {
-    // Trustworthy when it fires — no verification needed.
+    // Real OS signal — trust it immediately, bypassing the probe debounce
+    // (browsers don't fire `offline` spuriously; this is genuine airplane
+    // mode / radio loss).
+    consecutiveFailures = FAILURE_THRESHOLD;
+    if (confirmTimer) {
+      clearTimeout(confirmTimer);
+      confirmTimer = null;
+    }
     emit(false);
     scheduleReprobe();
   });
@@ -131,5 +183,8 @@ export function __resetConnectivityForTests(): void {
   probeInFlight = null;
   if (reprobeTimer) clearTimeout(reprobeTimer);
   reprobeTimer = null;
+  if (confirmTimer) clearTimeout(confirmTimer);
+  confirmTimer = null;
+  consecutiveFailures = 0;
   listeners.clear();
 }
