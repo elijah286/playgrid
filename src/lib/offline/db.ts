@@ -193,6 +193,17 @@ export async function getCachedPlays(playbookId: string): Promise<CachedPlayRow[
   return rows;
 }
 
+/** A single cached play row by id (the plays store is keyed by id). Used by
+ *  the editor's offline read-only fallback to show the play's name. */
+export async function getCachedPlay(playId: string): Promise<CachedPlayRow | null> {
+  const db = await openDb();
+  const t = tx(db, [STORE_PLAYS], "readonly");
+  const row = await promisify<CachedPlayRow | undefined>(
+    t.objectStore(STORE_PLAYS).get(playId),
+  );
+  return row ?? null;
+}
+
 export async function getCachedPlayDocument(playId: string): Promise<unknown | null> {
   const db = await openDb();
   const t = tx(db, [STORE_DOCUMENTS], "readonly");
