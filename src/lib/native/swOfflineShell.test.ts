@@ -206,6 +206,99 @@ describe("sw.js PRECACHE_URLS message", () => {
   });
 });
 
+describe("sw.js poisoned-home guard (2026-07-15)", () => {
+  // /home can render "Couldn't load — check your connection" as a 200 when the
+  // dashboard fetch times out on a flaky connection. Caching that poisons the
+  // offline boot with a dead-end error page. It must never be cached, and an
+  // already-poisoned entry must be healed on activate.
+  const POISON = "<html><body>Couldn't load — check your connection.</body></html>";
+
+  function navEvent(path: string) {
+    const event: any = {
+      request: { method: "GET", mode: "navigate", url: `${ORIGIN}${path}`, headers: { get: () => "" } },
+    };
+    event.respondWith = (p: Promise<unknown>) => {
+      event.__responded = Promise.resolve(p);
+    };
+    return event;
+  }
+
+  // Navigation fetches pass the request OBJECT (not a URL string); read its url.
+  const pathOf = (u: any) => (typeof u === "string" ? u : new URL(u.url).pathname);
+
+  it("does NOT cache a /home response showing the connection error", async () => {
+    const sw = loadWorker(async (u) => {
+      const path = pathOf(u);
+      if (path === "/home") return res(path, { body: POISON });
+      return res(path);
+    });
+    const event = navEvent("/home");
+    await sw.fire("fetch", event);
+    await event.__responded;
+    const nav = sw.cachesByName.get(NAV_CACHE);
+    expect(await nav?.match("/home")).toBeUndefined();
+  });
+
+  it("still caches a healthy /home", async () => {
+    const sw = loadWorker(async (u) => res(pathOf(u), { body: "<html>playbooks</html>" }));
+    const event = navEvent("/home");
+    await sw.fire("fetch", event);
+    await event.__responded;
+    const nav = sw.cachesByName.get(NAV_CACHE)!;
+    expect(await nav.match("/home")).toBeDefined();
+  });
+
+  it("heals an already-cached poisoned /home on activate", async () => {
+    const sw = loadWorker(async (url) => res(String(url)));
+    const nav = new FakeCache();
+    await nav.put("/home", res("/home", { body: POISON }));
+    await nav.put("/offline", res("/offline"));
+    sw.cachesByName.set(NAV_CACHE, nav);
+    await sw.fire("activate", waitableEvent());
+    expect(await nav.match("/home")).toBeUndefined();
+    expect(await nav.match("/offline")).toBeDefined();
+  });
+});
+
+describe("sw.js PRECACHE_URLS dedupe (self-heal, 2026-07-15)", () => {
+  it("skips URLs already cached when dedupe is set", async () => {
+    let fetches = 0;
+    const sw = loadWorker(async (url) => {
+      fetches++;
+      return res(String(url), { body: "x" });
+    });
+    const nav = new FakeCache();
+    await nav.put("/plays/a/edit", res("/plays/a/edit"));
+    sw.cachesByName.set(NAV_CACHE, nav);
+    await sw.fire(
+      "message",
+      waitableEvent({
+        data: { type: "PRECACHE_URLS", dedupe: true, urls: ["/plays/a/edit", "/plays/b/edit"] },
+      }),
+    );
+    // /plays/a/edit already cached → skipped; only /plays/b/edit (+ its RSC) fetched.
+    expect(await nav.match("/plays/b/edit")).toBeDefined();
+    // a was NOT re-fetched: the only page fetch is b (RSC adds one more for b).
+    expect(fetches).toBeLessThanOrEqual(2);
+  });
+
+  it("re-fetches everything when dedupe is absent (download refresh)", async () => {
+    let pageFetches = 0;
+    const sw = loadWorker(async (url) => {
+      if (/\/edit$/.test(String(url))) pageFetches++;
+      return res(String(url), { body: "x" });
+    });
+    const nav = new FakeCache();
+    await nav.put("/plays/a/edit", res("/plays/a/edit"));
+    sw.cachesByName.set(NAV_CACHE, nav);
+    await sw.fire(
+      "message",
+      waitableEvent({ data: { type: "PRECACHE_URLS", urls: ["/plays/a/edit"] } }),
+    );
+    expect(pageFetches).toBe(1); // refreshed despite being cached
+  });
+});
+
 describe("sw.js referenced-asset precache (chunk skew fix, 2026-07-15)", () => {
   // The offline viewer for a downloaded playbook needs its route JS chunks.
   // The download only precached the page HTML; the chunks were cached lazily

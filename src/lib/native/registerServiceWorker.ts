@@ -24,12 +24,15 @@ export async function registerOfflineServiceWorker(): Promise<void> {
  * downloads a playbook, so `/offline/<playbookId>` is in cache before
  * they actually need it on the sideline).
  */
-export async function precacheUrls(urls: string[]): Promise<void> {
+export async function precacheUrls(
+  urls: string[],
+  opts?: { dedupe?: boolean },
+): Promise<void> {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
   const reg = await navigator.serviceWorker.getRegistration();
   const worker = reg?.active ?? reg?.waiting ?? reg?.installing;
   if (!worker) return;
-  worker.postMessage({ type: "PRECACHE_URLS", urls });
+  worker.postMessage({ type: "PRECACHE_URLS", urls, dedupe: opts?.dedupe ?? false });
 }
 
 /**
@@ -46,23 +49,35 @@ export async function precacheUrls(urls: string[]): Promise<void> {
  *    where a coach downloads playbooks and drives to the field) would end
  *    with no SW and no cached shell.
  * 3. Playbooks already saved to IndexedDB may predate the registration (the
- *    download button's precache no-ops without a SW), so the REAL
- *    /playbooks/<id> routes are re-primed from the local DB — self-healing
- *    for devices that downloaded playbooks while the SW was unregistered.
+ *    download button's precache no-ops without a SW), so the REAL app routes
+ *    are re-primed from the local DB — SELF-HEALING for downloads that
+ *    predate the real-route precache: every downloaded playbook's
+ *    /playbooks/<id> AND every one of its plays' /plays/<id>/edit get pulled
+ *    into the cache so tapping a play offline opens the real editor with no
+ *    manual re-download. `dedupe` skips already-cached routes, so this sweep
+ *    only pays the fetch cost once (the first launch after an update) and is
+ *    near-free thereafter.
  *
- * Primes the REAL app routes (/home, /playbooks/<id>) so offline navigation
- * lands on the standard pages — there is no separate offline surface.
+ * Primes the REAL app routes only — there is no separate offline surface.
  */
 export async function primeOfflineShell(): Promise<void> {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
   await registerOfflineServiceWorker();
   const urls = ["/home"];
   try {
-    const { listCachedPlaybooks } = await import("@/lib/offline/db");
+    const { listCachedPlaybooks, getCachedPlays } = await import("@/lib/offline/db");
     const cached = await listCachedPlaybooks();
-    urls.push(...cached.map((m) => `/playbooks/${m.id}`));
+    for (const m of cached) {
+      urls.push(`/playbooks/${m.id}`);
+      try {
+        const plays = await getCachedPlays(m.id);
+        urls.push(...plays.map((p) => `/plays/${p.id}/edit`));
+      } catch {
+        // A playbook's plays are unreadable — still prime its /playbooks page.
+      }
+    }
   } catch {
     // IndexedDB unavailable/cold — /home still gets primed.
   }
-  await precacheUrls(urls);
+  await precacheUrls(urls, { dedupe: true });
 }

@@ -119,9 +119,21 @@ self.addEventListener("activate", (event) => {
         entries.map(async (req) => {
           const res = await nav.match(req);
           if (!res) return;
+          const reqPath = new URL(req.url).pathname;
           const finalPath = res.url ? new URL(res.url).pathname : null;
           if (res.redirected || finalPath === "/login") {
             await nav.delete(req);
+            return;
+          }
+          // Heal a previously-cached poisoned /home (dashboard soft-error).
+          if (reqPath === "/home") {
+            try {
+              if ((await res.clone().text()).includes("check your connection")) {
+                await nav.delete(req);
+              }
+            } catch {
+              /* leave it — a read failure isn't proof it's poisoned */
+            }
           }
         }),
       );
@@ -308,6 +320,21 @@ function cacheKeyFor(request) {
   return new Request(url.toString(), { headers: request.headers });
 }
 
+// A shell page can render a transient soft-error yet still return HTTP 200 —
+// e.g. /home when the dashboard data fetch times out on a flaky connection
+// shows "Couldn't load — check your connection". Caching THAT poisons the
+// cache: every offline boot then serves the error page, with no working way
+// back to the playbooks. Refuse to cache it so the last good copy survives.
+async function isPoisonedShell(request, res) {
+  const url = new URL(request.url);
+  if (url.pathname !== "/home") return false;
+  try {
+    return (await res.clone().text()).includes("check your connection");
+  } catch {
+    return false;
+  }
+}
+
 async function networkFirstWithCacheFallback(cacheName, request, htmlFallback = false) {
   const cache = await caches.open(cacheName);
   const key = cacheKeyFor(request);
@@ -316,8 +343,9 @@ async function networkFirstWithCacheFallback(cacheName, request, htmlFallback = 
     // Same rule as the precache: a redirected response means we did NOT get
     // the shell route we asked for (usually a bounce to /login after
     // sign-out) — caching it would replace good offline content with a
-    // login wall that can't submit without signal.
-    if (res && res.ok && !res.redirected) {
+    // login wall that can't submit without signal. And never cache a
+    // poisoned soft-error shell (see isPoisonedShell).
+    if (res && res.ok && !res.redirected && !(await isPoisonedShell(request, res))) {
       cache.put(key, res.clone()).catch(() => {});
       // Fire-and-forget: pull this page's chunk set into the static cache
       // so the just-refreshed HTML stays openable offline (see
@@ -435,10 +463,14 @@ async function precacheRsc(url) {
   }
 }
 
-// Allow the page to nudge the worker into precaching a specific URL — used
+// Allow the page to nudge the worker into precaching specific URLs — used
 // after a coach downloads a playbook so the real /playbooks/<id> +
 // /plays/<id>/edit routes (HTML + RSC + chunks) are in the cache before they
-// need them offline.
+// need them offline. `dedupe: true` skips URLs already cached — used by the
+// self-heal on app launch (primeOfflineShell), which sweeps every downloaded
+// playbook's play routes so an old download's play pages land on-device
+// WITHOUT a manual re-download, staying cheap on repeat launches. The
+// download button omits dedupe so a "Refresh offline copy" re-fetches fresh.
 self.addEventListener("message", (event) => {
   const data = event.data;
   if (!data || data.type !== "PRECACHE_URLS" || !Array.isArray(data.urls)) return;
@@ -448,6 +480,7 @@ self.addEventListener("message", (event) => {
       await Promise.all(
         data.urls.map(async (u) => {
           try {
+            if (data.dedupe && (await cache.match(u))) return; // already cached
             const res = await fetch(u, { cache: "no-cache" });
             // See install precache: never cache a login redirect under a
             // shell/playbook key.
