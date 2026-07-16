@@ -107,6 +107,17 @@ export default function EditorError({
           while you&rsquo;re online and tap &ldquo;Available offline&rdquo; —
           plays with a green check are ready for the sideline.
         </p>
+        {/* Show what threw HERE TOO. This branch is supposed to mean "nothing
+            was cached", but if that's ever wrong we'd be silently blaming the
+            coach's connection for a crash — and offline is exactly when Sentry
+            is unreachable, so the screen is the only place the truth can appear.
+            Muted and small: informative if you look, ignorable if you don't. */}
+        {error?.message && (
+          <p className="mt-4 break-words px-2 font-mono text-[10px] leading-snug text-muted/70">
+            {error.message}
+            {error.digest ? ` · ${error.digest}` : ""}
+          </p>
+        )}
         <div className="mt-5 flex justify-center">
           <Button variant="secondary" onClick={() => window.history.back()}>
             Back
