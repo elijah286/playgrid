@@ -96,7 +96,12 @@ export default async function DashboardLayout({
     // mount in the editor chrome too — see src/app/layout.tsx.
     <div className="min-h-full">
       {expirationNotice && <ExpirationBanner notice={expirationNotice} />}
-      <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
+      {/* `data-dashboard-main` lets a page opt out of the max-w-6xl cap for
+          itself (see `body.playbook-wide` in globals CSS) without every
+          dashboard page inheriting the wider shell. */}
+      <main data-dashboard-main className="mx-auto max-w-6xl px-6 py-8">
+        {children}
+      </main>
       <TermsAcceptancePrompt needed={termsNeeded} />
       {/* Defer the (dismissible) name prompt until the (blocking) terms gate is
           cleared, so a new user never sees both modals stacked. */}

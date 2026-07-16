@@ -509,6 +509,50 @@ html.coach-docked .coach-dock-aware {
   --site-header-height: 61px;
 }
 
+/* Tablet in the native shell: let the playbook page use the full screen.
+ * The dashboard shell caps at max-w-6xl (1152px), which on an iPad Pro
+ * landscape (1366px) leaves dead margins either side of the plays grid AND
+ * keeps content under the 1280px `xl:` threshold, so the grid's `xl:` column
+ * counts can never fire. Removing the cap is what lets them.
+ *
+ * Scoped three ways on purpose: `html.native-shell` (Capacitor only — the web
+ * app is unchanged, including iPad Safari), `min-width: 768px` (tablets only —
+ * a native iPhone is narrower and keeps today's layout), and `body.playbook-wide`
+ * (set by the playbook page alone, so no other dashboard page widens). */
+@media (min-width: 768px) {
+  html.native-shell body.playbook-wide [data-dashboard-main] {
+    max-width: none;
+  }
+}
+
+/* Plays-grid columns on tablet, driven by width rather than by the `sm/lg/xl`
+ * steps in SIZE_COL_CLASS. The Tailwind breakpoints can't express this: an
+ * iPad Pro 11" landscape (1194px) and a 13" (1366px) both want 5 medium
+ * columns, but they straddle the 1280px `xl:` line, so a class-based rule
+ * would give the 11" only 3. Native shell only — the web grid is untouched. */
+@media (min-width: 768px) and (max-width: 1099px) {
+  html.native-shell [data-plays-grid="small"] {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  html.native-shell [data-plays-grid="medium"] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  html.native-shell [data-plays-grid="large"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1100px) {
+  html.native-shell [data-plays-grid="small"] {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  html.native-shell [data-plays-grid="medium"] {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  html.native-shell [data-plays-grid="large"] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 /* Field viewport cap on small screens. Without this, when the editor
  * column grows in edit mode the aspect-ratio field can end up taller than
  * the phone viewport. The cap binds both dimensions so the aspect ratio
@@ -777,6 +821,19 @@ body.native-app [data-site-header],
 body.native-app .native-safe-top {
   padding-top: env(safe-area-inset-top);
 }
+/* Like .native-safe-top, but only while the element is actually flush with
+ * the viewport top. The playbook banners (dashboard + editor) are flush only
+ * below `sm`, where the site header is hidden; at `sm` and up the site header
+ * sits above them and they stick below it, so the inset would pad content
+ * away from a notch that is not overhead — dead space on tablets. */
+body.native-app .native-safe-top-mobile {
+  padding-top: env(safe-area-inset-top);
+}
+@media (min-width: 640px) {
+  body.native-app .native-safe-top-mobile {
+    padding-top: 0;
+  }
+}
 body.native-app [data-site-footer],
 body.native-app [data-marketing-only],
 body.native-app [data-pwa-install],
@@ -846,4 +903,47 @@ html.native-shell [data-native-only] {
     max-height: 100%;
     max-width: 100%;
   }
+}
+
+/* Fullscreen field in the play editor (toggled from PlayEditorClient).
+ * Same idea as the game-mode rule above: `height: 100%` + `width: auto`
+ * lets the viewport's inline `aspect-ratio` drive the width, so the field
+ * letterboxes instead of stretching. `margin: auto` inside a fixed inset-0
+ * box centers it on both axes.
+ *
+ * This overrides `.field-viewport`'s 320/420px height caps and
+ * `.play-editor-content`'s width cap, which is the whole point — those caps
+ * are what keep the field small on a big screen. */
+body.play-field-fullscreen {
+  overflow: hidden;
+}
+body.play-field-fullscreen [data-site-header],
+body.play-field-fullscreen [data-site-footer] {
+  display: none;
+}
+/* Backdrop: fills the letterbox bars either side of the field. */
+body.play-field-fullscreen::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  background: var(--color-surface-inset, #000);
+}
+body.play-field-fullscreen .field-viewport {
+  position: fixed;
+  inset: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+  z-index: 60;
+  margin: auto;
+  height: 100%;
+  width: auto;
+  max-height: 100%;
+  max-width: 100%;
+  border-radius: 0;
+}
+.play-field-fullscreen-exit {
+  position: fixed;
+  z-index: 70;
+  top: calc(env(safe-area-inset-top) + 0.75rem);
+  right: calc(env(safe-area-inset-right) + 0.75rem);
 }

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Archive as ArchiveIcon, ChevronDown, ChevronLeft, ChevronRight, FlaskConical, GraduationCap, RotateCcw } from "lucide-react";
+import { Archive as ArchiveIcon, ChevronDown, ChevronLeft, ChevronRight, FlaskConical, GraduationCap, Maximize2, Minimize2, RotateCcw } from "lucide-react";
 import { registerReloadGuard } from "@/lib/native/reloadGuard";
 import { isNativeApp } from "@/lib/native/isNativeApp";
 import type { EndDecoration, PlayDocument, Player, Point2, Route, SegmentShape, StrokePattern, VsPlaySnapshot } from "@/domain/play/types";
@@ -1185,6 +1185,25 @@ function PlayEditorClientInner({
     mql.addEventListener("change", apply);
     return () => mql.removeEventListener("change", apply);
   }, []);
+
+  // Fullscreen field. The heavy lifting is CSS (`body.play-field-fullscreen`
+  // in globals) — it hides the site chrome and lets the field-viewport fill
+  // the screen, the same shape Game Mode already uses. Keeping it a body
+  // class rather than re-parenting the field means EditorCanvas never
+  // remounts, so selection and undo history survive the toggle.
+  const [fieldFullscreen, setFieldFullscreen] = useState(false);
+  useEffect(() => {
+    if (!fieldFullscreen) return;
+    document.body.classList.add("play-field-fullscreen");
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFieldFullscreen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.classList.remove("play-field-fullscreen");
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [fieldFullscreen]);
 
   // Touch defaults to view-only so a coach can just watch the play on a
   // phone without tripping over edit controls. Non-touch always renders the
@@ -2438,7 +2457,35 @@ function PlayEditorClientInner({
                     </button>
                   )
                 )}
+                {/* Third slot: fullscreen. Shares the row's `flex-1` so the
+                    buttons divide the width evenly (thirds when all three
+                    render, halves when only two do). */}
+                <button
+                  type="button"
+                  onClick={() => setFieldFullscreen(true)}
+                  aria-label="View play fullscreen"
+                  className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-border bg-surface-raised text-sm font-semibold text-foreground hover:bg-surface"
+                >
+                  <Maximize2 className="size-4" />
+                  Fullscreen
+                </button>
               </div>
+            )}
+
+            {/* Exit control, rendered only while fullscreen. It sits outside
+                the field-viewport on purpose: the viewport takes
+                `pointer-events-none` in view mode, which would swallow taps
+                on a button nested inside it. */}
+            {fieldFullscreen && (
+              <button
+                type="button"
+                onClick={() => setFieldFullscreen(false)}
+                aria-label="Exit fullscreen"
+                className="play-field-fullscreen-exit inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-border bg-surface-raised px-4 text-sm font-semibold text-foreground shadow-lg hover:bg-surface"
+              >
+                <Minimize2 className="size-4" />
+                Exit
+              </button>
             )}
 
             {/* The route toolbar is ALWAYS rendered — even with nothing

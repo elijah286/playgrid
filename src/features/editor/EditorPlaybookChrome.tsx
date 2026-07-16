@@ -79,14 +79,15 @@ export function EditorPlaybookChrome({
     .join(" · ");
   return (
     // Mirrors PlaybookHeader's edge-to-edge pattern. The gradient
-    // extends behind the status bar via `native-safe-top`
+    // extends behind the status bar via `native-safe-top-mobile`
     // (env(safe-area-inset-top) is added as padding INSIDE the
-    // gradient on Capacitor), and the negative margins cancel the
-    // editor layout's mobile padding (`px-3 py-5`) so there is no
-    // white frame above or beside the banner. Desktop drops the
-    // negative top offset and uses the desktop layout's `px-6`.
+    // gradient on Capacitor, below `sm` only — at `sm`+ the site header
+    // sits above this banner, so the inset would be dead space), and the
+    // negative margins cancel the editor layout's mobile padding
+    // (`px-3 py-5`) so there is no white frame above or beside the banner.
+    // Desktop drops the negative top offset and uses the desktop layout's `px-6`.
     <div
-      className="native-safe-top relative -mx-3 -mt-5 sm:-mx-6 sm:mt-0"
+      className="native-safe-top-mobile relative -mx-3 -mt-5 sm:-mx-6 sm:mt-0"
       style={{ backgroundImage: gradient, backgroundColor: accentColor }}
     >
       <div className="flex items-center gap-2 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">

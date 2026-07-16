@@ -265,6 +265,10 @@ type PlaybookPrefs = {
   showPlayNumbers: boolean;
 };
 
+// Base (web) column counts. Note these top out early in practice: the
+// dashboard shell caps content at ~1104px, so the `xl:` steps below only
+// ever fire where that cap is lifted. The native shell on tablet lifts it
+// and overrides these counts via `[data-plays-grid]` in globals CSS.
 const SIZE_COL_CLASS: Record<ThumbSize, string> = {
   large: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
   medium: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
@@ -731,6 +735,15 @@ function PlaybookDetailClientInner({
       document.documentElement.style.removeProperty("--playbook-content-top");
     };
   }, []);
+  // Opt this page out of the dashboard shell's max-w-6xl cap. The CSS rule
+  // (globals) narrows it further to the native shell on tablet widths; this
+  // effect only marks *which page* is allowed to widen, and unsets it on
+  // unmount so navigating away restores the capped shell.
+  useEffect(() => {
+    document.body.classList.add("playbook-wide");
+    return () => document.body.classList.remove("playbook-wide");
+  }, []);
+
   const [viewMode, setViewMode] = useState<"cards" | "list">(
     initialPrefs?.viewMode === "list" ? "list" : "cards",
   );
@@ -2283,7 +2296,10 @@ function PlaybookDetailClientInner({
                 </div>
                 {viewMode === "cards" && (
                   <SortableContext items={playIds} strategy={rectSortingStrategy}>
-                  <div className={`grid gap-3 ${SIZE_COL_CLASS[thumbSize]}`}>
+                  <div
+                    data-plays-grid={thumbSize}
+                    className={`grid gap-3 ${SIZE_COL_CLASS[thumbSize]}`}
+                  >
 
                     {section.plays.map((p) => {
                       const isSelected = selectedPlayIds.has(p.id);
