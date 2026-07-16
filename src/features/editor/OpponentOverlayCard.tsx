@@ -183,7 +183,19 @@ export function OpponentOverlayCard({
     setSelection({ kind: "play", id: p.id, label: p.name });
     setPickedHasRoutes(false);
     startTransition(async () => {
-      const res = await getPlayForEditorAction(p.id);
+      // The action REJECTS offline ("Load failed") rather than returning
+      // ok:false, and a rejected await inside a transition is not contained —
+      // React 19 hands it to the editor's error boundary. Checking `ok` alone
+      // handled the tidy failure and let the real one kill the page.
+      // See editorOfflineResilience.test.tsx for the same bug's first sighting.
+      let res: Awaited<ReturnType<typeof getPlayForEditorAction>>;
+      try {
+        res = await getPlayForEditorAction(p.id);
+      } catch {
+        toast("Couldn't load that play — you may be offline.", "error");
+        setSelection({ kind: "none" });
+        return;
+      }
       if (!res.ok) {
         toast(res.error, "error");
         setSelection({ kind: "none" });
@@ -220,7 +232,11 @@ export function OpponentOverlayCard({
     // play), it just resets local state.
     if (hasCustomOpponent && onSetHidden) {
       startCustomPending(async () => {
-        await onSetHidden(true);
+        try {
+          await onSetHidden(true);
+        } catch {
+          toast("Couldn't clear the opponent — you may be offline.", "error");
+        }
       });
       return;
     }
@@ -233,14 +249,23 @@ export function OpponentOverlayCard({
   const showCustom = () => {
     if (!onSetHidden) return;
     startCustomPending(async () => {
-      await onSetHidden(false);
+      try {
+        await onSetHidden(false);
+      } catch {
+        toast("Couldn't show the opponent — you may be offline.", "error");
+      }
     });
   };
 
   const pickCustom = () => {
     if (!onCreateCustom) return;
     startCustomPending(async () => {
-      await onCreateCustom();
+      try {
+        await onCreateCustom();
+      } catch {
+        toast("Couldn't create a custom opponent — you may be offline.", "error");
+        return;
+      }
       setSelection({ kind: "custom" });
       notifyTutorialAction("opponent-custom-created");
     });
@@ -254,7 +279,14 @@ export function OpponentOverlayCard({
       return;
     }
     startCustomPending(async () => {
-      await onSaveCustomAsPlay(name);
+      try {
+        await onSaveCustomAsPlay(name);
+      } catch {
+        // Keep the dialog open with the name intact — the coach typed it, and
+        // a retry once they're back online should not cost them that.
+        toast("Couldn't save the defensive play — you may be offline.", "error");
+        return;
+      }
       setSaveOpen(false);
       setSaveName("");
       notifyTutorialAction("opponent-saved-as-defense");
@@ -448,7 +480,11 @@ export function OpponentOverlayCard({
               onClick={() => {
                 const offId = selection.id;
                 startInstall(async () => {
-                  await onInstallVsPlay(offId);
+                  try {
+                    await onInstallVsPlay(offId);
+                  } catch {
+                    toast("Couldn't install against that play — you may be offline.", "error");
+                  }
                 });
               }}
               data-tutor="install-vs-play"
