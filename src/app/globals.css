@@ -553,14 +553,25 @@ html.coach-docked .coach-dock-aware {
   }
 }
 
-/* Field viewport cap on small screens. Without this, when the editor
- * column grows in edit mode the aspect-ratio field can end up taller than
- * the phone viewport. The cap binds both dimensions so the aspect ratio
- * stays intact. */
+/* Field viewport sizing on phones.
+ *
+ * Every field we render is landscape (aspect ≥ 1.33: flag_5v5 1.33,
+ * flag_7v7 1.6, tackle_11 2.83), so a field drawn at the full column width
+ * is at most ~0.75× the column TALL — never enough to dominate the phone
+ * viewport. The old height-derived `max-width` cap (min(42dvh,320) × aspect)
+ * therefore never needed to shrink the field here; it only did so when the
+ * native WebView under-reported `dvh`, leaving the play narrower than its
+ * own full-width header with white gaps down each side (and "randomly"
+ * changing as the measured dvh drifted between entry points). Pin the width
+ * to the column instead so the field fills it deterministically, no matter
+ * what dvh reports. Height follows from the inline `aspect-ratio`. */
 @media (max-width: 639px) {
   .field-viewport {
-    max-height: min(42dvh, 320px);
-    max-width: calc(min(42dvh, 320px) * var(--field-aspect, 2));
+    max-width: 100%;
+    /* Safety net for pathological/portrait content only. High enough that
+     * it never binds for the landscape aspects above, so it can't force
+     * letterboxing — which would re-open the side gaps it's meant to avoid. */
+    max-height: 85dvh;
   }
   body.editor-hide-site-header [data-site-header],
   body.editor-hide-site-header [data-site-footer] {
