@@ -609,18 +609,30 @@ self.addEventListener("message", (event) => {
             await cache.put(u, res.clone());
             await precacheReferencedAssets(res);
             // NOTE: we deliberately do NOT precache the RSC payload here.
-            // It was 75KB and one extra request PER PLAY (half the download's
-            // requests, ~30% of its bytes) — and worse, it was the bug. A cached
-            // RSC is replayed cross-context for every _rsc request (cacheKeyFor
-            // collapses them to one key), the hazard next.config.ts names as
-            // "the hazard that made the service-worker approach throw 'Something
-            // went wrong'" — landing on the editor's error boundary.
             //
-            // Letting the RSC MISS is strictly better: Next turns a failed RSC
-            // fetch into a document navigation ("If fetch fails handle it like a
-            // mpa navigation" — next/dist/client/components/router-reducer/
-            // fetch-server-response.js), which the SW answers from the HTML
-            // cached right here, rendering the REAL editor. Faster AND correct.
+            // Reason 1 (proven): it cost 75KB and one extra request PER PLAY —
+            // half the download's requests and ~30% of its bytes — for a payload
+            // we don't need.
+            //
+            // Reason 2 (proven): letting the RSC MISS is a BETTER path than
+            // hitting. Next turns a failed RSC fetch into a document navigation
+            // ("If fetch fails handle it like a mpa navigation" —
+            // next/dist/client/components/router-reducer/fetch-server-response.js
+            // catch → `return originalUrl.toString()`), which the SW answers
+            // from the HTML cached right here and renders the REAL editor. That
+            // is the one offline path verified end-to-end on a device.
+            //
+            // What is NOT proven: that serving a cached RSC *throws*. A payload
+            // fetched with only `RSC: 1` carries no Next-Router-State-Tree, and
+            // networkFirstWithCacheFallback matches with `ignoreVary: true`, so
+            // it IS served into a different router context than it was made for.
+            // But Next 16 handles that mismatch with a soft retry or an MPA
+            // navigation (ppr-navigations.js:895-935) — no render-phase throw
+            // could be found. An earlier version of this comment asserted the
+            // replay was "the bug"; that was overstated, and cacheKeyFor
+            // preserves the pathname, so one play can never receive another
+            // play's payload. Keep this change for reasons 1 and 2 — not for a
+            // mechanism we never demonstrated.
             ok = true;
           }
         } catch {

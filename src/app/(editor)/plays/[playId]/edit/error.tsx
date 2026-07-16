@@ -6,6 +6,7 @@ import { AlertTriangle, RefreshCw, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui";
 import { isNativeApp } from "@/lib/native/isNativeApp";
 import { probeConnectivity } from "@/lib/offline/connectivity";
+import { checkCachedRoutes } from "@/lib/native/registerServiceWorker";
 
 /**
  * Editor segment error boundary.
@@ -60,7 +61,23 @@ export default function EditorError({
         // connectivity excuse.
         const online = await probeConnectivity();
         if (!alive) return;
-        setMode(online ? "error" : "unavailableOffline");
+        if (online) {
+          setMode("error");
+          return;
+        }
+        // Offline — but that alone does NOT mean "unavailable". If this play's
+        // page IS in the cache it should have rendered, so landing here is a
+        // real bug and calling it "not available offline" would blame the
+        // coach's connection for our crash (exactly the lie "Playbook not
+        // found" told this morning). Only an uncached play is genuinely
+        // unavailable.
+        const playId = window.location.pathname.match(/^\/plays\/([^/]+)\/edit/)?.[1];
+        const route = playId ? `/plays/${playId}/edit` : null;
+        const cached = route
+          ? await checkCachedRoutes([route]).catch(() => new Set<string>())
+          : new Set<string>();
+        if (!alive) return;
+        setMode(route && cached.has(route) ? "error" : "unavailableOffline");
       } catch {
         if (alive) setMode("error");
       }
@@ -109,6 +126,16 @@ export default function EditorError({
       <p className="mt-2 text-sm text-muted">
         The team has been notified. You can try again, or head back.
       </p>
+      {/* Show what actually threw. It's already sent to Sentry, but a coach
+          can screenshot this in the moment — and an offline crash is precisely
+          the case where we can't read Sentry from the sideline. Reading the real
+          error settles in seconds what days of code archaeology could not. */}
+      {error?.message && (
+        <p className="mt-3 break-words px-2 font-mono text-[11px] leading-snug text-muted/80">
+          {error.message}
+          {error.digest ? ` · ${error.digest}` : ""}
+        </p>
+      )}
       <div className="mt-5 flex justify-center gap-2">
         <Button variant="primary" leftIcon={RefreshCw} onClick={reset}>
           Try again

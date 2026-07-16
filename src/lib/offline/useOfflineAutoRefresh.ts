@@ -30,6 +30,24 @@ const INITIAL_DELAY_MS = 5_000;
  *     downloaded, not just the hand-picked ones. The dashboard layout decides
  *     the gate (beta flag + native shell).
  *
+ * ⚠️ THIS LOOP ONLY WRITES DATA. It calls putPlaybookBundle and never
+ * precacheUrls, so it caches ZERO pages — a playbook it "downloads" cannot
+ * actually be opened offline. With autoCache on, that quietly half-downloaded a
+ * coach's entire library: all 30+ playbooks looked downloaded and none opened,
+ * because the badge was keyed off IndexedDB (reported 2026-07-16;
+ * offline_auto_cache flipped to "off" in prod as the immediate stop-gap).
+ *
+ * Two rules follow, and both are load-bearing:
+ *  1. Readiness is MEASURED against the page cache (useOfflineState.downloadedIds),
+ *     never inferred from a row existing here. That makes a data-only writer
+ *     unable to produce a false badge, whoever writes it.
+ *  2. Do NOT "fix" this by making the loop precache pages. Fetching one ~250KB
+ *     editor page per play across a whole library on every launch is the exact
+ *     eager sweep that saturated the connection and took page rendering down in
+ *     prod (2026-07-15). Downloads stay explicit and throttled. The real fix is
+ *     to stop shipping a page per play at all — cache the tooling ONCE, then
+ *     download only content (~5.5KB/play vs ~250KB/page).
+ *
  * Either mode pulls the lightweight signature first and skips the full bundle
  * when it still matches the local copy, so steady state costs one cheap call
  * per playbook. putPlaybookBundle rewrites IndexedDB and fires

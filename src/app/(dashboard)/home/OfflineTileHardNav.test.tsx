@@ -58,6 +58,15 @@ vi.mock("@/lib/offline/db", () => ({
   listCachedPlaybooks: vi.fn().mockResolvedValue([{ id: "pb-1" }]),
 }));
 
+// "Downloaded" now means data AND page — useOfflineState verifies the page
+// against the real SW cache, because a data-only row (written by the background
+// auto-cache loop) must never earn a badge. So a genuinely-downloaded fixture
+// has to supply both halves.
+vi.mock("@/lib/native/registerServiceWorker", () => ({
+  OFFLINE_ROUTES_EVENT: "xog:offline-routes-changed",
+  checkCachedRoutes: vi.fn(async (urls: string[]) => new Set(urls)),
+}));
+
 let online = true;
 const listeners = new Set<() => void>();
 vi.mock("@/lib/offline/connectivity", () => ({
@@ -125,10 +134,16 @@ async function mount() {
 const link = () =>
   container.querySelector('a[href="/playbooks/pb-1"]') as HTMLAnchorElement | null;
 
-beforeEach(() => {
+beforeEach(async () => {
   online = true;
   native = true;
   listeners.clear();
+  // Reset to "pages ARE cached" — the genuinely-downloaded default. Without
+  // this, a per-test mockResolvedValue leaks into later cases.
+  const { checkCachedRoutes } = await import("@/lib/native/registerServiceWorker");
+  vi.mocked(checkCachedRoutes).mockImplementation(
+    async (urls: string[]) => new Set(urls),
+  );
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -158,6 +173,23 @@ describe("InteractiveBookTile navigation mode", () => {
     const a = link();
     expect(a).toBeTruthy();
     expect(a!.getAttribute("data-client-nav")).toBe("true");
+  });
+
+  it("DATA-ONLY playbook (auto-cache loop) → no offline claim, no nav into a miss", async () => {
+    // The reported state (2026-07-16): the background auto-cache loop wrote data
+    // for 30+ playbooks the coach never downloaded and cached ZERO pages. Every
+    // tile showed the offline cloud, and tapping one bounced straight back to
+    // /home on a cache miss. Now the page is measured, so a data-only row is
+    // simply not downloaded — the tile greys out honestly instead of pretending.
+    const { checkCachedRoutes } = await import("@/lib/native/registerServiceWorker");
+    vi.mocked(checkCachedRoutes).mockResolvedValue(new Set<string>()); // no pages
+    online = false;
+    await mount();
+
+    // No link at all: offline + not actually downloaded → the unavailable tile.
+    expect(link()).toBeNull();
+    // ...and it still names the playbook rather than vanishing.
+    expect(container.textContent).toContain("Test Playbook");
   });
 
   it("offline on the WEB (not native) → unchanged client-side routing", async () => {

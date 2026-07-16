@@ -6,7 +6,7 @@ import { useIsNativeApp } from "@/lib/native/useIsNativeApp";
 import { hapticImpact, hapticSuccess } from "@/lib/native/haptics";
 import { useToast } from "@/components/ui";
 import { getPlaybookOfflineBundleAction } from "@/app/actions/offline";
-import { precacheUrls } from "@/lib/native/registerServiceWorker";
+import { checkCachedRoutes, precacheUrls } from "@/lib/native/registerServiceWorker";
 import {
   getCachedPlaybookMeta,
   putPlaybookBundle,
@@ -44,13 +44,20 @@ export function DownloadForOfflineButton({ playbookId, className, onAction }: Pr
   useEffect(() => {
     if (!native) return;
     let alive = true;
-    void getCachedPlaybookMeta(playbookId)
-      .then((m) => {
-        if (alive) setMeta(m);
-      })
-      .catch(() => {
-        /* ignore — cache simply absent */
-      });
+    void (async () => {
+      // "Available offline" must mean the playbook OPENS offline — data AND
+      // page. Keying it off IndexedDB alone is how every playbook in a coach's
+      // library claimed to be downloaded while none would open: the background
+      // auto-cache loop writes data and never precaches a page (2026-07-16).
+      const [m, cached] = await Promise.all([
+        getCachedPlaybookMeta(playbookId).catch(() => null),
+        checkCachedRoutes([`/playbooks/${playbookId}`]).catch(
+          () => new Set<string>(),
+        ),
+      ]);
+      if (!alive) return;
+      setMeta(m && cached.has(`/playbooks/${playbookId}`) ? m : null);
+    })();
     return () => {
       alive = false;
     };
