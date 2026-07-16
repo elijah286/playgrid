@@ -20,19 +20,118 @@ export async function registerOfflineServiceWorker(): Promise<void> {
 }
 
 /**
+ * Fired whenever the set of CACHED ROUTES changes (a precache tick / finish).
+ * Distinct from OFFLINE_CACHE_EVENT, which covers the IndexedDB data. A play is
+ * only truly openable offline when BOTH have landed, so the readiness UI
+ * listens to both.
+ */
+export const OFFLINE_ROUTES_EVENT = "xog:offline-routes-changed";
+
+function notifyRoutesChanged(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.dispatchEvent(new CustomEvent(OFFLINE_ROUTES_EVENT));
+  } catch {
+    /* no-op */
+  }
+}
+
+export type PrecacheProgress = { done: number; total: number };
+
+async function activeWorker(): Promise<ServiceWorker | null> {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return null;
+  const reg = await navigator.serviceWorker.getRegistration();
+  return reg?.active ?? reg?.waiting ?? reg?.installing ?? null;
+}
+
+/**
  * Asks the active worker to precache a list of URLs (used after a coach
- * downloads a playbook, so `/offline/<playbookId>` is in cache before
- * they actually need it on the sideline).
+ * downloads a playbook, so the real /playbooks/<id> + /plays/<id>/edit routes
+ * are in cache before they need them on the sideline).
+ *
+ * Fire-and-forget by default (existing callers rely on that). Pass `onProgress`
+ * to instead AWAIT completion and receive per-URL ticks over a MessageChannel —
+ * that's what lets the download button report honest progress instead of
+ * claiming "Available offline" while pages are still streaming in.
  */
 export async function precacheUrls(
   urls: string[],
-  opts?: { dedupe?: boolean },
+  opts?: { dedupe?: boolean; onProgress?: (p: PrecacheProgress) => void },
 ): Promise<void> {
-  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
-  const reg = await navigator.serviceWorker.getRegistration();
-  const worker = reg?.active ?? reg?.waiting ?? reg?.installing;
+  const worker = await activeWorker();
   if (!worker) return;
-  worker.postMessage({ type: "PRECACHE_URLS", urls, dedupe: opts?.dedupe ?? false });
+  const payload = { type: "PRECACHE_URLS", urls, dedupe: opts?.dedupe ?? false };
+
+  if (!opts?.onProgress) {
+    worker.postMessage(payload);
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    const ch = new MessageChannel();
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      try {
+        ch.port1.close();
+      } catch {
+        /* already closed */
+      }
+      notifyRoutesChanged();
+      resolve();
+    };
+    // Safety net: never leave the UI stuck on "Downloading…" if the worker is
+    // replaced mid-flight (an update activates) and the DONE reply never lands.
+    const timer = setTimeout(finish, 120_000);
+    ch.port1.onmessage = (e: MessageEvent) => {
+      const d = e.data as { type?: string; done?: number; total?: number };
+      if (d?.type === "PRECACHE_PROGRESS") {
+        opts.onProgress?.({ done: d.done ?? 0, total: d.total ?? urls.length });
+        notifyRoutesChanged();
+      } else if (d?.type === "PRECACHE_DONE") {
+        clearTimeout(timer);
+        finish();
+      }
+    };
+    worker.postMessage(payload, [ch.port2]);
+  });
+}
+
+/**
+ * Which of `urls` are actually present in the worker's nav cache. Used to show
+ * a coach WHICH plays are genuinely available offline instead of assuming the
+ * whole playbook landed. Resolves to an empty set when there's no worker (web)
+ * or the worker doesn't answer — callers treat that as "nothing cached", which
+ * degrades to hiding the glyph rather than lying about readiness.
+ */
+export async function checkCachedRoutes(urls: string[]): Promise<Set<string>> {
+  if (urls.length === 0) return new Set();
+  const worker = await activeWorker();
+  if (!worker) return new Set();
+
+  return new Promise<Set<string>>((resolve) => {
+    const ch = new MessageChannel();
+    let settled = false;
+    const done = (v: Set<string>) => {
+      if (settled) return;
+      settled = true;
+      try {
+        ch.port1.close();
+      } catch {
+        /* already closed */
+      }
+      resolve(v);
+    };
+    const timer = setTimeout(() => done(new Set()), 5_000);
+    ch.port1.onmessage = (e: MessageEvent) => {
+      clearTimeout(timer);
+      const cached = (e.data as { cached?: unknown })?.cached;
+      done(new Set(Array.isArray(cached) ? (cached as string[]) : []));
+    };
+    ch.port1.onmessageerror = () => done(new Set());
+    worker.postMessage({ type: "CHECK_CACHED_URLS", urls }, [ch.port2]);
+  });
 }
 
 /**

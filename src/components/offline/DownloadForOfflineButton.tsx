@@ -35,6 +35,11 @@ export function DownloadForOfflineButton({ playbookId, className, onAction }: Pr
   const { isGated: offline, reason: offlineReason } = useOfflineGate();
   const [meta, setMeta] = useState<CachedPlaybookMeta | null>(null);
   const [busy, setBusy] = useState<"download" | "remove" | null>(null);
+  /** Page-precache progress (0–100) while a download is in flight, else null.
+   *  The bundle write is fast; fetching one page per play is the slow part, and
+   *  it used to run invisibly AFTER the button already said "Available
+   *  offline". */
+  const [progress, setProgress] = useState<number | null>(null);
 
   useEffect(() => {
     if (!native) return;
@@ -73,14 +78,27 @@ export function DownloadForOfflineButton({ playbookId, className, onAction }: Pr
       // separate offline surface: the coach navigates the standard pages
       // without signal. Without this the data is in IndexedDB but the pages
       // that render it were never fetched, so offline visits stall.
-      void precacheUrls([
-        `/playbooks/${playbookId}`,
-        ...res.bundle.plays.map((p) => `/plays/${p.id}/edit`),
-      ]);
+      //
+      // AWAIT it (with progress) rather than fire-and-forget: this is one fetch
+      // per play, and it used to run invisibly after we'd already told the coach
+      // "Available offline" — who then tapped a play that wouldn't open. The
+      // copy isn't done until the pages are down.
+      const wasUpdate = meta != null;
+      setProgress(0);
+      await precacheUrls(
+        [
+          `/playbooks/${playbookId}`,
+          ...res.bundle.plays.map((p) => `/plays/${p.id}/edit`),
+        ],
+        {
+          onProgress: ({ done, total }) =>
+            setProgress(total > 0 ? Math.round((done / total) * 100) : 100),
+        },
+      );
       setMeta(res.bundle.meta);
       void hapticSuccess();
       toast(
-        meta ? "Offline copy updated." : "Now available offline on this device.",
+        wasUpdate ? "Offline copy updated." : "Now available offline on this device.",
         "success",
       );
       onAction?.();
@@ -89,6 +107,7 @@ export function DownloadForOfflineButton({ playbookId, className, onAction }: Pr
       toast(msg, "error");
     } finally {
       setBusy(null);
+      setProgress(null);
     }
   }
 
@@ -113,6 +132,11 @@ export function DownloadForOfflineButton({ playbookId, className, onAction }: Pr
     className ??
     "flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-surface-inset disabled:opacity-50";
 
+  // Honest progress copy: percentage once the pages start landing, a generic
+  // label only for the brief data-fetch before the first tick.
+  const downloadingLabel =
+    progress != null ? `Downloading ${progress}%` : "Saving for offline…";
+
   if (!meta) {
     return (
       <button
@@ -128,7 +152,7 @@ export function DownloadForOfflineButton({ playbookId, className, onAction }: Pr
         ) : (
           <Download className="size-4 shrink-0" />
         )}
-        <span>{busy === "download" ? "Saving for offline…" : "Make available offline"}</span>
+        <span>{busy === "download" ? downloadingLabel : "Make available offline"}</span>
       </button>
     );
   }
@@ -154,7 +178,7 @@ export function DownloadForOfflineButton({ playbookId, className, onAction }: Pr
         className={cls}
       >
         <RefreshCw className="size-4 shrink-0" />
-        <span>{busy === "download" ? "Updating…" : "Update now"}</span>
+        <span>{busy === "download" ? downloadingLabel : "Update now"}</span>
       </button>
       <button
         type="button"

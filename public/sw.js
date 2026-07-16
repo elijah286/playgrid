@@ -552,12 +552,46 @@ async function runLimited(items, limit, fn) {
   );
 }
 
+// Answer "which of these routes are actually in the cache?" for the page. The
+// UI uses this to tell a coach WHICH plays are genuinely available offline
+// rather than assuming the whole playbook landed. Replies over the caller's
+// MessageChannel port so the answer is scoped to the asking page and the cache
+// NAME (which is version-stamped) never has to leak into client code.
+async function checkCachedUrls(urls, port) {
+  const cache = await caches.open(NAV_CACHE);
+  const cached = [];
+  for (const u of urls) {
+    try {
+      if (await cache.match(u)) cached.push(u);
+    } catch {
+      // best-effort — treat as not cached
+    }
+  }
+  if (port) {
+    try {
+      port.postMessage({ cached });
+    } catch {
+      /* port closed */
+    }
+  }
+}
+
 self.addEventListener("message", (event) => {
   const data = event.data;
-  if (!data || data.type !== "PRECACHE_URLS" || !Array.isArray(data.urls)) return;
+  if (!data || !Array.isArray(data.urls)) return;
+  const port = event.ports && event.ports[0];
+
+  if (data.type === "CHECK_CACHED_URLS") {
+    event.waitUntil(checkCachedUrls(data.urls, port));
+    return;
+  }
+
+  if (data.type !== "PRECACHE_URLS") return;
   event.waitUntil(
     (async () => {
       const cache = await caches.open(NAV_CACHE);
+      const total = data.urls.length;
+      let done = 0;
       await runLimited(data.urls, 3, async (u) => {
         try {
           if (data.dedupe && (await cache.match(u))) return; // already cached
@@ -572,8 +606,30 @@ self.addEventListener("message", (event) => {
           }
         } catch {
           // best-effort
+        } finally {
+          // Report progress per URL — including dedupe-skips and failures, so
+          // the count always reaches `total` and the UI can never hang at 90%.
+          // Downloading a playbook means fetching one page per play; the button
+          // used to claim "Available offline" the moment the DATA landed while
+          // these were still streaming in, which is a lie the coach feels as
+          // "why won't this play open?".
+          done += 1;
+          if (port) {
+            try {
+              port.postMessage({ type: "PRECACHE_PROGRESS", done, total, url: u });
+            } catch {
+              /* port closed — page navigated away mid-download */
+            }
+          }
         }
       });
+      if (port) {
+        try {
+          port.postMessage({ type: "PRECACHE_DONE", done, total });
+        } catch {
+          /* port closed */
+        }
+      }
     })(),
   );
 });

@@ -7,6 +7,8 @@ import {
 } from "@/features/admin/ExamplePreviewContext";
 import type { ReferralPromo } from "@/lib/data/referral-summary";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
+import { useOfflinePlayReadiness } from "@/lib/offline/useOfflinePlayReadiness";
+import { OfflineReadyGlyph } from "@/components/offline/OfflineReadyGlyph";
 import { TutorialDeepLinkLauncher } from "@/features/tutorials/TutorialDeepLinkLauncher";
 import { track } from "@/lib/analytics/track";
 import { PlayNumberBadge, EditablePlayNumberBadge } from "@/features/editor/PlayNumberBadge";
@@ -723,6 +725,11 @@ function PlaybookDetailClientInner({
   useEffect(() => {
     setLocalPlays(initialPlays);
   }, [initialPlays]);
+  // Which plays a coach can ACTUALLY open without signal — measured (data in
+  // IndexedDB + page in the SW cache), not assumed. Empty on web / until the
+  // first check, so the glyph under-claims rather than over-claims.
+  const allPlayIds = useMemo(() => localPlays.map((p) => p.id), [localPlays]);
+  const offlineReadyPlayIds = useOfflinePlayReadiness(playbookId, allPlayIds);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [selectedPlayIds, setSelectedPlayIds] = useState<Set<string>>(
     () => new Set(),
@@ -2329,6 +2336,7 @@ function PlaybookDetailClientInner({
                                   <StickyNote className="size-3.5" />
                                 </span>
                               )}
+                              {offlineReadyPlayIds.has(p.id) && <OfflineReadyGlyph />}
                             </div>
                             <EditablePlayTitle
                               name={p.name}
@@ -2446,6 +2454,7 @@ function PlaybookDetailClientInner({
                               <StickyNote className="size-3.5" />
                             </span>
                           )}
+                          {offlineReadyPlayIds.has(p.id) && <OfflineReadyGlyph />}
                           {p.tags.length > 0 && (
                             <div className="hidden flex-wrap gap-1 md:flex">
                               {p.tags.slice(0, 3).map((t) => (

@@ -206,6 +206,116 @@ describe("sw.js PRECACHE_URLS message", () => {
   });
 });
 
+describe("sw.js precache progress reporting", () => {
+  // Downloading a playbook = one page fetch per play. The button used to claim
+  // "Available offline" the instant the DATA landed while these were still in
+  // flight, so a coach tapped a play that wouldn't open. Progress must reach
+  // `total` on EVERY path — a stall at 90% is a permanently-spinning button.
+  function fakePort() {
+    const messages: any[] = [];
+    return { port: { postMessage: (m: any) => messages.push(m) }, messages };
+  }
+
+  it("reports a tick per URL and finishes at total", async () => {
+    const sw = loadWorker(async (url) => res(String(url)));
+    const { port, messages } = fakePort();
+
+    await sw.fire(
+      "message",
+      waitableEvent({
+        data: { type: "PRECACHE_URLS", urls: ["/plays/a/edit", "/plays/b/edit"] },
+        ports: [port],
+      }),
+    );
+
+    const ticks = messages.filter((m) => m.type === "PRECACHE_PROGRESS");
+    expect(ticks.map((t) => t.done)).toEqual([1, 2]);
+    expect(ticks.every((t) => t.total === 2)).toBe(true);
+    expect(messages.at(-1)).toMatchObject({ type: "PRECACHE_DONE", done: 2, total: 2 });
+  });
+
+  it("still reaches total when a page FAILS to fetch (never hangs the UI)", async () => {
+    const sw = loadWorker(async (url) => {
+      if (String(url) === "/plays/b/edit") throw new Error("offline");
+      return res(String(url));
+    });
+    const { port, messages } = fakePort();
+
+    await sw.fire(
+      "message",
+      waitableEvent({
+        data: { type: "PRECACHE_URLS", urls: ["/plays/a/edit", "/plays/b/edit"] },
+        ports: [port],
+      }),
+    );
+
+    // The failure still ticks — otherwise the button sticks at 50% forever.
+    expect(messages.at(-1)).toMatchObject({ type: "PRECACHE_DONE", done: 2, total: 2 });
+  });
+
+  it("counts dedupe-skips toward progress too", async () => {
+    const sw = loadWorker(async (url) => res(String(url)));
+    const nav = new FakeCache();
+    await nav.put("/plays/a/edit", res("/plays/a/edit")); // already cached
+    sw.cachesByName.set(NAV_CACHE, nav);
+    const { port, messages } = fakePort();
+
+    await sw.fire(
+      "message",
+      waitableEvent({
+        data: {
+          type: "PRECACHE_URLS",
+          urls: ["/plays/a/edit", "/plays/b/edit"],
+          dedupe: true,
+        },
+        ports: [port],
+      }),
+    );
+
+    expect(messages.at(-1)).toMatchObject({ type: "PRECACHE_DONE", done: 2, total: 2 });
+  });
+
+  it("does not throw when the page navigated away and the port is dead", async () => {
+    const sw = loadWorker(async (url) => res(String(url)));
+    const deadPort = {
+      postMessage: () => {
+        throw new Error("port closed");
+      },
+    };
+    // Must not reject — a coach leaving the page mid-download is normal.
+    await expect(
+      sw.fire(
+        "message",
+        waitableEvent({
+          data: { type: "PRECACHE_URLS", urls: ["/plays/a/edit"] },
+          ports: [deadPort],
+        }),
+      ),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe("sw.js CHECK_CACHED_URLS query", () => {
+  it("answers with exactly the routes that are really cached", async () => {
+    const sw = loadWorker(async (url) => res(String(url)));
+    const nav = new FakeCache();
+    await nav.put("/plays/a/edit", res("/plays/a/edit"));
+    sw.cachesByName.set(NAV_CACHE, nav);
+    const messages: any[] = [];
+
+    await sw.fire(
+      "message",
+      waitableEvent({
+        data: { type: "CHECK_CACHED_URLS", urls: ["/plays/a/edit", "/plays/b/edit"] },
+        ports: [{ postMessage: (m: any) => messages.push(m) }],
+      }),
+    );
+
+    // b is NOT cached — the glyph must not claim it's available offline.
+    expect(messages).toEqual([{ cached: ["/plays/a/edit"] }]);
+  });
+});
+
 describe("sw.js poisoned-home guard (2026-07-15)", () => {
   // /home can render "Couldn't load — check your connection" as a 200 when the
   // dashboard fetch times out on a flaky connection. Caching that poisons the
