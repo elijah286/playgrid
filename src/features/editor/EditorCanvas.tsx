@@ -2812,7 +2812,7 @@ function EditorCanvasImpl({
           // "Whole-route" selection = route selected but no specific segment.
           const isWholeRouteSelected = isActive && selectedSegmentId == null;
           const rendered = routeToRenderedSegments(route);
-          const effectiveStroke = resolveRouteStroke(route, doc.layers.players);
+          const effectiveStroke = resolveRouteStroke(route, doc.layers.players, fieldBackground);
 
           return (
             <g key={route.id}>
@@ -3004,7 +3004,7 @@ function EditorCanvasImpl({
         );
         if (terminals.length === 0) return null;
 
-        const effectiveRouteStroke = resolveRouteStroke(route, doc.layers.players);
+        const effectiveRouteStroke = resolveRouteStroke(route, doc.layers.players, fieldBackground);
 
         return (
           <g key={`deco-${route.id}`} pointerEvents="none">

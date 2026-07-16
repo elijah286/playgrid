@@ -460,6 +460,7 @@ export function PrintPlaybookClient({
 
   const wristbandGridOpts: WristbandGridOptions = useMemo(
     () => ({
+      fieldBackground: config.fieldBackground,
       widthIn: config.wristbandWidthIn,
       heightIn: config.wristbandHeightIn,
       layout: config.wristbandGridLayout,
@@ -492,6 +493,7 @@ export function PrintPlaybookClient({
   // today is the column-count cap surfaced in the UI (1–3 vs 1–5).
   const playsheetOpts: PlaysheetOptions = useMemo(() => {
     return {
+      fieldBackground: config.fieldBackground,
       columns: config.playsheetColumns,
       orientation: config.sheetOrientation,
       pageBreak: config.playsheetPageBreak,

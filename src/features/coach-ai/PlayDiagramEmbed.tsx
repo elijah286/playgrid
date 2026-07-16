@@ -17,7 +17,12 @@ import {
 import { routeToRenderedSegments } from "@/domain/play/geometry";
 import { deriveLabelColor } from "@/domain/play/labelColor";
 import { usePlayAnimation, type PlayAnimation } from "@/features/animation/usePlayAnimation";
-import { resolveFieldTheme } from "@/domain/play/fieldTheme";
+import { resolveFieldTheme, type FieldBackground } from "@/domain/play/fieldTheme";
+
+/** Chat embeds always draw the green field, matching the editor default. Named
+ *  so the field chrome and the route ink can never disagree about it — routes
+ *  are only legible if they are resolved against the field they land on. */
+const EMBED_FIELD_BACKGROUND: FieldBackground = "green";
 import { fieldAspectFor, NARROW_FIELD_ASPECT } from "@/domain/play/render-config";
 import { coachDiagramToPlayDocument, type CoachDiagram } from "./coachDiagramConverter";
 
@@ -96,7 +101,7 @@ function RouteDecorations({ doc, fieldAspect }: {
         if (decoration === "none") return null;
         const fromIds = new Set(r.segments.map((s) => s.fromNodeId));
         const terminals = r.segments.filter((s) => !fromIds.has(s.toNodeId));
-        const routeStroke = resolveRouteStroke(r, doc.layers.players);
+        const routeStroke = resolveRouteStroke(r, doc.layers.players, EMBED_FIELD_BACKGROUND);
         return terminals.map((seg) => {
           const fromNode = r.nodes.find((n) => n.id === seg.fromNodeId);
           const toNode   = r.nodes.find((n) => n.id === seg.toNodeId);
@@ -164,7 +169,7 @@ const DiagramCanvas = memo(function DiagramCanvas({ doc, animatingIds, fieldAspe
   // field actually contains content.
   const losY01 = doc.lineOfScrimmageY ?? 0.4;
   const losSvgY = 1 - losY01;
-  const theme = resolveFieldTheme(undefined); // green default, matches editor default
+  const theme = resolveFieldTheme(EMBED_FIELD_BACKGROUND);
   const fieldLengthYds = doc.sportProfile.fieldLengthYds || 25;
   const losYd = Math.round(losY01 * fieldLengthYds);
   const zone = resolveFieldZone(doc);
@@ -307,7 +312,7 @@ const DiagramCanvas = memo(function DiagramCanvas({ doc, animatingIds, fieldAspe
         <g transform={`scale(${fieldAspect} 1)`}>
           {doc.layers.routes.map((r) => {
             const segs = routeToRenderedSegments(r);
-            const stroke = resolveRouteStroke(r, doc.layers.players);
+            const stroke = resolveRouteStroke(r, doc.layers.players, EMBED_FIELD_BACKGROUND);
             return (
               <g key={r.id}>
                 {segs.map((rs) => (

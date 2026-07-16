@@ -4,8 +4,10 @@ import { Lock } from "lucide-react";
 import { SegmentedControl } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { useIsNativeApp } from "@/lib/native/useIsNativeApp";
+import type { FieldBackground } from "@/domain/play/fieldTheme";
 import {
   defaultPlaybookPrintRunConfig,
+  PRINT_FIELD_BACKGROUNDS,
   PLAYBOOK_COLUMN_OPTIONS,
   PLAYSHEET_COLUMN_OPTIONS,
   PLAYSHEET_NOTE_LINES_MAX,
@@ -30,6 +32,18 @@ const arrowSizeOptions: { value: ArrowSize; label: string }[] = [
   { value: "medium", label: "Medium" },
   { value: "large", label: "Large" },
 ];
+
+const FIELD_BACKGROUND_LABELS: Record<FieldBackground, string> = {
+  white: "White",
+  gray: "Light gray",
+  green: "Green",
+  black: "Black",
+};
+
+/** Derived from PRINT_FIELD_BACKGROUNDS so the picker can never offer a value
+ *  normalizePrintRunConfig would reject. */
+const FIELD_BACKGROUND_OPTIONS: { value: FieldBackground; label: string }[] =
+  PRINT_FIELD_BACKGROUNDS.map((value) => ({ value, label: FIELD_BACKGROUND_LABELS[value] }));
 
 type Props = {
   config: PlaybookPrintRunConfig;
@@ -342,6 +356,13 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all", ca
 
           {showVisuals && (
             <>
+              <PillGroup
+                label="Field background"
+                value={config.fieldBackground}
+                onChange={(v) => patch({ fieldBackground: v as FieldBackground })}
+                options={FIELD_BACKGROUND_OPTIONS}
+              />
+
               <PillGroup
                 label="Position icon size"
                 value={config.playsheetIconSize}
@@ -760,6 +781,13 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all", ca
 
           {showVisuals && (
             <>
+          <PillGroup
+            label="Field background"
+            value={config.fieldBackground}
+            onChange={(v) => patch({ fieldBackground: v as FieldBackground })}
+            options={FIELD_BACKGROUND_OPTIONS}
+          />
+
           <PillGroup
             label="Position icon size"
             value={config.wristbandIconSize}

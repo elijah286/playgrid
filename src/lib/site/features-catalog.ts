@@ -1127,6 +1127,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-04",
   },
   {
+    id: "print-field-background",
+    name: "Field background picker on printed sheets",
+    description:
+      "Print Customize → Style now offers a field background for every diagram on the sheet: White (the default, unchanged from before) or Light gray for a little contrast against the page. Applies to call sheets, playbooks and wrist coach cards. Route colors adapt to whichever background is picked, so a route can never come out the same color as the field it sits on — the QB in particular is drawn white for the green on-screen field, and its route now switches to the QB's own dark outline color on a light printed sheet instead of disappearing into the paper.",
+    category: "Print & export",
+    status: "ga",
+    addedDate: "2026-07-16",
+  },
+  {
     id: "print-redesign-format-presets",
     name: "Print page format picker + system presets",
     description:

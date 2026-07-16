@@ -10,6 +10,8 @@ import {
   type SportVariant,
 } from "./types";
 import type { FieldStructure } from "./leaguePresets";
+import type { FieldBackground } from "./fieldTheme";
+import { resolveContrastingInk } from "./contrast";
 
 /** Whether hash marks should render by default for a given sport variant.
  *  Flag football plays a smaller, cleaner field — hash marks are noise.
@@ -190,13 +192,27 @@ export function resolveEndDecoration(route: Route): EndDecoration {
  * explicitly picked a different stroke. Legacy routes were all stored as
  * white, so treat white as "no explicit colour" and fall back to the
  * player's fill colour.
+ *
+ * `fieldBackground` is REQUIRED, and deliberately so. The inherited fill is
+ * only guaranteed to read on the green field the palette was designed for —
+ * the QB's fill is #FFFFFF, so on a white field (every printed playsheet, and
+ * the editor when a coach picks white) its route was drawn white-on-white and
+ * disappeared. Making the caller name its background means a renderer cannot
+ * silently forget and reprint an invisible route; see contrast.ts for the
+ * rescue rule and why it is measured perceptually rather than by WCAG ratio.
  */
-export function resolveRouteStroke(route: Route, players: Player[]): string {
+export function resolveRouteStroke(
+  route: Route,
+  players: Player[],
+  fieldBackground: FieldBackground | null | undefined,
+): string {
   const raw = route.style.stroke;
   const isDefault = raw.toLowerCase() === "#ffffff" || raw.toLowerCase() === "#fff";
-  if (!isDefault) return raw;
   const carrier = players.find((p) => p.id === route.carrierPlayerId);
-  return carrier?.style.fill ?? raw;
+  // #FFFFFF is a sentinel meaning "unset", not a colour choice — resolve the
+  // inheritance FIRST, then judge whatever colour that landed on.
+  const inherited = isDefault ? (carrier?.style.fill ?? raw) : raw;
+  return resolveContrastingInk(inherited, carrier?.style.stroke, fieldBackground);
 }
 
 /* ------------------------------------------------------------------ */

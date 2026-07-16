@@ -85,7 +85,7 @@ export default async function SharedPlayPage({ params }: Props) {
               key={r.id}
               d={pathGeometryToSvgD(routeToPathGeometry(r))}
               fill="none"
-              stroke={resolveRouteStroke(r, doc.layers.players)}
+              stroke={resolveRouteStroke(r, doc.layers.players, "green")}
               strokeWidth={0.004}
             />
           ))}

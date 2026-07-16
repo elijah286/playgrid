@@ -1,4 +1,5 @@
 import type { PlayDocument, Player, Route, Zone } from "@/domain/play/types";
+import type { FieldBackground } from "@/domain/play/fieldTheme";
 
 /**
  * Product variants the print page can produce.
@@ -73,6 +74,18 @@ export type PlaybookPrintRunConfig = {
   /** Playsheet: columns across a letter page (1–5). */
   playsheetColumns: PlaysheetColumns;
   sheetOrientation: "portrait" | "landscape";
+  /**
+   * Field colour behind every diagram on the sheet. Shared across products
+   * (playsheet / playbook / wristband) — a mixed-background sheet reads as a
+   * printing fault, not a choice.
+   *
+   * Defaults to "white": paper is white, and it is what every sheet printed
+   * before this option existed looked like. The other values are safe to pick
+   * because route ink is resolved against this background (see
+   * domain/play/contrast.ts) — on "gray" both the white QB and the gray
+   * linemen would otherwise disappear into the field.
+   */
+  fieldBackground: FieldBackground;
   /** Playsheet: continuous packing or force a new page per group. */
   playsheetPageBreak: PlaysheetPageBreak;
   /** Playsheet: fixed-height notes strip under each play. */
@@ -221,6 +234,7 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   product: "playsheet",
   playsheetColumns: 3,
   sheetOrientation: "portrait",
+  fieldBackground: "white",
   playsheetPageBreak: "continuous",
   playsheetShowNotes: true,
   playsheetNoteLines: 2,
@@ -292,6 +306,29 @@ function legacyLabelsToToggles(mode: unknown): PrintLabelToggles | null {
   return null;
 }
 
+/**
+ * Field backgrounds offered on the print sheet.
+ *
+ * A deliberate subset of FieldBackground. "green" and "black" are omitted:
+ * print draws its line of scrimmage in a hardcoded dark slate (#475569 in
+ * templates.ts), which disappears on a black field and reads poorly on green —
+ * and a full-bleed dark field per play is an ink sink on the home inkjets
+ * these sheets get printed on. Offering them would mean theming every guide
+ * colour first. White and gray both read correctly with the guide colours that
+ * already exist.
+ *
+ * Anything outside this list (including a preset saved with "black") coerces
+ * back to the default in normalizePrintRunConfig.
+ */
+export const PRINT_FIELD_BACKGROUNDS: readonly FieldBackground[] = ["white", "gray"];
+
+function coerceFieldBackground(value: unknown, fallback: FieldBackground): FieldBackground {
+  return typeof value === "string" &&
+    (PRINT_FIELD_BACKGROUNDS as readonly string[]).includes(value)
+    ? (value as FieldBackground)
+    : fallback;
+}
+
 function coerceLabels(value: unknown, fallback: PrintLabelToggles): PrintLabelToggles {
   const legacy = legacyLabelsToToggles(value);
   if (legacy) return legacy;
@@ -319,6 +356,11 @@ export function normalizePrintRunConfig(raw: unknown): PlaybookPrintRunConfig {
   const merged = { ...base, ...r } as PlaybookPrintRunConfig & Record<string, unknown>;
   merged.playsheetLabels = coerceLabels(r.playsheetLabels, base.playsheetLabels);
   merged.wristbandLabels = coerceLabels(r.wristbandLabels, base.wristbandLabels);
+  // The spread above would pass any junk straight through. Presets saved
+  // before this option existed have no fieldBackground at all, and resolving
+  // an unknown value would silently fall back to GREEN — printing a green
+  // field on a coach who never asked for one. Coerce to the white default.
+  merged.fieldBackground = coerceFieldBackground(r.fieldBackground, base.fieldBackground);
   delete (merged as Record<string, unknown>).playsheetLabelStyle;
   delete (merged as Record<string, unknown>).wristbandLabelStyle;
   return merged;

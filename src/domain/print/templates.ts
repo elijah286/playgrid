@@ -23,6 +23,7 @@ function scaleDashForPrint(dash: string | undefined, strokeWidth: number): strin
   return `${dashLen.toFixed(2)} ${gapLen.toFixed(2)}`;
 }
 import { resolveRouteStroke } from "../play/factory";
+import { resolveFieldTheme, type FieldBackground } from "../play/fieldTheme";
 
 /** Merge the frozen opposing-side snapshot (defense plays installed against a
  *  specific offense) into the doc's players/routes so print tiles show both
@@ -103,6 +104,8 @@ export type CompiledPrintSvg = {
 
 export type CompilePlaySvgOptions = {
   templatePatch?: Partial<PrintTemplateDefinition>;
+  /** Field colour behind the diagram. Defaults to white — paper. */
+  fieldBackground?: FieldBackground;
 };
 
 function wrapText(text: string, maxChars: number): string[] {
@@ -433,6 +436,8 @@ export function compilePlayToSvg(
   options?: CompilePlaySvgOptions,
 ): CompiledPrintSvg {
   const def = mergeTemplate(kind, options?.templatePatch);
+  const fieldBackground: FieldBackground = options?.fieldBackground ?? "white";
+  const fieldTheme = resolveFieldTheme(fieldBackground);
   const { page, diagramBox } = def;
   const w = page.orientation === "landscape" ? page.heightMm : page.widthMm;
   const h = page.orientation === "landscape" ? page.widthMm : page.heightMm;
@@ -464,7 +469,7 @@ export function compilePlayToSvg(
   let routePaths = "";
   for (const r of doc.layers.routes) {
     const groups = routeToPrintGroups(r);
-    const stroke = resolveRouteStroke(r, doc.layers.players);
+    const stroke = resolveRouteStroke(r, doc.layers.players, fieldBackground);
     const sw = r.style.strokeWidth * 0.35;
     for (const grp of groups) {
       const d = grp.segments
@@ -495,7 +500,7 @@ export function compilePlayToSvg(
   <rect width="100%" height="100%" fill="#ffffff"/>
   <text x="${w / 2}" y="${h * 0.08}" text-anchor="middle" font-size="${fontTitle}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="#111827">${title}</text>
   ${code ? `<text x="${w / 2}" y="${h * 0.12}" text-anchor="middle" font-size="${fontMeta}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="#64748b">${code}</text>` : ""}
-  <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ffffff" stroke="#d1d5db" stroke-width="0.3"/>
+  <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="${fieldTheme.bgMain}" stroke="#d1d5db" stroke-width="0.3"/>
   ${yardMarkersSvg(fieldX, fieldY, fieldW, fieldH)}
   ${playerCircles}
   ${routePaths}
@@ -564,6 +569,8 @@ function yardMarkersSvg(fx: number, fy: number, fw: number, fh: number): string 
 }
 
 export type PlayTileLookOptions = {
+  /** Field colour behind the diagram. Route ink is resolved against it. */
+  fieldBackground: FieldBackground;
   iconSize: WristbandIconSize;
   routeWeight: WristbandRouteWeight;
   arrowSize: ArrowSize;
@@ -1040,7 +1047,7 @@ function renderFieldContents(
   }
 
   const zones = renderZones(doc, fieldX, fieldY, fieldW, fieldH, fit, fieldMin);
-  const routes = renderRoutesAndArrows(doc, fieldX, fieldY, fieldW, fieldH, strokeW, fieldMin, look.arrowSize, fit);
+  const routes = renderRoutesAndArrows(doc, look.fieldBackground, fieldX, fieldY, fieldW, fieldH, strokeW, fieldMin, look.arrowSize, fit);
 
   let players = "";
   for (const p of doc.layers.players) {
@@ -1052,8 +1059,21 @@ function renderFieldContents(
     }
   }
 
+  // Field wash. The playsheet card's outer border rect is white-filled and
+  // spans the WHOLE card — title, field and notes — so it deliberately has no
+  // inner field rect of its own (a redundant white-on-white one used to mask
+  // the card border). We therefore paint the field here, inside the field clip,
+  // and only when the coach picked a non-white background: on "white" this
+  // emits nothing and the sheet stays byte-identical to before the option
+  // existed. Colouring the outer rect instead would tint the title and notes
+  // too, and their ink is hardcoded dark.
+  const fieldWash =
+    look.fieldBackground === "white"
+      ? ""
+      : `<rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="${resolveFieldTheme(look.fieldBackground).bgMain}"/>`;
+
   const clipId = `fc-${Math.random().toString(36).slice(2, 9)}`;
-  return `<defs><clipPath id="${clipId}"><rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}"/></clipPath></defs><g clip-path="url(#${clipId})">${guides}${zones}${routes}${players}</g>`;
+  return `<defs><clipPath id="${clipId}"><rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}"/></clipPath></defs><g clip-path="url(#${clipId})">${fieldWash}${guides}${zones}${routes}${players}</g>`;
 }
 
 /** Defensive coverage zones — rectangles or ellipses rendered beneath routes
@@ -1090,6 +1110,7 @@ function renderZones(
 /** Arrow rendered at each terminal segment's tip (matches editor logic). */
 function renderRoutesAndArrows(
   doc: PlayDocument,
+  fieldBackground: FieldBackground,
   fieldX: number,
   fieldY: number,
   fieldW: number,
@@ -1105,7 +1126,7 @@ function renderRoutesAndArrows(
   let out = "";
   for (const r of doc.layers.routes) {
     const groups = routeToPrintGroups(r);
-    const stroke = resolveRouteStroke(r, doc.layers.players);
+    const stroke = resolveRouteStroke(r, doc.layers.players, fieldBackground);
     for (const grp of groups) {
       const d = grp.segments
         .map((seg) => {
@@ -1179,6 +1200,8 @@ function routeStrokeProportional(weight: WristbandRouteWeight, fieldMin: number)
 }
 
 export type WristbandGridOptions = {
+  /** Field colour behind the diagram. Route ink is resolved against it. */
+  fieldBackground: FieldBackground;
   widthIn: number;
   heightIn: number;
   layout: WristbandGridLayout;
@@ -1821,7 +1844,7 @@ function renderWristbandTile(
     }
   }
 
-  const routes = renderRoutesAndArrows(doc, fieldX, fieldY, fieldW, fieldH, strokeW, Math.min(fieldW, fieldH), opts.arrowSize, fit);
+  const routes = renderRoutesAndArrows(doc, opts.fieldBackground, fieldX, fieldY, fieldW, fieldH, strokeW, Math.min(fieldW, fieldH), opts.arrowSize, fit);
 
   const ymI = Math.max(0, Math.min(1, opts.yardMarkersIntensity));
   const losI = Math.max(0, Math.min(1, opts.losIntensity));
@@ -1841,7 +1864,7 @@ function renderWristbandTile(
   <g>
     <rect x="${ox}" y="${oy}" width="${cw}" height="${ch}" fill="#ffffff" stroke="${outerStroke}" stroke-width="${0.25 * bt}"/>
     ${header}
-    <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ffffff" stroke="${innerStroke}" stroke-width="${0.25 * bt}"/>
+    <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="${resolveFieldTheme(opts.fieldBackground).bgMain}" stroke="${innerStroke}" stroke-width="${0.25 * bt}"/>
     <defs><clipPath id="${clipId}"><rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}"/></clipPath></defs>
     <g clip-path="url(#${clipId})">
       ${guides}

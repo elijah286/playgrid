@@ -1,6 +1,7 @@
 import { memo } from "react";
 import type { Player, Route, Zone } from "@/domain/play/types";
 import { resolveEndDecoration, resolveRouteStroke } from "@/domain/play/factory";
+import type { FieldBackground } from "@/domain/play/fieldTheme";
 import { routeToRenderedSegments } from "@/domain/play/geometry";
 import { deriveLabelColor } from "@/domain/play/labelColor";
 
@@ -43,6 +44,13 @@ function PlayThumbnailImpl({
 }) {
   const routeSW = thin ? 0.9 : 1.8;
   const arrowSW = thin ? 0.5 : 0.8;
+  // The thumbnail paints no field of its own — the SVG sits on the wrapper
+  // div's background. `light` forces that to white, which is exactly the
+  // surface a white QB route disappears against, so resolve route ink against
+  // white there. Otherwise the wrapper follows the user's theme
+  // (bg-surface-inset) and we can't know its colour from here; "green" keeps
+  // the long-standing behaviour rather than guessing.
+  const fieldBackground: FieldBackground = light ? "white" : "green";
   const playerSW = thin ? 0.6 : 1;
   const zoneSW = thin ? 0.6 : 1;
   const losSW = thin ? 0.75 : 1.25;
@@ -157,7 +165,7 @@ function PlayThumbnailImpl({
           })}
           {preview.routes.map((r) => {
             const rendered = routeToRenderedSegments(r);
-            const stroke = resolveRouteStroke(r, preview.players);
+            const stroke = resolveRouteStroke(r, preview.players, fieldBackground);
             const hl = highlights?.routes?.get(r.id);
             const haloColor = hl ? HIGHLIGHT_COLOR[hl] : null;
             return (
@@ -176,7 +184,7 @@ function PlayThumbnailImpl({
             if (decoration === "none") return null;
             const fromIds = new Set(r.segments.map((s) => s.fromNodeId));
             const terminals = r.segments.filter((s) => !fromIds.has(s.toNodeId));
-            const stroke = resolveRouteStroke(r, preview.players);
+            const stroke = resolveRouteStroke(r, preview.players, fieldBackground);
             return (
               <g key={`deco-${r.id}`}>
                 {terminals.map((seg) => {
