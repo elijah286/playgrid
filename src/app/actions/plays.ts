@@ -850,11 +850,35 @@ export async function getPlayForEditorAction(playId: string) {
   };
 }
 
+/**
+ * The version this edit started from, for refuse-don't-clobber.
+ *
+ * OMIT IT and you get the historical behaviour: a full-document last-writer-wins
+ * overwrite of whatever the server head happens to be. Every existing caller
+ * does exactly that, which is why this is optional — passing it is opt-in, so no
+ * existing write path changes shape.
+ *
+ * PASS IT and the save is refused when the head has moved since — returning the
+ * conflict instead of destroying the other edit. That matters most for a draft
+ * replayed on reconnect: it was composed against a head that may be minutes or
+ * days stale, and landing it blind would erase a co-coach's work AND record the
+ * new version as parented onto theirs, i.e. the history would claim this coach
+ * had seen an edit they never saw.
+ */
+export type SaveConflict = {
+  /** The head we refused to overwrite. */
+  serverVersionId: string;
+  /** Who moved it, for "Dan changed this" copy. Best-effort. */
+  serverEditorName: string | null;
+  serverUpdatedAt: string | null;
+};
+
 export async function savePlayVersionAction(
   playId: string,
   document: PlayDocument,
   label?: string,
   note?: string | null,
+  opts?: { baseVersionId?: string | null },
 ) {
   if (!hasSupabaseEnv()) {
     return { ok: false as const, error: "Supabase is not configured." };
@@ -931,11 +955,47 @@ export async function savePlayVersionAction(
     },
   };
 
+  // Refuse-don't-clobber. Only when the caller told us what it edited FROM —
+  // omitting baseVersionId keeps the historical last-writer-wins behaviour for
+  // every existing caller.
+  //
+  // Note what we compare: the caller's base against the CURRENT head. If they
+  // match, nobody moved and this is a normal save. If they differ, someone else
+  // wrote in between — and blindly proceeding would (a) revert their work and
+  // (b) record this version with parent_version_id = their version, so the
+  // history would assert this coach saw an edit they never saw. Returning the
+  // conflict keeps the coach's work safe on their device (the draft is only
+  // cleared on a confirmed ok) and lets them choose.
+  const head = (play.current_version_id as string | null) ?? null;
+  const base = opts?.baseVersionId;
+  if (base !== undefined && base !== head) {
+    let serverEditorName: string | null = null;
+    let serverUpdatedAt: string | null = null;
+    if (head) {
+      const { data: headRow } = await supabase
+        .from("play_versions")
+        .select("editor_name_snapshot, created_at")
+        .eq("id", head)
+        .maybeSingle();
+      serverEditorName = (headRow?.editor_name_snapshot as string | null) ?? null;
+      serverUpdatedAt = (headRow?.created_at as string | null) ?? null;
+    }
+    return {
+      ok: false as const,
+      error: "This play changed somewhere else.",
+      conflict: {
+        serverVersionId: head ?? "",
+        serverEditorName,
+        serverUpdatedAt,
+      } satisfies SaveConflict,
+    };
+  }
+
   const recorded = await recordPlayVersion({
     supabase,
     playId,
     document: sanitizedDoc,
-    parentVersionId: (play.current_version_id as string | null) ?? null,
+    parentVersionId: head,
     userId: user.id,
     kind: "edit",
     note: note ?? null,

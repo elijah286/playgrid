@@ -24,7 +24,7 @@ import {
   updateCustomOpponentRoutesAction,
 } from "@/app/actions/plays";
 import { putPlayDraft, removePlayDraft } from "@/lib/offline/db";
-import { SaveStatePill } from "./SaveStatePill";
+import { isSaveConflict, SaveStatePill, type SaveState } from "./SaveStatePill";
 import { usePlayEditor } from "./usePlayEditor";
 import { EditorCanvas } from "./EditorCanvas";
 import { RouteToolbar } from "./RouteToolbar";
@@ -1272,7 +1272,7 @@ function PlayEditorClientInner({
    * never rendered), so silence read as "saved" — including when the save had
    * thrown offline and the work was going nowhere. Silence is the lie.
    */
-  const [saveState, setSaveState] = useState<"idle" | "saved" | "pending">("idle");
+  const [saveState, setSaveState] = useState<SaveState>("idle");
   /** The version this session started from; see the prop's docstring. */
   const baseVersionIdRef = useRef<string | null>(baseVersionId);
   useEffect(() => {
@@ -1365,7 +1365,12 @@ function PlayEditorClientInner({
       try {
         return saveAdapter
           ? await saveAdapter(sentDoc)
-          : await savePlayVersionAction(playId, sentDoc);
+          : await savePlayVersionAction(playId, sentDoc, undefined, undefined, {
+              // Tell the server what we edited FROM. If the head has moved, it
+              // refuses rather than reverting whoever moved it — and the version
+              // history stops claiming we'd seen an edit we never saw.
+              baseVersionId: baseVersionIdRef.current,
+            });
       } catch {
         return null;
       }
@@ -1384,6 +1389,15 @@ function PlayEditorClientInner({
         callerName: res.gameLock.callerName,
       });
     } else if (res.ok) {
+      // Advance the base to the version we just created. Without this, the very
+      // next save would send a base the server has already moved past and
+      // conflict with ITSELF after one edit. (The saveAdapter path — library
+      // admin edits — writes no play_versions row and returns no id; it also
+      // never sends a base, so it stays on the historical last-writer-wins
+      // behaviour and there is nothing to advance.)
+      if ("versionId" in res && typeof res.versionId === "string") {
+        baseVersionIdRef.current = res.versionId;
+      }
       // Only declare clean if local hasn't moved past what we sent.
       if (docRef.current === sentDoc) {
         isDirtyRef.current = false;
@@ -1394,6 +1408,13 @@ function PlayEditorClientInner({
       }
       setSaveState("saved");
       router.refresh();
+    } else if (isSaveConflict(res)) {
+      // Someone else moved the play while this session held it. We did NOT
+      // overwrite them, and the draft is still on the device — nothing is lost
+      // either way. Park it as a conflict; resolving is a deliberate choice,
+      // not something to guess at behind the coach's back.
+      isDirtyRef.current = true;
+      setSaveState("conflict");
     } else {
       toast(res.error, "error");
       setSaveState("pending");
