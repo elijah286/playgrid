@@ -6,6 +6,8 @@ import { ArrowLeft, WifiOff } from "lucide-react";
 import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { SportVariant } from "@/domain/play/types";
 import { InboxBell } from "@/components/layout/InboxBell";
+import { useOfflineGate } from "@/components/offline/OfflineGate";
+import { useOfflineLogo } from "@/lib/offline/useOfflineLogo";
 
 /**
  * Slim chrome banner for the play editor — mirrors the colored playbook
@@ -40,12 +42,22 @@ export function EditorPlaybookChrome({
   playbookVariant?: string | null;
   /** Owner display name shown in the subtitle. */
   playbookOwnerName?: string | null;
-  /** Read-only OFFLINE render: the same chrome, but the logo comes from an
-   *  inlined data: URL (plain <img>, no optimizer) and the inbox bell — which
-   *  fetches — is replaced by an "Offline" marker. Defaults to the normal
-   *  online behavior, so this is a no-op for the live editor. */
+  /** Force the OFFLINE chrome (inbox bell → "Offline" marker). Normally omitted:
+   *  the component detects connectivity itself, because the REAL editor now
+   *  renders offline (document nav → SW-cached HTML) and must degrade its own
+   *  network-dependent bits without a caller remembering to say so. */
   offline?: boolean;
 }) {
+  // Detect rather than be told. Passing `offline` explicitly still wins.
+  const { isGated } = useOfflineGate();
+  const isOffline = offline || isGated;
+  // The team logo is on a cross-origin CDN the SW can't cache, so offline the
+  // remote URL is dead (a bare <img src={deadUrl}> shows a broken-image glyph).
+  // Swap in the copy the download inlined into IndexedDB; online this is a no-op.
+  const effectiveLogoUrl = useOfflineLogo(playbookId, playbookLogoUrl);
+  // Only a data: URL needs the plain <img>; next/image can't optimize those (and
+  // offline there's no optimizer to reach anyway).
+  const logoIsInlined = effectiveLogoUrl?.startsWith("data:") ?? false;
   const accentColor = playbookColor || "#F26522";
   const isLightBg = hexLuminance(accentColor) > 0.55;
   const onAccent = isLightBg ? "text-slate-900" : "text-white";
@@ -103,19 +115,19 @@ export function EditorPlaybookChrome({
             isLightBg ? "bg-white/80 ring-black/10" : "bg-white/20 ring-white/30"
           } ${onAccent}`}
         >
-          {playbookLogoUrl ? (
-            offline ? (
+          {effectiveLogoUrl ? (
+            logoIsInlined ? (
               // Inlined data: URL — plain <img>, the optimizer is unreachable
               // without a network.
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={playbookLogoUrl}
+                src={effectiveLogoUrl}
                 alt=""
                 className="absolute inset-0 size-full object-contain p-1"
               />
             ) : (
               <Image
-                src={playbookLogoUrl}
+                src={effectiveLogoUrl}
                 alt=""
                 fill
                 className="object-contain p-1"
@@ -146,7 +158,7 @@ export function EditorPlaybookChrome({
             is the only attention surface for cross-playbook items while
             a coach is drawing a play on phone. Desktop relies on the
             persistent SiteHeader above this chrome. */}
-        {offline ? (
+        {isOffline ? (
           <span
             className={`inline-flex shrink-0 items-center gap-1 rounded-full bg-black/20 px-2 py-1 text-[11px] font-semibold ${onAccent}`}
           >

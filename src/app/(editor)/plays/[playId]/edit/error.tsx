@@ -2,49 +2,40 @@
 
 import * as Sentry from "@sentry/nextjs";
 import { useEffect, useState } from "react";
-import {
-  AlertTriangle,
-  Calendar,
-  ListChecks,
-  MessageCircle,
-  MoreHorizontal,
-  RefreshCw,
-  WifiOff,
-} from "lucide-react";
-import type { PlayDocument } from "@/domain/play/types";
+import { AlertTriangle, RefreshCw, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui";
 import { isNativeApp } from "@/lib/native/isNativeApp";
 import { probeConnectivity } from "@/lib/offline/connectivity";
-import { PlayDocRender } from "@/features/coach-ai/PlayDiagramEmbed";
-import { NotesMarkdown } from "@/features/editor/NotesMarkdown";
-import { EditorPlaybookChrome } from "@/features/editor/EditorPlaybookChrome";
 
 /**
- * Editor segment error boundary — the read-only OFFLINE view.
+ * Editor segment error boundary.
  *
- * The full editor page fires a network call on mount that rejects with no
- * signal and throws here. Editing needs the server anyway (saves are server
- * actions), so offline the right thing is not an error screen — it's the
- * editor rendered READ-ONLY: the same playbook header, the same canonical
- * field (PlayDocRender), the same notes, and the editor's bottom toolbar
- * shown but GREYED OUT. Since offline is read-only, a greyed editor shell is
- * functionally identical to "the real editor, read-only" — and it keeps the
- * offline experience indistinguishable from online without forcing the heavy
- * editor to mount without a network (the risky path). Online errors (a genuine
- * bug) still show the normal error UI — we only swap to the read-only shell
- * when the probe confirms we're actually offline AND the play is cached.
+ * OFFLINE POLICY (2026-07-16, founder rule): a play is either rendered
+ * CORRECTLY — by the real editor, same engine, same data — or we say it isn't
+ * available offline. There is no degraded lookalike.
+ *
+ * This boundary used to draw the play itself with `PlayDocRender` (the Coach Cal
+ * chat-embed renderer) as a read-only "offline view". It was a second SVG engine
+ * pretending to be the first, and it silently diverged: horizontal instead of
+ * rotated yard numbers, the free-form 50-yard fallback instead of the playbook's
+ * real field position, and NO defense overlay (PlayDocRender's whole API is
+ * `{doc, linkTo}` — there was never a channel for opponents). A coach reported
+ * "the plays look totally different" TWICE in 24h, because the lookalike was
+ * convincing enough to hide its own wrongness — strictly worse than no view.
+ *
+ * The real editor renders offline just fine; it was only ever UNREACHABLE. A
+ * client-side nav re-runs the editor's server tree (and an SW cache hit replays
+ * a full-tree RSC payload cross-context — the hazard next.config.ts names),
+ * which threw into this boundary. Downloaded plays are now opened with a
+ * DOCUMENT navigation (see PlayTileLink), so the SW serves the HTML precached at
+ * download time and the REAL EditorCanvas hydrates — verified identical to
+ * online on a real iPad, 2026-07-16.
+ *
+ * So reaching this boundary while offline now means the play genuinely is not
+ * available on this device (its page never cached, or the Cache API was evicted).
+ * The honest message IS the feature.
  */
-type Mode = "checking" | "offline" | "notDownloaded" | "error";
-
-type PlaybookChrome = {
-  id: string;
-  name: string;
-  color: string;
-  logo: string | null;
-  season: string | null;
-  variant: string;
-  owner: string | null;
-};
+type Mode = "checking" | "unavailableOffline" | "error";
 
 export default function EditorError({
   error,
@@ -54,67 +45,22 @@ export default function EditorError({
   reset: () => void;
 }) {
   const [mode, setMode] = useState<Mode>("checking");
-  const [doc, setDoc] = useState<PlayDocument | null>(null);
-  const [name, setName] = useState<string>("");
-  const [book, setBook] = useState<PlaybookChrome | null>(null);
 
   useEffect(() => {
     Sentry.captureException(error);
     let alive = true;
     void (async () => {
-      const match = window.location.pathname.match(/^\/plays\/([^/]+)\/edit/);
-      if (!isNativeApp() || !match) {
+      if (!isNativeApp()) {
         if (alive) setMode("error");
         return;
       }
-      const playId = match[1]!;
       try {
-        const [
-          { getCachedPlayDocument, getCachedPlay, getCachedPlaybookMeta },
-          online,
-        ] = await Promise.all([import("@/lib/offline/db"), probeConnectivity()]);
-        // Only fall back to the read-only cached view when genuinely offline —
-        // otherwise an online crash should surface as a real error, not be
-        // masked by a stale cached render.
-        if (online) {
-          if (alive) setMode("error");
-          return;
-        }
-        const [cachedDoc, cachedPlay] = await Promise.all([
-          getCachedPlayDocument(playId),
-          getCachedPlay(playId),
-        ]);
+        // Only claim "offline" when the probe confirms it — an ONLINE crash is a
+        // genuine bug and must surface as an error, never be softened into a
+        // connectivity excuse.
+        const online = await probeConnectivity();
         if (!alive) return;
-        if (cachedDoc) {
-          setDoc(cachedDoc as PlayDocument);
-          setName(cachedPlay?.name ?? "");
-          // Playbook chrome for the header (best-effort — the diagram + notes
-          // render regardless of whether the playbook meta is cached).
-          if (cachedPlay?.playbookId) {
-            const meta = await getCachedPlaybookMeta(cachedPlay.playbookId).catch(
-              () => null,
-            );
-            if (alive && meta) {
-              // Only the inlined logo — the remote URL is dead offline (a plain
-              // <img src=deadUrl> would render a broken-image "?"). Null falls
-              // back to the playbook initial in EditorPlaybookChrome.
-              setBook({
-                id: meta.id,
-                name: meta.name,
-                color: meta.color,
-                logo: meta.logoDataUrl,
-                season: meta.season,
-                variant: meta.sportVariant,
-                owner: meta.ownerLabel,
-              });
-            }
-          }
-          setMode("offline");
-        } else {
-          // Offline and this play was never downloaded — a friendly, honest
-          // message beats "Something went wrong."
-          setMode("notDownloaded");
-        }
+        setMode(online ? "error" : "unavailableOffline");
       } catch {
         if (alive) setMode("error");
       }
@@ -132,76 +78,17 @@ export default function EditorError({
     );
   }
 
-  if (mode === "offline" && doc) {
-    return (
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 pb-24 sm:pb-6">
-        {/* The SAME playbook chrome the online editor renders (offline mode:
-            inlined logo, "Offline" marker instead of the inbox bell) so the
-            header is identical online and off. */}
-        <EditorPlaybookChrome
-          offline
-          playbookId={book?.id ?? ""}
-          playbookName={book?.name ?? "Playbook"}
-          playbookColor={book?.color ?? null}
-          playbookLogoUrl={book?.logo ?? null}
-          playbookSeason={book?.season}
-          playbookVariant={book?.variant}
-          playbookOwnerName={book?.owner}
-        />
-
-        {/* Play name */}
-        {name && (
-          <h1 className="px-4 pt-1 text-lg font-bold text-foreground">{name}</h1>
-        )}
-
-        {/* Field — fills the width like the online editor canvas. */}
-        <div className="px-2">
-          <PlayDocRender doc={doc} />
-        </div>
-
-        {/* Coaching notes — same source + renderer as online. */}
-        {doc.metadata?.notes ? (
-          <div className="mx-4 rounded-xl border border-border bg-surface-raised p-3">
-            <NotesMarkdown
-              value={doc.metadata.notes}
-              players={doc.layers?.players ?? []}
-            />
-          </div>
-        ) : null}
-
-        {/* Editor toolbar — shown but GREYED OUT (non-interactive). Mirrors the
-            real EditorBottomNav's label set so the shell reads as the editor;
-            offline is read-only, so the actions are disabled with a hint. */}
-        <nav
-          aria-label="Editing is available online"
-          className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-surface-raised opacity-50"
-          title="Editing is available when you're back online"
-          style={{
-            paddingBottom: "env(safe-area-inset-bottom, 0px)",
-            paddingLeft: "env(safe-area-inset-left, 0px)",
-            paddingRight: "env(safe-area-inset-right, 0px)",
-          }}
-        >
-          <GreyNavItem label="Plays" Icon={ListChecks} />
-          <GreyNavItem label="Chat" Icon={MessageCircle} />
-          <GreyNavItem label="Calendar" Icon={Calendar} />
-          <GreyNavItem label="More" Icon={MoreHorizontal} />
-        </nav>
-      </div>
-    );
-  }
-
-  if (mode === "notDownloaded") {
+  if (mode === "unavailableOffline") {
     return (
       <div className="mx-auto max-w-md px-6 py-16 text-center">
         <WifiOff className="mx-auto size-8 text-muted" />
         <h1 className="mt-3 text-lg font-semibold text-foreground">
-          This play isn&rsquo;t downloaded
+          This play isn&rsquo;t available offline
         </h1>
         <p className="mt-2 text-sm text-muted">
-          Open its playbook while you&rsquo;re online and tap
-          &ldquo;Available offline&rdquo; to keep every play on this device for
-          the sideline.
+          It hasn&rsquo;t finished downloading to this device. Open its playbook
+          while you&rsquo;re online and tap &ldquo;Available offline&rdquo; —
+          plays with a green check are ready for the sideline.
         </p>
         <div className="mt-5 flex justify-center">
           <Button variant="secondary" onClick={() => window.history.back()}>
@@ -212,7 +99,7 @@ export default function EditorError({
     );
   }
 
-  // Genuine error (online, or nothing cached).
+  // Genuine error (online).
   return (
     <div className="mx-auto max-w-lg px-6 py-16 text-center">
       <AlertTriangle className="mx-auto size-8 text-muted" />
@@ -230,19 +117,6 @@ export default function EditorError({
           Go home
         </Button>
       </div>
-    </div>
-  );
-}
-
-/** Greyed, non-interactive toolbar item — a read-only echo of EditorBottomNav. */
-function GreyNavItem({ label, Icon }: { label: string; Icon: React.ElementType }) {
-  return (
-    <div
-      aria-disabled="true"
-      className="flex min-h-[48px] flex-1 cursor-not-allowed flex-col items-center justify-center gap-1 px-1 py-1.5 text-[11px] font-semibold tracking-tight text-muted"
-    >
-      <Icon className="size-5" aria-hidden />
-      <span className="truncate">{label}</span>
     </div>
   );
 }

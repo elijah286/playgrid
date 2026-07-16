@@ -58,6 +58,7 @@ import { DownloadForOfflineButton } from "@/components/offline/DownloadForOfflin
 import { InboxBell } from "@/components/layout/InboxBell";
 import { useIsNativeApp } from "@/lib/native/useIsNativeApp";
 import { useOfflineState } from "@/lib/offline/useOfflineState";
+import { useOfflineLogo } from "@/lib/offline/useOfflineLogo";
 import { nativeShare } from "@/lib/native/share";
 import { isNativeApp } from "@/lib/native/isNativeApp";
 import { track } from "@/lib/analytics/track";
@@ -254,6 +255,10 @@ export function PlaybookHeader({
   const isNative = useIsNativeApp();
   const { downloadedIds } = useOfflineState();
   const isDownloaded = isNative && downloadedIds.has(playbookId);
+  // The team logo lives on a cross-origin CDN the SW can't cache, so offline the
+  // remote URL is dead. Swap in the copy the download inlined into IndexedDB.
+  // (Online this returns logoUrl untouched.)
+  const effectiveLogoUrl = useOfflineLogo(playbookId, logoUrl);
 
   useEffect(() => {
     if (!searchParams) return;
@@ -517,8 +522,26 @@ export function PlaybookHeader({
               isLightBg ? "bg-white/80 ring-black/10" : "bg-white/20 ring-white/30"
             } ${onAccent}`}
           >
-            {logoUrl ? (
-              <Image src={logoUrl} alt="" fill className="object-contain p-1" sizes="44px" />
+            {effectiveLogoUrl ? (
+              // A cached logo is an inlined data: URL — next/image's optimizer
+              // can't serve those (and offline there's no optimizer to reach),
+              // so render it as a plain <img>. Remote URLs keep the optimizer.
+              effectiveLogoUrl.startsWith("data:") ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={effectiveLogoUrl}
+                  alt=""
+                  className="absolute inset-0 size-full object-contain p-1"
+                />
+              ) : (
+                <Image
+                  src={effectiveLogoUrl}
+                  alt=""
+                  fill
+                  className="object-contain p-1"
+                  sizes="44px"
+                />
+              )
             ) : (
               <span>{initial}</span>
             )}
