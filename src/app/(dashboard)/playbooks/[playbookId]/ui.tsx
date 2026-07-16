@@ -102,7 +102,11 @@ import {
   setPlayGroupAction,
   type PlaybookDetailPlayRow,
 } from "@/app/actions/plays";
-import { listFormationsAction } from "@/app/actions/formations";
+import {
+  listFormationsAction,
+  listStarterFormationsAction,
+  materializeStarterFormationAction,
+} from "@/app/actions/formations";
 import type { SavedFormation } from "@/app/actions/formations";
 import { PlaybookFormationsTab } from "./PlaybookFormationsTab";
 import { GameResultsPanel } from "@/features/game-results/GameResultsPanel";
@@ -129,13 +133,11 @@ import type { Player, PlayType, Route, SpecialTeamsUnit, SportVariant, Zone } fr
 import {
   defaultDefendersForVariant,
   defaultPlayersForVariant,
-  defenseTemplatesForVariant,
   resolveEndDecoration,
   resolveRouteStroke,
   sportProfileForVariant,
   specialTeamsTemplates,
   SPORT_VARIANT_LABELS,
-  type DefenseTemplate,
   type SpecialTeamsTemplate,
 } from "@/domain/play/factory";
 import { routeToRenderedSegments } from "@/domain/play/geometry";
@@ -838,10 +840,11 @@ function PlaybookDetailClientInner({
   // doors; "formation" reveals the existing formation grid. Ignored when the
   // flag is off (the sheet renders its classic single-step layout).
   const [newPlayStep, setNewPlayStep] = useState<"choose" | "formation">("choose");
-  const defenseTemplates = useMemo(
-    () => defenseTemplatesForVariant(variant),
-    [variant],
-  );
+  // Catalog-derived defensive formations, shown read-only. Unlike offense
+  // seeds (snapshot-cloned into a playbook at creation), these are never
+  // backfilled — they're listed here and cloned into the playbook only when
+  // a coach actually starts a play from one.
+  const [defenseStarters, setDefenseStarters] = useState<SavedFormation[]>([]);
   const stTemplates = useMemo(
     () => (variant === "tackle_11" ? specialTeamsTemplates() : []),
     [variant],
@@ -1101,6 +1104,42 @@ function PlaybookDetailClientInner({
       }
       setLoadingFormations(false);
     });
+    listStarterFormationsAction("defense", variant).then((res) => {
+      if (res.ok) setDefenseStarters(res.formations);
+    });
+  }
+
+  /**
+   * Start a defensive play from a catalog starter.
+   *
+   * Starters are global seed rows, so the play can't link straight to one:
+   * every consumer of plays.formation_id assumes a playbook-owned row.
+   * Materialize first (idempotent per playbook), then link the owned clone.
+   * createPlayAction re-derives the coverage's zones from the clone's
+   * semantic_key, so the coach lands on a drawn-up Cover 2 rather than bare
+   * triangles.
+   */
+  async function createFromDefenseStarter(starter: SavedFormation) {
+    if (isPreview) {
+      blockIfPreview(
+        "This flow isn't available in demo mode. Start your own playbook to unlock every formation.",
+      );
+      return;
+    }
+    setCreating(true);
+    const res = await materializeStarterFormationAction(starter.id, playbookId);
+    if (!res.ok) {
+      setCreating(false);
+      toast(res.error, "error");
+      return;
+    }
+    await createWithFormation(
+      { ...starter, id: res.formationId, playbookId, isSeed: false },
+      {
+        playType: "defense",
+        playName: nextPlayNameForTemplate(starter.displayName),
+      },
+    );
   }
 
   async function createWithFormation(
@@ -1169,15 +1208,6 @@ function PlaybookDetailClientInner({
     return `${base} ${anyMatch ? maxN + 1 : 1}`;
   }
 
-  function createFromDefenseTemplate(t: DefenseTemplate) {
-    void createWithFormation(undefined, {
-      playType: "defense",
-      initialPlayers: t.players,
-      formationName: t.displayName,
-      playName: nextPlayNameForTemplate(t.displayName),
-    });
-  }
-
   function createFromSTTemplate(t: SpecialTeamsTemplate) {
     void createWithFormation(undefined, {
       playType: "special_teams",
@@ -1188,7 +1218,7 @@ function PlaybookDetailClientInner({
     });
   }
 
-  async function createAndGoToFormationEditor() {
+  async function createAndGoToFormationEditor(kind: "offense" | "defense" = "offense") {
     // Preview mode: go straight to the formation editor with a preview
     // flag — there's no play to anchor returnToPlay against.
     if (isPreview) {
@@ -1197,16 +1227,24 @@ function PlaybookDetailClientInner({
         preview: "1",
         variant,
         returnToPlaybook: playbookId,
+        kind,
       });
       router.push(`/formations/new?${q.toString()}`);
       return;
     }
     setCreating(true);
-    const res = await createPlayAction(playbookId, { initialPlayers: defaultPlayers, variant, playerCount: playbookPlayerCount });
+    // The anchor play must match the side being drawn, otherwise saving a
+    // defensive formation would bounce the coach back into an offensive play.
+    const res = await createPlayAction(playbookId, {
+      initialPlayers: kind === "defense" ? defaultDefenders : defaultPlayers,
+      variant,
+      playerCount: playbookPlayerCount,
+      playType: kind,
+    });
     if (res.ok) {
       // Go to formation editor; when user saves, the formation editor
       // should redirect back to the play. Pass playId as return target.
-      router.push(`/formations/new?variant=${variant}&returnToPlay=${res.playId}`);
+      router.push(`/formations/new?variant=${variant}&kind=${kind}&returnToPlay=${res.playId}`);
     } else {
       setCreating(false);
       setShowFormationPicker(false);
@@ -2963,7 +3001,7 @@ function PlaybookDetailClientInner({
                           <button
                             type="button"
                             className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
-                            onClick={createAndGoToFormationEditor}
+                            onClick={() => void createAndGoToFormationEditor("offense")}
                           >
                             <div className="flex size-20 items-center justify-center rounded-md bg-surface-raised text-muted">
                               <Plus className="size-7" />
@@ -3009,32 +3047,64 @@ function PlaybookDetailClientInner({
 
                     {openSection === "defense" && (
                       <>
-                        {defenseTemplates.length > 0 && (
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            type="button"
+                            className="flex flex-col items-center gap-2 rounded-xl border-2 border-primary/40 bg-primary/5 p-4 text-center transition-colors hover:border-primary hover:bg-primary/10"
+                            onClick={() => createWithFormation(undefined, { playType: "defense" })}
+                          >
+                            <MiniPlayerDiagram players={defaultDefenders} />
+                            <div>
+                              <p className="text-sm font-semibold text-foreground">No specific formation</p>
+                              <p className="text-xs text-muted">{defaultDefenders.length} default defenders</p>
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
+                            onClick={() => createAndGoToFormationEditor("defense")}
+                          >
+                            <div className="flex size-20 items-center justify-center rounded-md bg-surface-raised text-muted">
+                              <Plus className="size-7" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-foreground">Create new formation</p>
+                              <p className="text-xs text-muted">Design from scratch</p>
+                            </div>
+                          </button>
+                        </div>
+
+                        {defenseStarters.length > 0 && (
                           <>
-                            <p className="mb-2 text-xs font-medium text-muted">
-                              Pick a defensive play to start with
-                            </p>
+                            <SectionDivider>Starter formations</SectionDivider>
                             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                              {defenseTemplates.map((t) => (
+                              {defenseStarters.map((f) => (
                                 <button
-                                  key={t.key}
+                                  key={f.id}
                                   type="button"
                                   className="flex flex-col items-center gap-2 rounded-xl border border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
-                                  onClick={() => createFromDefenseTemplate(t)}
-                                  title={t.description}
+                                  onClick={() => void createFromDefenseStarter(f)}
                                 >
-                                  <MiniPlayerDiagram players={t.players} />
+                                  <MiniPlayerDiagram players={f.players} />
                                   <div>
-                                    <p className="text-sm font-semibold text-foreground">{t.displayName}</p>
-                                    <p className="text-xs text-muted">{t.players.length} defenders</p>
+                                    <p className="text-sm font-semibold text-foreground">{f.displayName}</p>
+                                    <p className="text-xs text-muted">{f.players.length} defenders</p>
                                   </div>
                                 </button>
                               ))}
                             </div>
                           </>
                         )}
+
                         {(() => {
-                          const def = availableFormations.filter((f) => f.kind === "defense");
+                          // Variant-filter to match offense. Without it a 5v5
+                          // defensive formation shows up in a 7v7 playbook and
+                          // puts 5 defenders on a 7-man field.
+                          const def = availableFormations.filter((f) => {
+                            if (f.kind !== "defense") return false;
+                            const fv = f.sportProfile?.variant as SportVariant | undefined;
+                            return fv ? fv === variant : true;
+                          });
                           if (def.length === 0) return null;
                           return (
                             <>
@@ -3046,13 +3116,16 @@ function PlaybookDetailClientInner({
                                     type="button"
                                     className="flex flex-col items-center gap-2 rounded-xl border border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
                                     onClick={() =>
-                                      createWithFormation(f, { playType: "defense" })
+                                      createWithFormation(f, {
+                                        playType: "defense",
+                                        playName: nextPlayNameForTemplate(f.displayName),
+                                      })
                                     }
                                   >
                                     <MiniPlayerDiagram players={f.players} />
                                     <div>
                                       <p className="text-sm font-semibold text-foreground">{f.displayName}</p>
-                                      <p className="text-xs text-muted">{f.players.length} players</p>
+                                      <p className="text-xs text-muted">{f.players.length} defenders</p>
                                     </div>
                                   </button>
                                 ))}

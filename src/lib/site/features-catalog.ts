@@ -241,6 +241,15 @@ export const FEATURES: FeatureEntry[] = [
 
   // ── Plays & formations ──────────────────────────────────────────
   {
+    id: "defensive-formations",
+    name: "Defensive formations",
+    description:
+      "Defense now works the way offense always has. The new-play dialog offers a library of real defensive looks for the playbook's game type — Cover 2, Cover 3, Tampa 2, Cover 4, Cover 0, blitz packages, and in tackle the full fronts (4-3 Over, 3-4, Nickel, 46 Bear, 4-4 Stack) — each drawn from the same catalog that powers Coach Cal and the Football Library, so the alignment is genuinely correct rather than a rough sketch. Start a play from one and the coverage's zones come pre-drawn. Coaches can design and save their own defensive formations from scratch, exactly as they do for offense, and every defensive play shows its formation in the header and can be swapped to another — the defenders re-align to the new front. Because a defensive front is a personnel change rather than a rearrangement of the same players, swapping asks first when there's coverage work to lose.",
+    category: "Plays & formations",
+    status: "ga",
+    addedDate: "2026-07-16",
+  },
+  {
     id: "photo-play-import",
     name: "Import plays from a photo",
     description:

@@ -7,6 +7,7 @@ import { ensureDefaultWorkspace, getOrCreateInboxPlaybook } from "@/lib/data/wor
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { createEmptyPlayDocument, defaultDefendersForVariant, defaultPlayersForVariant, generateOtherVariantPlayers, normalizePlayDocument, sportProfileForVariant } from "@/domain/play/factory";
 import type { PlayDocument, Player, PlayType, Route, SpecialTeamsUnit, SportVariant, VsPlaySnapshot, Zone } from "@/domain/play/types";
+import { defenseStarterZones } from "@/lib/formations/defense-starter-zones";
 import type { LibraryVariant } from "@/lib/learn/variant";
 import { normalizePlaybookSettings, type PlaybookSettings } from "@/domain/playbook/settings";
 import {
@@ -231,6 +232,13 @@ export async function createPlayAction(
   playbookId: string,
   opts?: {
     initialPlayers?: Player[];
+    /** Coverage zones to draw on a brand-new defensive play. A defensive
+     *  formation stores bodies only, but at creation there is no coach work
+     *  to overwrite — so starting from a catalog starter installs that
+     *  coverage's zones, and a coach who picks "Cover 2" gets a Cover 2
+     *  picture instead of bare triangles. Never set on a formation the coach
+     *  drew themselves; those carry no coverage. */
+    initialZones?: Zone[];
     formationId?: string | null;
     formationName?: string;
     playerCount?: number;
@@ -293,10 +301,31 @@ export async function createPlayAction(
     (pbRow?.custom_offense_count as number | null) ?? null,
   );
 
+  // A brand-new defensive play started from a catalog starter gets that
+  // coverage's zones drawn in. The formation itself stores bodies only, so
+  // the zones are re-derived from the catalog through the linked formation's
+  // semantic_key. Coach-drawn formations resolve to [] — they carry no
+  // coverage. Only ever on create, where there's no coach work to overwrite.
+  let zones = opts?.initialZones;
+  if (!zones && (opts?.playType ?? "offense") === "defense" && opts?.formationId) {
+    const { data: fRow } = await supabase
+      .from("formations")
+      .select("semantic_key")
+      .eq("id", opts.formationId)
+      .maybeSingle();
+    const derived = defenseStarterZones(fRow?.semantic_key as string | null | undefined);
+    if (derived.length > 0) zones = derived;
+  }
+
   const doc = createEmptyPlayDocument(
     {
       sportProfile,
-      layers: { players, routes: [], annotations: [] },
+      layers: {
+        players,
+        routes: [],
+        annotations: [],
+        ...(zones && zones.length > 0 ? { zones } : {}),
+      },
     },
     pbSettings.fieldDisplay.markingDefaults,
   );

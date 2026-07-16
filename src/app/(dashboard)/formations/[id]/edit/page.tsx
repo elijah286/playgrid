@@ -42,6 +42,7 @@ export default async function EditFormationPage({
       initialName={formation.displayName}
       initialVariant={variant}
       initialPlayers={formation.players}
+      kind={formation.kind === "defense" ? "defense" : "offense"}
       returnToPlaybook={returnToPlaybook}
       navFormations={navFormations}
     />

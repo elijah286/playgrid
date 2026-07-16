@@ -31,11 +31,12 @@ import { ExamplePreviewBanner } from "@/features/admin/ExamplePreviewBanner";
 import { useExamplePreview } from "@/features/admin/ExamplePreviewContext";
 import {
   createEmptyPlayDocument,
+  defaultDefendersForVariant,
   defaultPlayersForVariant,
   SPORT_VARIANT_LABELS,
   sportProfileForVariant,
 } from "@/domain/play/factory";
-import type { Player, SportVariant } from "@/domain/play/types";
+import type { Player, PlayerRole, SportVariant } from "@/domain/play/types";
 import { fieldAspectFor } from "@/domain/play/render-config";
 import { defaultSettingsForVariant } from "@/domain/playbook/settings";
 
@@ -43,9 +44,17 @@ const SPORT_OPTIONS = (
   Object.entries(SPORT_VARIANT_LABELS) as [SportVariant, string][]
 ).map(([value, label]) => ({ value, label }));
 
+/**
+ * Which side of the ball this editor is drawing. A subset of
+ * `FormationKind` — special teams isn't buildable here yet.
+ */
+export type FormationEditorKind = "offense" | "defense";
+
 type Props =
   | {
       mode: "new";
+      /** Which side of the ball to draw (from ?kind= query param). */
+      kind?: FormationEditorKind;
       /** Pre-selected sport variant (from ?variant= query param). */
       initialVariant?: SportVariant;
       /**
@@ -66,6 +75,9 @@ type Props =
       initialName: string;
       initialVariant: SportVariant;
       initialPlayers: Player[];
+      /** The side this formation was created as. Immutable — `kind` is set at
+       *  create time and updateFormationAction never rewrites it. */
+      kind: FormationEditorKind;
       /** Playbook ID to return to after saving (from ?returnToPlaybook=). */
       returnToPlaybook?: string | null;
       /** Sibling formations in the same playbook for prev/next/all nav. */
@@ -82,6 +94,13 @@ export function FormationEditorClient(props: Props) {
     props.mode === "edit"
       ? props.initialVariant
       : (props.initialVariant ?? "flag_7v7");
+
+  // Comes from the `formations.kind` column on edit, and ?kind= on create.
+  // Never inferred from the players: a coach who relabels every defender to
+  // "Other" must not have their defensive formation silently become an
+  // offensive one on the next save.
+  const kind: FormationEditorKind = props.mode === "edit" ? props.kind : (props.kind ?? "offense");
+  const isDefense = kind === "defense";
 
   /* ── name + sport variant ── */
   const [name, setName] = useState(
@@ -101,9 +120,21 @@ export function FormationEditorClient(props: Props) {
             layers: { ...base.layers, players: props.initialPlayers },
           };
         })()
-      : createEmptyPlayDocument({
-          sportProfile: sportProfileForVariant(defaultVariant),
-        });
+      : (() => {
+          // createEmptyPlayDocument seeds the offensive default set, so only
+          // the defensive arm needs to swap the players out.
+          const base = createEmptyPlayDocument({
+            sportProfile: sportProfileForVariant(defaultVariant),
+          });
+          if (!isDefense) return base;
+          return {
+            ...base,
+            layers: {
+              ...base.layers,
+              players: defaultDefendersForVariant(defaultVariant),
+            },
+          };
+        })();
 
   const { doc, dispatch, replaceDocument } = usePlayEditor(initialDoc);
 
@@ -121,7 +152,9 @@ export function FormationEditorClient(props: Props) {
       ...freshDoc,
       layers: {
         ...freshDoc.layers,
-        players: defaultPlayersForVariant(next),
+        players: isDefense
+          ? defaultDefendersForVariant(next)
+          : defaultPlayersForVariant(next),
       },
     });
     setSelectedPlayerId(null);
@@ -169,7 +202,7 @@ export function FormationEditorClient(props: Props) {
           doc.layers.players,
           doc.sportProfile,
           losY,
-          "offense",
+          kind,
           ids[0],
         );
       } else {
@@ -178,7 +211,7 @@ export function FormationEditorClient(props: Props) {
           doc.layers.players,
           doc.sportProfile,
           losY,
-          "offense",
+          kind,
           ids,
         );
         if (multi.ok && multi.errors.length === 0) {
@@ -256,7 +289,13 @@ export function FormationEditorClient(props: Props) {
           </Button>
         </Link>
         <h1 className="text-lg font-bold text-foreground">
-          {props.mode === "edit" ? "Edit formation" : "New formation"}
+          {props.mode === "edit"
+            ? isDefense
+              ? "Edit defensive formation"
+              : "Edit formation"
+            : isDefense
+              ? "New defensive formation"
+              : "New formation"}
         </h1>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -355,7 +394,7 @@ export function FormationEditorClient(props: Props) {
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Trips Right"
+            placeholder={isDefense ? "e.g. Cover 3" : "e.g. Trips Right"}
             onKeyDown={(e) => e.key === "Enter" && handleSave()}
           />
         </div>

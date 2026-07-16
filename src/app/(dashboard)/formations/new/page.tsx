@@ -1,4 +1,7 @@
-import { FormationEditorClient } from "@/features/formations/FormationEditorClient";
+import {
+  FormationEditorClient,
+  type FormationEditorKind,
+} from "@/features/formations/FormationEditorClient";
 import { ExamplePreviewProvider } from "@/features/admin/ExamplePreviewContext";
 import type { SportVariant } from "@/domain/play/types";
 import { createClient } from "@/lib/supabase/server";
@@ -8,9 +11,14 @@ export const metadata = { title: "New Formation — XO Gridmaker" };
 
 const VALID_VARIANTS: SportVariant[] = ["flag_5v5", "flag_7v7", "other", "tackle_11"];
 
+// Special teams formations aren't buildable here yet — an unrecognised
+// ?kind= falls back to offense rather than 404ing.
+const VALID_KINDS: FormationEditorKind[] = ["offense", "defense"];
+
 type Props = {
   searchParams: Promise<{
     variant?: string;
+    kind?: string;
     returnToPlay?: string;
     returnToPlaybook?: string;
     preview?: string;
@@ -21,6 +29,7 @@ export default async function NewFormationPage({ searchParams }: Props) {
   const params = await searchParams;
   const queryVariant =
     VALID_VARIANTS.find((v) => v === params.variant) ?? "flag_7v7";
+  const queryKind = VALID_KINDS.find((k) => k === params.kind) ?? "offense";
   const returnToPlay = params.returnToPlay ?? null;
   const returnToPlaybook = params.returnToPlaybook ?? null;
   const isPreview = params.preview === "1";
@@ -57,6 +66,7 @@ export default async function NewFormationPage({ searchParams }: Props) {
     <ExamplePreviewProvider isPreview={isPreview}>
       <FormationEditorClient
         mode="new"
+        kind={queryKind}
         initialVariant={initialVariant}
         lockVariant={lockVariant}
         returnToPlay={returnToPlay}

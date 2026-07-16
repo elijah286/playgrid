@@ -2,7 +2,12 @@
 
 import { Button, Input, Select, Badge } from "@/components/ui";
 import type { PlayCommand } from "@/domain/play/commands";
-import type { PlayDocument, PlayerRole, PlayerShape } from "@/domain/play/types";
+import type {
+  PlayDocument,
+  Player,
+  PlayerRole,
+  PlayerShape,
+} from "@/domain/play/types";
 import { deriveLabelColor } from "@/domain/play/labelColor";
 import { notifyTutorialAction } from "@/features/tutorials/engine/notify";
 
@@ -13,7 +18,7 @@ type Props = {
   onSelectPlayer: (id: string | null) => void;
 };
 
-const ROLE_OPTIONS: { value: PlayerRole; label: string }[] = [
+const OFFENSE_ROLE_OPTIONS: { value: PlayerRole; label: string }[] = [
   { value: "QB", label: "QB" },
   { value: "RB", label: "RB" },
   { value: "WR", label: "WR" },
@@ -21,6 +26,27 @@ const ROLE_OPTIONS: { value: PlayerRole; label: string }[] = [
   { value: "C", label: "C" },
   { value: "OTHER", label: "Other" },
 ];
+
+const DEFENSE_ROLE_OPTIONS: { value: PlayerRole; label: string }[] = [
+  { value: "DL", label: "DL" },
+  { value: "LB", label: "LB" },
+  { value: "CB", label: "CB" },
+  { value: "S", label: "S" },
+  { value: "NB", label: "NB" },
+  { value: "OTHER", label: "Other" },
+];
+
+// PlayDocument players carry no offense/defense team flag, so a defender is
+// identified by its role. Same convention as src/lib/learn/defense-resolver.ts.
+// Offensive roles never appear in this set, so offensive players always get
+// the offensive option list.
+const DEFENSIVE_ROLES = new Set<PlayerRole>(["DL", "LB", "CB", "S", "NB"]);
+
+function roleOptionsFor(player: Player): { value: PlayerRole; label: string }[] {
+  return DEFENSIVE_ROLES.has(player.role)
+    ? DEFENSE_ROLE_OPTIONS
+    : OFFENSE_ROLE_OPTIONS;
+}
 
 const FILL_COLORS = [
   "#FFFFFF",
@@ -89,7 +115,7 @@ export function FormationInspector({
           <label className="text-xs font-medium text-muted">Role</label>
           <Select
             value={selectedPlayer.role}
-            options={ROLE_OPTIONS}
+            options={roleOptionsFor(selectedPlayer)}
             onChange={(v) =>
               dispatch({
                 type: "player.setRole",
