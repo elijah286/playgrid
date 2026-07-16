@@ -76,11 +76,18 @@ export function PlayHistoryButton({ playId, hideMobileLabel = false, open: openP
     if (!open) return;
     let cancelled = false;
     setError(null);
-    listPlayVersionsAction(playId).then((res) => {
-      if (cancelled) return;
-      if (res.ok) setRows(res.rows);
-      else setError(res.error);
-    });
+    listPlayVersionsAction(playId)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok) setRows(res.rows);
+        else setError(res.error);
+      })
+      // Offline this REJECTS rather than returning ok:false, so the `else`
+      // never ran — an unhandled rejection, and the panel spun forever.
+      // Version history is server-side by nature; say so.
+      .catch(() => {
+        if (!cancelled) setError("Version history needs a connection.");
+      });
     return () => { cancelled = true; };
   }, [open, playId]);
 

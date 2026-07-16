@@ -41,11 +41,19 @@ function UnlockedCard({
     let cancelled = false;
     setGames(null);
     setError(null);
-    listGameResultsForPlayAction(playbookId, playId).then((res) => {
-      if (cancelled) return;
-      if (res.ok) setGames(res.games);
-      else setError(res.error);
-    });
+    listGameResultsForPlayAction(playbookId, playId)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok) setGames(res.games);
+        else setError(res.error);
+      })
+      // Offline this REJECTS ("Load failed") rather than returning ok:false,
+      // so the `else` above never ran: an unhandled rejection, and the card
+      // stuck on its loading state forever. Game results need the server —
+      // say so instead of spinning.
+      .catch(() => {
+        if (!cancelled) setError("Game results need a connection.");
+      });
     return () => {
       cancelled = true;
     };

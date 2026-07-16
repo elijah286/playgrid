@@ -32,11 +32,20 @@ export function useUserRouteTemplates(): UserRouteTemplatesHook {
 
   useEffect(() => {
     let cancelled = false;
-    listUserRouteTemplatesAction().then((res) => {
-      if (cancelled) return;
-      if (res.ok) setTemplates(res.data);
-      setLoaded(true);
-    });
+    listUserRouteTemplatesAction()
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok) setTemplates(res.data);
+        setLoaded(true);
+      })
+      // Offline this REJECTS ("Load failed"), and without a catch it was an
+      // unhandled rejection that also left `loaded` false forever — so "Your
+      // routes" sat spinning instead of saying it has none. A coach's saved
+      // route templates are an online nicety; the editor must not depend on
+      // them. Mark loaded and move on.
+      .catch(() => {
+        if (!cancelled) setLoaded(true);
+      });
     return () => {
       cancelled = true;
     };

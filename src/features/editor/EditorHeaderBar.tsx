@@ -168,13 +168,33 @@ export function EditorHeaderBar({
   // Refresh the sibling nav when this play is renamed (server-side ordering may
   // change). Cheap best-effort; ignore result if it fails. Skipped in library
   // mode — the synthetic playbookId would always 400 on the UUID parse.
+  //
+  // The try/catch is LOAD-BEARING, not defensive dressing. This runs on MOUNT,
+  // and a rejected `await` inside startTransition does NOT stay contained:
+  // React 19 propagates transition errors to the nearest error boundary. So
+  // with no signal, this "cheap best-effort" refresh threw "Load failed"
+  // (WebKit's rejected-fetch message) straight into the editor's boundary and
+  // took the WHOLE PLAY EDITOR down — the play painted from cached HTML for
+  // ~100ms, then vanished behind "This play isn't available offline".
+  //
+  // That was the offline bug, hunted across two days and four wrong theories
+  // (a cross-context RSC replay, a readiness race, a phantom "mount-time
+  // dependency in the (editor) layout", stale cached rows). Every one of them
+  // was plausible. The truth was here: only `res.ok === false` was handled,
+  // never a THROWN rejection. The nav we'd lose is cosmetic — `initialNav`
+  // already came from props — so failing quietly is exactly right.
   useEffect(() => {
     if (libraryMode) return;
     startTransition(async () => {
-      const res = await listPlaybookPlaysForNavigationAction(playbookId);
-      if (res.ok) {
-        setNav(res.plays);
-        setGroups(res.groups);
+      try {
+        const res = await listPlaybookPlaysForNavigationAction(playbookId);
+        if (res.ok) {
+          setNav(res.plays);
+          setGroups(res.groups);
+        }
+      } catch {
+        // Offline or a blip. Keep the nav we were given; never take down the
+        // editor over a sibling-list refresh.
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
