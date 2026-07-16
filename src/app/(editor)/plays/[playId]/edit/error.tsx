@@ -112,12 +112,7 @@ export default function EditorError({
             coach's connection for a crash — and offline is exactly when Sentry
             is unreachable, so the screen is the only place the truth can appear.
             Muted and small: informative if you look, ignorable if you don't. */}
-        {error?.message && (
-          <p className="mt-4 break-words px-2 font-mono text-[10px] leading-snug text-muted/70">
-            {error.message}
-            {error.digest ? ` · ${error.digest}` : ""}
-          </p>
-        )}
+        <ErrorDetail error={error} />
         <div className="mt-5 flex justify-center">
           <Button variant="secondary" onClick={() => window.history.back()}>
             Back
@@ -137,16 +132,7 @@ export default function EditorError({
       <p className="mt-2 text-sm text-muted">
         The team has been notified. You can try again, or head back.
       </p>
-      {/* Show what actually threw. It's already sent to Sentry, but a coach
-          can screenshot this in the moment — and an offline crash is precisely
-          the case where we can't read Sentry from the sideline. Reading the real
-          error settles in seconds what days of code archaeology could not. */}
-      {error?.message && (
-        <p className="mt-3 break-words px-2 font-mono text-[11px] leading-snug text-muted/80">
-          {error.message}
-          {error.digest ? ` · ${error.digest}` : ""}
-        </p>
-      )}
+      <ErrorDetail error={error} />
       <div className="mt-5 flex justify-center gap-2">
         <Button variant="primary" leftIcon={RefreshCw} onClick={reset}>
           Try again
@@ -155,6 +141,52 @@ export default function EditorError({
           Go home
         </Button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * What actually threw — message + the top stack frames.
+ *
+ * It's already sent to Sentry, but an offline crash is precisely the case where
+ * Sentry is unreachable, so the screen is the only place the truth can surface.
+ * "Load failed" (WebKit's fetch-failure message) tells us a fetch died but not
+ * WHICH one; the stack names it. Even minified, the chunk filename identifies
+ * the module — which is the whole question.
+ *
+ * Deliberately quiet: small, muted, below the fold of attention. A coach who
+ * doesn't care sees a tidy message; a coach who's debugging with us can tap
+ * Copy and paste the whole thing.
+ */
+function ErrorDetail({ error }: { error: Error & { digest?: string } }) {
+  const [copied, setCopied] = useState(false);
+  if (!error?.message) return null;
+
+  const detail = [
+    error.message,
+    error.digest ? `digest: ${error.digest}` : null,
+    error.stack ? `\n${error.stack.split("\n").slice(0, 6).join("\n")}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return (
+    <div className="mx-auto mt-4 max-w-md">
+      <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-surface-inset px-3 py-2 text-left font-mono text-[10px] leading-snug text-muted/80">
+        {detail}
+      </pre>
+      <button
+        type="button"
+        className="mt-1 text-[11px] font-medium text-muted underline underline-offset-2"
+        onClick={() => {
+          void navigator.clipboard
+            ?.writeText(detail)
+            .then(() => setCopied(true))
+            .catch(() => setCopied(false));
+        }}
+      >
+        {copied ? "Copied" : "Copy error"}
+      </button>
     </div>
   );
 }
