@@ -869,10 +869,11 @@ export function SiteSettingsAdminClient({
             Continue with Apple
           </p>
           <p className="mt-0.5 text-xs text-muted">
-            Show the Apple sign-in button on the login page. Requires an
-            Apple Developer Services ID + secret JWT wired into Supabase Auth
-            → Providers (the JWT expires every 6 months). Apple is required
-            by App Store Review Guideline 4.8 once the iOS app ships.
+            Show the Apple sign-in button on the login page in a web browser.
+            The iOS app always shows it regardless of this toggle — App Store
+            Review Guideline 4.8 requires Apple wherever Google appears. The
+            client secret rotates itself monthly via GitHub Actions; no manual
+            renewal needed.
           </p>
         </div>
         <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-foreground">

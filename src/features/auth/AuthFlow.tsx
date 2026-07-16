@@ -118,10 +118,7 @@ export function AuthFlow({
   subheading,
   inviteCode,
   onStepChange,
-  // `appleEnabled` (AuthFlowProps) is intentionally NOT destructured/consulted:
-  // it gated only the broken Supabase *web* Apple provider, and native — the
-  // only place we currently show Apple — bypasses that provider entirely. Kept
-  // on the props type for callers and for when the web path is restored.
+  appleEnabled = false,
   googleEnabled = false,
   googleOAuthWebClientId = null,
   googleOAuthIosClientId = null,
@@ -133,9 +130,8 @@ export function AuthFlow({
   // Guideline 4.8 invariant (on iOS, Google never renders without Apple) is
   // enforced by an exhaustive test instead of inline JSX that a refactor could
   // drift. The native Apple sheet uses the App ID via signInWithIdToken and
-  // never 400s, so it isn't gated behind the admin toggle. Web Apple stays
-  // hidden until the web provider's Client ID is fixed (2026-06-11); restore a
-  // web path in the helper once it is.
+  // never 400s, so it isn't gated behind the admin toggle; web Apple is, and
+  // routes through Supabase's hosted OAuth redirect like Google does.
   const native = useIsNativeApp();
   const { showAppleButton, showGoogleButton } = computeSocialButtonVisibility({
     native,
@@ -144,6 +140,7 @@ export function AuthFlow({
       googleOAuthWebClientId,
       googleOAuthIosClientId,
     ),
+    appleEnabled,
     googleEnabled,
   });
 

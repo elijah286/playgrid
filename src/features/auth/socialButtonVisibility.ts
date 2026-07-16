@@ -13,6 +13,11 @@
  * holds for EVERY input combination (asserted exhaustively in the test). That
  * is what makes a Google-only sign-in screen — the exact 4.8 rejection this
  * fixes — structurally impossible on iOS, regardless of admin toggles.
+ *
+ * Note the asymmetry: on web the Apple button follows its admin toggle, but on
+ * native it deliberately does not. An admin switching Apple off must not be
+ * able to produce a Google-only iOS screen — hence the toggle is consulted on
+ * the web branch only.
  */
 export type SocialButtonVisibilityInput = {
   /** Running inside the Capacitor native shell (vs. a plain web browser). */
@@ -22,6 +27,9 @@ export type SocialButtonVisibilityInput = {
   appleNativeUsable: boolean;
   /** Native Google sign-in is usable: client IDs configured + plugin present. */
   googleNativeUsable: boolean;
+  /** Admin toggle `site_settings.apple_signin_enabled`. Gates the web Apple
+   *  button only — never the native sheet (see below). */
+  appleEnabled: boolean;
   /** Admin toggle `site_settings.google_signin_enabled`. */
   googleEnabled: boolean;
 };
@@ -34,18 +42,25 @@ export type SocialButtonVisibility = {
 export function computeSocialButtonVisibility(
   input: SocialButtonVisibilityInput,
 ): SocialButtonVisibility {
-  const { native, appleNativeUsable, googleNativeUsable, googleEnabled } = input;
+  const { native, appleNativeUsable, googleNativeUsable, appleEnabled, googleEnabled } =
+    input;
 
   // Sign in with Apple.
   //  - Native iOS: gated SOLELY by whether the native sheet is usable — NOT by
-  //    an admin flag. `apple_signin_enabled` exists only to hide the broken
-  //    Supabase *web* Apple provider (it sends the bundle ID com.xogridmaker.app
-  //    instead of the Services ID com.xogridmaker.signin, so Apple rejects with
-  //    "invalid_request"). The native sheet bypasses that provider entirely
-  //    (App ID via signInWithIdToken) and never 400s, so on iOS Apple must not
-  //    be gated behind a toggle that defaults off — Guideline 4.8.
-  //  - Web / Android: hidden until the web Apple provider Client ID is fixed.
-  const showAppleButton = native ? appleNativeUsable : false;
+  //    the admin flag. The native sheet authenticates against the App ID via
+  //    signInWithIdToken and bypasses the web provider entirely, so it must not
+  //    be gated behind a toggle an admin could switch off — Guideline 4.8
+  //    requires Apple to render wherever Google does.
+  //  - Web / Android: the admin toggle. Web Apple was hard-disabled here from
+  //    2026-06-11 to 2026-07-16 because Supabase sent the bundle ID
+  //    com.xogridmaker.app as the OAuth client_id instead of the Services ID
+  //    com.xogridmaker.signin, and Apple rejected it with "invalid_request".
+  //    Supabase uses the FIRST id in its Client IDs list for the web flow and
+  //    accepts any of them as a native token audience, so ordering that list
+  //    "com.xogridmaker.signin,com.xogridmaker.app" fixes web without touching
+  //    native. That's config, not code — if web Apple regresses, re-check that
+  //    ordering before touching this line.
+  const showAppleButton = native ? appleNativeUsable : appleEnabled;
 
   // Google.
   //  - Native: hide when its own native plugin is unusable (no client ID, or a

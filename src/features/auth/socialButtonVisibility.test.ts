@@ -11,8 +11,15 @@ function allInputs(): SocialButtonVisibilityInput[] {
   for (const native of bools)
     for (const appleNativeUsable of bools)
       for (const googleNativeUsable of bools)
-        for (const googleEnabled of bools)
-          out.push({ native, appleNativeUsable, googleNativeUsable, googleEnabled });
+        for (const appleEnabled of bools)
+          for (const googleEnabled of bools)
+            out.push({
+              native,
+              appleNativeUsable,
+              googleNativeUsable,
+              appleEnabled,
+              googleEnabled,
+            });
   return out;
 }
 
@@ -32,11 +39,14 @@ describe("computeSocialButtonVisibility", () => {
     }
   });
 
-  it("shows Apple on native whenever the native sheet is usable, regardless of admin toggles", () => {
+  // The admin toggle gates web only. If it could hide Apple on native, an admin
+  // switching it off would recreate the Google-only iOS screen 4.8 rejects.
+  it("shows Apple on native whenever the native sheet is usable, even with the admin toggle off", () => {
     const { showAppleButton } = computeSocialButtonVisibility({
       native: true,
       appleNativeUsable: true,
       googleNativeUsable: false,
+      appleEnabled: false,
       googleEnabled: false,
     });
     expect(showAppleButton).toBe(true);
@@ -47,6 +57,7 @@ describe("computeSocialButtonVisibility", () => {
       native: true,
       appleNativeUsable: false,
       googleNativeUsable: true,
+      appleEnabled: true,
       googleEnabled: true,
     });
     expect(showAppleButton).toBe(false);
@@ -59,28 +70,66 @@ describe("computeSocialButtonVisibility", () => {
       native: true,
       appleNativeUsable: true,
       googleNativeUsable: true,
+      appleEnabled: true,
       googleEnabled: true,
     });
     expect(showAppleButton).toBe(true);
     expect(showGoogleButton).toBe(true);
   });
 
-  it("keeps Apple hidden on web (broken Supabase web provider) and lets Google follow its admin toggle", () => {
-    const enabled = computeSocialButtonVisibility({
+  // Web Apple rides the admin toggle: the Supabase Client IDs list now leads
+  // with the Services ID, so the web OAuth redirect no longer 400s and the
+  // button is safe to render off the flag alone.
+  it("shows Apple on web when the admin toggle is on, and hides it when off", () => {
+    const base = {
       native: false,
       appleNativeUsable: true,
       googleNativeUsable: true,
       googleEnabled: true,
-    });
-    expect(enabled.showAppleButton).toBe(false);
-    expect(enabled.showGoogleButton).toBe(true);
+    } as const;
 
-    const disabled = computeSocialButtonVisibility({
+    expect(
+      computeSocialButtonVisibility({ ...base, appleEnabled: true }).showAppleButton,
+    ).toBe(true);
+    expect(
+      computeSocialButtonVisibility({ ...base, appleEnabled: false }).showAppleButton,
+    ).toBe(false);
+  });
+
+  it("does not couple Apple and Google on web — each follows its own toggle", () => {
+    // Unlike native, a Google-only row is fine on web: App Review only tests
+    // the native binary, so the 4.8 coupling would be a needless restriction.
+    const googleOnly = computeSocialButtonVisibility({
       native: false,
       appleNativeUsable: true,
       googleNativeUsable: true,
+      appleEnabled: false,
+      googleEnabled: true,
+    });
+    expect(googleOnly.showAppleButton).toBe(false);
+    expect(googleOnly.showGoogleButton).toBe(true);
+
+    const appleOnly = computeSocialButtonVisibility({
+      native: false,
+      appleNativeUsable: true,
+      googleNativeUsable: true,
+      appleEnabled: true,
       googleEnabled: false,
     });
-    expect(disabled.showGoogleButton).toBe(false);
+    expect(appleOnly.showAppleButton).toBe(true);
+    expect(appleOnly.showGoogleButton).toBe(false);
+  });
+
+  // Web Apple does not depend on the native plugin being present — the web
+  // branch must never consult appleNativeUsable.
+  it("shows Apple on web even when the native sheet is unusable", () => {
+    const { showAppleButton } = computeSocialButtonVisibility({
+      native: false,
+      appleNativeUsable: false,
+      googleNativeUsable: false,
+      appleEnabled: true,
+      googleEnabled: false,
+    });
+    expect(showAppleButton).toBe(true);
   });
 });
