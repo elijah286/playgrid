@@ -13,6 +13,7 @@ import {
 } from "@/lib/offline/db";
 import { PlayThumbnail, type PlayThumbnailInput } from "@/features/editor/PlayThumbnail";
 import { PlayDocRender } from "@/features/coach-ai/PlayDiagramEmbed";
+import { NotesMarkdown } from "@/features/editor/NotesMarkdown";
 
 type Props = { playbookId: string };
 
@@ -196,8 +197,9 @@ export function OfflinePlaybookClient({ playbookId }: Props) {
   const selectedPlay = selectedId ? plays.find((p) => p.id === selectedId) : null;
   const selectedDoc = selectedId ? docsById.get(selectedId) : undefined;
   if (selectedPlay) {
+    const notes = selectedDoc?.metadata?.notes;
     return (
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-4">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-3 py-4 sm:px-4">
         <button
           type="button"
           onClick={() => setSelectedId(null)}
@@ -206,7 +208,7 @@ export function OfflinePlaybookClient({ playbookId }: Props) {
           <ArrowLeft className="size-4" />
           <span>{meta.name}</span>
         </button>
-        <div className="flex items-baseline justify-between gap-3">
+        <div className="flex items-baseline justify-between gap-3 px-1">
           <h1 className="text-lg font-bold text-foreground">{selectedPlay.name}</h1>
           {selectedPlay.wristbandCode && (
             <span className="shrink-0 rounded-md bg-primary px-2 py-0.5 text-xs font-bold text-white">
@@ -214,20 +216,27 @@ export function OfflinePlaybookClient({ playbookId }: Props) {
             </span>
           )}
         </div>
-        <div className="rounded-xl border border-border bg-surface-raised p-3">
-          {selectedDoc ? (
-            <PlayRenderBoundary key={selectedId}>
-              <div className="flex justify-center">
-                <PlayDocRender doc={selectedDoc} />
-              </div>
-            </PlayRenderBoundary>
-          ) : (
-            <div className="flex h-64 items-center justify-center text-center text-sm text-muted">
-              This play&rsquo;s diagram isn&rsquo;t in the offline copy. Re-download
-              the playbook when you&rsquo;re back online.
-            </div>
-          )}
-        </div>
+        {/* Field fills the width like the online editor — PlayDocRender is its
+            own bordered box (w-full), so it goes edge-to-edge inside the
+            container instead of being boxed + centered smaller than online. */}
+        {selectedDoc ? (
+          <PlayRenderBoundary key={selectedId}>
+            <PlayDocRender doc={selectedDoc} />
+          </PlayRenderBoundary>
+        ) : (
+          <div className="flex h-64 items-center justify-center rounded-xl border border-border bg-surface-raised text-center text-sm text-muted">
+            This play&rsquo;s diagram isn&rsquo;t in the offline copy. Re-download
+            the playbook when you&rsquo;re back online.
+          </div>
+        )}
+        {/* Coaching notes — same source + renderer as the online editor
+            (doc.metadata.notes via NotesMarkdown). Omitted before, which is
+            why offline plays showed no notes. */}
+        {notes ? (
+          <div className="rounded-xl border border-border bg-surface-raised p-3">
+            <NotesMarkdown value={notes} players={selectedDoc?.layers?.players ?? []} />
+          </div>
+        ) : null}
       </div>
     );
   }
