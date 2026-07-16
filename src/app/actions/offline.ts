@@ -64,21 +64,44 @@ export async function getPlaybookOfflineBundleAction(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Sign in required." };
 
-  const { data: book } = await supabase
+  // NOTE: `playbooks` has NO `created_by` column — ownership lives in
+  // `playbook_members.role = 'owner'`. Selecting a non-existent column makes
+  // PostgREST reject the WHOLE query (400, code 42703), which surfaces here as
+  // `book == null` and returns the deeply misleading "Playbook not found." for
+  // every playbook, for every coach. That's exactly what broke offline
+  // downloads (2026-07-15 → 07-16). Keep this select to real columns.
+  const { data: book, error: bookError } = await supabase
     .from("playbooks")
-    .select("id, name, season, sport_variant, color, logo_url, created_by, is_example, is_public_example")
+    .select("id, name, season, sport_variant, color, logo_url, is_example, is_public_example")
     .eq("id", playbookId)
     .maybeSingle();
+  // Never let a QUERY failure masquerade as "not found". A malformed select
+  // (or any PostgREST error) also yields data == null, and reporting that as
+  // "Playbook not found." is what hid the created_by bug from us for a day —
+  // the message blamed the coach's playbook for our schema mistake. Surface
+  // errors as errors so the next one is obvious in the first bug report.
+  if (bookError) {
+    return { ok: false, error: `Couldn't read playbook: ${bookError.message}` };
+  }
   if (!book) return { ok: false, error: "Playbook not found." };
 
   // Owner display name for the header subtitle (season · variant · owner) —
-  // matches the online editor chrome. Best-effort.
+  // matches the online editor chrome, which resolves the owner the same way:
+  // playbook_members(role='owner') → profiles.display_name. Best-effort.
   let ownerLabel: string | null = null;
-  if (book.created_by) {
+  const { data: ownerRow } = await supabase
+    .from("playbook_members")
+    .select("user_id")
+    .eq("playbook_id", playbookId)
+    .eq("role", "owner")
+    .limit(1)
+    .maybeSingle();
+  const ownerId = (ownerRow?.user_id as string | null) ?? null;
+  if (ownerId) {
     const { data: owner } = await supabase
       .from("profiles")
       .select("display_name")
-      .eq("id", book.created_by as string)
+      .eq("id", ownerId)
       .maybeSingle();
     ownerLabel = (owner?.display_name as string | null) ?? null;
   }
