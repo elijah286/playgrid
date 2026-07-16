@@ -454,3 +454,120 @@ describe("sw.js navigation handler", () => {
     expect(await event.__responded).toBe(goodHome);
   });
 });
+
+describe("sw.js stale-while-revalidate (downloaded detail routes, perf 2026-07-15)", () => {
+  // Downloaded playbook/play routes are served CACHE-FIRST with background
+  // revalidation so opening a downloaded play (and going back to its playbook)
+  // is instant off the device copy instead of waiting on a live RSC fetch.
+  // /home and non-downloaded routes stay network-first.
+  const PLAY = "/plays/abc/edit";
+
+  function navEvent(path: string) {
+    const event: any = {
+      request: {
+        method: "GET",
+        mode: "navigate",
+        url: `${ORIGIN}${path}`,
+        headers: { get: () => "" },
+      },
+    };
+    event.respondWith = (p: Promise<unknown>) => {
+      event.__responded = Promise.resolve(p);
+    };
+    event.waitUntil = (p: Promise<unknown>) => {
+      event.__waited = p;
+    };
+    return event;
+  }
+
+  // Client-side navigation RSC request: not "navigate" mode, carries _rsc.
+  function rscEvent(path: string) {
+    const event: any = {
+      request: {
+        method: "GET",
+        mode: "cors",
+        url: `${ORIGIN}${path}?_rsc=abc123`,
+        headers: { get: (k: string) => (k === "Accept" ? "text/x-component" : "") },
+      },
+    };
+    event.respondWith = (p: Promise<unknown>) => {
+      event.__responded = Promise.resolve(p);
+    };
+    event.waitUntil = (p: Promise<unknown>) => {
+      event.__waited = p;
+    };
+    return event;
+  }
+
+  it("serves a downloaded play from cache INSTANTLY, then revalidates in the background", async () => {
+    const cached = res(PLAY, { body: "CACHED" });
+    const fresh = res(PLAY, { body: "FRESH" });
+    const sw = loadWorker(async () => fresh);
+    const nav = new FakeCache();
+    await nav.put(PLAY, cached);
+    sw.cachesByName.set(NAV_CACHE, nav);
+
+    const event = navEvent(PLAY);
+    await sw.fire("fetch", event);
+    // The coach sees the cached copy — no waiting on the network.
+    expect(await event.__responded).toBe(cached);
+    // Background revalidation refreshes the cache for next time.
+    await event.__waited;
+    expect(await nav.match(PLAY)).toBe(fresh);
+  });
+
+  it("does NOT overwrite the downloaded copy with a login redirect on revalidation", async () => {
+    const cached = res(PLAY, { body: "CACHED" });
+    const sw = loadWorker(async () =>
+      res(PLAY, { redirected: true, finalPath: "/login" }),
+    );
+    const nav = new FakeCache();
+    await nav.put(PLAY, cached);
+    sw.cachesByName.set(NAV_CACHE, nav);
+
+    const event = navEvent(PLAY);
+    await sw.fire("fetch", event);
+    expect(await event.__responded).toBe(cached);
+    await event.__waited;
+    // The last good copy survives — a sign-out bounce can't poison it.
+    expect(await nav.match(PLAY)).toBe(cached);
+  });
+
+  it("falls through to the network (network-first) when the route isn't downloaded", async () => {
+    const fresh = res(PLAY, { body: "FRESH" });
+    const sw = loadWorker(async () => fresh);
+    // NAV_CACHE empty — nothing downloaded.
+    const event = navEvent(PLAY);
+    await sw.fire("fetch", event);
+    expect(await event.__responded).toBe(fresh);
+    const nav = sw.cachesByName.get(NAV_CACHE);
+    expect(await nav?.match(PLAY)).toBe(fresh); // cached for next time
+  });
+
+  it("keeps /home network-first (fresh dashboard, not the stale cache)", async () => {
+    const cachedHome = res("/home", { body: "STALE" });
+    const freshHome = res("/home", { body: "FRESH" });
+    const sw = loadWorker(async () => freshHome);
+    const nav = new FakeCache();
+    await nav.put("/home", cachedHome);
+    sw.cachesByName.set(NAV_CACHE, nav);
+
+    const event = navEvent("/home");
+    await sw.fire("fetch", event);
+    expect(await event.__responded).toBe(freshHome);
+  });
+
+  it("serves a downloaded route's RSC payload from cache (instant client-side nav)", async () => {
+    const cachedRsc = res(PLAY, { body: "CACHED_RSC" });
+    const freshRsc = res(PLAY, { body: "FRESH_RSC" });
+    const sw = loadWorker(async () => freshRsc);
+    const nav = new FakeCache();
+    // Stored under the normalized _rsc key (cacheKeyFor sets _rsc=swcache).
+    await nav.put(`${PLAY}?_rsc=swcache`, cachedRsc);
+    sw.cachesByName.set(NAV_CACHE, nav);
+
+    const event = rscEvent(PLAY);
+    await sw.fire("fetch", event);
+    expect(await event.__responded).toBe(cachedRsc);
+  });
+});

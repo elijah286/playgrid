@@ -377,11 +377,76 @@ async function networkFirstWithCacheFallback(cacheName, request, htmlFallback = 
   }
 }
 
-async function handleNavigation(request) {
+// Downloaded detail routes (playbook / play / practice-plan pages) are served
+// CACHE-FIRST with background revalidation. If a local copy exists — i.e. the
+// coach downloaded this playbook — render it INSTANTLY and refresh it in the
+// background for next time, so "downloaded" means fast, not merely available.
+//
+// Why this exists: network-first made every online navigation to a downloaded
+// play wait on a live RSC round-trip (~1s), and Next's in-memory Router Cache
+// (the only fast layer) evicts as soon as you visit another play — so the
+// durable on-device copy was never used for speed, only as an offline
+// fallback. Scoped to isCachedAppRoute; /home and everything else stay
+// network-first so the dashboard is always fresh.
+//
+// Crucially this adds NO new requests vs. network-first — the revalidation is
+// the SAME fetch that already happened, just no longer blocking the render —
+// so there is no fan-out/precache-storm mechanism here.
+//
+// Staleness: after an edit, a downloaded route can show the pre-edit render
+// for exactly ONE navigation before the background refresh lands. The play
+// editor closes even that gap by re-priming this route's cache on save (see
+// precacheUrls in PlayEditorClient.runSave).
+async function staleWhileRevalidate(cacheName, request, event, htmlFallback = false) {
+  const cache = await caches.open(cacheName);
+  const key = cacheKeyFor(request);
+  const cached = await cache.match(key, { ignoreVary: true });
+
+  const revalidate = fetchWithTimeout(request, NAV_FETCH_TIMEOUT_MS)
+    .then(async (res) => {
+      // Same guards as network-first: never overwrite a good cached copy with
+      // a post-sign-out login redirect or a poisoned soft-error shell.
+      if (res && res.ok && !res.redirected && !(await isPoisonedShell(request, res))) {
+        cache.put(key, res.clone()).catch(() => {});
+        precacheReferencedAssets(res).catch(() => {});
+      }
+      return res;
+    })
+    .catch(() => null);
+
+  if (cached) {
+    // Serve the local copy now; keep the worker alive to finish the refresh
+    // without making the coach wait on it.
+    if (event && typeof event.waitUntil === "function") {
+      event.waitUntil(revalidate);
+    }
+    return cached;
+  }
+
+  // Nothing cached (route not downloaded, or first-ever visit): behave exactly
+  // like network-first — await the network, fall back only if it fails.
+  const res = await revalidate;
+  if (res) return res;
+  const url = new URL(request.url);
+  if (htmlFallback && url.pathname !== "/home") {
+    const homeFallback = await cache.match("/home");
+    if (homeFallback) return Response.redirect("/home", 302);
+  }
+  return htmlFallback ? offlineFallbackResponse() : Response.error();
+}
+
+async function handleNavigation(request, event) {
   const url = new URL(request.url);
   const cache = await caches.open(NAV_CACHE);
 
-  // Shell routes (/home, /offline/*) — try network first so the current
+  // Downloaded detail pages: cache-first + background revalidate, so opening a
+  // play (and going back to the playbook) is instant off the device copy.
+  // Checked before isShellNav because isShellNav includes these routes.
+  if (isCachedAppRoute(url)) {
+    return staleWhileRevalidate(NAV_CACHE, request, event, true);
+  }
+
+  // Other shell routes (/home, /offline/*) — try network first so the current
   // user's playbooks always win. Fall back to the cached copy only when
   // offline so coaches still land on the last-known shell with downloaded
   // tiles tappable.
@@ -426,12 +491,19 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (request.mode === "navigate") {
-    event.respondWith(handleNavigation(request));
+    event.respondWith(handleNavigation(request, event));
     return;
   }
 
   if (isShellRsc(url, request)) {
-    event.respondWith(networkFirstWithCacheFallback(NAV_CACHE, request));
+    // The RSC data request for a downloaded detail route rides the same
+    // cache-first path as its page so client-side navigation is instant off
+    // the device copy; other shell RSC (e.g. /home) stays network-first.
+    event.respondWith(
+      isCachedAppRoute(url)
+        ? staleWhileRevalidate(NAV_CACHE, request, event)
+        : networkFirstWithCacheFallback(NAV_CACHE, request),
+    );
     return;
   }
 
