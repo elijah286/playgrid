@@ -453,4 +453,40 @@ describe("sw.js navigation handler", () => {
     await sw.fire("fetch", event);
     expect(await event.__responded).toBe(goodHome);
   });
+
+  it("shows a 'not downloaded' page (NOT a /home bounce) for an uncached play route offline", async () => {
+    // The "tapped a play, got kicked back to the lobby" report: an uncached
+    // play route offline used to redirect to /home. It must serve an honest
+    // not-downloaded page instead.
+    const sw = loadWorker(async () => {
+      throw new Error("offline");
+    });
+    const nav = new FakeCache();
+    await nav.put("/home", res("/home")); // /home IS cached (the bounce target)
+    sw.cachesByName.set(NAV_CACHE, nav);
+
+    const event = navEvent("/plays/xyz/edit");
+    await sw.fire("fetch", event);
+    const response: any = await event.__responded;
+
+    expect(response.__redirect).toBeUndefined(); // not a /home redirect
+    expect(String(response.body)).toContain("Available offline");
+    expect(String(response.body)).toContain("isn"); // "isn't downloaded"
+  });
+
+  it("still bounces a NON-play uncached route to the cached /home shell", async () => {
+    // Scoping guard: the not-downloaded page is play-specific; other uncached
+    // shell routes keep the existing /home fallback.
+    const sw = loadWorker(async () => {
+      throw new Error("offline");
+    });
+    const nav = new FakeCache();
+    await nav.put("/home", res("/home"));
+    sw.cachesByName.set(NAV_CACHE, nav);
+
+    const event = navEvent("/playbooks/pb-1");
+    await sw.fire("fetch", event);
+    const response: any = await event.__responded;
+    expect(response.__redirect).toBe("/home");
+  });
 });

@@ -303,6 +303,65 @@ function offlineFallbackResponse() {
   });
 }
 
+// Shown when a coach opens a play OFFLINE whose page was never cached — i.e.
+// the playbook wasn't downloaded (or the download didn't reach this play). The
+// old behavior redirected to /home, so a tap silently "kicked back to the
+// lobby." This honest, self-contained page (zero network/cache dependency)
+// tells them what to do and offers a Back button instead.
+const PLAY_NOT_DOWNLOADED_HTML = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Play not downloaded</title>
+<style>
+  :root { color-scheme: light dark; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 1.25rem; text-align: center;
+    font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    background: #ffffff; color: #0f172a;
+    padding: max(env(safe-area-inset-top), 2rem) 2rem max(env(safe-area-inset-bottom), 2rem);
+  }
+  @media (prefers-color-scheme: dark) { body { background: #0b0b0c; color: #f4f4f5; } }
+  .icon { width: 64px; height: 64px; opacity: 0.6; }
+  h1 { margin: 0; font-size: 1.15rem; font-weight: 800; letter-spacing: -0.01em; }
+  p { margin: 0; max-width: 22rem; font-size: 0.95rem; line-height: 1.55; opacity: 0.72; }
+  button {
+    margin-top: 0.25rem; border: 0; border-radius: 999px; cursor: pointer;
+    background: #f26522; color: #fff; font-weight: 700; font-size: 1rem;
+    padding: 0.85rem 2.25rem; -webkit-tap-highlight-color: transparent;
+  }
+  button:active { opacity: 0.85; }
+</style>
+</head>
+<body>
+  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M1 1l22 22" />
+    <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" />
+    <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" />
+    <path d="M10.71 5.05A16 16 0 0 1 22.58 9" />
+    <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" />
+    <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+    <line x1="12" y1="20" x2="12.01" y2="20" />
+  </svg>
+  <h1>This play isn&rsquo;t downloaded</h1>
+  <p>Please reconnect, open this playbook, and tap &ldquo;Available offline&rdquo; so every play is saved to this device for the sideline.</p>
+  <button onclick="history.length > 1 ? history.back() : location.replace('/home')">Go back</button>
+</body>
+</html>`;
+
+function playNotDownloadedResponse() {
+  return new Response(PLAY_NOT_DOWNLOADED_HTML, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
 // Client-side navigations (next/link, router.push) fetch an RSC payload with
 // a per-request `_rsc` cache-buster query param whose value changes every
 // time. Caching/serving those by full URL therefore always MISSES offline —
@@ -363,8 +422,17 @@ async function networkFirstWithCacheFallback(cacheName, request, htmlFallback = 
     const cached = await cache.match(key, { ignoreVary: true });
     if (cached) return cached;
     const url = new URL(request.url);
-    // Fall back to the cached /home shell (the standard app view) — never a
-    // separate offline surface. If /home isn't cached either, serve the
+    // An uncached PLAY route offline means this play wasn't downloaded (the
+    // playbook wasn't made "Available offline", or the download didn't reach
+    // it). Show an honest "not downloaded" page instead of bouncing to /home —
+    // that silent bounce is the "tapped a play, got kicked back to the lobby"
+    // report. Full-page navigations only (htmlFallback); a failed RSC fetch
+    // returns Response.error() below and Next falls back to this hard nav.
+    if (htmlFallback && /^\/plays\/[^/]+\/edit$/.test(url.pathname)) {
+      return playNotDownloadedResponse();
+    }
+    // Otherwise fall back to the cached /home shell (the standard app view) —
+    // never a separate offline surface. If /home isn't cached either, serve the
     // self-contained inline retry page so a navigation never ends on a blank
     // network error (black WebView). Non-navigation callers (RSC payloads)
     // get Response.error() — HTML is the wrong content type and the client
