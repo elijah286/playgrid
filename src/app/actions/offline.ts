@@ -66,10 +66,22 @@ export async function getPlaybookOfflineBundleAction(
 
   const { data: book } = await supabase
     .from("playbooks")
-    .select("id, name, season, sport_variant, color, logo_url, is_example, is_public_example")
+    .select("id, name, season, sport_variant, color, logo_url, created_by, is_example, is_public_example")
     .eq("id", playbookId)
     .maybeSingle();
   if (!book) return { ok: false, error: "Playbook not found." };
+
+  // Owner display name for the header subtitle (season · variant · owner) —
+  // matches the online editor chrome. Best-effort.
+  let ownerLabel: string | null = null;
+  if (book.created_by) {
+    const { data: owner } = await supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", book.created_by as string)
+      .maybeSingle();
+    ownerLabel = (owner?.display_name as string | null) ?? null;
+  }
 
   // Inline the logo as a data: URL so it survives offline — the SW won't cache
   // the cross-origin CDN image, so the remote URL is dead without signal.
@@ -139,7 +151,7 @@ export async function getPlaybookOfflineBundleAction(
         color: (book.color as string | null) || "#134e2a",
         logoUrl: (book.logo_url as string | null) ?? null,
         logoDataUrl,
-        ownerLabel: null,
+        ownerLabel,
         playCount: documents.length,
         downloadedAt: new Date().toISOString(),
         signature: computeBundleSignature(plays, versionByPlay),

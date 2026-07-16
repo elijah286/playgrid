@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, WifiOff } from "lucide-react";
 import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { SportVariant } from "@/domain/play/types";
 import { InboxBell } from "@/components/layout/InboxBell";
@@ -26,6 +26,7 @@ export function EditorPlaybookChrome({
   playbookSeason,
   playbookVariant,
   playbookOwnerName,
+  offline = false,
 }: {
   playbookId: string;
   playbookName: string | null;
@@ -39,6 +40,11 @@ export function EditorPlaybookChrome({
   playbookVariant?: string | null;
   /** Owner display name shown in the subtitle. */
   playbookOwnerName?: string | null;
+  /** Read-only OFFLINE render: the same chrome, but the logo comes from an
+   *  inlined data: URL (plain <img>, no optimizer) and the inbox bell — which
+   *  fetches — is replaced by an "Offline" marker. Defaults to the normal
+   *  online behavior, so this is a no-op for the live editor. */
+  offline?: boolean;
 }) {
   const accentColor = playbookColor || "#F26522";
   const isLightBg = hexLuminance(accentColor) > 0.55;
@@ -98,13 +104,24 @@ export function EditorPlaybookChrome({
           } ${onAccent}`}
         >
           {playbookLogoUrl ? (
-            <Image
-              src={playbookLogoUrl}
-              alt=""
-              fill
-              className="object-contain p-1"
-              sizes="44px"
-            />
+            offline ? (
+              // Inlined data: URL — plain <img>, the optimizer is unreachable
+              // without a network.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={playbookLogoUrl}
+                alt=""
+                className="absolute inset-0 size-full object-contain p-1"
+              />
+            ) : (
+              <Image
+                src={playbookLogoUrl}
+                alt=""
+                fill
+                className="object-contain p-1"
+                sizes="44px"
+              />
+            )
           ) : (
             <span>{initial}</span>
           )}
@@ -129,9 +146,18 @@ export function EditorPlaybookChrome({
             is the only attention surface for cross-playbook items while
             a coach is drawing a play on phone. Desktop relies on the
             persistent SiteHeader above this chrome. */}
-        <div className="shrink-0 sm:hidden">
-          <InboxBell buttonClassName={`${onAccent} ${onAccentHover}`} />
-        </div>
+        {offline ? (
+          <span
+            className={`inline-flex shrink-0 items-center gap-1 rounded-full bg-black/20 px-2 py-1 text-[11px] font-semibold ${onAccent}`}
+          >
+            <WifiOff className="size-3" />
+            Offline
+          </span>
+        ) : (
+          <div className="shrink-0 sm:hidden">
+            <InboxBell buttonClassName={`${onAccent} ${onAccentHover}`} />
+          </div>
+        )}
       </div>
     </div>
   );

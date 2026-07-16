@@ -4,7 +4,6 @@ import * as Sentry from "@sentry/nextjs";
 import { useEffect, useState } from "react";
 import {
   AlertTriangle,
-  ArrowLeft,
   Calendar,
   ListChecks,
   MessageCircle,
@@ -18,6 +17,7 @@ import { isNativeApp } from "@/lib/native/isNativeApp";
 import { probeConnectivity } from "@/lib/offline/connectivity";
 import { PlayDocRender } from "@/features/coach-ai/PlayDiagramEmbed";
 import { NotesMarkdown } from "@/features/editor/NotesMarkdown";
+import { EditorPlaybookChrome } from "@/features/editor/EditorPlaybookChrome";
 
 /**
  * Editor segment error boundary — the read-only OFFLINE view.
@@ -36,7 +36,15 @@ import { NotesMarkdown } from "@/features/editor/NotesMarkdown";
  */
 type Mode = "checking" | "offline" | "notDownloaded" | "error";
 
-type PlaybookChrome = { name: string; logo: string | null; color: string };
+type PlaybookChrome = {
+  id: string;
+  name: string;
+  color: string;
+  logo: string | null;
+  season: string | null;
+  variant: string;
+  owner: string | null;
+};
 
 export default function EditorError({
   error,
@@ -87,11 +95,17 @@ export default function EditorError({
               () => null,
             );
             if (alive && meta) {
-              // Prefer the inlined logo — the remote URL is dead offline.
+              // Only the inlined logo — the remote URL is dead offline (a plain
+              // <img src=deadUrl> would render a broken-image "?"). Null falls
+              // back to the playbook initial in EditorPlaybookChrome.
               setBook({
+                id: meta.id,
                 name: meta.name,
-                logo: meta.logoDataUrl ?? meta.logoUrl,
                 color: meta.color,
+                logo: meta.logoDataUrl,
+                season: meta.season,
+                variant: meta.sportVariant,
+                owner: meta.ownerLabel,
               });
             }
           }
@@ -119,47 +133,21 @@ export default function EditorError({
   }
 
   if (mode === "offline" && doc) {
-    const color = book?.color || "#F26522";
     return (
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 pb-24 sm:pb-6">
-        {/* Playbook header — mirrors the editor's mobile chrome so the offline
-            view has the same top bar (not a bare back button merged into the
-            iOS status bar). Back sits in the bar; the offline state is marked
-            on the right. */}
-        <div className="sticky top-0 z-30 -mx-6 bg-surface px-6 pb-2 pt-[calc(env(safe-area-inset-top)+0.75rem)]">
-          <div
-            className="-mx-6 flex items-center gap-2 px-4 py-3"
-            style={{ backgroundColor: color }}
-          >
-            <button
-              type="button"
-              onClick={() => window.history.back()}
-              aria-label="Back"
-              className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-white hover:bg-white/15"
-            >
-              <ArrowLeft className="size-5" />
-            </button>
-            {book?.logo ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={book.logo}
-                alt=""
-                className="size-9 shrink-0 rounded-lg bg-white/10 object-contain"
-              />
-            ) : book ? (
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white/20 text-sm font-bold text-white">
-                {(book.name[0] ?? "?").toUpperCase()}
-              </div>
-            ) : null}
-            <span className="min-w-0 flex-1 truncate text-base font-bold text-white">
-              {book?.name ?? "Playbook"}
-            </span>
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-black/20 px-2 py-1 text-[11px] font-semibold text-white">
-              <WifiOff className="size-3" />
-              Offline
-            </span>
-          </div>
-        </div>
+        {/* The SAME playbook chrome the online editor renders (offline mode:
+            inlined logo, "Offline" marker instead of the inbox bell) so the
+            header is identical online and off. */}
+        <EditorPlaybookChrome
+          offline
+          playbookId={book?.id ?? ""}
+          playbookName={book?.name ?? "Playbook"}
+          playbookColor={book?.color ?? null}
+          playbookLogoUrl={book?.logo ?? null}
+          playbookSeason={book?.season}
+          playbookVariant={book?.variant}
+          playbookOwnerName={book?.owner}
+        />
 
         {/* Play name */}
         {name && (
