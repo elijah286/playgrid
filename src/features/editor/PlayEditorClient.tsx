@@ -6,8 +6,6 @@ import Link from "next/link";
 import { Archive as ArchiveIcon, ChevronDown, ChevronLeft, ChevronRight, FlaskConical, GraduationCap, RotateCcw } from "lucide-react";
 import { registerReloadGuard } from "@/lib/native/reloadGuard";
 import { isNativeApp } from "@/lib/native/isNativeApp";
-import { precacheUrls } from "@/lib/native/registerServiceWorker";
-import { getCachedPlaybookMeta } from "@/lib/offline/db";
 import type { EndDecoration, PlayDocument, Player, Point2, Route, SegmentShape, StrokePattern, VsPlaySnapshot } from "@/domain/play/types";
 import type { SavedFormation } from "@/app/actions/formations";
 import { saveFormationAction } from "@/app/actions/formations";
@@ -1255,35 +1253,6 @@ function PlayEditorClientInner({
       canEdit && !isExamplePreview && !isArchived && gameLock == null;
   }, [canEdit, isExamplePreview, isArchived, gameLock]);
 
-  // Is THIS play's playbook downloaded for offline? Only then does the SW serve
-  // it cache-first (stale-while-revalidate), so only then must a save re-prime
-  // the SW cache to avoid showing the pre-edit render for one navigation. For
-  // non-downloaded plays the SW is network-first (always fresh) — no refresh
-  // needed, and we skip the fetch so active editing doesn't refetch on every
-  // autosave. Checked once on mount; native + downloaded is the narrow case.
-  const offlineDownloadedRef = useRef(false);
-  // Throttle the post-save cache re-prime: autosave can fire every few seconds
-  // during active editing, and re-priming re-fetches the page + RSC each time.
-  // Bounding it to once per window keeps us well clear of the fetch chatter
-  // that made the online app feel offline during the precache incident; the
-  // worst case is that edits within one window show for a single navigation
-  // before the SWR revalidation catches up.
-  const lastCachePrimeRef = useRef(0);
-  useEffect(() => {
-    if (!isNativeApp()) return;
-    let alive = true;
-    void getCachedPlaybookMeta(playbookId)
-      .then((m) => {
-        if (alive) offlineDownloadedRef.current = m != null;
-      })
-      .catch(() => {
-        /* cache absent — treat as not downloaded */
-      });
-    return () => {
-      alive = false;
-    };
-  }, [playbookId]);
-
   const runSave = useCallback(async () => {
     if (!canSaveRef.current) return;
     if (!isDirtyRef.current) return;
@@ -1311,23 +1280,11 @@ function PlayEditorClientInner({
         isDirtyRef.current = false;
       }
       router.refresh();
-      // Re-prime the SW cache for this route so a stale-while-revalidate read
-      // after this edit doesn't show the pre-save version for one navigation.
-      // Gated to downloaded playbooks (see offlineDownloadedRef) and throttled;
-      // no-ops on web and when not native.
-      if (offlineDownloadedRef.current) {
-        const now = Date.now();
-        // Throttle to once per 10s so autosave can't turn into fetch chatter.
-        if (now - lastCachePrimeRef.current > 10_000) {
-          lastCachePrimeRef.current = now;
-          void precacheUrls([`/plays/${playId}/edit`, `/playbooks/${playbookId}`]);
-        }
-      }
     } else {
       toast(res.error, "error");
     }
     setIsSaving(false);
-  }, [playId, playbookId, router, toast, saveAdapter]);
+  }, [playId, router, toast, saveAdapter]);
 
   // Doc-change driven autosave scheduling. Marks dirty and schedules the
   // save: a long safety-net timer while a selection is active, the regular
