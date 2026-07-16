@@ -3,14 +3,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { getSuggestReviews } from "@/lib/site/review-prompt-config";
 import {
   buildRatingPromptNotice,
   buildRatingShownNotice,
   type RatingOutcome,
   type RatingSentiment,
 } from "@/lib/notifications/rating-prompt-notice";
-import { isWithinEngagementCooldown } from "@/lib/notifications/engagement-prompt";
 
 export type RatingTrigger =
   | "cal_save"
@@ -59,92 +57,6 @@ export async function recordRatingTrigger(trigger: RatingTrigger): Promise<void>
       .eq("id", user.id);
   } catch {
     // best-effort
-  }
-}
-
-/**
- * Check whether the current user is eligible to see the rating nudge.
- * Called by RatingNudge on every dashboard navigation and on the
- * 'xo:rating-check' custom event.
- *
- * Gates (all must pass):
- *  1. suggest_reviews site setting is not 'off'
- *  2. If setting is 'only_admins', user must be a site admin
- *  3. Account age ≥ 7 days
- *  4. No show in the last 365 days (or never shown)
- *  5. Not within the shared 14-day engagement-prompt cooldown
- *  6. Engaged: ≥1 rating trigger recorded OR ≥3 created plays
- */
-export async function checkRatingEligibility(): Promise<boolean> {
-  if (!hasSupabaseEnv()) return false;
-  try {
-    const setting = await getSuggestReviews();
-    if (setting === "off") return false;
-
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return false;
-
-    const admin = createServiceRoleClient();
-    const { data: profile } = await admin
-      .from("profiles")
-      .select(
-        "role, created_at, rating_triggers_fired, rating_prompt_shown_at, last_engagement_prompt_at",
-      )
-      .eq("id", user.id)
-      .single();
-    if (!profile) return false;
-
-    if (setting === "only_admins" && (profile.role as string) !== "admin") {
-      return false;
-    }
-
-    const ageMs =
-      Date.now() - new Date(profile.created_at as string).getTime();
-    if (ageMs < ACCOUNT_AGE_MS) return false;
-
-    if (profile.rating_prompt_shown_at) {
-      const daysSince =
-        (Date.now() -
-          new Date(profile.rating_prompt_shown_at as string).getTime()) /
-        86400000;
-      if (daysSince < COOLDOWN_DAYS) return false;
-    }
-
-    // De-dupe with the other engagement asks via the SHARED 14-day cooldown —
-    // that alone prevents stacking a review ask on top of a referral ask in the
-    // same window. We deliberately do NOT also defer to "referral announcement
-    // owed first": with referral_enabled=true that predicate is true for every
-    // coach who hasn't seen the announcement yet, so it permanently pre-empted
-    // the review prompt (0 shown, ever). The announcement was meant to go first
-    // during launch week, not to starve reviews forever; the 14-day cooldown is
-    // the correct, sufficient de-dup. Whichever ask a coach reaches first wins,
-    // and the other holds for 14 days.
-    if (isWithinEngagementCooldown(profile.last_engagement_prompt_at as string | null)) {
-      return false;
-    }
-
-    // Engagement signal (checked LAST so the play-count query only runs for
-    // coaches who already passed every cheaper gate). Either an explicit
-    // "delight moment" trigger fired, OR the coach has built a real playbook
-    // (≥3 created plays). The trigger events (third_play/first_print/cal_save/
-    // second_share) are sparse and were introduced late without a backfill, so
-    // requiring one starved the prompt; play count is the durable signal.
-    const fired = (profile.rating_triggers_fired as string[]) ?? [];
-    if (fired.length === 0) {
-      const { count } = await admin
-        .from("play_versions")
-        .select("id", { count: "exact", head: true })
-        .eq("created_by", user.id)
-        .eq("kind", "create");
-      if ((count ?? 0) < RATING_MIN_PLAYS) return false;
-    }
-
-    return true;
-  } catch {
-    return false;
   }
 }
 
@@ -209,7 +121,7 @@ export async function recordRatingOutcome(
  *     this, a nudge that's shown then ignored is invisible to admins (the
  *     outcome notices only fire on a tap-through).
  *
- * Called by RatingNudge immediately on render. The cooldown stamp happens
+ * Called by RatingAsk immediately on render. The cooldown stamp happens
  * first and the notice insert is a best-effort add-on, so a failure to log the
  * send (e.g. before the review_prompt migration lands) can never break the
  * cooldown or the coach's flow.

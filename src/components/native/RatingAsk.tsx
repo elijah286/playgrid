@@ -1,19 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
 import { Star, X } from "lucide-react";
-import { isNativeApp, nativePlatform } from "@/lib/native/isNativeApp";
+import { nativePlatform } from "@/lib/native/isNativeApp";
 import { APP_STORE_ID, PLAY_STORE_ID } from "@/lib/native/appStore";
 import {
-  checkRatingEligibility,
   recordRatingOutcome,
   recordRatingPromptShown,
 } from "@/app/actions/rating-prompt";
 import { submitFeedbackAction } from "@/app/actions/feedback";
 import { track } from "@/lib/analytics/track";
-
-const SHOWN_KEY = "playgrid:rating-nudge-shown";
 
 /** Coarse store bucket for outcome logging + review deep links. */
 function storePlatform(): "ios" | "android" {
@@ -22,16 +18,14 @@ function storePlatform(): "ios" | "android" {
 
 function ratingUrl(): string {
   if (storePlatform() === "android") {
-    // Opens the Play Store app directly to the rating sheet.
     return `market://details?id=${PLAY_STORE_ID}&showAllReviews=true`;
   }
-  // iOS: deep-links into the App Store rating sheet.
   return `itms-apps://itunes.apple.com/app/id${APP_STORE_ID}?action=write-review`;
 }
 
 /**
- * Steps of the nudge. We gate on sentiment BEFORE inviting a public review —
- * the well-worn "are you enjoying the app?" pattern — so only happy coaches are
+ * Steps of the ask. We gate on sentiment BEFORE inviting a public review — the
+ * well-worn "are you enjoying the app?" pattern — so only happy coaches are
  * sent to the store and unhappy ones are quietly routed to private feedback
  * instead of a 1-star review.
  *
@@ -43,30 +37,17 @@ function ratingUrl(): string {
 type Step = "ask" | "rate" | "feedback" | "thanks";
 
 /**
- * Surfaces an App Store rating nudge to native-app users who have hit a
- * meaningful engagement milestone. Mounts once in the dashboard layout and
- * re-checks on every navigation (pathname change) and on the custom
- * 'xo:rating-check' event dispatched by immediate triggers (print).
+ * Presentational App Store rating ask. It does NOT decide whether it should be
+ * on screen — EngagementAskHost does, and only ever renders this after winning
+ * the engagement window. Rendering it is the decision; by the time this mounts,
+ * the coach is being asked.
  *
- * Gates (all enforced server-side in checkRatingEligibility):
- *  - suggest_reviews site setting is not 'off'
- *  - If 'only_admins', user must be a site admin
- *  - Account age ≥ 7 days
- *  - Not shown in the last 365 days
- *  - At least one trigger has been recorded
- *
- * localStorage key prevents re-show within the same browser session even if
- * the server-side timestamp hasn't been written yet.
- *
- * The send itself is reported to the site-admin inbox on show (see
- * recordRatingPromptShown), and so is every terminal outcome (left a review /
- * dismissed / sent feedback) — see recordRatingOutcome and, for the unhappy
- * path, submitFeedbackAction's 'feedback_received' notice. So an admin can see
- * who was shown the nudge and when, and whether or not they acted on it.
+ * That split is deliberate: this component used to self-gate on mount, which is
+ * how it ended up stacked on top of the native welcome spotlight (it was the
+ * one modal that never joined the first-run queue). Do not reintroduce
+ * eligibility checks here.
  */
-export function RatingNudge() {
-  const pathname = usePathname();
-  const [show, setShow] = useState(false);
+export function RatingAsk({ onDone }: { onDone: () => void }) {
   const [step, setStep] = useState<Step>("ask");
   const [sentiment, setSentiment] = useState<"positive" | "negative" | "unknown">(
     "unknown",
@@ -75,51 +56,18 @@ export function RatingNudge() {
   const [sending, setSending] = useState(false);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   // Guards against double-logging an outcome (e.g. a dismiss firing after a
-  // rate). Exactly one terminal outcome is recorded per prompt.
+  // rate). Exactly one terminal outcome is recorded per ask.
   const settled = useRef(false);
+  const recorded = useRef(false);
 
+  // Mounting IS being shown, so record the send here. This stamps the 365-day
+  // rating_prompt_shown_at cooldown and emits the admin-inbox notice.
   useEffect(() => {
-    let cancelled = false;
-
-    async function checkAndMaybeShow() {
-      if (!isNativeApp()) return;
-      try {
-        if (localStorage.getItem(SHOWN_KEY) === "1") return;
-      } catch {
-        // storage unavailable — continue
-      }
-
-      const eligible = await checkRatingEligibility();
-      if (cancelled || !eligible) return;
-
-      setShow(true);
-      try {
-        localStorage.setItem(SHOWN_KEY, "1");
-      } catch {
-        // ignore
-      }
-      void recordRatingPromptShown(storePlatform());
-      track({ event: "rating_nudge_view", target: "rating_nudge" });
-    }
-
-    void checkAndMaybeShow();
-
-    function onCheck() {
-      void checkAndMaybeShow();
-    }
-    window.addEventListener("xo:rating-check", onCheck);
-
-    return () => {
-      cancelled = true;
-      window.removeEventListener("xo:rating-check", onCheck);
-    };
-  }, [pathname]);
-
-  if (!show) return null;
-
-  function close() {
-    setShow(false);
-  }
+    if (recorded.current) return;
+    recorded.current = true;
+    void recordRatingPromptShown(storePlatform());
+    track({ event: "rating_nudge_view", target: "rating_nudge" });
+  }, []);
 
   /** Coach closed/skipped without leaving a review. Logged once. */
   function dismiss() {
@@ -128,7 +76,7 @@ export function RatingNudge() {
       track({ event: "rating_nudge_dismiss", target: "rating_nudge" });
       void recordRatingOutcome("dismissed", storePlatform(), sentiment);
     }
-    close();
+    onDone();
   }
 
   function onEnjoyingYes() {
@@ -150,7 +98,7 @@ export function RatingNudge() {
       void recordRatingOutcome("rated", storePlatform(), "positive");
     }
     window.location.href = ratingUrl();
-    close();
+    onDone();
   }
 
   async function sendFeedback() {
@@ -299,7 +247,7 @@ export function RatingNudge() {
             <div className="mt-4">
               <button
                 type="button"
-                onClick={close}
+                onClick={onDone}
                 className="flex w-full items-center justify-center rounded-xl bg-primary py-2.5 text-sm font-bold text-white transition hover:opacity-90"
               >
                 Done

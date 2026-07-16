@@ -13,6 +13,7 @@ import { TermsAcceptancePrompt } from "@/components/account/TermsAcceptancePromp
 import { termsAcceptanceNeeded } from "@/lib/auth/terms";
 import { OfflineAutoRefreshMount } from "@/components/offline/OfflineAutoRefreshMount";
 import { NativeWelcomeSpotlight } from "@/components/native/NativeWelcomeSpotlight";
+import { EngagementAskHost } from "@/components/engagement/EngagementAskHost";
 import { FirstRunModalQueueProvider } from "@/components/onboarding/FirstRunModalQueue";
 import { userSignedInWithApple } from "@/lib/auth/provider";
 import {
@@ -111,17 +112,12 @@ export default async function DashboardLayout({
           three modals at once. `blocked` reserves the screen for those gates. */}
       <FirstRunModalQueueProvider blocked={termsNeeded || nameCaptureNeeded}>
         {user && <NativeWelcomeSpotlight />}
-        {/* RatingNudge + ReferralAnnouncementNudge are unmounted pending the
-            engagement-prompt rework. The queue serialized the asks but never
-            reduced them: a coach logging in on a new device got the OS push
-            dialog, the rating nudge (which never joined the queue, so it
-            stacked ON TOP of the welcome spotlight), the welcome spotlight,
-            then the referral ask — four interruptions before reaching a
-            playbook. Re-mount only behind an arbiter that asks at most once per
-            session, never on the first authed paint, and at a peak moment
-            rather than on cold load.
-            NOTE: the site_settings.suggest_reviews admin toggle is inert while
-            RatingNudge is unmounted. */}
+        {/* Every interruptive ask (rating, referral) goes through this ONE
+            host — it picks at most one, never during the coach's first moments
+            in a session, and reserves the 14-day window atomically so two can't
+            both fire. Do not mount an ask directly here again: the rating nudge
+            used to, which is how it stacked on top of the welcome spotlight. */}
+        {user && <EngagementAskHost />}
       </FirstRunModalQueueProvider>
       <TimeOnSiteTracker />
       {feedbackSettings.enabled && (

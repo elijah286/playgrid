@@ -118,8 +118,15 @@ export function useFirstRunModalSlot(priority: number, want: boolean): boolean {
 }
 
 /** Priority ladder for the first-run queue. Higher shows first. Terms & name
- *  capture are handled via the provider's `blocked` flag, above all of these. */
+ *  capture are handled via the provider's `blocked` flag, above all of these.
+ *
+ *  Education outranks extraction: the native welcome explains what the coach
+ *  just installed, so it goes before any ask for a rating or a referral. The
+ *  asks themselves share ONE slot (`engagementAsk`) — EngagementAskHost picks
+ *  which of them fills it, so they can never occupy two rungs at once. That is
+ *  why there is no per-ask entry here; adding one would let two asks queue up
+ *  behind each other and re-create the pile this ladder exists to prevent. */
 export const FIRST_RUN_PRIORITY = {
   nativeWelcome: 200,
-  referralAnnouncement: 100,
+  engagementAsk: 100,
 } as const;
