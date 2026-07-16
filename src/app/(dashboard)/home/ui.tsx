@@ -420,6 +420,49 @@ export function PlaybookBookTile({
   return <InteractiveBookTile tile={tile} actions={actions} />;
 }
 
+/**
+ * The tile's link element. Offline, a `<Link>` tap is a CLIENT-SIDE RSC fetch —
+ * not a document navigation — and that fetch dies without signal: the SW routes
+ * RSC requests through networkFirstWithCacheFallback with `htmlFallback` false,
+ * so it returns Response.error() and the coach's downloaded playbook simply
+ * refuses to open. (Both the SW's "not downloaded" page and its /home fallback
+ * are htmlFallback-gated, so an RSC request can't reach either.) A real document
+ * navigation lets the SW serve the HTML it cached at download time.
+ *
+ * This mirrors the branch PlaybookTile has always had — that tile only renders
+ * under the `hide_lobby_playbook_animation` admin toggle, so the fix existed on
+ * a surface real coaches never see while THIS default tile stayed broken
+ * (reported on a real iPad 2026-07-16: "if I go back to the playbooks, they will
+ * not open in offline mode - even the ones that indicate they are available").
+ *
+ * Hook-free by construction: it branches on props only, so swapping the element
+ * can't change a hook count (see PlaybookBookTile's React #300 note).
+ */
+function BookTileLink({
+  href,
+  hardNav,
+  className,
+  children,
+}: {
+  href: string;
+  hardNav: boolean;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  if (hardNav) {
+    return (
+      <a href={href} className={className}>
+        {children}
+      </a>
+    );
+  }
+  return (
+    <Link href={href} className={className}>
+      {children}
+    </Link>
+  );
+}
+
 function InteractiveBookTile({
   tile,
   actions,
@@ -430,6 +473,10 @@ function InteractiveBookTile({
   const native = useIsNativeApp();
   const { isOnline, downloadedIds } = useOfflineState();
   const isDownloaded = downloadedIds.has(tile.id);
+  // Downloaded + offline in the native shell → force a document navigation so
+  // the SW-cached HTML is actually reachable. `isOnline` was previously read
+  // here and never used — the dead variable was the bug's fingerprint.
+  const offlineHardNav = isDownloaded && native && !isOnline;
   const color = colorFor(tile);
   const initials = tile.name
     .split(/\s+/)
@@ -581,8 +628,9 @@ function InteractiveBookTile({
             : "translate3d(0, 0, 0) scale(1)",
         }}
       >
-      <Link
+      <BookTileLink
         href={`/playbooks/${tile.id}`}
+        hardNav={offlineHardNav}
         className="relative block aspect-[3/4] w-full"
       >
         {/* ------------------------------------------------------------ */}
@@ -753,7 +801,7 @@ function InteractiveBookTile({
             </div>
           </div>
         </div>
-      </Link>
+      </BookTileLink>
       {hasPreviews && (
         <div
           aria-hidden
