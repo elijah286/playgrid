@@ -129,10 +129,20 @@ export async function createPlaybookForUser(
   if (memberErr) return { ok: false, error: `Membership insert failed: ${memberErr.message}` };
 
   // Clone seed formations matching this variant.
+  //
+  // Offense only, deliberately. Defense seeds are STARTERS: surfaced
+  // read-only in the new-play picker and cloned into a playbook only when a
+  // coach actually starts a play from one. Eager-cloning them here would
+  // (a) drop 5-12 defensive formations a coach never made into every new
+  // playbook, and (b) rewrite semantic_key to `seeded_*` below — severing
+  // the catalog link the starter flow resolves a coverage through, so the
+  // copy would silently produce bare triangles while the identically-named
+  // starter produced a drawn-up coverage.
   const { data: seeds } = await supabase
     .from("formations")
     .select("params, kind")
-    .eq("is_seed", true);
+    .eq("is_seed", true)
+    .eq("kind", "offense");
   if (seeds && seeds.length > 0) {
     const rows = seeds
       .filter((s) => {
