@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { PlayCommand } from "@/domain/play/commands";
+import { defensiveSwapDiscards } from "@/domain/play/reducer";
 import type { PlayDocument, SportVariant } from "@/domain/play/types";
 import { useTutorial } from "@/features/tutorials/engine/TutorialProvider";
 import { PLAY_AUTHORING_TUTORIAL } from "@/features/tutorials/tutorials/playAuthoring";
@@ -244,13 +245,17 @@ export function EditorHeaderBar({
           />
         ) : (
           <div className="flex min-w-0 flex-1 flex-col leading-tight">
-            {(doc.metadata.playType ?? "offense") === "offense" && (
+            {/* Special teams has no formation library yet — offense and
+                defense both do. */}
+            {(doc.metadata.playType ?? "offense") !== "special_teams" && (
               <div className="flex min-w-0 items-center text-[11px] text-muted">
                 {canEditMeta ? (
                   <FormationTitlePicker
                     currentId={formationId ?? null}
                     currentName={formation ?? ""}
                     allFormations={allFormations}
+                    playType={(doc.metadata.playType ?? "offense") === "defense" ? "defense" : "offense"}
+                    discards={defensiveSwapDiscards(doc)}
                     dispatch={dispatch}
                     onSaveAsNewFormation={onSaveAsNewFormation}
                   />
@@ -429,12 +434,20 @@ function FormationTitlePicker({
   currentId,
   currentName,
   allFormations,
+  playType,
+  discards,
   dispatch,
   onSaveAsNewFormation,
 }: {
   currentId: string | null;
   currentName: string;
   allFormations: SavedFormation[];
+  /** Which side's formations to offer. A defensive play must never be shown
+   *  offensive formations — applying one would put receivers on the field. */
+  playType: "offense" | "defense";
+  /** What a defensive swap would discard, so we only confirm when there's
+   *  actually something to lose. */
+  discards: { zones: number; defenderPaths: number; any: boolean };
   dispatch: (c: PlayCommand) => void;
   onSaveAsNewFormation: (name: string) => void | Promise<void>;
 }) {
@@ -445,7 +458,7 @@ function FormationTitlePicker({
   const activeFormationRef = useRef<HTMLButtonElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [mobileTop, setMobileTop] = useState<number | null>(null);
-  const offenseFormations = allFormations.filter((f) => (f.kind ?? "offense") === "offense");
+  const sideFormations = allFormations.filter((f) => (f.kind ?? "offense") === playType);
 
   useLayoutEffect(() => {
     if (!open) {
@@ -504,23 +517,58 @@ function FormationTitlePicker({
 
   const q = query.trim().toLowerCase();
   const filtered = q
-    ? offenseFormations.filter((f) => f.displayName.toLowerCase().includes(q))
-    : offenseFormations;
+    ? sideFormations.filter((f) => f.displayName.toLowerCase().includes(q))
+    : sideFormations;
 
   function pick(f: SavedFormation | null) {
     if (!f) {
       dispatch({ type: "document.setFormationLink", formationId: null, formationName: "" });
       notifyTutorialAction("formation-unlinked");
-    } else {
+      setOpen(false);
+      return;
+    }
+
+    if (playType === "defense") {
+      // Changing a defensive front swaps the personnel — the new front's
+      // defenders replace the old ones outright, so the coverage drawn on top
+      // of the old front can't survive. Only ask when they'd actually lose
+      // something; a play with nothing drawn yet shouldn't nag.
+      if (discards.any) {
+        const lost = [
+          discards.zones > 0 ? `${discards.zones} zone${discards.zones === 1 ? "" : "s"}` : null,
+          discards.defenderPaths > 0
+            ? `${discards.defenderPaths} defender path${discards.defenderPaths === 1 ? "" : "s"}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" and ");
+        const ok = window.confirm(
+          `Change this play to ${f.displayName}?\n\n` +
+            `${f.displayName} lines up different defenders, so your ${lost} will be cleared. ` +
+            `You'll need to draw the coverage again.`,
+        );
+        if (!ok) return;
+      }
       dispatch({
-        type: "document.setFormationLink",
+        type: "document.replaceDefensiveFormation",
         formationId: f.id,
         formationName: f.displayName,
         players: f.players,
         formationLosY: f.losY,
       });
       notifyTutorialAction("formation-applied");
+      setOpen(false);
+      return;
     }
+
+    dispatch({
+      type: "document.setFormationLink",
+      formationId: f.id,
+      formationName: f.displayName,
+      players: f.players,
+      formationLosY: f.losY,
+    });
+    notifyTutorialAction("formation-applied");
     setOpen(false);
   }
 

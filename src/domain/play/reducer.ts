@@ -79,6 +79,43 @@ function applyFormationPositions(
   return { players, routes };
 }
 
+/**
+ * Convert a formation player's stored position into this play's coordinate
+ * space. Formations are authored against a standard 25-yard window and their
+ * own losY; the play may use different field settings, so positions travel
+ * through "yards from LOS" space. Same transform `applyFormationPositions`
+ * uses — factored out so the defensive replace path can't drift from it.
+ */
+function formationPositionToPlay(
+  doc: PlayDocument,
+  position: Point2,
+  formationLosY: number,
+): Point2 {
+  const FORM_FIELD_LEN = 25;
+  const playLosY = typeof doc.lineOfScrimmageY === "number" ? doc.lineOfScrimmageY : 0.4;
+  const playFieldLen = doc.sportProfile.fieldLengthYds;
+  const yardsFromLos = (position.y - formationLosY) * FORM_FIELD_LEN;
+  return {
+    x: position.x, // x is width-relative; no transform needed
+    y: Math.max(0, Math.min(1, playLosY + yardsFromLos / playFieldLen)),
+  };
+}
+
+/**
+ * What a `document.replaceDefensiveFormation` would destroy, so the UI can ask
+ * before doing it — and stay silent when there's nothing to lose (a freshly
+ * created play with no assignments drawn yet shouldn't nag).
+ */
+export function defensiveSwapDiscards(doc: PlayDocument): {
+  zones: number;
+  defenderPaths: number;
+  any: boolean;
+} {
+  const zones = doc.layers.zones?.length ?? 0;
+  const defenderPaths = doc.layers.routes.length;
+  return { zones, defenderPaths, any: zones > 0 || defenderPaths > 0 };
+}
+
 function flipPoint(p: Point2, axis: "horizontal" | "vertical"): Point2 {
   if (axis === "horizontal") return { x: 1 - p.x, y: p.y };
   return { x: p.x, y: 1 - p.y };
@@ -646,6 +683,37 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
         cmd.formationLosY ?? 0.4,
       );
       return { ...doc, metadata, layers: { ...doc.layers, players, routes } };
+    }
+
+    case "document.replaceDefensiveFormation": {
+      const metadata = {
+        ...doc.metadata,
+        formationId: cmd.formationId,
+        formation: cmd.formationName,
+        formationTag: null,
+      };
+      // Guard the invariant this case depends on: in a defensive play every
+      // player in the document IS a defender (the opponent overlay lives in
+      // separate editor state, never in doc.layers.players — see
+      // EditorCanvas's isDefender check). If that ever stops holding, a
+      // wholesale replace would silently delete the offense, so refuse
+      // rather than corrupt the play.
+      if (doc.metadata.playType !== "defense") return doc;
+
+      const losY = cmd.formationLosY ?? 0.4;
+      const players = cmd.players.map((p) => ({
+        ...p,
+        position: formationPositionToPlay(doc, p.position, losY),
+      }));
+
+      // The old front's zones and defender paths described defenders that no
+      // longer exist. Routes are keyed by carrierPlayerId, so keeping them
+      // would leave paths anchored to deleted players.
+      return {
+        ...doc,
+        metadata,
+        layers: { ...doc.layers, players, routes: [], zones: [] },
+      };
     }
 
     case "document.setFormationTag":

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { applyCommand } from "./reducer";
-import { createEmptyPlayDocument } from "./factory";
+import { applyCommand, defensiveSwapDiscards } from "./reducer";
+import { createEmptyPlayDocument, defaultDefendersForVariant } from "./factory";
+import type { Player } from "./types";
 
 describe("applyCommand", () => {
   it("moves a player", () => {
@@ -112,5 +113,150 @@ describe("applyCommand", () => {
       expect(p?.badge).toBe("1");
       expect(p?.badgeHidden).toBe(false);
     });
+  });
+});
+
+describe("document.replaceDefensiveFormation", () => {
+  /** A defensive play: defenders in doc.layers.players, a coverage drawn on
+   *  top (zones + a blitz path). Mirrors what a coach actually has on screen
+   *  before they change the formation. */
+  function defensivePlay() {
+    const doc = createEmptyPlayDocument({ metadata: { playType: "defense" } as never });
+    const defenders = defaultDefendersForVariant("flag_5v5");
+    return {
+      ...doc,
+      metadata: { ...doc.metadata, playType: "defense" as const },
+      layers: {
+        ...doc.layers,
+        players: defenders,
+        routes: [
+          {
+            id: "r_blitz",
+            carrierPlayerId: defenders[0].id,
+            kind: "path" as const,
+            nodes: [
+              { id: "n1", position: { x: 0.5, y: 0.5 } },
+              { id: "n2", position: { x: 0.5, y: 0.3 } },
+            ],
+          },
+        ] as never,
+        zones: [
+          {
+            id: "z_flat",
+            kind: "ellipse" as const,
+            center: { x: 0.2, y: 0.55 },
+            size: { w: 0.1, h: 0.08 },
+            label: "Flat L",
+            style: { fill: "#0002", stroke: "#000" },
+          },
+        ] as never,
+      },
+    };
+  }
+
+  const target: Player[] = [
+    { id: "def_cb", role: "CB", label: "CB", position: { x: 0.15, y: 0.56 }, eligible: false, shape: "triangle" as const, style: { fill: "#EF4444", stroke: "#991b1b", labelColor: "#fff" } },
+    { id: "def_fs", role: "S", label: "FS", position: { x: 0.5, y: 0.8 }, eligible: false, shape: "triangle" as const, style: { fill: "#EF4444", stroke: "#991b1b", labelColor: "#fff" } },
+  ];
+
+  it("replaces the defenders wholesale — a front change is a personnel change, not a move", () => {
+    const doc = defensivePlay();
+    const next = applyCommand(doc, {
+      type: "document.replaceDefensiveFormation",
+      formationId: "f1",
+      formationName: "Cover 2",
+      players: target,
+      formationLosY: 0.4,
+    });
+    // The old defenders are gone entirely — not repositioned, not merged.
+    expect(next.layers.players.map((p) => p.id)).toEqual(["def_cb", "def_fs"]);
+  });
+
+  it("clears zones and defender paths — they described defenders that no longer exist", () => {
+    const doc = defensivePlay();
+    expect(doc.layers.zones).toHaveLength(1);
+    expect(doc.layers.routes).toHaveLength(1);
+    const next = applyCommand(doc, {
+      type: "document.replaceDefensiveFormation",
+      formationId: "f1",
+      formationName: "Cover 2",
+      players: target,
+      formationLosY: 0.4,
+    });
+    expect(next.layers.zones).toEqual([]);
+    expect(next.layers.routes).toEqual([]);
+  });
+
+  it("links the formation and clears any drift tag", () => {
+    const doc = {
+      ...defensivePlay(),
+      metadata: { ...defensivePlay().metadata, formationTag: "Press" },
+    };
+    const next = applyCommand(doc, {
+      type: "document.replaceDefensiveFormation",
+      formationId: "f1",
+      formationName: "Cover 2",
+      players: target,
+      formationLosY: 0.4,
+    });
+    expect(next.metadata.formationId).toBe("f1");
+    expect(next.metadata.formation).toBe("Cover 2");
+    expect(next.metadata.formationTag).toBeNull();
+  });
+
+  it("refuses on a non-defensive play rather than deleting the offense", () => {
+    // The wholesale replace is only safe because a defensive play contains
+    // nothing but defenders. On an offensive play it would wipe the players.
+    const doc = createEmptyPlayDocument();
+    const before = doc.layers.players.map((p) => p.id);
+    const next = applyCommand(doc, {
+      type: "document.replaceDefensiveFormation",
+      formationId: "f1",
+      formationName: "Cover 2",
+      players: target,
+      formationLosY: 0.4,
+    });
+    expect(next).toBe(doc);
+    expect(next.layers.players.map((p) => p.id)).toEqual(before);
+  });
+
+  it("transforms positions through yards-from-LOS when the play's LOS differs", () => {
+    const doc = { ...defensivePlay(), lineOfScrimmageY: 0.5 };
+    const next = applyCommand(doc, {
+      type: "document.replaceDefensiveFormation",
+      formationId: "f1",
+      formationName: "Cover 2",
+      players: target,
+      formationLosY: 0.4,
+    });
+    // def_cb sits 0.16 above a 0.4 LOS = 4 yds downfield in a 25-yd window.
+    // Against a 0.5 LOS on a 25-yd field that lands at 0.5 + 4/25 = 0.66.
+    const cb = next.layers.players.find((p) => p.id === "def_cb")!;
+    expect(cb.position.y).toBeCloseTo(0.66, 5);
+    expect(cb.position.x).toBe(0.15); // x is width-relative — untransformed
+  });
+});
+
+describe("defensiveSwapDiscards", () => {
+  it("reports nothing to lose on a fresh play, so the UI can skip the warning", () => {
+    const doc = createEmptyPlayDocument({ metadata: { playType: "defense" } as never });
+    const d = defensiveSwapDiscards({ ...doc, layers: { ...doc.layers, routes: [], zones: [] } });
+    expect(d.any).toBe(false);
+    expect(d.zones).toBe(0);
+    expect(d.defenderPaths).toBe(0);
+  });
+
+  it("counts zones and defender paths so the confirm can name what's lost", () => {
+    const doc = createEmptyPlayDocument();
+    const withWork = {
+      ...doc,
+      layers: {
+        ...doc.layers,
+        routes: [{ id: "r1", carrierPlayerId: "d1", kind: "path", nodes: [] }] as never,
+        zones: [{ id: "z1", kind: "ellipse", center: { x: 0.5, y: 0.5 }, size: { w: 0.1, h: 0.1 }, label: "Hook", style: { fill: "#0002", stroke: "#000" } }] as never,
+      },
+    };
+    const d = defensiveSwapDiscards(withWork);
+    expect(d).toEqual({ zones: 1, defenderPaths: 1, any: true });
   });
 });

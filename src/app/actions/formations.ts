@@ -101,6 +101,120 @@ export async function listFormationsAction(): Promise<
 }
 
 /**
+ * Starter formations for one side of the ball: the catalog-derived seed pool,
+ * filtered to a variant. Read-only templates — a coach picks one and we clone
+ * it into their playbook on first use (see `materializeStarterFormationAction`).
+ *
+ * Offense seeds are snapshot-cloned into every new playbook at creation time
+ * (`createPlaybookForUser`), so offense never needs this. Defense seeds are
+ * deliberately NOT cloned: backfilling them into the 609 existing playbooks
+ * would insert thousands of rows a coach never made and bury their own
+ * formations. Showing them instead makes the starters available to every
+ * playbook — old and new — at zero storage cost.
+ *
+ * Variant lives inside params->sportProfile->variant rather than as a column,
+ * so the filter has to happen in JS. Same constraint `createPlaybookForUser`
+ * works around.
+ */
+export async function listStarterFormationsAction(
+  kind: FormationKind,
+  variant: string,
+): Promise<{ ok: true; formations: SavedFormation[] } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) {
+    return { ok: false, error: "Supabase is not configured." };
+  }
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: true, formations: [] };
+
+  const { data, error } = await supabase
+    .from("formations")
+    .select("id, playbook_id, is_seed, params, kind, sort_order, is_archived")
+    .eq("is_seed", true)
+    .eq("kind", kind)
+    .order("sort_order", { ascending: true });
+  if (error) return { ok: false, error: error.message };
+
+  const formations = (data ?? [])
+    .map((row) => rowToFormation(row))
+    .filter((f) => f.players.length > 0 && f.sportProfile.variant === variant);
+
+  return { ok: true, formations };
+}
+
+/**
+ * Clone a starter into a playbook so the coach owns an editable copy, and
+ * return the owned row's id.
+ *
+ * Plays link formations by `formation_id`, and every consumer of that link —
+ * RLS (`can_edit_playbook`), drift detection, `updateFormationAndPropagate` —
+ * assumes the target is a playbook-owned row. Pointing a play straight at a
+ * global seed would break that invariant in a specifically nasty way: a site
+ * admin editing one seed would propagate position rewrites into every user's
+ * plays at once. So we clone on use instead.
+ *
+ * Idempotent per playbook: the starter's `semantic_key` is preserved on the
+ * clone and re-used as the dedupe key, so a coach who builds ten Cover 2
+ * plays gets one Cover 2 formation, not ten.
+ */
+export async function materializeStarterFormationAction(
+  starterId: string,
+  playbookId: string,
+): Promise<{ ok: true; formationId: string } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) {
+    return { ok: false, error: "Supabase is not configured." };
+  }
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const { data: src, error: fetchErr } = await supabase
+    .from("formations")
+    .select("params, kind, is_seed, semantic_key")
+    .eq("id", starterId)
+    .single();
+  if (fetchErr || !src) return { ok: false, error: fetchErr?.message ?? "Not found." };
+  if (!src.is_seed) {
+    // Already playbook-owned — nothing to materialize.
+    return { ok: true, formationId: starterId };
+  }
+
+  const semanticKey = (src.semantic_key as string | null) ?? `starter_${Date.now()}`;
+
+  // Already materialized in this playbook? Reuse it.
+  const { data: existing } = await supabase
+    .from("formations")
+    .select("id")
+    .eq("playbook_id", playbookId)
+    .eq("semantic_key", semanticKey)
+    .limit(1)
+    .maybeSingle();
+  if (existing?.id) return { ok: true, formationId: existing.id as string };
+
+  const nextSortOrder = await getNextFormationSortOrder(supabase, playbookId);
+
+  const { data, error } = await supabase
+    .from("formations")
+    .insert({
+      playbook_id: playbookId,
+      is_seed: false,
+      semantic_key: semanticKey,
+      params: src.params as unknown as Record<string, unknown>,
+      kind: (src.kind as string | null) ?? "offense",
+      sort_order: nextSortOrder,
+    })
+    .select("id")
+    .single();
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, formationId: data.id as string };
+}
+
+/**
  * Seeds-only list, for the site admin UI. Non-admins see an empty array
  * (RLS actually allows reading seeds but we double-gate on is_seed here so
  * regular flows never surface them).

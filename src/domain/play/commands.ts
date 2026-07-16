@@ -147,6 +147,30 @@ export type PlayCommand =
       /** lineOfScrimmageY of the source formation — used to transform positions. */
       formationLosY?: number;
     }
+  | {
+      /**
+       * Swap a DEFENSIVE play onto a different formation.
+       *
+       * Not a variant of setFormationLink: for offense, changing formation is a
+       * relocation — the same WRs stand somewhere else, so positions are matched
+       * by player id and routes ride along. Defensive fronts don't work that way.
+       * 4-3 Over and 3-4 don't share a linebacker between them, and even 5v5 Base
+       * and Cover 2 have only 3 of 5 defenders in common, because a defensive
+       * alignment is a personnel decision, not an arrangement of fixed personnel.
+       *
+       * So this replaces `players` wholesale, and drops the zones and defender
+       * paths that described the OLD front's assignments. Callers must confirm
+       * with the coach first when there is work to lose — see
+       * `defensiveSwapDiscards`.
+       */
+      type: "document.replaceDefensiveFormation";
+      formationId: string | null;
+      formationName: string;
+      /** The target formation's defenders. Replaces doc.layers.players entirely. */
+      players: Player[];
+      /** lineOfScrimmageY of the source formation — used to transform positions. */
+      formationLosY?: number;
+    }
   | { type: "document.setFormationTag"; formationTag: string | null }
   | {
       /** Snap all player positions back to the linked formation's canonical layout. */

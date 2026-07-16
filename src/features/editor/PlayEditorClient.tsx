@@ -1627,25 +1627,29 @@ function PlayEditorClientInner({
       ) {
         return;
       }
+      // Save under the play's own side. Hardcoding "offense" here filed a
+      // defensive play's triangles as an offensive formation, where they'd
+      // surface in the offense picker and drop defenders onto an offense.
+      const playType = doc.metadata.playType ?? "offense";
       const res = await saveFormationAction(
         name,
         doc.layers.players,
         doc.sportProfile,
         typeof doc.lineOfScrimmageY === "number" ? doc.lineOfScrimmageY : 0.4,
-        "offense",
+        playType,
         playbookId,
       );
       if (!res.ok) {
         toast(res.error, "error");
         return;
       }
+      // Link only — the formation was just built FROM these players, so
+      // there's nothing to reposition. Passing players here would send a
+      // defensive play through the id-matching offense path for no reason.
       dispatch({
         type: "document.setFormationLink",
         formationId: res.formationId,
         formationName: name,
-        players: doc.layers.players,
-        formationLosY:
-          typeof doc.lineOfScrimmageY === "number" ? doc.lineOfScrimmageY : 0.4,
       });
       toast(`Saved "${name}" as a new formation`, "success");
       router.refresh();
