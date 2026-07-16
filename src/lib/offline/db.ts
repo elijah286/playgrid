@@ -20,6 +20,29 @@
 
 const DB_NAME = "XO Gridmaker-offline";
 const DB_VERSION = 1;
+
+/**
+ * Format version of an offline copy.
+ *
+ * Bumped when a download made by an OLDER build can no longer be trusted to
+ * actually work offline. A copy below this version is treated as NOT downloaded
+ * — the tile reverts to "Make available offline" and the row is purged on the
+ * next read, so a coach re-downloads deliberately.
+ *
+ * Why this exists: "downloaded" is two independent caches with no shared truth.
+ * The badge was gated on IndexedDB alone (it proves the DATA landed), while what
+ * actually fails is the SW route cache (the pages). Every pre-2026-07-16 copy
+ * therefore claimed "Available offline" while its plays had no green check and
+ * could not open — the data was there, the pages were not. Rather than probe
+ * every route on the home screen, we stamp the copies we know are sound.
+ *
+ * v2 (2026-07-16) — first version where the download is trustworthy:
+ *   - the bundle action works at all (pre-fix it 400'd on a phantom column, so
+ *     nothing could be downloaded),
+ *   - play pages are precached and verified (the green check is measured),
+ *   - failures are reported instead of rounded up to a fake 100%.
+ */
+export const OFFLINE_FORMAT_VERSION = 2;
 const STORE_PLAYBOOKS = "playbooks";
 const STORE_PLAYS = "plays";
 const STORE_DOCUMENTS = "documents";
@@ -114,6 +137,10 @@ export type CachedPlaybookMeta = {
    *  refresh treats missing-signature rows as "always stale" so the very
    *  first auto-refresh upgrades them. */
   signature?: string;
+  /** Which download format produced this copy (see OFFLINE_FORMAT_VERSION).
+   *  Absent on every pre-2026-07-16 copy — those are not trustworthy and are
+   *  treated as not-downloaded. */
+  formatVersion?: number;
 };
 
 export type CachedPlayRow = {
@@ -152,7 +179,14 @@ export async function putPlaybookBundle(input: {
     }),
   );
 
-  await promisify(t.objectStore(STORE_PLAYBOOKS).put(input.meta));
+  // Stamp the format so a future build can tell a trustworthy copy from one
+  // made by an older, broken downloader. Set here (not server-side) because it
+  // describes the CLIENT's download pipeline, not the payload.
+  await promisify(
+    t
+      .objectStore(STORE_PLAYBOOKS)
+      .put({ ...input.meta, formatVersion: OFFLINE_FORMAT_VERSION }),
+  );
   for (const p of input.plays) {
     await promisify(t.objectStore(STORE_PLAYS).put(p));
   }
@@ -168,6 +202,13 @@ export async function putPlaybookBundle(input: {
   notifyCacheChanged();
 }
 
+/**
+ * One trustworthy offline copy, or null. A copy from an older download format
+ * reads as ABSENT — this is what the action menu keys off, so an untrustworthy
+ * copy must say "Make available offline", not "Available offline" (reported on
+ * a real iPad 2026-07-16: every pre-fix playbook claimed to be downloaded while
+ * none of its plays had a green check or could open).
+ */
 export async function getCachedPlaybookMeta(
   playbookId: string,
 ): Promise<CachedPlaybookMeta | null> {
@@ -176,16 +217,40 @@ export async function getCachedPlaybookMeta(
   const row = await promisify<CachedPlaybookMeta | undefined>(
     t.objectStore(STORE_PLAYBOOKS).get(playbookId),
   );
-  return row ?? null;
+  if (!row) return null;
+  if ((row.formatVersion ?? 0) < OFFLINE_FORMAT_VERSION) {
+    void removeCachedPlaybook(row.id).catch(() => {});
+    return null;
+  }
+  return row;
 }
 
+/**
+ * Every offline copy this build can TRUST. Copies from an older download format
+ * are excluded and purged in the background.
+ *
+ * This is the load-bearing honesty gate for the whole offline UI: the home
+ * tile's "Available offline" badge is derived from this list, so a copy that
+ * can't actually open must not appear here. A stale copy silently reverts to
+ * "Make available offline" — which is simply the truth, and lets a coach
+ * re-download deliberately rather than discover on a sideline that the badge
+ * was describing data we could no longer render.
+ */
 export async function listCachedPlaybooks(): Promise<CachedPlaybookMeta[]> {
   const db = await openDb();
   const t = tx(db, [STORE_PLAYBOOKS], "readonly");
   const rows = await promisify<CachedPlaybookMeta[]>(
     t.objectStore(STORE_PLAYBOOKS).getAll(),
   );
-  return rows.sort((a, b) => (a.downloadedAt < b.downloadedAt ? 1 : -1));
+  const fresh = rows.filter(
+    (r) => (r.formatVersion ?? 0) >= OFFLINE_FORMAT_VERSION,
+  );
+  const stale = rows.filter((r) => (r.formatVersion ?? 0) < OFFLINE_FORMAT_VERSION);
+  // Reclaim the space, but never let cleanup failure block the read.
+  if (stale.length > 0) {
+    void Promise.all(stale.map((r) => removeCachedPlaybook(r.id))).catch(() => {});
+  }
+  return fresh.sort((a, b) => (a.downloadedAt < b.downloadedAt ? 1 : -1));
 }
 
 export async function getCachedPlays(playbookId: string): Promise<CachedPlayRow[]> {

@@ -23,6 +23,12 @@ const SW_SOURCE = readFileSync(
 
 const ORIGIN = "https://www.xogridmaker.com";
 
+// Derived from the worker itself: SHELL_VERSION is bumped whenever the cache
+// contract changes, and hard-coding it here made every bump fail ~10 unrelated
+// tests for no signal.
+const SHELL_VERSION = /const SHELL_VERSION = "([^"]+)"/.exec(SW_SOURCE)![1];
+const NAV_CACHE = `${SHELL_VERSION}-nav`;
+
 type FakeResponse = {
   ok: boolean;
   status: number;
@@ -51,7 +57,7 @@ function res(
   return r;
 }
 
-const STATIC_CACHE = "xog-shell-v4-static";
+const STATIC_CACHE = `${SHELL_VERSION}-static`;
 
 class FakeCache {
   store = new Map<string, FakeResponse>();
@@ -156,7 +162,6 @@ function waitableEvent(extra: Record<string, unknown> = {}) {
   return event;
 }
 
-const NAV_CACHE = "xog-shell-v4-nav";
 
 describe("sw.js install precache", () => {
   it("caches shell routes fetched cleanly (no redirect)", async () => {
@@ -292,37 +297,32 @@ describe("sw.js precache progress reporting", () => {
     expect(messages.at(-1)).toMatchObject({ type: "PRECACHE_DONE", failed: 1 });
   });
 
-  it("dedupe tops up a stranded RSC instead of skipping the route entirely", async () => {
-    // An ONLINE visit caches only the HTML (networkFirstWithCacheFallback never
-    // calls precacheRsc). The old dedupe returned on an HTML hit and therefore
-    // stranded that route's RSC FOREVER — the route looked "downloaded" while
-    // client-side nav to it could never work offline.
+  it("does NOT fetch an RSC payload — half the requests, and the RSC was the bug", async () => {
+    // We used to precache the RSC for every play: 75KB + one extra request each
+    // (half the download's requests, ~30% of its bytes). Worse, it CAUSED the
+    // failure it was meant to prevent — cacheKeyFor collapses every `_rsc` value
+    // to one key, so a single full-tree payload got replayed cross-context and
+    // threw into the editor's error boundary.
+    //
+    // Letting the RSC miss is faster AND correct: Next converts a failed RSC
+    // fetch into a document navigation, which we answer from the cached HTML.
     const fetched: string[] = [];
     const sw = loadWorker(async (url) => {
       fetched.push(String(url));
       return res(String(url));
     });
-    const nav = new FakeCache();
-    await nav.put("/plays/a/edit", res("/plays/a/edit")); // HTML only, no RSC
-    sw.cachesByName.set(NAV_CACHE, nav);
     const { port, messages } = fakePort();
 
     await sw.fire(
       "message",
       waitableEvent({
-        data: { type: "PRECACHE_URLS", urls: ["/plays/a/edit"], dedupe: true },
+        data: { type: "PRECACHE_URLS", urls: ["/plays/a/edit"] },
         ports: [port],
       }),
     );
 
-    // The HTML is NOT re-fetched (dedupe still saves the bytes)...
-    expect(fetched).not.toContain("/plays/a/edit");
-    // ...but the missing RSC IS fetched. (We assert the FETCH rather than the
-    // cache entry: precacheRsc stores via `new Request(rscUrl)`, and this
-    // sandbox's Node global Request rejects a relative URL, so the put is a
-    // harness artifact. A real SW resolves it against its scope.)
-    expect(fetched).toContain("/plays/a/edit?_rsc=swcache");
-    // And a dedupe-skip is progress, not a failure.
+    expect(fetched).toContain("/plays/a/edit"); // the HTML: yes
+    expect(fetched.some((u) => u.includes("_rsc"))).toBe(false); // the RSC: never
     expect(messages.at(-1)).toMatchObject({
       type: "PRECACHE_DONE",
       done: 1,
@@ -427,12 +427,7 @@ describe("sw.js poisoned-home guard (2026-07-15)", () => {
 });
 
 describe("sw.js PRECACHE_URLS dedupe (self-heal, 2026-07-15)", () => {
-  it("skips re-fetching cached HTML, but still tops up that route's RSC", async () => {
-    // UPDATED 2026-07-16. This test previously asserted a cached route was
-    // skipped ENTIRELY (`fetches <= 2`) — which enshrined a real bug: an online
-    // visit caches only the HTML, so returning early on an HTML hit stranded
-    // that route's RSC forever and client-side nav to it could never work
-    // offline. Dedupe must save the HTML bytes WITHOUT abandoning the RSC.
+  it("skips URLs already cached when dedupe is set", async () => {
     const fetched: string[] = [];
     const sw = loadWorker(async (url) => {
       fetched.push(String(url));
@@ -448,10 +443,10 @@ describe("sw.js PRECACHE_URLS dedupe (self-heal, 2026-07-15)", () => {
       }),
     );
     expect(await nav.match("/plays/b/edit")).toBeDefined();
-    // a's HTML is still NOT re-fetched — dedupe's purpose is preserved.
-    expect(fetched).not.toContain("/plays/a/edit");
-    // ...but a's missing RSC IS now fetched (the stranding fix).
-    expect(fetched).toContain("/plays/a/edit?_rsc=swcache");
+    // a is already cached → not re-fetched. (Since we no longer precache RSC,
+    // a cached HTML entry is the whole story for that route — there's nothing
+    // left to strand.)
+    expect(fetched).toEqual(["/plays/b/edit"]);
   });
 
   it("re-fetches everything when dedupe is absent (download refresh)", async () => {

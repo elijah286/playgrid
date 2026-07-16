@@ -22,7 +22,15 @@
 // Bump SHELL_VERSION whenever the cache contract changes (e.g. precache list).
 // On activate, old versioned caches are purged.
 
-const SHELL_VERSION = "xog-shell-v4";
+// v5 (2026-07-16): v4 caches hold RSC payloads we no longer write and must never
+// serve — a cached RSC gets replayed cross-context and throws into the editor's
+// error boundary (see the PRECACHE_URLS note). Bumping drops those on activate.
+// Deliberately paired with OFFLINE_FORMAT_VERSION = 2 in src/lib/offline/db.ts:
+// wiping the route cache alone would leave IndexedDB still claiming "Available
+// offline" for playbooks whose pages just vanished. Bumping BOTH keeps the two
+// caches telling the same story — a coach sees "Make available offline" and
+// re-downloads into a clean, correct state.
+const SHELL_VERSION = "xog-shell-v5";
 const STATIC_CACHE = `${SHELL_VERSION}-static`;
 const NAV_CACHE = `${SHELL_VERSION}-nav`;
 
@@ -499,7 +507,22 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (isShellRsc(url, request)) {
-    event.respondWith(networkFirstWithCacheFallback(NAV_CACHE, request));
+    // NETWORK-ONLY, deliberately. We neither write nor serve cached RSC.
+    //
+    // Serving one is the bug: cacheKeyFor collapses every `_rsc` value to a
+    // single key, so one full-tree payload gets replayed for every client-side
+    // nav — the cross-context RSC replay next.config.ts calls "the hazard that
+    // made the service-worker approach throw 'Something went wrong'". That throw
+    // is what dropped offline coaches onto the error boundary.
+    //
+    // Failing is BETTER: Next turns a failed RSC fetch into a document
+    // navigation ("If fetch fails handle it like a mpa navigation" —
+    // next/dist/client/components/router-reducer/fetch-server-response.js),
+    // which handleNavigation answers from the cached HTML, rendering the REAL
+    // editor. So offline we let it fail and let Next do the right thing.
+    event.respondWith(
+      fetchWithTimeout(request, NAV_FETCH_TIMEOUT_MS).catch(() => Response.error()),
+    );
     return;
   }
 
@@ -509,27 +532,6 @@ self.addEventListener("fetch", (event) => {
   }
 });
 
-// Precache the RSC payload for a route so CLIENT-SIDE navigation to it works
-// offline (not just a full page load). Next serves the RSC when the request
-// carries the `RSC: 1` header; we store it under the same normalized `_rsc`
-// key the fetch handler reads (cacheKeyFor), so an offline client-nav — whose
-// `_rsc` value differs — still hits. Best-effort.
-async function precacheRsc(url) {
-  try {
-    const rscUrl = url + (url.includes("?") ? "&" : "?") + "_rsc=swcache";
-    const res = await fetch(rscUrl, {
-      cache: "no-cache",
-      headers: { RSC: "1" },
-    });
-    if (res.ok && !res.redirected) {
-      const cache = await caches.open(NAV_CACHE);
-      await cache.put(new Request(rscUrl), res.clone());
-      await precacheReferencedAssets(res);
-    }
-  } catch {
-    // best-effort — client-nav will fall back to a full load offline
-  }
-}
 
 // Allow the page to nudge the worker into precaching specific URLs — used
 // after a coach downloads a playbook so the real /playbooks/<id> +
@@ -597,13 +599,8 @@ self.addEventListener("message", (event) => {
         let ok = false;
         try {
           if (data.dedupe && (await cache.match(u))) {
-            // Already have the HTML — but the RSC may still be missing, because
-            // an ONLINE visit caches only the HTML (networkFirstWithCacheFallback)
-            // and never calls precacheRsc. Returning here used to strand that
-            // route's RSC forever. Top it up instead of skipping outright.
-            await precacheRsc(u);
             ok = true;
-            return;
+            return; // already cached
           }
           const res = await fetch(u, { cache: "no-cache" });
           // See install precache: never cache a login redirect under a
@@ -611,8 +608,19 @@ self.addEventListener("message", (event) => {
           if (res.ok && !res.redirected) {
             await cache.put(u, res.clone());
             await precacheReferencedAssets(res);
-            // Also prime the RSC so client-side nav to it works offline.
-            await precacheRsc(u);
+            // NOTE: we deliberately do NOT precache the RSC payload here.
+            // It was 75KB and one extra request PER PLAY (half the download's
+            // requests, ~30% of its bytes) — and worse, it was the bug. A cached
+            // RSC is replayed cross-context for every _rsc request (cacheKeyFor
+            // collapses them to one key), the hazard next.config.ts names as
+            // "the hazard that made the service-worker approach throw 'Something
+            // went wrong'" — landing on the editor's error boundary.
+            //
+            // Letting the RSC MISS is strictly better: Next turns a failed RSC
+            // fetch into a document navigation ("If fetch fails handle it like a
+            // mpa navigation" — next/dist/client/components/router-reducer/
+            // fetch-server-response.js), which the SW answers from the HTML
+            // cached right here, rendering the REAL editor. Faster AND correct.
             ok = true;
           }
         } catch {

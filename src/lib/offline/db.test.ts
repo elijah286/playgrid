@@ -38,6 +38,10 @@ const META_ROW = {
   ownerLabel: null,
   playCount: 1,
   downloadedAt: "2026-07-01T00:00:00.000Z",
+  // These tests are about openDb retry semantics, so the row must be a copy the
+  // current build TRUSTS — an unstamped (pre-2026-07-16) copy reads as absent by
+  // design. See OFFLINE_FORMAT_VERSION.
+  formatVersion: 2,
 };
 
 /** Minimal IDBDatabase fake: every store `get` resolves with META_ROW. */
