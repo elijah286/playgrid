@@ -14,6 +14,7 @@ import { termsAcceptanceNeeded } from "@/lib/auth/terms";
 import { OfflineAutoRefreshMount } from "@/components/offline/OfflineAutoRefreshMount";
 import { NativeWelcomeSpotlight } from "@/components/native/NativeWelcomeSpotlight";
 import { EngagementAskHost } from "@/components/engagement/EngagementAskHost";
+import { PushPrimingDialog } from "@/components/native/PushPrimingDialog";
 import { FirstRunModalQueueProvider } from "@/components/onboarding/FirstRunModalQueue";
 import { userSignedInWithApple } from "@/lib/auth/provider";
 import {
@@ -119,6 +120,11 @@ export default async function DashboardLayout({
             used to, which is how it stacked on top of the welcome spotlight. */}
         {user && <EngagementAskHost />}
       </FirstRunModalQueueProvider>
+      {/* Outside the queue on purpose: this one is a direct response to the
+          coach scheduling a game, not an interruption we chose to make, so it
+          shouldn't wait behind the welcome spotlight or burn the engagement
+          window. It self-suppresses unless the OS alert is still unspent. */}
+      {user && <PushPrimingDialog />}
       <TimeOnSiteTracker />
       {feedbackSettings.enabled && (
         <FeedbackWidget

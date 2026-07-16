@@ -10,6 +10,7 @@ import {
   updateEventAction,
   updateEventOccurrenceAction,
 } from "@/app/actions/calendar";
+import { requestPushPriming } from "@/lib/native/pushPermission";
 import {
   PlaceAutocomplete,
   type SelectedPlace,
@@ -307,6 +308,11 @@ export function EventSheet({
           return;
         }
         toast("Event created.", "success");
+        // A coach who just put a game on the calendar is the one coach for whom
+        // "remind me before kickoff" needs no explanation — so this is where we
+        // ask, rather than at login where the OS alert used to fire blind.
+        // No-ops unless we're native and the alert is still unspent.
+        requestPushPriming();
       }
       onSaved?.();
       onClose();

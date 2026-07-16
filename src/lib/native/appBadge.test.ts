@@ -53,19 +53,23 @@ describe("setAppBadge", () => {
     expect(set).toHaveBeenCalledWith({ count: 2 });
   });
 
-  it("requests badge permission if not yet granted, then sets", async () => {
+  // On iOS badge authorization rides the same UNUserNotificationCenter alert as
+  // push, and NativeBadgeSync calls setAppBadge on every inbox-count change —
+  // including at app open. Requesting here would fire the notification
+  // permission alert with no context and burn the one shot iOS allows.
+  it("NEVER requests permission — it would spend the push one-shot", async () => {
     setNative(true);
     checkPermissions.mockResolvedValueOnce({ display: "prompt" });
     await setAppBadge(1);
-    expect(requestPermissions).toHaveBeenCalledTimes(1);
-    expect(set).toHaveBeenCalledWith({ count: 1 });
+    expect(requestPermissions).not.toHaveBeenCalled();
+    expect(set).not.toHaveBeenCalled();
   });
 
   it("does not set when badge permission is denied", async () => {
     setNative(true);
     checkPermissions.mockResolvedValueOnce({ display: "denied" });
-    requestPermissions.mockResolvedValueOnce({ display: "denied" });
     await setAppBadge(2);
+    expect(requestPermissions).not.toHaveBeenCalled();
     expect(set).not.toHaveBeenCalled();
   });
 

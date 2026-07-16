@@ -20,10 +20,19 @@ async function storeRefreshSecret(secret: string): Promise<void> {
 /**
  * Register this native device for push and persist its FCM token server-side.
  *
- * No-ops on web (the plugin only exists in the native shell) and bails quietly
- * if the user declines the OS permission prompt. Safe to call on every app
- * start once the user is authenticated — re-registering refreshes the token's
- * last_seen_at and re-enables any soft-disabled row.
+ * NEVER prompts. If permission hasn't been granted yet this returns silently,
+ * leaving the OS alert unspent — asking for it is PushPrimingDialog's job, at a
+ * moment where a coach can see why it's worth granting.
+ *
+ * Until 2026-07-16 this function called requestPermissions() itself, so the OS
+ * alert fired the instant a session was recovered: a coach logging in got the
+ * permission dialog with no context, stacked over three other modals. iOS only
+ * ever shows that alert once, so a reflexive "Don't Allow" there permanently
+ * killed game/practice reminders for that install. Do not re-add a prompt here.
+ *
+ * No-ops on web (the plugin only exists in the native shell). Safe to call on
+ * every app start once the user is authenticated — re-registering refreshes the
+ * token's last_seen_at and re-enables any soft-disabled row.
  *
  * Returns an unsubscribe fn that tears down the listeners (call on sign-out).
  */
@@ -39,10 +48,9 @@ export async function registerPush(): Promise<(() => void) | void> {
   }
 
   try {
-    let perm = await PushNotifications.checkPermissions();
-    if (perm.receive === "prompt" || perm.receive === "prompt-with-rationale") {
-      perm = await PushNotifications.requestPermissions();
-    }
+    // Read-only. "prompt" means our one shot is still unspent — leave it for
+    // the priming dialog rather than burning it on an app start.
+    const perm = await PushNotifications.checkPermissions();
     if (perm.receive !== "granted") return;
 
     const platform = nativePlatform();

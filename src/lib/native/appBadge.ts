@@ -25,13 +25,16 @@ export async function setAppBadge(count: number): Promise<void> {
       await Badge.clear();
       return;
     }
-    // Ensure badge authorization (granted alongside push, but a coach could
-    // have toggled it). requestPermissions is a no-op once already granted.
+    // Check only — NEVER request. On iOS badge authorization is part of the
+    // same UNUserNotificationCenter alert as push, and this runs from
+    // NativeBadgeSync on every inbox-count change, including at app open. So a
+    // request here would fire the notification permission alert with no context
+    // and spend the one shot iOS gives us — exactly the bug we removed from
+    // registerPush. A badge with no notification permission is worthless
+    // anyway; PushPrimingDialog does the asking, and once a coach grants it the
+    // next count change badges normally.
     const perm = await Badge.checkPermissions();
-    if (perm.display !== "granted") {
-      const asked = await Badge.requestPermissions();
-      if (asked.display !== "granted") return;
-    }
+    if (perm.display !== "granted") return;
     await Badge.set({ count: n });
   } catch {
     // Plugin missing (web / not yet synced into this build) or the OS denied

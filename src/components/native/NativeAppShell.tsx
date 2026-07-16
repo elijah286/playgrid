@@ -8,6 +8,7 @@ import {
 } from "@/lib/native/registerServiceWorker";
 import { installFetchFailureLog } from "@/lib/native/fetchFailureLog";
 import { registerPush, unregisterPush } from "@/lib/native/registerPush";
+import { PUSH_GRANTED_EVENT } from "@/lib/native/pushPermission";
 import { registerAppOpen } from "@/lib/native/registerAppOpen";
 import {
   isReloadBlocked,
@@ -174,10 +175,22 @@ export function NativeAppShell() {
       }
     });
 
+    // registerPush() no longer prompts, so on a fresh install the doRegister()
+    // above finds no permission and returns without registering. When the coach
+    // later grants it via the priming dialog, register right then — otherwise
+    // their device would sit tokenless until the next cold start, and the first
+    // reminder they said yes to would be the one that didn't arrive.
+    const onPushGranted = () => {
+      registered = false;
+      doRegister();
+    };
+    window.addEventListener(PUSH_GRANTED_EVENT, onPushGranted);
+
     return () => {
       cancelled = true;
       if (hideTimer) clearTimeout(hideTimer);
       document.removeEventListener("DOMContentLoaded", revealAfterPaint);
+      window.removeEventListener(PUSH_GRANTED_EVENT, onPushGranted);
       appStateHandle?.remove();
       teardownPush?.();
       authSub.subscription.unsubscribe();
