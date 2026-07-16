@@ -13,8 +13,6 @@ import { TermsAcceptancePrompt } from "@/components/account/TermsAcceptancePromp
 import { termsAcceptanceNeeded } from "@/lib/auth/terms";
 import { OfflineAutoRefreshMount } from "@/components/offline/OfflineAutoRefreshMount";
 import { NativeWelcomeSpotlight } from "@/components/native/NativeWelcomeSpotlight";
-import { RatingNudge } from "@/components/native/RatingNudge";
-import { ReferralAnnouncementNudge } from "@/components/referral/ReferralAnnouncementNudge";
 import { FirstRunModalQueueProvider } from "@/components/onboarding/FirstRunModalQueue";
 import { userSignedInWithApple } from "@/lib/auth/provider";
 import {
@@ -113,11 +111,17 @@ export default async function DashboardLayout({
           three modals at once. `blocked` reserves the screen for those gates. */}
       <FirstRunModalQueueProvider blocked={termsNeeded || nameCaptureNeeded}>
         {user && <NativeWelcomeSpotlight />}
-        {/* Review nudge + referral announcement share one 14-day cooldown and the
-            review nudge defers while the announcement is owed, so a coach never
-            gets both asks at once (see engagement-prompt.ts). */}
-        {user && <RatingNudge />}
-        {user && <ReferralAnnouncementNudge />}
+        {/* RatingNudge + ReferralAnnouncementNudge are unmounted pending the
+            engagement-prompt rework. The queue serialized the asks but never
+            reduced them: a coach logging in on a new device got the OS push
+            dialog, the rating nudge (which never joined the queue, so it
+            stacked ON TOP of the welcome spotlight), the welcome spotlight,
+            then the referral ask — four interruptions before reaching a
+            playbook. Re-mount only behind an arbiter that asks at most once per
+            session, never on the first authed paint, and at a peak moment
+            rather than on cold load.
+            NOTE: the site_settings.suggest_reviews admin toggle is inert while
+            RatingNudge is unmounted. */}
       </FirstRunModalQueueProvider>
       <TimeOnSiteTracker />
       {feedbackSettings.enabled && (
