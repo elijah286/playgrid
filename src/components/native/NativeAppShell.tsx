@@ -6,6 +6,7 @@ import {
   primeOfflineShell,
   registerOfflineServiceWorker,
 } from "@/lib/native/registerServiceWorker";
+import { installFetchFailureLog } from "@/lib/native/fetchFailureLog";
 import { registerPush, unregisterPush } from "@/lib/native/registerPush";
 import { registerAppOpen } from "@/lib/native/registerAppOpen";
 import {
@@ -24,6 +25,12 @@ const RESUME_RELOAD_AFTER_MS = 20 * 60 * 1000; // 20 minutes
 export function NativeAppShell() {
   useEffect(() => {
     if (!isNativeApp()) return;
+
+    // FIRST — before anything can fetch. Offline, opening a downloaded play
+    // paints the real editor then throws "Load failed" (WebKit's rejected-fetch
+    // message, which carries no usable stack, so the error can't name its own
+    // cause). This records WHICH request died. Observe-and-rethrow only.
+    installFetchFailureLog();
 
     document.body.classList.add("native-app");
     document.body.classList.add(`native-${nativePlatform()}`);

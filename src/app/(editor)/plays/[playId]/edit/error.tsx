@@ -7,6 +7,7 @@ import { Button } from "@/components/ui";
 import { isNativeApp } from "@/lib/native/isNativeApp";
 import { probeConnectivity } from "@/lib/offline/connectivity";
 import { checkCachedRoutes } from "@/lib/native/registerServiceWorker";
+import { recentFetchFailures } from "@/lib/native/fetchFailureLog";
 
 /**
  * Editor segment error boundary.
@@ -162,10 +163,21 @@ function ErrorDetail({ error }: { error: Error & { digest?: string } }) {
   const [copied, setCopied] = useState(false);
   if (!error?.message) return null;
 
+  // "Load failed" is WebKit's rejected-fetch message, and WebKit gives those
+  // rejections no usable stack — so the error alone can never say WHICH request
+  // died. installFetchFailureLog (NativeAppShell) records that at the source;
+  // this is the one fact the diagnosis has been missing.
+  const failed = recentFetchFailures();
+
   const detail = [
     error.message,
     error.digest ? `digest: ${error.digest}` : null,
     error.stack ? `\n${error.stack.split("\n").slice(0, 6).join("\n")}` : null,
+    failed.length
+      ? `\nfailed fetches:\n${failed
+          .map((f) => `  ${f.at}ms ${f.method} ${f.url} — ${f.message}`)
+          .join("\n")}`
+      : "\nfailed fetches: (none recorded)",
   ]
     .filter(Boolean)
     .join("\n");
