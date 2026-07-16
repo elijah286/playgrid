@@ -20,6 +20,27 @@ const nextConfig: NextConfig = {
   // Self-contained server bundle for container deploys (Cloud Run / Fly / etc.).
   // Emits .next/standalone with a minimal node_modules tree.
   output: "standalone",
+  experimental: {
+    // Keep recently-visited dynamic routes warm in Next's client-side Router
+    // Cache so in-app navigation is instant: going BACK to a playbook grid you
+    // were just on, or bouncing between plays you've opened, reuses Next's own
+    // correctly-contextualized RSC payload instead of refetching (~1s) every
+    // time. Next 15 changed the `dynamic` default from 30s to 0 (refetch on
+    // every navigation) — that 0 is exactly why "back to the plays list" and
+    // "re-open a play after visiting another" felt slow. We restore the old
+    // 30s, which the framework shipped as its default for years.
+    //
+    // This is Next's sanctioned mechanism and is safe by construction: Next
+    // manages the cached payloads with the correct router context, so there is
+    // NO cross-context RSC replay (the hazard that made the service-worker
+    // approach throw "Something went wrong"). An edit calls router.refresh(),
+    // which invalidates this cache, so the editing coach always sees fresh.
+    // First-ever open of a never-visited play still fetches — this only makes
+    // RE-navigation instant. `static` stays at its 5-min default.
+    staleTimes: {
+      dynamic: 30,
+    },
+  },
   // Per-deploy build id, inlined into both client and server bundles. The
   // native app compares the id baked into the loaded bundle against the live
   // /api/version response to decide whether a resume-reload is worth the
