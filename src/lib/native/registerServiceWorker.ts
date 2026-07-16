@@ -36,7 +36,14 @@ function notifyRoutesChanged(): void {
   }
 }
 
-export type PrecacheProgress = { done: number; total: number };
+export type PrecacheProgress = {
+  done: number;
+  total: number;
+  /** Pages that FAILED to cache. Each one is a play that will not open offline
+   *  — there is no degraded fallback to hide it — so the UI must report this
+   *  rather than round up to a comforting 100%. */
+  failed: number;
+};
 
 async function activeWorker(): Promise<ServiceWorker | null> {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return null;
@@ -85,12 +92,26 @@ export async function precacheUrls(
     // replaced mid-flight (an update activates) and the DONE reply never lands.
     const timer = setTimeout(finish, 120_000);
     ch.port1.onmessage = (e: MessageEvent) => {
-      const d = e.data as { type?: string; done?: number; total?: number };
+      const d = e.data as {
+        type?: string;
+        done?: number;
+        total?: number;
+        failed?: number;
+      };
       if (d?.type === "PRECACHE_PROGRESS") {
-        opts.onProgress?.({ done: d.done ?? 0, total: d.total ?? urls.length });
+        opts.onProgress?.({
+          done: d.done ?? 0,
+          total: d.total ?? urls.length,
+          failed: d.failed ?? 0,
+        });
         notifyRoutesChanged();
       } else if (d?.type === "PRECACHE_DONE") {
         clearTimeout(timer);
+        opts.onProgress?.({
+          done: d.done ?? urls.length,
+          total: d.total ?? urls.length,
+          failed: d.failed ?? 0,
+        });
         finish();
       }
     };

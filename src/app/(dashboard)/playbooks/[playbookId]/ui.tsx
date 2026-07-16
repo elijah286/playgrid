@@ -277,9 +277,39 @@ const SIZE_COL_CLASS: Record<ThumbSize, string> = {
 // onPointerEnter covers both desktop hover and the first touch on mobile.
 function PlayTileLink({
   children,
+  hardNav = false,
   ...rest
-}: React.ComponentProps<typeof Link>) {
+}: React.ComponentProps<typeof Link> & { hardNav?: boolean }) {
   const [warm, setWarm] = useState(false);
+  // Offline, a client-side nav re-runs the editor's server tree (its RSC), which
+  // needs the network — and when the SW answers from cache it replays ONE
+  // full-tree RSC payload for every _rsc request, the cross-context replay that
+  // next.config.ts names as "the hazard that made the service-worker approach
+  // throw 'Something went wrong'". Either way it lands on the editor's error
+  // boundary, which is why an offline play opened as the degraded read-only view
+  // instead of the real editor.
+  //
+  // A document navigation sidesteps the RSC path entirely: the SW serves the
+  // HTML precached at download time, whose flight data is inlined, so the server
+  // tree never re-runs and the REAL EditorCanvas hydrates — identical to online.
+  // Same medicine that fixed the /home tiles (commit 8d8e55ea).
+  //
+  // Gated on MEASURED readiness by the caller (the play's page is actually in
+  // the SW cache), so we never hard-nav into a cache miss.
+  if (hardNav) {
+    const { href, className, onClick, tabIndex, "aria-label": ariaLabel } = rest;
+    return (
+      <a
+        href={String(href)}
+        className={className}
+        onClick={onClick as React.MouseEventHandler<HTMLAnchorElement> | undefined}
+        tabIndex={tabIndex}
+        aria-label={ariaLabel}
+      >
+        {children}
+      </a>
+    );
+  }
   return (
     <Link
       {...rest}
@@ -612,7 +642,10 @@ function PlaybookDetailClientInner({
   // Game mode requires a live Supabase connection (auth, shared session,
   // realtime calls). Grey out the entry button on native when offline so
   // coaches don't tap into a stalled page.
-  const { isGated: gameModeOfflineGated, reason: offlineReason } = useOfflineGate();
+  // native && !isOnline. Gates connection-required actions (Game Mode) AND
+  // decides how we navigate to a play — offline the editor must be reached by a
+  // document nav so the SW-cached HTML renders the REAL editor (see PlayTileLink).
+  const { isGated: offlineInNativeShell, reason: offlineReason } = useOfflineGate();
   const [trashOpen, setTrashOpen] = useState(false);
 
   function showPlayCapUpgrade() {
@@ -1841,7 +1874,7 @@ function PlaybookDetailClientInner({
               beta feature is on for this user. */}
           {gameModeAvailable && (
             canUseGameMode ? (
-              gameModeOfflineGated ? (
+              offlineInNativeShell ? (
                 <button
                   type="button"
                   disabled
@@ -2315,6 +2348,7 @@ function PlaybookDetailClientInner({
                         )}
                         <PlayTileLink
                           href={`/plays/${p.id}/edit`}
+                          hardNav={offlineInNativeShell && offlineReadyPlayIds.has(p.id)}
                           className={`flex flex-1 flex-col px-4 pt-2 pb-4 ${selectionMode || reorderMode || isLocked ? "pointer-events-none" : ""} ${isLocked ? "opacity-50" : ""}`}
                           aria-label={isLocked ? `${p.name} (locked — upgrade to access)` : `Open ${p.name}`}
                           tabIndex={selectionMode || reorderMode || isLocked ? -1 : 0}
@@ -2420,6 +2454,7 @@ function PlaybookDetailClientInner({
                         )}
                         <PlayTileLink
                           href={`/plays/${p.id}/edit`}
+                          hardNav={offlineInNativeShell && offlineReadyPlayIds.has(p.id)}
                           onClick={
                             isLocked
                               ? (e) => {

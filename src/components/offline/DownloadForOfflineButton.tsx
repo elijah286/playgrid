@@ -85,22 +85,38 @@ export function DownloadForOfflineButton({ playbookId, className, onAction }: Pr
       // copy isn't done until the pages are down.
       const wasUpdate = meta != null;
       setProgress(0);
+      let failedPages = 0;
+      const totalPages = res.bundle.plays.length + 1; // plays + the playbook page
       await precacheUrls(
         [
           `/playbooks/${playbookId}`,
           ...res.bundle.plays.map((p) => `/plays/${p.id}/edit`),
         ],
         {
-          onProgress: ({ done, total }) =>
-            setProgress(total > 0 ? Math.round((done / total) * 100) : 100),
+          onProgress: ({ done, total, failed }) => {
+            failedPages = failed;
+            setProgress(total > 0 ? Math.round((done / total) * 100) : 100);
+          },
         },
       );
       setMeta(res.bundle.meta);
       void hapticSuccess();
-      toast(
-        wasUpdate ? "Offline copy updated." : "Now available offline on this device.",
-        "success",
-      );
+      // Report what actually landed. A page that failed to cache is a play that
+      // will NOT open offline — and there is no degraded fallback to paper over
+      // it — so a blanket "Now available offline" would be the same lie the
+      // premature label used to tell, just later in the sequence.
+      if (failedPages > 0) {
+        const ready = Math.max(0, totalPages - failedPages);
+        toast(
+          `Partly downloaded — ${ready} of ${totalPages} pages ready. Tap Update to retry the rest.`,
+          "error",
+        );
+      } else {
+        toast(
+          wasUpdate ? "Offline copy updated." : "Now available offline on this device.",
+          "success",
+        );
+      }
       onAction?.();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Couldn't save offline.";

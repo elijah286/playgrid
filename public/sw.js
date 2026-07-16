@@ -592,9 +592,19 @@ self.addEventListener("message", (event) => {
       const cache = await caches.open(NAV_CACHE);
       const total = data.urls.length;
       let done = 0;
+      let failed = 0;
       await runLimited(data.urls, 3, async (u) => {
+        let ok = false;
         try {
-          if (data.dedupe && (await cache.match(u))) return; // already cached
+          if (data.dedupe && (await cache.match(u))) {
+            // Already have the HTML — but the RSC may still be missing, because
+            // an ONLINE visit caches only the HTML (networkFirstWithCacheFallback)
+            // and never calls precacheRsc. Returning here used to strand that
+            // route's RSC forever. Top it up instead of skipping outright.
+            await precacheRsc(u);
+            ok = true;
+            return;
+          }
           const res = await fetch(u, { cache: "no-cache" });
           // See install precache: never cache a login redirect under a
           // shell/playbook key.
@@ -603,20 +613,30 @@ self.addEventListener("message", (event) => {
             await precacheReferencedAssets(res);
             // Also prime the RSC so client-side nav to it works offline.
             await precacheRsc(u);
+            ok = true;
           }
         } catch {
-          // best-effort
+          // best-effort — `ok` stays false and is reported as a failure below.
         } finally {
-          // Report progress per URL — including dedupe-skips and failures, so
-          // the count always reaches `total` and the UI can never hang at 90%.
-          // Downloading a playbook means fetching one page per play; the button
-          // used to claim "Available offline" the moment the DATA landed while
-          // these were still streaming in, which is a lie the coach feels as
-          // "why won't this play open?".
+          // Tick per URL so the count always reaches `total` and the UI can
+          // never hang at 90%. But report ok/failed HONESTLY: a page that
+          // failed to cache is a play that will NOT open offline, and there is
+          // no degraded fallback to hide it — so claiming a bare "100%" would
+          // be the same lie in a new costume (the button previously said
+          // "Available offline" the moment the DATA landed, while these pages
+          // were still streaming in).
           done += 1;
+          if (!ok) failed += 1;
           if (port) {
             try {
-              port.postMessage({ type: "PRECACHE_PROGRESS", done, total, url: u });
+              port.postMessage({
+                type: "PRECACHE_PROGRESS",
+                done,
+                total,
+                failed,
+                ok,
+                url: u,
+              });
             } catch {
               /* port closed — page navigated away mid-download */
             }
@@ -625,7 +645,7 @@ self.addEventListener("message", (event) => {
       });
       if (port) {
         try {
-          port.postMessage({ type: "PRECACHE_DONE", done, total });
+          port.postMessage({ type: "PRECACHE_DONE", done, total, failed });
         } catch {
           /* port closed */
         }

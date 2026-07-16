@@ -234,7 +234,7 @@ describe("sw.js precache progress reporting", () => {
     expect(messages.at(-1)).toMatchObject({ type: "PRECACHE_DONE", done: 2, total: 2 });
   });
 
-  it("still reaches total when a page FAILS to fetch (never hangs the UI)", async () => {
+  it("reaches total when a page FAILS, and reports the failure HONESTLY", async () => {
     const sw = loadWorker(async (url) => {
       if (String(url) === "/plays/b/edit") throw new Error("offline");
       return res(String(url));
@@ -249,30 +249,86 @@ describe("sw.js precache progress reporting", () => {
       }),
     );
 
-    // The failure still ticks — otherwise the button sticks at 50% forever.
-    expect(messages.at(-1)).toMatchObject({ type: "PRECACHE_DONE", done: 2, total: 2 });
+    // Ticks to total so the button can't hang at 50% forever...
+    // ...but `failed` must surface: with no degraded fallback, an uncached page
+    // means that play WON'T OPEN offline. Rounding up to a clean 100% would be
+    // the same lie as the old premature "Available offline".
+    expect(messages.at(-1)).toMatchObject({
+      type: "PRECACHE_DONE",
+      done: 2,
+      total: 2,
+      failed: 1,
+    });
   });
 
-  it("counts dedupe-skips toward progress too", async () => {
+  it("reports failed: 0 when everything really landed", async () => {
     const sw = loadWorker(async (url) => res(String(url)));
+    const { port, messages } = fakePort();
+    await sw.fire(
+      "message",
+      waitableEvent({
+        data: { type: "PRECACHE_URLS", urls: ["/plays/a/edit"] },
+        ports: [port],
+      }),
+    );
+    expect(messages.at(-1)).toMatchObject({ type: "PRECACHE_DONE", failed: 0 });
+  });
+
+  it("a page that 404s counts as FAILED, not success", async () => {
+    const sw = loadWorker(async (url) => {
+      if (String(url) === "/plays/b/edit") {
+        return res(String(url), { ok: false, status: 404 });
+      }
+      return res(String(url));
+    });
+    const { port, messages } = fakePort();
+    await sw.fire(
+      "message",
+      waitableEvent({
+        data: { type: "PRECACHE_URLS", urls: ["/plays/a/edit", "/plays/b/edit"] },
+        ports: [port],
+      }),
+    );
+    expect(messages.at(-1)).toMatchObject({ type: "PRECACHE_DONE", failed: 1 });
+  });
+
+  it("dedupe tops up a stranded RSC instead of skipping the route entirely", async () => {
+    // An ONLINE visit caches only the HTML (networkFirstWithCacheFallback never
+    // calls precacheRsc). The old dedupe returned on an HTML hit and therefore
+    // stranded that route's RSC FOREVER — the route looked "downloaded" while
+    // client-side nav to it could never work offline.
+    const fetched: string[] = [];
+    const sw = loadWorker(async (url) => {
+      fetched.push(String(url));
+      return res(String(url));
+    });
     const nav = new FakeCache();
-    await nav.put("/plays/a/edit", res("/plays/a/edit")); // already cached
+    await nav.put("/plays/a/edit", res("/plays/a/edit")); // HTML only, no RSC
     sw.cachesByName.set(NAV_CACHE, nav);
     const { port, messages } = fakePort();
 
     await sw.fire(
       "message",
       waitableEvent({
-        data: {
-          type: "PRECACHE_URLS",
-          urls: ["/plays/a/edit", "/plays/b/edit"],
-          dedupe: true,
-        },
+        data: { type: "PRECACHE_URLS", urls: ["/plays/a/edit"], dedupe: true },
         ports: [port],
       }),
     );
 
-    expect(messages.at(-1)).toMatchObject({ type: "PRECACHE_DONE", done: 2, total: 2 });
+    // The HTML is NOT re-fetched (dedupe still saves the bytes)...
+    expect(fetched).not.toContain("/plays/a/edit");
+    // ...but the missing RSC IS fetched. (We assert the FETCH rather than the
+    // cache entry: precacheRsc stores via `new Request(rscUrl)`, and this
+    // sandbox's Node global Request rejects a relative URL, so the put is a
+    // harness artifact. A real SW resolves it against its scope.)
+    expect(fetched).toContain("/plays/a/edit?_rsc=swcache");
+    // And a dedupe-skip is progress, not a failure.
+    expect(messages.at(-1)).toMatchObject({
+      type: "PRECACHE_DONE",
+      done: 1,
+      total: 1,
+      failed: 0,
+    });
   });
 
   it("does not throw when the page navigated away and the port is dead", async () => {
@@ -371,10 +427,15 @@ describe("sw.js poisoned-home guard (2026-07-15)", () => {
 });
 
 describe("sw.js PRECACHE_URLS dedupe (self-heal, 2026-07-15)", () => {
-  it("skips URLs already cached when dedupe is set", async () => {
-    let fetches = 0;
+  it("skips re-fetching cached HTML, but still tops up that route's RSC", async () => {
+    // UPDATED 2026-07-16. This test previously asserted a cached route was
+    // skipped ENTIRELY (`fetches <= 2`) — which enshrined a real bug: an online
+    // visit caches only the HTML, so returning early on an HTML hit stranded
+    // that route's RSC forever and client-side nav to it could never work
+    // offline. Dedupe must save the HTML bytes WITHOUT abandoning the RSC.
+    const fetched: string[] = [];
     const sw = loadWorker(async (url) => {
-      fetches++;
+      fetched.push(String(url));
       return res(String(url), { body: "x" });
     });
     const nav = new FakeCache();
@@ -386,10 +447,11 @@ describe("sw.js PRECACHE_URLS dedupe (self-heal, 2026-07-15)", () => {
         data: { type: "PRECACHE_URLS", dedupe: true, urls: ["/plays/a/edit", "/plays/b/edit"] },
       }),
     );
-    // /plays/a/edit already cached → skipped; only /plays/b/edit (+ its RSC) fetched.
     expect(await nav.match("/plays/b/edit")).toBeDefined();
-    // a was NOT re-fetched: the only page fetch is b (RSC adds one more for b).
-    expect(fetches).toBeLessThanOrEqual(2);
+    // a's HTML is still NOT re-fetched — dedupe's purpose is preserved.
+    expect(fetched).not.toContain("/plays/a/edit");
+    // ...but a's missing RSC IS now fetched (the stranding fix).
+    expect(fetched).toContain("/plays/a/edit?_rsc=swcache");
   });
 
   it("re-fetches everything when dedupe is absent (download refresh)", async () => {
