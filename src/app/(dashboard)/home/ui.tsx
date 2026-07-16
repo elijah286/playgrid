@@ -213,12 +213,16 @@ function PlaybookTile({
   actions: ActionMenuItem[];
 }) {
   const native = useIsNativeApp();
-  const { isOnline, downloadedIds } = useOfflineState();
+  const { isOnline, downloadedIds, downloaded } = useOfflineState();
   const isDownloaded = downloadedIds.has(tile.id);
   // Only block tile access when we're in the native shell and lacking
   // signal — web users always see live content, and locked tiles already
   // have their own treatment.
   const offlineUnavailable = native && !isOnline && !isDownloaded;
+  // Logo source: the remote CDN URL online, but that's unreachable offline, so
+  // fall back to the copy inlined into the offline cache at download time.
+  const cachedLogo = downloaded.find((d) => d.id === tile.id)?.logoDataUrl ?? null;
+  const logoSrc = isOnline ? tile.logo_url : cachedLogo;
 
   const color = colorFor(tile);
   const initials = tile.name
@@ -243,10 +247,10 @@ function PlaybookTile({
         className="flex h-20 items-center justify-center"
         style={{ backgroundColor: color }}
       >
-        {tile.logo_url ? (
+        {logoSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={tile.logo_url}
+            src={logoSrc}
             alt=""
             className="h-14 w-14 object-contain"
           />

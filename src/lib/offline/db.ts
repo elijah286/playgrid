@@ -102,6 +102,10 @@ export type CachedPlaybookMeta = {
   sportVariant: string;
   color: string;
   logoUrl: string | null;
+  /** The logo image inlined as a data: URL, captured at download time. The
+   *  logo lives on a cross-origin CDN the SW won't cache, so offline the
+   *  remote `logoUrl` is unreachable — render this instead when present. */
+  logoDataUrl: string | null;
   ownerLabel: string | null;
   playCount: number;
   downloadedAt: string;

@@ -13,6 +13,7 @@ export type OfflinePlaybookBundle = {
     sportVariant: string;
     color: string;
     logoUrl: string | null;
+    logoDataUrl: string | null;
     ownerLabel: string | null;
     playCount: number;
     downloadedAt: string;
@@ -69,6 +70,13 @@ export async function getPlaybookOfflineBundleAction(
     .eq("id", playbookId)
     .maybeSingle();
   if (!book) return { ok: false, error: "Playbook not found." };
+
+  // Inline the logo as a data: URL so it survives offline — the SW won't cache
+  // the cross-origin CDN image, so the remote URL is dead without signal.
+  // Fetched server-side (no browser CORS constraint); best-effort.
+  const logoDataUrl = await fetchImageAsDataUrl(
+    (book.logo_url as string | null) ?? null,
+  );
 
   const listed = await listPlaysAction(playbookId);
   if (!listed.ok) return { ok: false, error: listed.error };
@@ -130,6 +138,7 @@ export async function getPlaybookOfflineBundleAction(
         sportVariant: (book.sport_variant as string | null) ?? "flag_7v7",
         color: (book.color as string | null) || "#134e2a",
         logoUrl: (book.logo_url as string | null) ?? null,
+        logoDataUrl,
         ownerLabel: null,
         playCount: documents.length,
         downloadedAt: new Date().toISOString(),
@@ -139,6 +148,24 @@ export async function getPlaybookOfflineBundleAction(
       documents,
     },
   };
+}
+
+/** Fetch an image URL and return it as a `data:` URL (base64), or null on any
+ *  failure. Server-side, so no browser CORS constraint. Capped so a giant image
+ *  can't bloat the offline bundle; logos are small in practice. */
+async function fetchImageAsDataUrl(url: string | null): Promise<string | null> {
+  if (!url) return null;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const type = res.headers.get("content-type") || "image/png";
+    if (!type.startsWith("image/")) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.byteLength > 512 * 1024) return null; // 512KB cap — logos are tiny
+    return `data:${type};base64,${buf.toString("base64")}`;
+  } catch {
+    return null;
+  }
 }
 
 /** Stable fingerprint over (playId → current_version_id). Sorted so the

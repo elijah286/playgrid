@@ -34,9 +34,9 @@ import { NotesMarkdown } from "@/features/editor/NotesMarkdown";
  * bug) still show the normal error UI — we only swap to the read-only shell
  * when the probe confirms we're actually offline AND the play is cached.
  */
-type Mode = "checking" | "offline" | "error";
+type Mode = "checking" | "offline" | "notDownloaded" | "error";
 
-type PlaybookChrome = { name: string; logoUrl: string | null; color: string };
+type PlaybookChrome = { name: string; logo: string | null; color: string };
 
 export default function EditorError({
   error,
@@ -87,12 +87,19 @@ export default function EditorError({
               () => null,
             );
             if (alive && meta) {
-              setBook({ name: meta.name, logoUrl: meta.logoUrl, color: meta.color });
+              // Prefer the inlined logo — the remote URL is dead offline.
+              setBook({
+                name: meta.name,
+                logo: meta.logoDataUrl ?? meta.logoUrl,
+                color: meta.color,
+              });
             }
           }
           setMode("offline");
         } else {
-          setMode("error");
+          // Offline and this play was never downloaded — a friendly, honest
+          // message beats "Something went wrong."
+          setMode("notDownloaded");
         }
       } catch {
         if (alive) setMode("error");
@@ -132,10 +139,10 @@ export default function EditorError({
             >
               <ArrowLeft className="size-5" />
             </button>
-            {book?.logoUrl ? (
+            {book?.logo ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={book.logoUrl}
+                src={book.logo}
                 alt=""
                 className="size-9 shrink-0 rounded-lg bg-white/10 object-contain"
               />
@@ -192,6 +199,27 @@ export default function EditorError({
           <GreyNavItem label="Calendar" Icon={Calendar} />
           <GreyNavItem label="More" Icon={MoreHorizontal} />
         </nav>
+      </div>
+    );
+  }
+
+  if (mode === "notDownloaded") {
+    return (
+      <div className="mx-auto max-w-md px-6 py-16 text-center">
+        <WifiOff className="mx-auto size-8 text-muted" />
+        <h1 className="mt-3 text-lg font-semibold text-foreground">
+          This play isn&rsquo;t downloaded
+        </h1>
+        <p className="mt-2 text-sm text-muted">
+          Open its playbook while you&rsquo;re online and tap
+          &ldquo;Available offline&rdquo; to keep every play on this device for
+          the sideline.
+        </p>
+        <div className="mt-5 flex justify-center">
+          <Button variant="secondary" onClick={() => window.history.back()}>
+            Back
+          </Button>
+        </div>
       </div>
     );
   }

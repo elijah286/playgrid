@@ -46,11 +46,13 @@ function previewFromDoc(doc: PlayDocument | undefined): PlayThumbnailInput | nul
 function PlaybookMark({ meta, size }: { meta: CachedPlaybookMeta; size: number }) {
   const [imgOk, setImgOk] = useState(true);
   const px = { width: size, height: size };
-  if (meta.logoUrl && imgOk) {
+  // Prefer the inlined logo — the remote URL is unreachable offline.
+  const logo = meta.logoDataUrl ?? meta.logoUrl;
+  if (logo && imgOk) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={meta.logoUrl}
+        src={logo}
         alt=""
         style={px}
         onError={() => setImgOk(false)}
