@@ -23,7 +23,7 @@ import {
   updateCustomOpponentPlayersAction,
   updateCustomOpponentRoutesAction,
 } from "@/app/actions/plays";
-import { putPlayDraft, removePlayDraft } from "@/lib/offline/db";
+import { getPlayDraft, putPlayDraft, removePlayDraft } from "@/lib/offline/db";
 import { isSaveConflict, SaveStatePill, type SaveState } from "./SaveStatePill";
 import { usePlayEditor } from "./usePlayEditor";
 import { EditorCanvas } from "./EditorCanvas";
@@ -1273,9 +1273,48 @@ function PlayEditorClientInner({
    * thrown offline and the work was going nowhere. Silence is the lie.
    */
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  /**
+   * Whether this session restored a draft from the device. While true, the
+   * draft's base — not the prop's — is authoritative. See the restore effect.
+   */
+  const draftRestoredRef = useRef(false);
+  /**
+   * Whether we have actually READ the drafts store for this play. Gates the
+   * removal in runSave: never delete what you haven't read. If IndexedDB refuses
+   * (it can, right after a cold launch) this stays false and a stale draft is
+   * left behind — recoverable — rather than a confirmed write silently
+   * destroying work we never looked at.
+   */
+  const draftReconciledRef = useRef(false);
+  /**
+   * Both refs above are per-PLAY, and this component is not remounted between
+   * plays: the wrapper renders PlayEditorClientInner without a key, and the
+   * editor soft-navigates play → play itself (router.push after install-vs-play
+   * / promote). So they must be reset explicitly or play B inherits play A's
+   * answers — and inheriting "we read the store" is what would let a save delete
+   * B's draft on the strength of having read A's.
+   *
+   * Done during render, not in an effect, so the values are already right before
+   * ANY effect reads them: the baseVersionId effect below is declared first and
+   * would otherwise consult the previous play's restore state. Idempotent, so a
+   * discarded render costs nothing.
+   */
+  const draftPlayRef = useRef(playId);
+  if (draftPlayRef.current !== playId) {
+    draftPlayRef.current = playId;
+    draftRestoredRef.current = false;
+    draftReconciledRef.current = false;
+  }
   /** The version this session started from; see the prop's docstring. */
   const baseVersionIdRef = useRef<string | null>(baseVersionId);
   useEffect(() => {
+    // A restored draft carries its OWN base — the version it was actually
+    // composed from, which is generally NOT the one this session was handed.
+    // Letting a refreshed prop overwrite it would upload the draft's stale
+    // content under a fresh parent and clobber whoever moved the play, which is
+    // the exact failure savePlayVersionAction's base check exists to refuse.
+    // Cleared on a confirmed write, when the base legitimately advances.
+    if (draftRestoredRef.current) return;
     baseVersionIdRef.current = baseVersionId;
   }, [baseVersionId]);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1339,6 +1378,68 @@ function PlayEditorClientInner({
     }
   }, [playId, playbookId]);
 
+  /**
+   * Read back work the last session couldn't upload.
+   *
+   * persistDraft has always written; nothing ever read. `getPlayDraft` and
+   * `listPlayDrafts` shipped with unit tests and ZERO callers, which left the
+   * drafts store a write-only sink: a draft survived the WebView kill it was
+   * built for, then stayed invisible — and the coach's next edit to this play
+   * saved from server state, reached the confirmed-write branch in runSave, and
+   * DELETED it unread. Durable but unrecoverable is not saved.
+   *
+   * The draft's own baseVersionId comes back with it, and that is the
+   * load-bearing part. The draft was composed from THAT version, so uploading it
+   * under the base this session was handed would send stale content with a fresh
+   * parent — precisely the co-coach clobber savePlayVersionAction's base check
+   * refuses. Restored work must carry its own lineage or the refusal can't fire.
+   *
+   * Runs at most ONCE per play, keyed on a ref rather than the dep array.
+   * `replaceDocument`'s identity follows `initialDocument`, and router.refresh()
+   * hands us a new one after every save — so a dep-driven re-run would restore
+   * over the coach mid-edit and wipe their undo stack via replaceDocument. A
+   * failed read is not retried either: draftReconciledRef stays false, so
+   * nothing gets deleted, and the next time they open the play it restores.
+   */
+  const draftReadForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (libraryMode || isExamplePreview) return;
+    if (draftReadForRef.current === playId) return;
+    draftReadForRef.current = playId;
+    let cancelled = false;
+    void (async () => {
+      let draft: Awaited<ReturnType<typeof getPlayDraft>>;
+      try {
+        draft = await getPlayDraft(playId);
+      } catch (e) {
+        console.error("[editor] could not read local draft", e);
+        return;
+      }
+      if (cancelled) return;
+      draftReconciledRef.current = true;
+      if (!draft) return;
+      if (!canSaveRef.current) return;
+      draftRestoredRef.current = true;
+      // Before replaceDocument: it schedules the save that reads this ref.
+      baseVersionIdRef.current = draft.baseVersionId;
+      // Before replaceDocument too — the reconciliation effect above treats a
+      // dirty editor as authoritative, so this stops an incoming
+      // `initialDocument` from overwriting the restored work in the gap before
+      // the doc-change effect sets it.
+      isDirtyRef.current = true;
+      replaceDocument(draft.document as PlayDocument);
+      // Says the true thing: on the device, not yet on the server. The autosave
+      // this replace schedules will upload it and flip the pill to "saved" — or,
+      // if a co-coach moved the play meanwhile, be refused and flip it to
+      // "conflict". Both are honest; neither loses anything.
+      setSaveState("pending");
+      toast("Restored changes you made on this device.", "success");
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [playId, libraryMode, isExamplePreview, replaceDocument, toast]);
+
   const runSave = useCallback(async () => {
     if (!canSaveRef.current) return;
     if (!isDirtyRef.current) return;
@@ -1397,6 +1498,9 @@ function PlayEditorClientInner({
       // behaviour and there is nothing to advance.)
       if ("versionId" in res && typeof res.versionId === "string") {
         baseVersionIdRef.current = res.versionId;
+        // The server now holds this work, so the draft's lineage is spent and
+        // the prop is authoritative again.
+        draftRestoredRef.current = false;
       }
       // Only declare clean if local hasn't moved past what we sent.
       if (docRef.current === sentDoc) {
@@ -1404,7 +1508,16 @@ function PlayEditorClientInner({
         // CONFIRMED server write — the one and only condition under which the
         // local copy may be dropped. If the coach kept editing while this was
         // in flight, the draft still holds newer work: leave it.
-        void removePlayDraft(playId).catch(() => {});
+        //
+        // And only if we READ the store on mount. That check assumed the draft
+        // and this save were the same lineage; before restore-on-mount existed
+        // they routinely weren't, so a confirmed write of server-derived content
+        // deleted halftime work it had never looked at. If the mount-time read
+        // failed we don't know what's in there — leave it and let the next
+        // session restore it.
+        if (draftReconciledRef.current) {
+          void removePlayDraft(playId).catch(() => {});
+        }
       }
       setSaveState("saved");
       router.refresh();
