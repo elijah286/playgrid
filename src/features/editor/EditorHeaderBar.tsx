@@ -25,6 +25,7 @@ import {
 import { useRouter } from "next/navigation";
 import type { PlayCommand } from "@/domain/play/commands";
 import { defensiveSwapDiscards } from "@/domain/play/reducer";
+import { defenseStarterZones } from "@/lib/formations/defense-starter-zones";
 import type { PlayDocument, SportVariant } from "@/domain/play/types";
 import { useTutorial } from "@/features/tutorials/engine/TutorialProvider";
 import { PLAY_AUTHORING_TUTORIAL } from "@/features/tutorials/tutorials/playAuthoring";
@@ -447,7 +448,7 @@ function FormationTitlePicker({
   playType: "offense" | "defense";
   /** What a defensive swap would discard, so we only confirm when there's
    *  actually something to lose. */
-  discards: { zones: number; defenderPaths: number; any: boolean };
+  discards: { defenderPaths: number; any: boolean };
   dispatch: (c: PlayCommand) => void;
   onSaveAsNewFormation: (name: string) => void | Promise<void>;
 }) {
@@ -529,23 +530,22 @@ function FormationTitlePicker({
     }
 
     if (playType === "defense") {
-      // Changing a defensive front swaps the personnel — the new front's
-      // defenders replace the old ones outright, so the coverage drawn on top
-      // of the old front can't survive. Only ask when they'd actually lose
-      // something; a play with nothing drawn yet shouldn't nag.
+      // Changing a defensive front swaps the personnel, so the new front's
+      // defenders replace the old ones outright and the target coverage's
+      // zones come with them — the same picture a coach gets starting a play
+      // from this formation. Coach-drawn formations and man coverages resolve
+      // to none, which is correct rather than a fallback.
+      const zones = defenseStarterZones(f.semanticKey);
+
+      // Only ask about the defender paths — the coach's own work, with no
+      // equivalent in the target front. Zones are replaced, not lost, so
+      // warning about them would nag on every swap.
       if (discards.any) {
-        const lost = [
-          discards.zones > 0 ? `${discards.zones} zone${discards.zones === 1 ? "" : "s"}` : null,
-          discards.defenderPaths > 0
-            ? `${discards.defenderPaths} defender path${discards.defenderPaths === 1 ? "" : "s"}`
-            : null,
-        ]
-          .filter(Boolean)
-          .join(" and ");
+        const n = discards.defenderPaths;
         const ok = window.confirm(
           `Change this play to ${f.displayName}?\n\n` +
-            `${f.displayName} lines up different defenders, so your ${lost} will be cleared. ` +
-            `You'll need to draw the coverage again.`,
+            `${f.displayName} lines up different defenders, so the ${n} defender ` +
+            `path${n === 1 ? "" : "s"} you've drawn will be cleared.`,
         );
         if (!ok) return;
       }
@@ -554,6 +554,7 @@ function FormationTitlePicker({
         formationId: f.id,
         formationName: f.displayName,
         players: f.players,
+        zones,
         formationLosY: f.losY,
       });
       notifyTutorialAction("formation-applied");

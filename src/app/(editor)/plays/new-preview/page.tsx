@@ -63,7 +63,7 @@ export default async function PreviewNewPlayPage({ searchParams }: Props) {
   if (formationId) {
     const { data: f } = await supabase
       .from("formations")
-      .select("id, params, kind, is_seed, playbook_id")
+      .select("id, params, kind, is_seed, playbook_id, semantic_key")
       .eq("id", formationId)
       .maybeSingle();
     const params = f?.params as
@@ -84,6 +84,7 @@ export default async function PreviewNewPlayPage({ searchParams }: Props) {
         isSeed: Boolean(f?.is_seed),
         playbookId: (f?.playbook_id as string | null) ?? null,
         kind: (f?.kind as SavedFormation["kind"] | null) ?? "offense",
+        semanticKey: (f?.semantic_key as string | null) ?? null,
         losY:
           typeof params.lineOfScrimmageY === "number"
             ? params.lineOfScrimmageY

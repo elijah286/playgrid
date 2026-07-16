@@ -14,6 +14,14 @@ export type SavedFormation = {
   sportProfile: Partial<SportProfile>;
   kind: FormationKind;
   /**
+   * Stable catalog/authoring key. For catalog-derived defensive starters this
+   * resolves back to the Football KG alignment (see domain/play/defenseStarters),
+   * which is how the picker knows which coverage zones a starter implies.
+   * Coach-drawn formations carry a "custom_" / "seeded_" key that resolves to
+   * nothing — correctly, since they have no coverage.
+   */
+  semanticKey: string | null;
+  /**
    * The lineOfScrimmageY that was active when this formation was saved.
    * Used to convert stored player positions to yards-from-LOS for drift
    * detection and reapply coordinate transforms.  Defaults to 0.4 for
@@ -45,6 +53,7 @@ function rowToFormation(row: {
   is_seed: boolean;
   params: FormationParams | Record<string, unknown> | null;
   kind: string | null;
+  semantic_key?: string | null;
   playbooks?: { name: string } | null;
   sort_order?: number | null;
   is_archived?: boolean | null;
@@ -56,6 +65,7 @@ function rowToFormation(row: {
     players: Array.isArray(params.players) ? params.players : [],
     sportProfile: params.sportProfile ?? {},
     kind: (row.kind as FormationKind | null) ?? "offense",
+    semanticKey: row.semantic_key ?? null,
     losY: typeof params.lineOfScrimmageY === "number" ? params.lineOfScrimmageY : 0.4,
     playbookId: row.playbook_id,
     playbookName: row.playbooks?.name,
@@ -84,7 +94,7 @@ export async function listFormationsAction(): Promise<
 
   const { data, error } = await supabase
     .from("formations")
-    .select("id, playbook_id, is_seed, params, kind, sort_order, is_archived, playbooks!inner(name)")
+    .select("id, playbook_id, is_seed, params, kind, semantic_key, sort_order, is_archived, playbooks!inner(name)")
     .eq("is_seed", false);
   if (error) return { ok: false, error: error.message };
 
@@ -131,7 +141,7 @@ export async function listStarterFormationsAction(
 
   const { data, error } = await supabase
     .from("formations")
-    .select("id, playbook_id, is_seed, params, kind, sort_order, is_archived")
+    .select("id, playbook_id, is_seed, params, kind, semantic_key, sort_order, is_archived")
     .eq("is_seed", true)
     .eq("kind", kind)
     .order("sort_order", { ascending: true });
@@ -231,7 +241,7 @@ export async function listSeedFormationsAction(): Promise<
 
   const { data, error } = await supabase
     .from("formations")
-    .select("id, playbook_id, is_seed, params, kind, sort_order, is_archived")
+    .select("id, playbook_id, is_seed, params, kind, semantic_key, sort_order, is_archived")
     .eq("is_seed", true);
   if (error) return { ok: false, error: error.message };
 
@@ -576,7 +586,7 @@ export async function listFormationsForPlaybookAction(
 
   const { data: rows, error: fErr } = await supabase
     .from("formations")
-    .select("id, playbook_id, is_seed, params, kind, sort_order, is_archived")
+    .select("id, playbook_id, is_seed, params, kind, semantic_key, sort_order, is_archived")
     .eq("playbook_id", playbookId)
     .order("sort_order", { ascending: true });
   if (fErr) return { ok: false, error: fErr.message };

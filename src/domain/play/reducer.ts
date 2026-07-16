@@ -102,18 +102,22 @@ function formationPositionToPlay(
 }
 
 /**
- * What a `document.replaceDefensiveFormation` would destroy, so the UI can ask
- * before doing it — and stay silent when there's nothing to lose (a freshly
- * created play with no assignments drawn yet shouldn't nag).
+ * What a `document.replaceDefensiveFormation` would destroy that the coach
+ * cannot get back, so the UI can ask first — and stay silent otherwise.
+ *
+ * Deliberately does NOT count zones. Zones are REPLACED by the target
+ * coverage's, not deleted, and on most defensive plays they were installed by
+ * us at creation rather than drawn by the coach — warning about losing them
+ * would be both untrue and a nag on every swap, which is how confirms get
+ * trained away. Defender paths (blitz arrows, man lines) are the coach's own
+ * work and have no equivalent in the target front, so they're the real loss.
  */
 export function defensiveSwapDiscards(doc: PlayDocument): {
-  zones: number;
   defenderPaths: number;
   any: boolean;
 } {
-  const zones = doc.layers.zones?.length ?? 0;
   const defenderPaths = doc.layers.routes.length;
-  return { zones, defenderPaths, any: zones > 0 || defenderPaths > 0 };
+  return { defenderPaths, any: defenderPaths > 0 };
 }
 
 function flipPoint(p: Point2, axis: "horizontal" | "vertical"): Point2 {
@@ -706,13 +710,20 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
         position: formationPositionToPlay(doc, p.position, losY),
       }));
 
-      // The old front's zones and defender paths described defenders that no
-      // longer exist. Routes are keyed by carrierPlayerId, so keeping them
-      // would leave paths anchored to deleted players.
+      // Zones come from the TARGET coverage, so swapping to Tampa 2 draws
+      // Tampa 2 — the same picture creating a play from Tampa 2 gives you.
+      // Keeping the old front's zones would leave a Cover 2 shell around a
+      // Tampa 2 front; clearing them outright would leave bare triangles and
+      // make the same formation mean two different things depending on how
+      // the coach got there. Empty is correct for man coverages and
+      // coach-drawn formations, which have no coverage to install.
+      //
+      // Defender paths are dropped: routes are keyed by carrierPlayerId, and
+      // those carriers no longer exist.
       return {
         ...doc,
         metadata,
-        layers: { ...doc.layers, players, routes: [], zones: [] },
+        layers: { ...doc.layers, players, routes: [], zones: cmd.zones ?? [] },
       };
     }
 

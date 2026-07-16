@@ -172,9 +172,42 @@ describe("document.replaceDefensiveFormation", () => {
     expect(next.layers.players.map((p) => p.id)).toEqual(["def_cb", "def_fs"]);
   });
 
-  it("clears zones and defender paths — they described defenders that no longer exist", () => {
+  it("installs the TARGET coverage's zones — swapping to Cover 2 draws Cover 2", () => {
+    // Swapping must give the same picture as creating a play from this
+    // formation. Clearing instead would make one formation mean two different
+    // things depending on how the coach arrived at it.
     const doc = defensivePlay();
-    expect(doc.layers.zones).toHaveLength(1);
+    expect(doc.layers.zones).toHaveLength(1); // the OLD front's coverage
+    const targetZones = [
+      { id: "z_deep_l", kind: "ellipse" as const, center: { x: 0.3, y: 0.85 }, size: { w: 0.2, h: 0.1 }, label: "Deep 1/2 L", style: { fill: "#0002", stroke: "#000" } },
+      { id: "z_deep_r", kind: "ellipse" as const, center: { x: 0.7, y: 0.85 }, size: { w: 0.2, h: 0.1 }, label: "Deep 1/2 R", style: { fill: "#0002", stroke: "#000" } },
+    ];
+    const next = applyCommand(doc, {
+      type: "document.replaceDefensiveFormation",
+      formationId: "f1",
+      formationName: "Cover 2",
+      players: target,
+      zones: targetZones as never,
+      formationLosY: 0.4,
+    });
+    expect(next.layers.zones?.map((z) => z.label)).toEqual(["Deep 1/2 L", "Deep 1/2 R"]);
+    expect(next.layers.zones).not.toContainEqual(expect.objectContaining({ label: "Flat L" }));
+  });
+
+  it("leaves a bare front when the target has no coverage (man, or coach-drawn)", () => {
+    const doc = defensivePlay();
+    const next = applyCommand(doc, {
+      type: "document.replaceDefensiveFormation",
+      formationId: "f1",
+      formationName: "Cover 0",
+      players: target,
+      formationLosY: 0.4,
+    });
+    expect(next.layers.zones).toEqual([]);
+  });
+
+  it("drops defender paths — routes are keyed to carriers that no longer exist", () => {
+    const doc = defensivePlay();
     expect(doc.layers.routes).toHaveLength(1);
     const next = applyCommand(doc, {
       type: "document.replaceDefensiveFormation",
@@ -183,7 +216,6 @@ describe("document.replaceDefensiveFormation", () => {
       players: target,
       formationLosY: 0.4,
     });
-    expect(next.layers.zones).toEqual([]);
     expect(next.layers.routes).toEqual([]);
   });
 
@@ -242,11 +274,26 @@ describe("defensiveSwapDiscards", () => {
     const doc = createEmptyPlayDocument({ metadata: { playType: "defense" } as never });
     const d = defensiveSwapDiscards({ ...doc, layers: { ...doc.layers, routes: [], zones: [] } });
     expect(d.any).toBe(false);
-    expect(d.zones).toBe(0);
     expect(d.defenderPaths).toBe(0);
   });
 
-  it("counts zones and defender paths so the confirm can name what's lost", () => {
+  it("does NOT warn about zones — they are replaced by the target's, not lost", () => {
+    // Most zones on a defensive play were installed by us at creation, not
+    // drawn by the coach. Warning about them would be untrue AND would nag on
+    // every single swap, which is how confirms get trained away.
+    const doc = createEmptyPlayDocument({ metadata: { playType: "defense" } as never });
+    const zonesOnly = {
+      ...doc,
+      layers: {
+        ...doc.layers,
+        routes: [],
+        zones: [{ id: "z1", kind: "ellipse", center: { x: 0.5, y: 0.5 }, size: { w: 0.1, h: 0.1 }, label: "Hook", style: { fill: "#0002", stroke: "#000" } }] as never,
+      },
+    };
+    expect(defensiveSwapDiscards(zonesOnly).any).toBe(false);
+  });
+
+  it("counts defender paths so the confirm can name what's lost", () => {
     const doc = createEmptyPlayDocument();
     const withWork = {
       ...doc,
@@ -257,6 +304,6 @@ describe("defensiveSwapDiscards", () => {
       },
     };
     const d = defensiveSwapDiscards(withWork);
-    expect(d).toEqual({ zones: 1, defenderPaths: 1, any: true });
+    expect(d).toEqual({ defenderPaths: 1, any: true });
   });
 });

@@ -158,16 +158,23 @@ export type PlayCommand =
        * and Cover 2 have only 3 of 5 defenders in common, because a defensive
        * alignment is a personnel decision, not an arrangement of fixed personnel.
        *
-       * So this replaces `players` wholesale, and drops the zones and defender
-       * paths that described the OLD front's assignments. Callers must confirm
-       * with the coach first when there is work to lose — see
-       * `defensiveSwapDiscards`.
+       * So this replaces `players` wholesale, and drops the defender paths that
+       * described the OLD front's assignments. Callers must confirm with the
+       * coach first when there is work to lose — see `defensiveSwapDiscards`.
        */
       type: "document.replaceDefensiveFormation";
       formationId: string | null;
       formationName: string;
       /** The target formation's defenders. Replaces doc.layers.players entirely. */
       players: Player[];
+      /**
+       * The target coverage's zones, derived from the catalog by the caller.
+       * Replaces doc.layers.zones outright — swapping to Tampa 2 should draw
+       * Tampa 2, exactly as creating a play from Tampa 2 does. Empty for
+       * man coverages (which draw no zones) and for coach-drawn formations
+       * (which carry none), so those correctly end up with a bare front.
+       */
+      zones?: Zone[];
       /** lineOfScrimmageY of the source formation — used to transform positions. */
       formationLosY?: number;
     }
