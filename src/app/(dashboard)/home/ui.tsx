@@ -4,23 +4,13 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import {
-  Archive,
-  ArchiveRestore,
   ArrowLeft,
   CloudDownload,
-  Copy,
-  FlaskConical,
-  Globe,
   Link2,
-  LogOut,
   Lock,
   Plus,
-  Settings2,
   Sparkles,
-  Trash2,
-  Unlock,
   Upload,
-  UserPlus,
   WifiOff,
   X,
 } from "lucide-react";
@@ -28,24 +18,11 @@ import { NativeUpgradeCta, useUpgradeHref } from "@/components/billing/NativeUpg
 import { track } from "@/lib/analytics/track";
 import type { ExamplePromo } from "@/lib/site/example-promo-config";
 import {
-  archivePlaybookAction,
   createPlaybookAction,
-  deletePlaybookAction,
-  duplicatePlaybookAction,
-  getPlaybookKbCountAction,
-  leavePlaybookAction,
-  setPlaybookAllowDuplicationAction,
   uploadPlaybookLogoAction,
 } from "@/app/actions/playbooks";
-import {
-  duplicateAsExampleAction,
-  setPlaybookHeroExampleAction,
-  setPlaybookIsExampleAction,
-  setPlaybookPublicExampleAction,
-} from "@/app/actions/admin-examples";
 import type { DashboardPlaybookTile, DashboardSummary } from "@/app/actions/plays";
 import { pickEditableFreePlaybook } from "@/lib/billing/free-playbook";
-import { ArchiveLockedDialog } from "@/components/billing/ArchiveLockedDialog";
 import type { Player, Route, SportVariant, Zone } from "@/domain/play/types";
 import {
   defaultSettingsForVariant,
@@ -56,20 +33,14 @@ import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import { SAMPLE_FAN_PREVIEWS } from "@/features/dashboard/sampleFan";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
 import {
-  ActionMenu,
   Badge,
   Button,
   Card,
   Input,
   SegmentedControl,
   useToast,
-  type ActionMenuItem,
 } from "@/components/ui";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
-import {
-  CustomizeTeamDialog,
-  InviteTeamMemberDialog,
-} from "@/app/(dashboard)/playbooks/[playbookId]/PlaybookHeader";
 import { HomeCalendarTab } from "@/features/calendar/HomeCalendarTab";
 import { InboxTab } from "@/features/dashboard/InboxTab";
 import { useInboxBadge } from "@/features/dashboard/InboxBadgeContext";
@@ -206,13 +177,7 @@ function colorFor(tile: DashboardPlaybookTile): string {
   return DEFAULT_COLORS[h % DEFAULT_COLORS.length];
 }
 
-function PlaybookTile({
-  tile,
-  actions,
-}: {
-  tile: DashboardPlaybookTile;
-  actions: ActionMenuItem[];
-}) {
+function PlaybookTile({ tile }: { tile: DashboardPlaybookTile }) {
   const native = useIsNativeApp();
   const { isOnline, downloadedIds, downloaded } = useOfflineState();
   const isDownloaded = downloadedIds.has(tile.id);
@@ -290,7 +255,7 @@ function PlaybookTile({
   const isInteractive = !locked && !offlineUnavailable;
 
   return (
-    <div className="group relative">
+    <div className="relative">
       <Card hover className="relative overflow-hidden p-0">
         {!isInteractive ? (
           <div className="flex h-full flex-col opacity-60">{inner}</div>
@@ -304,11 +269,6 @@ function PlaybookTile({
         {locked && <LockedOverlay />}
         {!locked && offlineUnavailable && <OfflineUnavailableOverlay />}
       </Card>
-      {isInteractive && actions.length > 0 && (
-        <div className="absolute right-2 top-2 z-10 opacity-0 transition-opacity group-hover:opacity-100">
-          <ActionMenu items={actions} />
-        </div>
-      )}
     </div>
   );
 }
@@ -394,13 +354,7 @@ function LockedOverlay() {
  * All animation is GPU-cheap: `transform` + `opacity` only, driven by CSS
  * `group-hover` with a custom property. No JS per frame.
  */
-export function PlaybookBookTile({
-  tile,
-  actions,
-}: {
-  tile: DashboardPlaybookTile;
-  actions: ActionMenuItem[];
-}) {
+export function PlaybookBookTile({ tile }: { tile: DashboardPlaybookTile }) {
   const native = useIsNativeApp();
   const { isOnline, downloadedIds } = useOfflineState();
   const isDownloaded = downloadedIds.has(tile.id);
@@ -418,7 +372,7 @@ export function PlaybookBookTile({
   if (offlineUnavailable) {
     return <OfflineUnavailableBookTile tile={tile} />;
   }
-  return <InteractiveBookTile tile={tile} actions={actions} />;
+  return <InteractiveBookTile tile={tile} />;
 }
 
 /**
@@ -469,13 +423,7 @@ function BookTileLink({
   );
 }
 
-function InteractiveBookTile({
-  tile,
-  actions,
-}: {
-  tile: DashboardPlaybookTile;
-  actions: ActionMenuItem[];
-}) {
+function InteractiveBookTile({ tile }: { tile: DashboardPlaybookTile }) {
   const native = useIsNativeApp();
   const { isOnline, downloadedIds } = useOfflineState();
   const isDownloaded = downloadedIds.has(tile.id);
@@ -516,7 +464,6 @@ function InteractiveBookTile({
     : [];
   const [hover, setHover] = useState(false);
   const [shiftX, setShiftX] = useState(0);
-  const [menuOpen, setMenuOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const mouseInsideRef = useRef(false);
 
@@ -533,40 +480,23 @@ function InteractiveBookTile({
     return () => mq.removeEventListener("change", handler);
   }, []);
 
-  // When the action menu closes (via click-outside or selection), if the
-  // mouse has already left the tile, collapse the book too.
-  useEffect(() => {
-    if (menuOpen) return;
-    if (!mouseInsideRef.current) {
-      setHover(false);
-      setShiftX(0);
-    }
-  }, [menuOpen]);
-
-  // A pointerdown anywhere outside the tile collapses it. Covers modal
-  // overlays (e.g. Duplicate dialog) that sit above the tile: mouseleave
-  // never fires because the overlay intercepts the pointer, and without
-  // this the tile stays stuck opened after the modal closes.
-  //
-  // Skip while the action menu is open — its items render in a portal
-  // outside `wrapperRef`, so this capture-phase handler would fire first
-  // and close the menu before the menu-item click ever dispatches.
-  // ActionMenu manages its own outside-click dismissal.
+  // A pointerdown anywhere outside the tile collapses it. Belt-and-braces
+  // for cases where mouseleave never fires (e.g. something layered above the
+  // tile intercepts the pointer), which would otherwise leave the book stuck
+  // open.
   useEffect(() => {
     if (!hover) return;
-    if (menuOpen) return;
     function onDown(e: PointerEvent) {
       const el = wrapperRef.current;
       if (!el) return;
       if (el.contains(e.target as Node)) return;
       mouseInsideRef.current = false;
-      setMenuOpen(false);
       setHover(false);
       setShiftX(0);
     }
     document.addEventListener("pointerdown", onDown, true);
     return () => document.removeEventListener("pointerdown", onDown, true);
-  }, [hover, menuOpen]);
+  }, [hover]);
 
   function handleEnter() {
     const el = wrapperRef.current;
@@ -599,7 +529,6 @@ function InteractiveBookTile({
 
   function handleLeave() {
     mouseInsideRef.current = false;
-    if (menuOpen) return;
     setHover(false);
     setShiftX(0);
   }
@@ -609,7 +538,7 @@ function InteractiveBookTile({
       ref={wrapperRef}
       onMouseEnter={isTouch ? undefined : handleEnter}
       onMouseLeave={isTouch ? undefined : handleLeave}
-      className="group relative z-0"
+      className="relative z-0"
       style={{ zIndex: hover ? 20 : 0 }}
     >
       {/* Outer transform: horizontal slide-to-fit. Snaps in quickly so the
@@ -820,13 +749,6 @@ function InteractiveBookTile({
         </div>
       )}
       </div>
-      {actions.length > 0 && (
-        <div
-          className="absolute right-2 top-2 z-10 rounded-full bg-surface-raised shadow-sm ring-1 ring-border opacity-0 transition-opacity group-hover:opacity-100"
-        >
-          <ActionMenu items={actions} open={menuOpen} onOpenChange={setMenuOpen} />
-        </div>
-      )}
       </div>
     </div>
   );
@@ -1290,7 +1212,6 @@ export function DashboardClient({
   hideAnimation = false,
   isAdmin = false,
   teamCalendarAvailable = false,
-  canUseTeamFeatures = false,
   inboxAlerts = [],
   activityEntries = [],
   initialTab = "playbooks",
@@ -1304,7 +1225,6 @@ export function DashboardClient({
   hideAnimation?: boolean;
   isAdmin?: boolean;
   teamCalendarAvailable?: boolean;
-  canUseTeamFeatures?: boolean;
   inboxAlerts?: InboxAlert[];
   activityEntries?: ActivityEntry[];
   initialTab?: HomeTab;
@@ -1370,11 +1290,6 @@ export function DashboardClient({
     secondaryLabel?: string;
     secondaryHref?: string;
   } | null>(null);
-  // The playbook a free coach just tried to archive. Archiving is a Team
-  // Coach feature, so instead of failing we offer delete-or-keep.
-  const [archiveGate, setArchiveGate] = useState<DashboardPlaybookTile | null>(
-    null,
-  );
   useEffect(() => {
     if (searchParams.get("create") === "1") {
       setShowCreate(true);
@@ -1384,15 +1299,6 @@ export function DashboardClient({
       window.history.replaceState({}, "", qs ? `/home?${qs}` : "/home");
     }
   }, [searchParams]);
-  const [duplicating, setDuplicating] = useState<DashboardPlaybookTile | null>(null);
-  const [customizing, setCustomizing] = useState<DashboardPlaybookTile | null>(null);
-  const [inviting, setInviting] = useState<DashboardPlaybookTile | null>(null);
-  // Tiles the coach just confirmed deletion on. We hide them locally
-  // before the server action returns so the grid reacts instantly — the
-  // tile reappears if the delete fails.
-  const [optimisticallyRemovedIds, setOptimisticallyRemovedIds] = useState<
-    ReadonlySet<string>
-  >(() => new Set());
   // Book covers everywhere. The site-admin "hide_lobby_animation" toggle
   // still falls back to flat tiles for low-end-device cohorts; otherwise
   // we always render the cover treatment. Per-tile touch detection inside
@@ -1406,12 +1312,10 @@ export function DashboardClient({
     "dashboard.showExamples",
   );
 
-  const visiblePlaybooks =
-    optimisticallyRemovedIds.size > 0
-      ? data.playbooks.filter((b) => !optimisticallyRemovedIds.has(b.id))
-      : data.playbooks;
-  const ownedAll = visiblePlaybooks.filter((b) => b.role === "owner" && !b.is_default);
-  const sharedAll = visiblePlaybooks.filter((b) => b.role !== "owner");
+  const ownedAll = data.playbooks.filter(
+    (b) => b.role === "owner" && !b.is_default,
+  );
+  const sharedAll = data.playbooks.filter((b) => b.role !== "owner");
   // Example playbooks are pulled out of the main grid so the admin's
   // real work isn't mixed with marketing copies. They only show when
   // the admin toggles "Show marketing examples".
@@ -1434,91 +1338,6 @@ export function DashboardClient({
     shared.length === 0 &&
     archived.length === 0 &&
     examples.length === 0;
-
-  function refresh() {
-    router.refresh();
-  }
-
-  function handle<T>(
-    fn: () => Promise<T>,
-    onOk?: (result: T) => void,
-    errLabel = "Something went wrong.",
-  ) {
-    startTransition(async () => {
-      try {
-        const res = await fn();
-        if (res && typeof res === "object" && "ok" in res) {
-          const r = res as { ok: boolean; error?: string };
-          if (!r.ok) {
-            if (r.error && /Coach feature|Upgrade to unlock|Free tier/i.test(r.error)) {
-              // Title kept neutral so we don't surface upsell language on
-              // native. `errorWebSuffix` (if present) is the upsell tail
-              // wrapped in `data-web-only` — visible on web, hidden on
-              // iOS/Android per App Store 3.1.3(b).
-              const suffix =
-                (r as { errorWebSuffix?: string }).errorWebSuffix ?? undefined;
-              setUpgradeNotice({
-                title: "Team Coach feature",
-                message: (
-                  <>
-                    {r.error}
-                    {suffix ? (
-                      <>
-                        {" "}
-                        <span data-web-only>{suffix}</span>
-                      </>
-                    ) : null}{" "}
-                    <span data-native-only>
-                      <NativeUpgradeCta label="Upgrade to Team Coach" fallback="Plan changes aren't available in this app." />
-                    </span>
-                  </>
-                ),
-              });
-            } else {
-              toast(r.error ?? errLabel, "error");
-            }
-            return;
-          }
-        }
-        onOk?.(res);
-        refresh();
-      } catch (e) {
-        toast(e instanceof Error ? e.message : errLabel, "error");
-      }
-    });
-  }
-
-  function deletePlaybookOptimistic(tile: DashboardPlaybookTile) {
-    setOptimisticallyRemovedIds((prev) => {
-      const next = new Set(prev);
-      next.add(tile.id);
-      return next;
-    });
-    const restore = () =>
-      setOptimisticallyRemovedIds((prev) => {
-        if (!prev.has(tile.id)) return prev;
-        const next = new Set(prev);
-        next.delete(tile.id);
-        return next;
-      });
-    startTransition(async () => {
-      try {
-        const res = await deletePlaybookAction(tile.id);
-        if (!res.ok) {
-          restore();
-          toast(res.error ?? "Couldn't delete playbook.", "error");
-          return;
-        }
-        refresh();
-      } catch (e) {
-        restore();
-        toast(
-          e instanceof Error ? e.message : "Couldn't delete playbook.",
-          "error",
-        );
-      }
-    });
-  }
 
   function createBook(config: {
     name: string;
@@ -1591,209 +1410,6 @@ export function DashboardClient({
       setShowCreate(false);
       router.push(`/playbooks/${res.id}`);
     });
-  }
-
-  function confirmAnd(msg: string, fn: () => void) {
-    if (window.confirm(msg)) fn();
-  }
-
-  function DupStatePill({ allowed }: { allowed: boolean }) {
-    return (
-      <span
-        className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide ${
-          allowed
-            ? "bg-success-light text-success"
-            : "bg-surface-inset text-muted"
-        }`}
-      >
-        {allowed ? "On" : "Off"}
-      </span>
-    );
-  }
-
-  function buildExampleAdminItems(tile: DashboardPlaybookTile): ActionMenuItem[] {
-    if (!isAdmin) return [];
-    if (!tile.is_example) {
-      // On a normal playbook, "Use as example" forks into a separate copy
-      // the admin owns so further edits to the source don't leak into the
-      // published example. We navigate into the copy on success.
-      return [
-        {
-          label: "Use as example",
-          icon: FlaskConical,
-          onSelect: () =>
-            handle(
-              () => duplicateAsExampleAction(tile.id),
-              (res) => {
-                if (res && typeof res === "object" && "id" in res && res.id) {
-                  router.push(`/playbooks/${res.id}`);
-                }
-              },
-            ),
-        },
-      ];
-    }
-    const items: ActionMenuItem[] = [
-      {
-        label: "Remove as example",
-        icon: FlaskConical,
-        onSelect: () =>
-          handle(() => setPlaybookIsExampleAction(tile.id, false)),
-      },
-      {
-        label: tile.is_public_example ? "Unpublish example" : "Publish example",
-        icon: Globe,
-        onSelect: () =>
-          handle(() =>
-            setPlaybookPublicExampleAction(tile.id, !tile.is_public_example),
-          ),
-      },
-    ];
-    // Hero promotion is downstream of "published example" — only offer the
-    // toggle once the playbook is publicly visible. The unique partial index
-    // on is_hero_marketing_example caps total heroes at one site-wide; the
-    // server action clears any existing hero before setting a new one.
-    if (tile.is_public_example || tile.is_hero_marketing_example) {
-      items.push({
-        label: tile.is_hero_marketing_example
-          ? "Remove as hero playbook"
-          : "Make hero playbook",
-        icon: Sparkles,
-        onSelect: () =>
-          handle(() =>
-            setPlaybookHeroExampleAction(
-              tile.id,
-              !tile.is_hero_marketing_example,
-            ),
-          ),
-      });
-    }
-    return items;
-  }
-
-  function buildOwnerActions(tile: DashboardPlaybookTile): ActionMenuItem[] {
-    if (tile.is_locked) {
-      return [
-        {
-          label: "Delete",
-          icon: Trash2,
-          danger: true,
-          onSelect: () =>
-            confirmAnd(
-              `Delete "${tile.name}" and all its plays? This can't be undone.`,
-              () => deletePlaybookOptimistic(tile),
-            ),
-        },
-      ];
-    }
-    return [
-      {
-        label: "Invite",
-        icon: UserPlus,
-        onSelect: () => setInviting(tile),
-      },
-      {
-        label: "Customize",
-        icon: Settings2,
-        onSelect: () => setCustomizing(tile),
-      },
-      {
-        label: "Duplicate",
-        icon: Copy,
-        onSelect: () => setDuplicating(tile),
-      },
-      {
-        label: "Coach duplication",
-        icon: tile.allow_coach_duplication ? Unlock : Lock,
-        trailing: <DupStatePill allowed={tile.allow_coach_duplication} />,
-        onSelect: () =>
-          handle(() =>
-            setPlaybookAllowDuplicationAction(
-              tile.id,
-              "coach",
-              !tile.allow_coach_duplication,
-            ),
-          ),
-      },
-      {
-        label: "Player duplication",
-        icon: tile.allow_player_duplication ? Unlock : Lock,
-        trailing: <DupStatePill allowed={tile.allow_player_duplication} />,
-        onSelect: () =>
-          handle(() =>
-            setPlaybookAllowDuplicationAction(
-              tile.id,
-              "player",
-              !tile.allow_player_duplication,
-            ),
-          ),
-      },
-      ...buildExampleAdminItems(tile),
-      tile.is_archived
-        ? {
-            label: "Unarchive",
-            icon: ArchiveRestore,
-            onSelect: () =>
-              handle(() => archivePlaybookAction(tile.id, false)),
-          }
-        : {
-            label: "Archive",
-            icon: Archive,
-            // Archiving is a Team Coach feature. Free coaches get the
-            // delete-or-keep dialog (an archived book still eats their one
-            // free slot); the server enforces the same gate as a backstop.
-            onSelect: () =>
-              canUseTeamFeatures
-                ? handle(() => archivePlaybookAction(tile.id, true))
-                : setArchiveGate(tile),
-          },
-      {
-        label: "Delete",
-        icon: Trash2,
-        danger: true,
-        onSelect: () =>
-          confirmAnd(
-            `Delete "${tile.name}" and all its plays? This can't be undone.`,
-            () => deletePlaybookOptimistic(tile),
-          ),
-      },
-    ];
-  }
-
-  function buildSharedActions(tile: DashboardPlaybookTile): ActionMenuItem[] {
-    const items: ActionMenuItem[] = [];
-    if (tile.role === "editor") {
-      items.push({
-        label: "Invite",
-        icon: UserPlus,
-        onSelect: () => setInviting(tile),
-      });
-    }
-    const duplicationAllowed =
-      tile.role === "editor"
-        ? tile.allow_coach_duplication
-        : tile.allow_player_duplication;
-    if (duplicationAllowed) {
-      items.push({
-        label: "Duplicate",
-        icon: Copy,
-        onSelect: () => setDuplicating(tile),
-      });
-    }
-    if (tile.role === "editor") {
-      items.push(...buildExampleAdminItems(tile));
-    }
-    items.push({
-      label: "Unsubscribe",
-      icon: LogOut,
-      danger: true,
-      onSelect: () =>
-        confirmAnd(
-          `Remove "${tile.name}" from your dashboard? The owner can re-share it later.`,
-          () => handle(() => leavePlaybookAction(tile.id)),
-        ),
-    });
-    return items;
   }
 
   const showTabNav =
@@ -1932,10 +1548,10 @@ export function DashboardClient({
         <section className="space-y-6">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
             {owned.map((b) => (
-              <PlaybookBookTile key={b.id} tile={b} actions={buildOwnerActions(b)} />
+              <PlaybookBookTile key={b.id} tile={b} />
             ))}
             {shared.map((b) => (
-              <PlaybookBookTile key={b.id} tile={b} actions={buildSharedActions(b)} />
+              <PlaybookBookTile key={b.id} tile={b} />
             ))}
           </div>
           {showArchived && archived.length > 0 && (
@@ -1949,15 +1565,7 @@ export function DashboardClient({
               </div>
               <div className="grid grid-cols-2 gap-3 opacity-70 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
                 {archived.map((b) => (
-                  <PlaybookBookTile
-                    key={b.id}
-                    tile={b}
-                    actions={
-                      b.role === "owner"
-                        ? buildOwnerActions(b)
-                        : buildSharedActions(b)
-                    }
-                  />
+                  <PlaybookBookTile key={b.id} tile={b} />
                 ))}
               </div>
             </>
@@ -1973,15 +1581,7 @@ export function DashboardClient({
               </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
                 {examples.map((b) => (
-                  <PlaybookBookTile
-                    key={b.id}
-                    tile={b}
-                    actions={
-                      b.role === "owner"
-                        ? buildOwnerActions(b)
-                        : buildSharedActions(b)
-                    }
-                  />
+                  <PlaybookBookTile key={b.id} tile={b} />
                 ))}
               </div>
             </>
@@ -1992,14 +1592,10 @@ export function DashboardClient({
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
             <NewPlaybookTile onClick={() => setShowCreate(true)} />
             {owned.map((b) => (
-              <PlaybookTile
-                key={b.id}
-                tile={b}
-                actions={buildOwnerActions(b)}
-              />
+              <PlaybookTile key={b.id} tile={b} />
             ))}
             {shared.map((b) => (
-              <PlaybookTile key={b.id} tile={b} actions={buildSharedActions(b)} />
+              <PlaybookTile key={b.id} tile={b} />
             ))}
           </div>
           {showArchived && archived.length > 0 && (
@@ -2013,15 +1609,7 @@ export function DashboardClient({
               </div>
               <div className="grid grid-cols-2 gap-3 opacity-70 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
                 {archived.map((b) => (
-                  <PlaybookTile
-                    key={b.id}
-                    tile={b}
-                    actions={
-                      b.role === "owner"
-                        ? buildOwnerActions(b)
-                        : buildSharedActions(b)
-                    }
-                  />
+                  <PlaybookTile key={b.id} tile={b} />
                 ))}
               </div>
             </>
@@ -2037,88 +1625,12 @@ export function DashboardClient({
               </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
                 {examples.map((b) => (
-                  <PlaybookTile
-                    key={b.id}
-                    tile={b}
-                    actions={
-                      b.role === "owner"
-                        ? buildOwnerActions(b)
-                        : buildSharedActions(b)
-                    }
-                  />
+                  <PlaybookTile key={b.id} tile={b} />
                 ))}
               </div>
             </>
           )}
         </section>
-      )}
-
-      {duplicating && (
-        <DuplicatePlaybookDialog
-          tile={duplicating}
-          pending={pending}
-          onClose={() => {
-            if (pending) return;
-            setDuplicating(null);
-          }}
-          onDuplicate={(name, dupOpts) => {
-            const tileId = duplicating.id;
-            startTransition(async () => {
-              const res = await duplicatePlaybookAction(tileId, name, {
-                copyKb: dupOpts.copyKb,
-              });
-              if (!res.ok) {
-                if ("needsUpgrade" in res && res.needsUpgrade) {
-                  setDuplicating(null);
-                  const existing =
-                    ("existingOwnedPlaybook" in res &&
-                      res.existingOwnedPlaybook) ||
-                    pickEditableFreePlaybook(ownedAll) ||
-                    null;
-                  setUpgradeNotice({
-                    title: "Your free playbook slot is taken",
-                    message: existing ? (
-                      <>
-                        Free accounts include one playbook —{" "}
-                        &ldquo;{existing.name}&rdquo;. Delete it to free the spot
-                        <span data-web-only>
-                          , or upgrade to Team Coach ($9/mo or $99/yr) for
-                          unlimited playbooks
-                        </span>
-                        .{" "}
-                        <span data-native-only>
-                          <NativeUpgradeCta label="Upgrade to Team Coach" fallback="Plan changes aren't available in this app." />
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        Free accounts include one playbook.
-                        <span data-web-only>
-                          {" "}
-                          Upgrade to Team Coach ($9/mo or $99/yr) to duplicate
-                          playbooks.
-                        </span>{" "}
-                        <span data-native-only>
-                          <NativeUpgradeCta label="Upgrade to Team Coach" fallback="Plan changes aren't available in this app." />
-                        </span>
-                      </>
-                    ),
-                    secondaryLabel: existing ? "Open my playbook" : undefined,
-                    secondaryHref: existing
-                      ? `/playbooks/${existing.id}`
-                      : undefined,
-                  });
-                } else {
-                  toast(res.error ?? "Something went wrong.", "error");
-                }
-                return;
-              }
-              setDuplicating(null);
-              toast("Playbook duplicated", "success");
-              refresh();
-            });
-          }}
-        />
       )}
 
       {showCreate && (
@@ -2129,29 +1641,6 @@ export function DashboardClient({
         />
       )}
 
-      {customizing && (
-        <CustomizeTeamDialog
-          playbookId={customizing.id}
-          initialName={customizing.name}
-          initialSeason={customizing.season ?? ""}
-          initialLogoUrl={customizing.logo_url ?? ""}
-          initialColor={customizing.color ?? colorFor(customizing)}
-          initialSettings={customizing.settings}
-          variant={customizing.sport_variant}
-          onClose={() => setCustomizing(null)}
-        />
-      )}
-
-      {inviting && (
-        <InviteTeamMemberDialog
-          playbookId={inviting.id}
-          teamName={inviting.name}
-          senderName={data.senderName ?? null}
-          canManage={inviting.role === "owner"}
-          onClose={() => setInviting(null)}
-        />
-      )}
-
       <UpgradeModal
         open={upgradeNotice !== null}
         onClose={() => setUpgradeNotice(null)}
@@ -2159,16 +1648,6 @@ export function DashboardClient({
         message={upgradeNotice?.message ?? ""}
         secondaryLabel={upgradeNotice?.secondaryLabel}
         secondaryHref={upgradeNotice?.secondaryHref}
-      />
-      <ArchiveLockedDialog
-        open={archiveGate !== null}
-        playbookName={archiveGate?.name ?? ""}
-        onClose={() => setArchiveGate(null)}
-        onDelete={() => {
-          const tile = archiveGate;
-          setArchiveGate(null);
-          if (tile) deletePlaybookOptimistic(tile);
-        }}
       />
       </div>
 
@@ -2473,122 +1952,6 @@ const PALETTE = [
   "#3B82F6", "#A855F7", "#EC4899", "#1C1C1E",
 ];
 
-function DuplicatePlaybookDialog({
-  tile,
-  pending,
-  onClose,
-  onDuplicate,
-}: {
-  tile: DashboardPlaybookTile;
-  pending: boolean;
-  onClose: () => void;
-  onDuplicate: (name: string, opts: { copyKb: boolean }) => void;
-}) {
-  const [name, setName] = useState(`${tile.name} (copy)`);
-  const [kbCount, setKbCount] = useState<number | null>(null);
-  const [copyKb, setCopyKb] = useState(false);
-
-  // Fetch the source playbook's KB note count once on mount so the
-  // "also copy notes" checkbox only appears when there's something to copy.
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const res = await getPlaybookKbCountAction(tile.id);
-      if (cancelled) return;
-      setKbCount(res.ok ? res.count : 0);
-    })();
-    return () => { cancelled = true; };
-  }, [tile.id]);
-
-  function submit() {
-    if (pending) return;
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    onDuplicate(trimmed, { copyKb });
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 overflow-y-auto bg-black/60"
-      onClick={(e) => {
-        if (pending) return;
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
-        className="flex min-h-full items-center justify-center p-4"
-        onClick={(e) => {
-          if (pending) return;
-          if (e.target === e.currentTarget) onClose();
-        }}
-      >
-      <div className="w-full max-w-md rounded-2xl border border-border bg-surface-raised shadow-elevated">
-        <div className="flex items-center justify-between border-b border-border px-5 py-3">
-          <h2 className="text-base font-bold text-foreground">Duplicate playbook</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={pending}
-            className="rounded-lg p-1.5 text-muted hover:bg-surface-inset hover:text-foreground disabled:opacity-50"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-
-        <div className="space-y-3 p-5">
-          <p className="text-sm text-muted">
-            This will copy every play in <span className="font-medium text-foreground">{tile.name}</span> into a new
-            playbook you own. You can rename it before creating.
-          </p>
-          <div className="space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-muted">Name</label>
-            <Input
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") submit();
-              }}
-            />
-          </div>
-          {kbCount !== null && kbCount > 0 && (
-            <label className="flex cursor-pointer items-start gap-2 rounded-lg bg-surface-inset px-3 py-2 text-sm text-foreground">
-              <input
-                type="checkbox"
-                checked={copyKb}
-                onChange={(e) => setCopyKb(e.target.checked)}
-                disabled={pending}
-                className="mt-0.5 size-4 cursor-pointer accent-primary"
-              />
-              <span className="min-w-0 flex-1">
-                <span className="font-medium">Also copy Coach Cal notes ({kbCount})</span>
-                <span className="mt-0.5 block text-xs text-muted">
-                  Schemes, terminology, opponent notes, and other team-specific knowledge
-                  attached to this playbook&apos;s Coach Cal knowledge base.
-                </span>
-              </span>
-            </label>
-          )}
-        </div>
-
-        <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
-          <Button variant="ghost" onClick={onClose} disabled={pending}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            onClick={submit}
-            disabled={!name.trim() || pending}
-            loading={pending}
-          >
-            {pending ? "Copying plays…" : "Create copy"}
-          </Button>
-        </div>
-      </div>
-      </div>
-    </div>
-  );
-}
 
 
 type HomeTab = "playbooks" | "calendar" | "inbox";

@@ -127,7 +127,7 @@ let root: Root;
 
 async function mount() {
   await act(async () => {
-    root.render(<PlaybookBookTile tile={tile} actions={[]} />);
+    root.render(<PlaybookBookTile tile={tile} />);
   });
   // Let listCachedPlaybooks resolve so downloadedIds is populated.
   await act(async () => {

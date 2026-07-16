@@ -105,7 +105,7 @@ describe("PlaybookBookTile under a runtime connectivity flip", () => {
         // React logs boundary-less errors to console.error and rethrows;
         // capture via window handler so a regression fails loudly here
         // instead of via unhandled exception noise.
-        <PlaybookBookTile tile={tile} actions={[]} />,
+        <PlaybookBookTile tile={tile} />,
       );
     });
     window.addEventListener("error", onError);

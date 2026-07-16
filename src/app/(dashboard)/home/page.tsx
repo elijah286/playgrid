@@ -9,7 +9,7 @@ import {
   DEFAULT_BETA_FEATURES,
 } from "@/lib/site/beta-features-config";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
-import { canUseAiFeatures, tierAtLeast } from "@/lib/billing/features";
+import { canUseAiFeatures } from "@/lib/billing/features";
 import { hasFreeCalPromptsRemaining } from "@/lib/billing/coach-cal-free-prompts";
 import { withTimeout } from "@/lib/perf/with-timeout";
 import { Suspense } from "react";
@@ -128,7 +128,6 @@ async function DashboardData({
     betaFeatures.team_calendar,
     { isAdmin, isEntitled: true },
   );
-  const canUseTeamFeatures = isAdmin || tierAtLeast(entitlement, "coach");
   const coachAiEntitled = isAdmin || canUseAiFeatures(entitlement);
   // Free users with trial prompts left get the real launcher, not the promo
   // (same gate as SiteHeader).
@@ -208,7 +207,6 @@ async function DashboardData({
           hideAnimation={hideAnimation}
           isAdmin={isAdmin}
           teamCalendarAvailable={teamCalendarAvailable}
-          canUseTeamFeatures={canUseTeamFeatures}
           inboxAlerts={inboxAlerts}
           activityEntries={activityEntries}
           initialTab={initialTab}
