@@ -50,6 +50,10 @@ vi.mock("next/link", () => ({
       {children}
     </a>
   ),
+  // The tile renders <LinkPendingSpinner>, which reads the nearest Link's
+  // pending state. Idle here — this suite is about WHICH element we navigate
+  // with, not the pending affordance.
+  useLinkStatus: () => ({ pending: false }),
 }));
 
 vi.mock("@/lib/offline/db", () => ({

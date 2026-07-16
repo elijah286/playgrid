@@ -9,6 +9,7 @@ import type { ReferralPromo } from "@/lib/data/referral-summary";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
 import { useOfflinePlayReadiness } from "@/lib/offline/useOfflinePlayReadiness";
 import { OfflineReadyGlyph } from "@/components/offline/OfflineReadyGlyph";
+import { LinkPendingSpinner } from "@/components/ui/LinkPendingSpinner";
 import { TutorialDeepLinkLauncher } from "@/features/tutorials/TutorialDeepLinkLauncher";
 import { track } from "@/lib/analytics/track";
 import { PlayNumberBadge, EditablePlayNumberBadge } from "@/features/editor/PlayNumberBadge";
@@ -313,6 +314,12 @@ function PlayTileLink({
   return (
     <Link
       {...rest}
+      // `relative` anchors the pending overlay. Opening a play is a dynamic
+      // route with a server round-trip (~500ms), and with no feedback the app
+      // reads as unresponsive — a coach can't tell their tap registered, so they
+      // tap again. The spinner renders nothing until the nav is actually
+      // pending, so the idle case is untouched.
+      className={`relative ${rest.className ?? ""}`}
       prefetch={warm ? true : false}
       onPointerEnter={(e) => {
         setWarm(true);
@@ -320,6 +327,7 @@ function PlayTileLink({
       }}
     >
       {children}
+      <LinkPendingSpinner overlay />
     </Link>
   );
 }

@@ -59,6 +59,7 @@ import { InboxBell } from "@/components/layout/InboxBell";
 import { useIsNativeApp } from "@/lib/native/useIsNativeApp";
 import { useOfflineState } from "@/lib/offline/useOfflineState";
 import { useOfflineLogo } from "@/lib/offline/useOfflineLogo";
+import { BackIcon } from "@/components/ui/LinkPendingSpinner";
 import { nativeShare } from "@/lib/native/share";
 import { isNativeApp } from "@/lib/native/isNativeApp";
 import { track } from "@/lib/analytics/track";
@@ -506,7 +507,7 @@ export function PlaybookHeader({
             className={`hidden sm:inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium transition-colors ${onAccentMuted} ${onAccentHover}`}
             aria-label="Back to home"
           >
-            <ArrowLeft className="size-4" />
+            <BackIcon className="size-4" />
             Home
           </Link>
           <div className={`hidden sm:block ${isLightBg ? "h-6 w-px bg-black/20" : "h-6 w-px bg-white/25"}`} />
@@ -515,7 +516,7 @@ export function PlaybookHeader({
             className={`sm:hidden inline-flex items-center justify-center -ml-1 size-9 shrink-0 rounded-lg transition-colors ${onAccent} ${onAccentHover}`}
             aria-label={isExamplePreview ? "Back to examples" : "Back to lobby"}
           >
-            <ArrowLeft className="size-5" />
+            <BackIcon className="size-5" />
           </Link>
           <div
             className={`relative size-9 sm:size-11 shrink-0 overflow-hidden rounded-lg sm:rounded-xl flex items-center justify-center text-base sm:text-lg font-extrabold ring-1 ${

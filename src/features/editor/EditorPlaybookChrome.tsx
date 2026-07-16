@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, WifiOff } from "lucide-react";
+import { WifiOff } from "lucide-react";
 import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { SportVariant } from "@/domain/play/types";
 import { InboxBell } from "@/components/layout/InboxBell";
 import { useOfflineGate } from "@/components/offline/OfflineGate";
 import { useOfflineLogo } from "@/lib/offline/useOfflineLogo";
+import { BackIcon } from "@/components/ui/LinkPendingSpinner";
 
 /**
  * Slim chrome banner for the play editor — mirrors the colored playbook
@@ -95,14 +96,17 @@ export function EditorPlaybookChrome({
           className={`-ml-1 inline-flex size-9 shrink-0 items-center justify-center rounded-lg transition-colors sm:hidden ${onAccent} ${onAccentHover}`}
           aria-label="Back to playbook"
         >
-          <ArrowLeft className="size-5" />
+          {/* Swap the arrow for a spinner while the nav is in flight — going
+              back is a dynamic route too, and a dead-looking button gets tapped
+              twice. */}
+          <BackIcon className="size-5" />
         </Link>
         <Link
           href={`/playbooks/${playbookId}`}
           className={`hidden items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium transition-colors sm:inline-flex ${onAccentMuted} ${onAccentHover}`}
           aria-label="Back to playbook"
         >
-          <ArrowLeft className="size-4" />
+          <BackIcon className="size-4" />
           Back
         </Link>
         <div

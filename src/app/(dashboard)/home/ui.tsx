@@ -77,6 +77,7 @@ import type { InboxAlert } from "@/app/actions/inbox";
 import type { ActivityEntry } from "@/app/actions/activity";
 import { useIsNativeApp } from "@/lib/native/useIsNativeApp";
 import { useOfflineState } from "@/lib/offline/useOfflineState";
+import { LinkPendingSpinner } from "@/components/ui/LinkPendingSpinner";
 import { WelcomeCoachProDialog } from "@/features/coach-ai/WelcomeCoachProDialog";
 import { TeamCoachWelcomeDialog } from "@/features/billing/TeamCoachWelcomeDialog";
 
@@ -450,6 +451,7 @@ function BookTileLink({
   children: React.ReactNode;
 }) {
   if (hardNav) {
+    // A document nav unloads the page; the browser owns the feedback.
     return (
       <a href={href} className={className}>
         {children}
@@ -459,6 +461,10 @@ function BookTileLink({
   return (
     <Link href={href} className={className}>
       {children}
+      {/* Opening a playbook is a dynamic route with a server round-trip, so
+          there's a gap where a tap looks ignored. Renders nothing until the nav
+          is actually pending. */}
+      <LinkPendingSpinner overlay />
     </Link>
   );
 }
