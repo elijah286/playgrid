@@ -1957,7 +1957,8 @@ function NoteProposalChip({
   );
 }
 
-function SaveDefensePlayChip({
+/** Exported for saveDefenseChipOffline.test.tsx — mounted directly there. */
+export function SaveDefensePlayChip({
   proposal,
   playbookId,
   state,
@@ -1975,10 +1976,24 @@ function SaveDefensePlayChip({
   async function commit(mode: "attached" | "new") {
     setPending(mode);
     setError(null);
-    const res =
-      mode === "attached"
-        ? await commitAttachDefenseToPlayAction(playbookId, proposal)
-        : await commitSaveDefenseProposalAction(playbookId, proposal);
+    // Offline the action REJECTS ("Load failed") instead of returning ok:false.
+    // Without this catch setPending(null) never ran, so the chip wedged in
+    // "Adding…" forever with both buttons disabled and no error shown — and the
+    // coach's only way out was closing the chat, which discards the proposal.
+    let res:
+      | Awaited<ReturnType<typeof commitAttachDefenseToPlayAction>>
+      | Awaited<ReturnType<typeof commitSaveDefenseProposalAction>>;
+    try {
+      res =
+        mode === "attached"
+          ? await commitAttachDefenseToPlayAction(playbookId, proposal)
+          : await commitSaveDefenseProposalAction(playbookId, proposal);
+    } catch {
+      // Leave the proposal untouched so a retry online costs the coach nothing.
+      setPending(null);
+      setError("Couldn't save that defense — you may be offline. Try again once you're back online.");
+      return;
+    }
     setPending(null);
     if (res.ok) {
       onUpdate({ status: "saved", mode, playId: res.playId });

@@ -953,10 +953,22 @@ function PlayEditorClientInner({
         const seedRoutes = opponentPickedRoutes ?? [];
         setSelectedOpponentPlayerId(playerId);
         void (async () => {
-          const res = await createCustomOpponentAction(playId, {
-            players: seedPlayers,
-            routes: seedRoutes,
-          });
+          // Offline the action REJECTS ("Load failed") instead of returning
+          // ok:false, so the branch below is unreachable. Unlike the transition
+          // sites, this is a voided IIFE — the rejection reaches no error
+          // boundary and disappears, leaving the defender rendered as selected
+          // with nothing created behind it. Silence here reads as success.
+          let res: Awaited<ReturnType<typeof createCustomOpponentAction>>;
+          try {
+            res = await createCustomOpponentAction(playId, {
+              players: seedPlayers,
+              routes: seedRoutes,
+            });
+          } catch {
+            toast("Couldn't add that opponent — you may be offline.", "error");
+            setSelectedOpponentPlayerId(null);
+            return;
+          }
           if (!res.ok) {
             toast(res.error, "error");
             setSelectedOpponentPlayerId(null);
