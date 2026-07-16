@@ -1167,8 +1167,15 @@ function PlaybookDetailClientInner({
     }
     setCreating(true);
     const playType = opts?.playType ?? "offense";
+    // The blank-play fallback must follow the side. Defaulting to
+    // defaultPlayers regardless put QB/RB/WR circles on a play stamped
+    // play_type='defense' — and that's the one state
+    // document.replaceDefensiveFormation's guard assumes can't exist, so a
+    // later formation swap would have deleted them all.
     const initialPlayers =
-      opts?.initialPlayers ?? formation?.players ?? defaultPlayers;
+      opts?.initialPlayers ??
+      formation?.players ??
+      (playType === "defense" ? defaultDefenders : defaultPlayers);
     const res = await createPlayAction(playbookId, {
       initialPlayers,
       formationId: formation?.id ?? null,

@@ -36,7 +36,7 @@ import {
   SPORT_VARIANT_LABELS,
   sportProfileForVariant,
 } from "@/domain/play/factory";
-import type { Player, PlayerRole, SportVariant } from "@/domain/play/types";
+import type { PlayDocument, Player, SportVariant } from "@/domain/play/types";
 import { fieldAspectFor } from "@/domain/play/render-config";
 import { defaultSettingsForVariant } from "@/domain/playbook/settings";
 
@@ -108,17 +108,26 @@ export function FormationEditorClient(props: Props) {
   );
   const [variant, setVariant] = useState<SportVariant>(defaultVariant);
 
-  /* ── play-document state (drives the canvas) ── */
+  /* ── play-document state (drives the canvas) ──
+   *
+   * The scratch document must declare its side. EditorCanvas reads
+   * metadata.playType to decide which way to clamp a dragged player against
+   * the LOS (defenders above, offense below); without it a defender whose
+   * role is "Other" gets clamped as offense and can be dragged onto the
+   * offense's side of the ball. */
+  const withDefensePlayType = (d: PlayDocument): PlayDocument =>
+    isDefense ? { ...d, metadata: { ...d.metadata, playType: "defense" } } : d;
+
   const initialDoc =
     props.mode === "edit"
       ? (() => {
           const base = createEmptyPlayDocument({
             sportProfile: sportProfileForVariant(props.initialVariant),
           });
-          return {
+          return withDefensePlayType({
             ...base,
             layers: { ...base.layers, players: props.initialPlayers },
-          };
+          });
         })()
       : (() => {
           // createEmptyPlayDocument seeds the offensive default set, so only
@@ -127,13 +136,13 @@ export function FormationEditorClient(props: Props) {
             sportProfile: sportProfileForVariant(defaultVariant),
           });
           if (!isDefense) return base;
-          return {
+          return withDefensePlayType({
             ...base,
             layers: {
               ...base.layers,
               players: defaultDefendersForVariant(defaultVariant),
             },
-          };
+          });
         })();
 
   const { doc, dispatch, replaceDocument } = usePlayEditor(initialDoc);
@@ -148,15 +157,17 @@ export function FormationEditorClient(props: Props) {
     const freshDoc = createEmptyPlayDocument({
       sportProfile: sportProfileForVariant(next),
     });
-    replaceDocument({
-      ...freshDoc,
-      layers: {
-        ...freshDoc.layers,
-        players: isDefense
-          ? defaultDefendersForVariant(next)
-          : defaultPlayersForVariant(next),
-      },
-    });
+    replaceDocument(
+      withDefensePlayType({
+        ...freshDoc,
+        layers: {
+          ...freshDoc.layers,
+          players: isDefense
+            ? defaultDefendersForVariant(next)
+            : defaultPlayersForVariant(next),
+        },
+      }),
+    );
     setSelectedPlayerId(null);
   }
 

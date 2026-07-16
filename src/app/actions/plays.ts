@@ -284,9 +284,16 @@ export async function createPlayAction(
   // Use the playbook's variant to drive both sport profile and default players.
   const effectiveVariant: SportVariant = opts?.variant ?? "flag_7v7";
   const sportProfile = sportProfileForVariant(effectiveVariant);
+  // The default roster follows the side. Defaulting to the offensive set on a
+  // play stamped play_type='defense' produces a play whose bodies contradict
+  // its type — QB/RB/WR circles on a defensive play — which downstream code
+  // (document.replaceDefensiveFormation's guard, EditorCanvas's LOS clamp)
+  // treats as impossible.
   const players: Player[] =
     opts?.initialPlayers ??
-    defaultPlayersForVariant(effectiveVariant, opts?.playerCount);
+    ((opts?.playType ?? "offense") === "defense"
+      ? defaultDefendersForVariant(effectiveVariant, opts?.playerCount)
+      : defaultPlayersForVariant(effectiveVariant, opts?.playerCount));
 
   // Pull the playbook's marking defaults so a fresh play inherits the
   // league preset's visibility (no-run zones on for IFAF flag, etc.).

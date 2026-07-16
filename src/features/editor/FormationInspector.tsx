@@ -36,14 +36,18 @@ const DEFENSE_ROLE_OPTIONS: { value: PlayerRole; label: string }[] = [
   { value: "OTHER", label: "Other" },
 ];
 
-// PlayDocument players carry no offense/defense team flag, so a defender is
-// identified by its role. Same convention as src/lib/learn/defense-resolver.ts.
-// Offensive roles never appear in this set, so offensive players always get
-// the offensive option list.
-const DEFENSIVE_ROLES = new Set<PlayerRole>(["DL", "LB", "CB", "S", "NB"]);
-
-function roleOptionsFor(player: Player): { value: PlayerRole; label: string }[] {
-  return DEFENSIVE_ROLES.has(player.role)
+/**
+ * Which role list to offer, keyed off the DOCUMENT's side rather than the
+ * selected player's current role.
+ *
+ * Reading it off the player makes "Other" a one-way trap: OTHER is in both
+ * lists, so a defender relabelled to Other is no longer a defensive role,
+ * the select flips to the offensive list, and there is no way back to CB.
+ * The document knows the side unconditionally and can't be relabelled out
+ * of it.
+ */
+function roleOptionsFor(doc: PlayDocument): { value: PlayerRole; label: string }[] {
+  return (doc.metadata.playType ?? "offense") === "defense"
     ? DEFENSE_ROLE_OPTIONS
     : OFFENSE_ROLE_OPTIONS;
 }
@@ -115,7 +119,7 @@ export function FormationInspector({
           <label className="text-xs font-medium text-muted">Role</label>
           <Select
             value={selectedPlayer.role}
-            options={roleOptionsFor(selectedPlayer)}
+            options={roleOptionsFor(doc)}
             onChange={(v) =>
               dispatch({
                 type: "player.setRole",
