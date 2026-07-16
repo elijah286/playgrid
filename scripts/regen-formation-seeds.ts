@@ -41,6 +41,16 @@ import {
   type CoachDiagram,
 } from "../src/features/coach-ai/coachDiagramConverter";
 import { sportProfileForVariant } from "../src/domain/play/factory";
+import {
+  DEFENSIVE_ALIGNMENTS,
+  alignmentPlayersWithUniqueIds,
+} from "../src/domain/play/defensiveAlignments";
+import {
+  defenseStarterSemanticKey,
+  slugifyDefensePart,
+} from "../src/domain/play/defenseStarters";
+
+type Side = "offense" | "defense";
 
 type LibraryVariant = "flag_5v5" | "flag_6v6" | "flag_7v7" | "tackle_11";
 const LIBRARY_VARIANTS: LibraryVariant[] = [
@@ -71,7 +81,7 @@ type Seed = {
   semanticKey: string;
   displayName: string;
   variant: LibraryVariant;
-  kind: "offense";
+  kind: "offense" | "defense";
   sortOrder: number;
   params: unknown;
 };
@@ -161,26 +171,202 @@ function generateSeeds(): Seed[] {
   return seeds;
 }
 
+// ── Defense ────────────────────────────────────────────────────────────────
+//
+// A defensive formation is BODIES ONLY — the same contract as offense. The
+// coverage's zones and assignments belong to the play, not the formation, so
+// they are deliberately dropped here; the new-play flow re-derives them from
+// the catalog via `semantic_key` when a coach starts a play from a starter.
+//
+// The unit is one seed per catalog ALIGNMENT (front × coverage), not per
+// front. Placement is a function of the coverage — a corner presses in Cover
+// 0 and bails in Cover 3 — so "front" alone does not determine where bodies
+// stand, and deduping to fronts would collapse flag to a meaningless
+// "Zone"/"Man" pair.
+
+/** Strip the catalog's explanatory glosses: "Nickel (4-2-5)" → "Nickel",
+ *  "Cover 4 (Quarters)" → "Cover 4". The parenthetical is a definition, not
+ *  part of the name a coach says out loud. */
+function stripGloss(s: string): string {
+  return s.replace(/\s*\([^)]*\)/g, "").trim();
+}
+
+/**
+ * The name a coach would actually call this look.
+ *
+ * In flag the "front" is a restatement of the coverage family ("5v5 Zone /
+ * Cover 2"), so prefixing it produces stutter — the coverage alone IS the
+ * name. In tackle the front is real, independent information (4-3 Over vs
+ * 3-4 vs 46 Bear), so it leads.
+ */
+function defenseDisplayName(front: string, coverage: string, variant: LibraryVariant): string {
+  const cov = stripGloss(coverage);
+  if (variant === "tackle_11") return `${stripGloss(front)} ${cov}`;
+  return cov;
+}
+
+/** Re-exported from the domain module so the ids the script bakes into the
+ *  migration and the keys the app resolves are produced by one function. */
+const slug = slugifyDefensePart;
+
+function buildDefenseSeed(
+  alignment: (typeof DEFENSIVE_ALIGNMENTS)[number],
+  strength: "left" | "right" | null,
+  sortOrder: number,
+): Seed | null {
+  const variant = alignment.variant as LibraryVariant;
+  const catalogPlayers = alignmentPlayersWithUniqueIds(alignment, strength ?? "right");
+
+  // Catalog coords are YARDS relative to the ball; CoachDiagram speaks the
+  // same units, and coachDiagramToPlayDocument does the normalization + the
+  // sanitizer pass (Rule 10). Defense-only diagram: no offense to render.
+  const diagram: CoachDiagram = {
+    title: alignment.coverage,
+    variant,
+    focus: "D",
+    players: catalogPlayers.map((p) => ({
+      id: p.uniqueId,
+      role: p.role,
+      x: p.x,
+      y: p.y,
+      team: "D",
+    })),
+    routes: [],
+    zones: [],
+  };
+
+  let doc;
+  try {
+    doc = coachDiagramToPlayDocument(diagram);
+  } catch (err) {
+    console.warn(
+      `[skip] ${alignment.front}/${alignment.coverage}/${variant}/${strength ?? "balanced"} — render error: ${(err as Error).message}`,
+    );
+    return null;
+  }
+
+  if (doc.layers.players.length !== catalogPlayers.length) {
+    throw new Error(
+      `Defender count drift for ${alignment.front}/${alignment.coverage}/${variant}: ` +
+        `catalog has ${catalogPlayers.length}, render produced ${doc.layers.players.length}.`,
+    );
+  }
+
+  // The converter assigns random ids (`cd_7_4q8yk`) via uid(). Seeds are
+  // committed to a migration and `updateFormationAndPropagateAction` matches
+  // play players to formation players BY ID, so the ids must be stable across
+  // regens. Remap to catalog-derived ids. The converter preserves input
+  // order; the label assertion below fails loudly if that ever stops holding.
+  const players = doc.layers.players.map((p, i) => {
+    const cp = catalogPlayers[i];
+    if (p.label !== cp.role && p.label !== cp.uniqueId) {
+      throw new Error(
+        `Player order drift for ${alignment.front}/${alignment.coverage}/${variant}: ` +
+          `slot ${i} rendered label "${p.label}" but catalog expected "${cp.role}". ` +
+          `coachDiagramToPlayDocument no longer preserves input order — remap by id instead.`,
+      );
+    }
+    return { ...p, id: `def_${slug(cp.uniqueId)}` };
+  });
+
+  const baseName = defenseDisplayName(alignment.front, alignment.coverage, variant);
+  const displayName = strength
+    ? `${baseName} ${strength === "right" ? "Right" : "Left"}`
+    : baseName;
+
+  // Encodes front + coverage + variant so the new-play flow can resolve this
+  // row back to its catalog alignment and install that coverage's zones.
+  // Built by the domain module that the app resolves with — see
+  // src/domain/play/defenseStarters.ts.
+  const semanticKey = defenseStarterSemanticKey(alignment, strength ?? "balanced");
+
+  return {
+    semanticKey,
+    displayName,
+    variant,
+    kind: "defense",
+    sortOrder,
+    params: {
+      displayName,
+      players,
+      sportProfile: sportProfileForVariant(variant),
+      lineOfScrimmageY: 0.4,
+    },
+  };
+}
+
+/** True when mirroring changes the SHAPE on the field, not merely which
+ *  label sits on which side. 5v5 Cover 2 mirrors onto itself (the FS/SS
+ *  swap sides but the picture is identical) — seeding it twice would give
+ *  coaches two tiles they can't tell apart. 6v6 Cover 3 offsets its rusher,
+ *  so Right and Left are genuinely different looks. */
+function isVisuallyAsymmetric(alignment: (typeof DEFENSIVE_ALIGNMENTS)[number]): boolean {
+  const posSig = (s: "left" | "right") =>
+    alignmentPlayersWithUniqueIds(alignment, s)
+      .map((p) => `${p.x},${p.y}`)
+      .sort()
+      .join("|");
+  return posSig("right") !== posSig("left");
+}
+
+function generateDefenseSeeds(): Seed[] {
+  const seeds: Seed[] = [];
+  let order = 0;
+  for (const alignment of DEFENSIVE_ALIGNMENTS) {
+    if (!LIBRARY_VARIANTS.includes(alignment.variant as LibraryVariant)) continue;
+    if (isVisuallyAsymmetric(alignment)) {
+      const r = buildDefenseSeed(alignment, "right", order++);
+      if (r) seeds.push(r);
+      const l = buildDefenseSeed(alignment, "left", order++);
+      if (l) seeds.push(l);
+    } else {
+      const s = buildDefenseSeed(alignment, null, order++);
+      if (s) seeds.push(s);
+    }
+  }
+  return seeds;
+}
+
 function escapeSqlString(s: string): string {
   return s.replace(/'/g, "''");
 }
 
-function emitMigration(seeds: Seed[]): string {
-  const header = `-- Auto-generated by scripts/regen-formation-seeds.ts — DO NOT EDIT BY HAND.
+const HEADERS: Record<Side, string> = {
+  offense: `-- Auto-generated by scripts/regen-formation-seeds.ts — DO NOT EDIT BY HAND.
 -- Source of truth: src/domain/football-kg/defs/formations.ts (FORMATIONS catalog).
--- Re-run \`npx tsx scripts/regen-formation-seeds.ts\` to regenerate after
--- catalog changes, then \`supabase db push\`.
+-- Re-run \`npx tsx scripts/regen-formation-seeds.ts --side=offense\` to
+-- regenerate after catalog changes, then \`supabase db push\`.
 --
 -- Replaces all offense seeds with catalog-derived rows. Defense and
--- special-teams seeds are left untouched (the catalog doesn't cover
--- those yet). Existing playbook copies of the old seeds (is_seed=false
--- rows owned by playbook_id) are NOT touched — only the seeds
--- themselves get regenerated.
+-- special-teams seeds are left untouched. Existing playbook copies of the
+-- old seeds (is_seed=false rows owned by playbook_id) are NOT touched —
+-- only the seeds themselves get regenerated.`,
+  defense: `-- Auto-generated by scripts/regen-formation-seeds.ts — DO NOT EDIT BY HAND.
+-- Source of truth: src/domain/football-kg/defs/schemes.ts, via the
+-- DEFENSIVE_ALIGNMENTS projection in src/domain/play/defensiveAlignments.ts.
+-- Re-run \`npx tsx scripts/regen-formation-seeds.ts --side=defense\` to
+-- regenerate after catalog changes, then \`supabase db push\`.
+--
+-- One row per catalog alignment (front × coverage), bodies only — the
+-- coverage's zones belong to the play, not the formation, and are re-derived
+-- from semantic_key when a coach starts a play from a starter.
+--
+-- Touches ONLY kind='defense' seeds. Offense seeds are left alone: they
+-- carry randomized player ids from a prior codegen run, so regenerating
+-- them would churn every row for no behavioral gain.
+--
+-- These rows are STARTERS: they are surfaced read-only in the new-play
+-- picker and cloned into a playbook lazily, on first use. Nothing is
+-- backfilled into the 609 existing playbooks.`,
+};
+
+function emitMigration(seeds: Seed[], side: Side): string {
+  const header = `${HEADERS[side]}
 
 begin;
 
 delete from public.formations
-where is_seed = true and kind = 'offense';
+where is_seed = true and kind = '${side}';
 
 insert into public.formations (playbook_id, is_seed, kind, semantic_key, sort_order, params)
 values
@@ -191,29 +377,36 @@ values
     const escaped = escapeSqlString(json);
     const key = escapeSqlString(s.semanticKey);
     const suffix = i === seeds.length - 1 ? ";" : ",";
-    return `  (null, true, 'offense', '${key}', ${s.sortOrder}, '${escaped}'::jsonb)${suffix}`;
+    return `  (null, true, '${side}', '${key}', ${s.sortOrder}, '${escaped}'::jsonb)${suffix}`;
   });
 
   return header + rows.join("\n") + "\n\ncommit;\n";
 }
 
-function main() {
-  const outArg = process.argv.find((a) => a.startsWith("--out="));
-  const out =
-    outArg?.split("=")[1] ??
-    resolve(
-      __dirname,
-      "../supabase/migrations/20260526170000_regen_formation_seeds.sql",
-    );
+const DEFAULT_OUT: Record<Side, string> = {
+  offense: "../supabase/migrations/20260526170000_regen_formation_seeds.sql",
+  defense: "../supabase/migrations/20260716090000_regen_defense_formation_seeds.sql",
+};
 
-  const seeds = generateSeeds();
+function main() {
+  const sideArg = process.argv.find((a) => a.startsWith("--side="))?.split("=")[1];
+  const side: Side = sideArg === "defense" ? "defense" : "offense";
+  if (sideArg && sideArg !== "offense" && sideArg !== "defense") {
+    console.error(`Unknown --side=${sideArg}. Expected "offense" or "defense".`);
+    process.exit(1);
+  }
+
+  const outArg = process.argv.find((a) => a.startsWith("--out="));
+  const out = outArg?.split("=")[1] ?? resolve(__dirname, DEFAULT_OUT[side]);
+
+  const seeds = side === "defense" ? generateDefenseSeeds() : generateSeeds();
   if (seeds.length === 0) {
     console.error("No seeds generated. Aborting.");
     process.exit(1);
   }
-  const sql = emitMigration(seeds);
+  const sql = emitMigration(seeds, side);
   writeFileSync(out, sql, "utf8");
-  console.log(`Wrote ${seeds.length} seed rows → ${out}`);
+  console.log(`Wrote ${seeds.length} ${side} seed rows → ${out}`);
   const byVariant: Record<string, number> = {};
   for (const s of seeds) byVariant[s.variant] = (byVariant[s.variant] || 0) + 1;
   console.log("by variant:", byVariant);

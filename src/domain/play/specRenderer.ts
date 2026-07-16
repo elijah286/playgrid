@@ -40,7 +40,7 @@ import {
 } from "./offensiveSynthesize";
 import {
   alignmentForStrength,
-  alignmentWithAssignments,
+  alignmentPlayersWithUniqueIds,
   findDefensiveAlignment,
   findZoneById,
   zonesForStrength,
@@ -252,24 +252,12 @@ function renderDefense(spec: PlaySpec, warnings: RenderWarning[]): DefenderRende
     return { players: [], zones: [], movement: [] };
   }
 
-  // Resolve player positions + catalog assignments for this strength.
-  const catalogPlayers = alignmentWithAssignments(alignment, strength);
-
-  // Suffix duplicate role labels so every defender has a UNIQUE diagram
-  // id. The catalog uses positional labels (two DTs, two CBs in many
-  // alignments) which collide as ids; downstream validation rejects
-  // duplicates with "Duplicate player id" and the routes can't address
-  // the second of a pair. Convention matches the offense path
-  // (playDocumentToCoachDiagram): first occurrence keeps the bare label,
-  // second becomes "DT2", third "DT3", etc. The display `role` always
-  // stays the bare label so the diagram still shows "DT" inside both
-  // triangles.
-  const seen = new Map<string, number>();
-  const uniqueIds = catalogPlayers.map((cp) => {
-    const count = (seen.get(cp.id) ?? 0) + 1;
-    seen.set(cp.id, count);
-    return count === 1 ? cp.id : `${cp.id}${count}`;
-  });
+  // Resolve player positions + catalog assignments + unique diagram ids
+  // for this strength. Id suffixing lives in the catalog module so the
+  // seed generator (scripts/regen-formation-seeds.ts) derives the exact
+  // same ids this renderer does.
+  const catalogPlayers = alignmentPlayersWithUniqueIds(alignment, strength);
+  const uniqueIds = catalogPlayers.map((cp) => cp.uniqueId);
 
   // Index spec deviations by defender id. Coaches reference defenders
   // by the SUFFIXED id (matching the rendered diagram); we also accept

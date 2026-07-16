@@ -224,6 +224,44 @@ export function alignmentWithAssignments(
 }
 
 /**
+ * Suffix duplicate catalog labels so every defender carries a unique id.
+ *
+ * The catalog authors `id` as a POSITIONAL LABEL (two CBs, two DTs, two
+ * safeties in most alignments), which collides when used as a diagram id:
+ * `coachDiagramToPlayDocument` throws on duplicates, and routes can't
+ * address the second of a pair. Convention matches the offense path
+ * (`playDocumentToCoachDiagram`): the first occurrence keeps the bare
+ * label, the second becomes "CB2", the third "CB3".
+ *
+ * The returned `role` always stays the BARE label, so both triangles still
+ * display "CB" — only the addressable id is disambiguated.
+ */
+export function alignmentPlayersWithUniqueIds(
+  alignment: DefensiveAlignment,
+  strength: "left" | "right" = "right",
+): Array<
+  DefensiveAlignmentPlayer & {
+    assignment: DefenderAssignmentSpec;
+    /** Unique within the alignment: "CB", "CB2", … */
+    uniqueId: string;
+    /** The catalog's bare positional label, for display. */
+    role: string;
+  }
+> {
+  const players = alignmentWithAssignments(alignment, strength);
+  const seen = new Map<string, number>();
+  return players.map((p) => {
+    const count = (seen.get(p.id) ?? 0) + 1;
+    seen.set(p.id, count);
+    return {
+      ...p,
+      uniqueId: count === 1 ? p.id : `${p.id}${count}`,
+      role: p.id,
+    };
+  });
+}
+
+/**
  * Look up a zone by id within an alignment. Optionally mirrors for strength.
  */
 export function findZoneById(
