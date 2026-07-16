@@ -23,6 +23,8 @@ import {
   updateCustomOpponentPlayersAction,
   updateCustomOpponentRoutesAction,
 } from "@/app/actions/plays";
+import { putPlayDraft, removePlayDraft } from "@/lib/offline/db";
+import { SaveStatePill } from "./SaveStatePill";
 import { usePlayEditor } from "./usePlayEditor";
 import { EditorCanvas } from "./EditorCanvas";
 import { RouteToolbar } from "./RouteToolbar";
@@ -111,6 +113,15 @@ function stableStringify(value: unknown): string {
 type Props = {
   playId: string;
   playbookId: string;
+  /**
+   * The play_versions id this editing session started from — the coach's
+   * "base". Recorded onto any local draft, because this is the only moment we
+   * know it, and a later upload needs it to tell "I changed nothing" from "we
+   * both changed it" without guessing. Guessing means false-positive conflict
+   * prompts for coaches who merely opened a play, which is worse than the bug.
+   * Null when unknown (e.g. library mode) — callers must tolerate that.
+   */
+  baseVersionId?: string | null;
   playbookName?: string | null;
   /** Hex accent color of the parent playbook. Drives the slim mobile
    *  chrome banner so coaches keep visual continuity with the playbook
@@ -292,6 +303,7 @@ function PlayEditorClientInner({
   isAdmin = false,
   isTutorialPlay = false,
   libraryMode = false,
+  baseVersionId = null,
   saveAdapter,
 }: Props) {
   const router = useRouter();
@@ -1220,6 +1232,21 @@ function PlayEditorClientInner({
 
   /* ---------- Auto-save ---------- */
   const [isSaving, setIsSaving] = useState(false);
+  /**
+   * What we can HONESTLY tell the coach about their work.
+   *  idle    — nothing to say yet
+   *  saved   — the server confirmed it
+   *  pending — it's safe on this device but NOT yet on the server
+   * The editor previously had no indicator at all (`isSaving` was declared and
+   * never rendered), so silence read as "saved" — including when the save had
+   * thrown offline and the work was going nowhere. Silence is the lie.
+   */
+  const [saveState, setSaveState] = useState<"idle" | "saved" | "pending">("idle");
+  /** The version this session started from; see the prop's docstring. */
+  const baseVersionIdRef = useRef<string | null>(baseVersionId);
+  useEffect(() => {
+    baseVersionIdRef.current = baseVersionId;
+  }, [baseVersionId]);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstDocRender = useRef(true);
   const [gameLock, setGameLock] = useState<{
@@ -1253,6 +1280,34 @@ function PlayEditorClientInner({
       canEdit && !isExamplePreview && !isArchived && gameLock == null;
   }, [canEdit, isExamplePreview, isArchived, gameLock]);
 
+  /**
+   * Write the coach's current work to the device. Called the moment an edit
+   * happens — BEFORE any save is attempted — so the work is durable regardless
+   * of whether the network exists, the save succeeds, or this component ever
+   * unmounts cleanly. Only ever removed on a CONFIRMED server write.
+   *
+   * Best-effort by necessity (IndexedDB can refuse right after a cold launch),
+   * but never silent: a failure here means the ONLY copy is React state, which
+   * is exactly the state we're eliminating, so it's worth a console record.
+   */
+  const persistDraft = useCallback(async () => {
+    if (!canSaveRef.current) return;
+    try {
+      await putPlayDraft({
+        playId,
+        playbookId,
+        document: docRef.current,
+        // The version this edit started from — captured now because this is the
+        // only moment we know it. It's what lets a later upload tell "I changed
+        // nothing" from "we both changed it" without guessing.
+        baseVersionId: baseVersionIdRef.current,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (e) {
+      console.error("[editor] could not persist draft locally", e);
+    }
+  }, [playId, playbookId]);
+
   const runSave = useCallback(async () => {
     if (!canSaveRef.current) return;
     if (!isDirtyRef.current) return;
@@ -1266,9 +1321,32 @@ function PlayEditorClientInner({
     // update because the library doesn't synthesize one. The
     // adapter's contract matches the default action's success / error
     // shape so the rest of this function doesn't need to fork.
-    const res = saveAdapter
-      ? await saveAdapter(sentDoc)
-      : await savePlayVersionAction(playId, sentDoc);
+    // A server action does NOT return {ok:false} when the network is gone — it
+    // THROWS (TypeError: "Load failed"). Without this try/catch the ok/else
+    // branches below were both unreachable offline: no toast, isSaving stuck
+    // true forever (which also permanently wedged the reload guard), and an
+    // unhandled rejection. The coach got no signal at all while their work went
+    // nowhere. The draft is already on the device by now, so a failure here is
+    // "not uploaded yet", not "lost".
+    // `null` means the call THREW (no network) — distinct from a returned
+    // {ok:false}, which is a server saying no.
+    const res = await (async () => {
+      try {
+        return saveAdapter
+          ? await saveAdapter(sentDoc)
+          : await savePlayVersionAction(playId, sentDoc);
+      } catch {
+        return null;
+      }
+    })();
+    if (res === null) {
+      // Offline or a blip. KEEP the draft — it is the only copy — and leave
+      // isDirtyRef true so the next tick retries. Say so honestly rather than
+      // implying it saved.
+      setSaveState("pending");
+      setIsSaving(false);
+      return;
+    }
     if (isGameModeLocked(res)) {
       setGameLock({
         playbookId: res.gameLock.playbookId,
@@ -1278,10 +1356,16 @@ function PlayEditorClientInner({
       // Only declare clean if local hasn't moved past what we sent.
       if (docRef.current === sentDoc) {
         isDirtyRef.current = false;
+        // CONFIRMED server write — the one and only condition under which the
+        // local copy may be dropped. If the coach kept editing while this was
+        // in flight, the draft still holds newer work: leave it.
+        void removePlayDraft(playId).catch(() => {});
       }
+      setSaveState("saved");
       router.refresh();
     } else {
       toast(res.error, "error");
+      setSaveState("pending");
     }
     setIsSaving(false);
   }, [playId, router, toast, saveAdapter]);
@@ -1299,6 +1383,13 @@ function PlayEditorClientInner({
     if (isArchived) return;
     if (gameLock) return;
     isDirtyRef.current = true;
+    // DURABLE FIRST, transmit second. Write the edit to the device before any
+    // network is involved, so it survives unmount, a backgrounded WebView being
+    // reclaimed by iOS (a process kill — no unmount, no flush), and a save that
+    // never leaves the device. Previously the doc lived ONLY in React state:
+    // three plays edited at halftime → likely zero survived the drive home,
+    // with no warning at any point. Cheap: one keyed put, fire-and-forget.
+    void persistDraft();
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     const delay = anySelected ? SAVE_SAFETY_NET_MS : SAVE_DEBOUNCE_IDLE_MS;
     autoSaveTimer.current = setTimeout(() => void runSave(), delay);
@@ -2138,6 +2229,13 @@ function PlayEditorClientInner({
           playbookVariant={playbookVariant}
           playbookOwnerName={playbookOwnerName}
         />
+      )}
+      {/* Tell the coach the truth about their work. The editor has never had a
+          save indicator — `isSaving` was declared and never rendered — so
+          silence meant "saved", including when the save had thrown offline and
+          the edit was going nowhere. Only shown once there IS something to say. */}
+      {canEdit && saveState !== "idle" && (
+        <SaveStatePill state={saveState} />
       )}
       {isNavPending && (
         <div

@@ -246,6 +246,13 @@ export default async function PlayEditPage({ params }: Props) {
       <PlayEditorClient
       playId={res.play.id}
       playbookId={res.play.playbook_id}
+      // The version this session starts from. getPlayForEditorAction has always
+      // returned it and this page has always dropped it on the floor — so every
+      // save was a blind full-document overwrite of whatever the server head
+      // happened to be by then. Forwarding it lets a local draft record its
+      // base, which is what makes honest conflict detection possible later
+      // (mine==base → take theirs; theirs==base → just upload; both moved → ask).
+      baseVersionId={(res.version?.id as string | null | undefined) ?? null}
       playbookName={(book?.name as string | null) ?? null}
       playbookColor={(book?.color as string | null) ?? null}
       playbookLogoUrl={(book?.logo_url as string | null) ?? null}

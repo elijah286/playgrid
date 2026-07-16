@@ -19,7 +19,10 @@
  */
 
 const DB_NAME = "XO Gridmaker-offline";
-const DB_VERSION = 1;
+/** v2 (2026-07-16): + the `drafts` store (see STORE_DRAFTS). Additive only —
+ *  onupgradeneeded creates the new store and touches nothing existing, so an
+ *  upgrade can never cost a coach a downloaded playbook. */
+const DB_VERSION = 2;
 
 /**
  * Format version of an offline copy.
@@ -46,6 +49,21 @@ export const OFFLINE_FORMAT_VERSION = 2;
 const STORE_PLAYBOOKS = "playbooks";
 const STORE_PLAYS = "plays";
 const STORE_DOCUMENTS = "documents";
+/**
+ * A coach's UNSAVED work — the only store that holds something the server does
+ * not. Everything else here is a copy of server truth and is disposable; a
+ * draft is not. Treat it accordingly: never clear one on anything less than a
+ * CONFIRMED server write.
+ *
+ * Why it exists: the editor became fully editable offline (2026-07-16) while
+ * every save stayed a server action with no catch. Offline that action REJECTS
+ * ("Load failed") rather than returning ok:false, so nothing surfaced and the
+ * doc — which lived only in React state — died at unmount, or with the WebView
+ * when iOS reclaimed it. Three plays edited at halftime → likely zero survived
+ * the drive home, with no warning. Rule: a change is durable on-device the
+ * moment it's made, independent of any network call.
+ */
+const STORE_DRAFTS = "drafts";
 
 /**
  * Fired when the offline cache changes (download/refresh/remove). Listeners
@@ -85,6 +103,11 @@ function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORE_DOCUMENTS)) {
         const s = db.createObjectStore(STORE_DOCUMENTS, { keyPath: "playId" });
         s.createIndex("playbookId", "playbookId", { unique: false });
+      }
+      // v2 — a coach's UNSAVED work. Created additively; existing stores are
+      // untouched, so upgrading can never cost someone a downloaded playbook.
+      if (!db.objectStoreNames.contains(STORE_DRAFTS)) {
+        db.createObjectStore(STORE_DRAFTS, { keyPath: "playId" });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -299,6 +322,79 @@ export async function getCachedPlayDocuments(
       .getAll(IDBKeyRange.only(playbookId)),
   );
   return new Map(rows.map((r) => [r.playId, r.document]));
+}
+
+/**
+ * An edit a coach has made that the SERVER HAS NOT CONFIRMED yet.
+ *
+ * `baseVersionId` is the play_versions id the coach started editing from. It's
+ * recorded at draft time because it is the only moment we know it — and it's
+ * what lets a later upload tell the four states apart honestly:
+ *   mine == base   → they changed nothing → take theirs, no prompt
+ *   theirs == base → nobody else moved    → just upload, no prompt
+ *   both moved     → a GENUINE conflict   → ask
+ * Without it we'd have to guess, and guessing means false-positive conflict
+ * prompts for coaches who merely opened a play — worse than the bug.
+ */
+export type PlayDraft = {
+  playId: string;
+  playbookId: string;
+  /** Serialized PlayDocument — the coach's actual work. */
+  document: unknown;
+  /** play_versions id this edit started from; null if it wasn't known. */
+  baseVersionId: string | null;
+  /** ISO — when the coach last touched it. */
+  updatedAt: string;
+};
+
+/**
+ * Record (or overwrite) the pending edit for a play. Called on every change
+ * while dirty, so it must stay cheap: one keyed put, no scans.
+ */
+export async function putPlayDraft(draft: PlayDraft): Promise<void> {
+  const db = await openDb();
+  const t = tx(db, [STORE_DRAFTS], "readwrite");
+  await promisify(t.objectStore(STORE_DRAFTS).put(draft));
+  await new Promise<void>((resolve, reject) => {
+    t.oncomplete = () => resolve();
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error);
+  });
+  notifyCacheChanged();
+}
+
+export async function getPlayDraft(playId: string): Promise<PlayDraft | null> {
+  const db = await openDb();
+  const t = tx(db, [STORE_DRAFTS], "readonly");
+  const row = await promisify<PlayDraft | undefined>(
+    t.objectStore(STORE_DRAFTS).get(playId),
+  );
+  return row ?? null;
+}
+
+/** Every pending edit on this device, oldest first (upload in the order made). */
+export async function listPlayDrafts(): Promise<PlayDraft[]> {
+  const db = await openDb();
+  const t = tx(db, [STORE_DRAFTS], "readonly");
+  const rows = await promisify<PlayDraft[]>(t.objectStore(STORE_DRAFTS).getAll());
+  return rows.sort((a, b) => (a.updatedAt < b.updatedAt ? -1 : 1));
+}
+
+/**
+ * Drop a draft. ONLY on a CONFIRMED server write (or an explicit discard by the
+ * coach) — never optimistically, never on a timeout, never because a save
+ * "probably" landed. This row is the only copy of that work.
+ */
+export async function removePlayDraft(playId: string): Promise<void> {
+  const db = await openDb();
+  const t = tx(db, [STORE_DRAFTS], "readwrite");
+  await promisify(t.objectStore(STORE_DRAFTS).delete(playId));
+  await new Promise<void>((resolve, reject) => {
+    t.oncomplete = () => resolve();
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error);
+  });
+  notifyCacheChanged();
 }
 
 export async function removeCachedPlaybook(playbookId: string): Promise<void> {
