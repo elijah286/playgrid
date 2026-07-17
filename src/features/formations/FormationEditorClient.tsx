@@ -50,6 +50,13 @@ const SPORT_OPTIONS = (
 /** Which side of the ball this editor is drawing. */
 export type FormationEditorKind = "offense" | "defense" | "special_teams";
 
+/** One label per side, so the picker and the read-only text can't drift. */
+const KIND_LABEL: Record<FormationEditorKind, string> = {
+  offense: "Offense",
+  defense: "Defense",
+  special_teams: "Special teams",
+};
+
 /**
  * Special teams is tackle-only — `specialTeamsTemplates` is authored for 11
  * players, and every other surface gates the option the same way. Offering it
@@ -58,27 +65,17 @@ export type FormationEditorKind = "offense" | "defense" | "special_teams";
 export function kindOptionsForVariant(
   variant: SportVariant,
 ): { value: FormationEditorKind; label: string }[] {
-  const opts: { value: FormationEditorKind; label: string }[] = [
-    { value: "offense", label: "Offense" },
-    { value: "defense", label: "Defense" },
-  ];
-  if (variant === "tackle_11") opts.push({ value: "special_teams", label: "Special teams" });
-  return opts;
+  const kinds: FormationEditorKind[] =
+    variant === "tackle_11"
+      ? ["offense", "defense", "special_teams"]
+      : ["offense", "defense"];
+  return kinds.map((k) => ({ value: k, label: KIND_LABEL[k] }));
 }
 
 const NAME_PLACEHOLDER: Record<FormationEditorKind, string> = {
   offense: "e.g. Trips Right",
   defense: "e.g. Cover 3",
   special_teams: "e.g. Punt",
-};
-
-/** Offense is the unmarked default, so it reads "New formation" — same
- *  convention as the unbadged offense tiles on the Plays and Formations tabs.
- *  Trailing space is deliberate; the qualifier is optional. */
-const HEADING_QUALIFIER: Record<FormationEditorKind, string> = {
-  offense: "",
-  defense: "defensive ",
-  special_teams: "special teams ",
 };
 
 /** The blank roster for a side. One place, so the initial document, the Type
@@ -390,8 +387,13 @@ export function FormationEditorClient(props: Props) {
             {backLabel}
           </Button>
         </Link>
+        {/* Structural, never the formation's name. It used to read "New
+            defensive formation", which competed with the Formation name field
+            right below it — two prominent strings, no way to tell which one
+            the coach was supposed to be looking at. The Type control states
+            the side; this states what you're doing. */}
         <h1 className="text-lg font-bold text-foreground">
-          {`${props.mode === "edit" ? "Edit" : "New"} ${HEADING_QUALIFIER[kind]}formation`}
+          {props.mode === "edit" ? "Edit formation" : "New formation"}
         </h1>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -493,21 +495,28 @@ export function FormationEditorClient(props: Props) {
         </div>
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-medium text-muted">Type</label>
-          <Select
-            value={kind}
-            onChange={handleKindChange}
-            options={kindOptionsForVariant(variant)}
-            className="w-40"
-            // Fixed once saved: updateFormationAction never rewrites `kind`,
-            // and flipping a saved formation's side would strand the plays
-            // already linked to it.
-            disabled={props.mode === "edit"}
-          />
+          {/* Chosen at creation, stated thereafter — same treatment as Sport
+              type, and for the same reason: a disabled dropdown offers a
+              choice it won't honour.
+
+              Deliberately not editable after the fact. Flipping a saved
+              formation's side isn't a field change — the players would have
+              to convert (receivers to defenders, circles to triangles), the
+              layout would have to mirror across the LOS, and every play
+              already linked to it would inherit the result. That's a
+              conversion feature, not a select. */}
           {props.mode === "edit" ? (
-            <p className="text-[11px] text-muted">
-              Set when the formation was created.
+            <p className="flex h-9 items-center text-sm font-medium text-foreground">
+              {KIND_LABEL[kind]}
             </p>
-          ) : null}
+          ) : (
+            <Select
+              value={kind}
+              onChange={handleKindChange}
+              options={kindOptionsForVariant(variant)}
+              className="w-40"
+            />
+          )}
         </div>
         <div className="flex flex-1 flex-col gap-1.5">
           <label className="text-xs font-medium text-muted">Formation name</label>
