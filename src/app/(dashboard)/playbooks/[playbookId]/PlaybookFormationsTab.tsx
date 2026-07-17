@@ -61,6 +61,7 @@ import {
   type SavedFormation,
 } from "@/app/actions/formations";
 import { CopyToPlaybookDialog, type CopyTarget } from "@/features/playbooks/CopyToPlaybookDialog";
+import { LinkPendingSpinner } from "@/components/ui/LinkPendingSpinner";
 import {
   ActionMenu,
   Button,
@@ -195,6 +196,43 @@ const NEW_FORMATION_KINDS: {
 ];
 
 /**
+ * A formation tile that shows its own pending state.
+ *
+ * Mirrors the Plays tab's PlayTileLink. Opening a formation is a dynamic route
+ * with a ~500ms server round-trip, and with no feedback the tile reads as
+ * unresponsive — a coach can't tell their tap registered, so they tap again.
+ * The route's loading.tsx covers the destination, but only the tile can show
+ * that THIS tile was the one tapped.
+ *
+ * LinkPendingSpinner reads `useLinkStatus` from the nearest ancestor Link, so
+ * this has to be a real Link — a button calling router.push has no pending
+ * state to read. It renders nothing until pending, so the idle case is free.
+ *
+ * Prefetch is off until hover (as on play tiles): a Formations tab can hold
+ * dozens of cards, and prefetching every editor route on mount would be a
+ * burst of requests for pages the coach mostly won't open.
+ */
+function FormationTileLink({
+  children,
+  ...rest
+}: React.ComponentProps<typeof Link>) {
+  const [warm, setWarm] = useState(false);
+  return (
+    <Link
+      {...rest}
+      prefetch={warm ? true : false}
+      onPointerEnter={(e) => {
+        setWarm(true);
+        rest.onPointerEnter?.(e);
+      }}
+    >
+      {children}
+      <LinkPendingSpinner overlay />
+    </Link>
+  );
+}
+
+/**
  * Does this formation survive the tab's filters?
  *
  * Extracted and exported so it can be tested directly. It also exists to
@@ -263,6 +301,11 @@ export function PlaybookFormationsTab({
    * control the editor won't honour.
    */
   const [kindPickerOpen, setKindPickerOpen] = useState(false);
+
+  /** The editor URL for a formation. One definition — the tile Link navigates
+   *  to it and the action menu's Edit pushes it. */
+  const editHrefFor = (f: SavedFormation) =>
+    `/formations/${f.id}/edit?returnToPlaybook=${playbookId}`;
 
   const newFormationHref = (kind: FormationKind) => {
     const q = new URLSearchParams({
@@ -628,11 +671,8 @@ export function PlaybookFormationsTab({
                           }}
                           formation={f}
                           isAdmin={isAdmin}
-                          onEdit={() =>
-                            router.push(
-                              `/formations/${f.id}/edit?returnToPlaybook=${playbookId}`,
-                            )
-                          }
+                          editHref={editHrefFor(f)}
+                          onEdit={() => router.push(editHrefFor(f))}
                           onCreatePlay={() =>
                             router.push(
                               `/plays/new?playbookId=${playbookId}&formationId=${f.id}`,
@@ -676,11 +716,8 @@ export function PlaybookFormationsTab({
                           }}
                           formation={f}
                           isAdmin={isAdmin}
-                          onEdit={() =>
-                            router.push(
-                              `/formations/${f.id}/edit?returnToPlaybook=${playbookId}`,
-                            )
-                          }
+                          editHref={editHrefFor(f)}
+                          onEdit={() => router.push(editHrefFor(f))}
                           onCreatePlay={() =>
                             router.push(
                               `/plays/new?playbookId=${playbookId}&formationId=${f.id}`,
@@ -852,6 +889,9 @@ export function PlaybookFormationsTab({
 type FormationCardProps = {
   formation: SavedFormation;
   isAdmin: boolean;
+  /** The editor URL. The tile is a Link so it can show its own pending
+   *  state; onEdit stays for the action menu, which needs a callback. */
+  editHref: string;
   onEdit: () => void;
   onCreatePlay: () => void;
   onCopy: (formation: SavedFormation) => void;
@@ -872,6 +912,7 @@ const FormationCard = function FormationCard({
   ref,
   formation,
   isAdmin,
+  editHref,
   onEdit,
   onCreatePlay,
   onCopy,
@@ -945,14 +986,20 @@ const FormationCard = function FormationCard({
           {isSelected && <Check className="size-3.5 text-primary" />}
         </div>
       )}
-      <button
-        type="button"
-        onClick={onEdit}
-        disabled={reorderMode || selectionMode}
-        className={`flex flex-1 flex-col p-4 text-left ${
+      {/* A Link, not a button that router.push-es — LinkPendingSpinner reads
+          the nearest ancestor Link's pending state, so only a real Link can
+          show that the tap registered. Opening a formation is a dynamic route
+          with a server round-trip; without this the card sat dead and coaches
+          tapped again. Same shape as the Plays tab's PlayTileLink, including
+          the pointer-events-none / tabIndex gating that replaces the button's
+          `disabled` during reorder and selection. */}
+      <FormationTileLink
+        href={editHref}
+        className={`relative flex flex-1 flex-col p-4 text-left ${
           reorderMode || selectionMode ? "pointer-events-none" : ""
         }`}
         tabIndex={reorderMode || selectionMode ? -1 : 0}
+        aria-label={`Open ${formation.displayName}`}
       >
         <div className="flex items-start gap-1.5 pr-8">
           <h3 className="min-w-0 flex-1 truncate font-semibold text-foreground">
@@ -968,7 +1015,7 @@ const FormationCard = function FormationCard({
         <p className="mt-2 truncate text-xs text-muted">
           {formation.players.length} {playerNoun(formation.kind)}
         </p>
-      </button>
+      </FormationTileLink>
 
       {!reorderMode && !selectionMode && (
         <div className="absolute right-2 top-2">
@@ -985,6 +1032,7 @@ const FormationRow = function FormationRow({
   ref,
   formation,
   isAdmin,
+  editHref,
   onEdit,
   onCreatePlay,
   onCopy,
@@ -1056,14 +1104,16 @@ const FormationRow = function FormationRow({
           {isSelected && <Check className="size-3.5 text-primary" />}
         </div>
       )}
-      <button
-        type="button"
-        onClick={onEdit}
-        disabled={reorderMode || selectionMode}
-        className={`flex min-w-0 flex-1 items-center gap-3 text-left ${
+      {/* Link, not a router.push button — the row needs its own pending state
+          for the same reason the card does. `relative` so the spinner overlay
+          has something to anchor to. */}
+      <FormationTileLink
+        href={editHref}
+        className={`relative flex min-w-0 flex-1 items-center gap-3 text-left ${
           reorderMode || selectionMode ? "pointer-events-none" : ""
         }`}
         tabIndex={reorderMode || selectionMode ? -1 : 0}
+        aria-label={`Open ${formation.displayName}`}
       >
         <div className="w-20 shrink-0 sm:w-28">
           <FormationThumbnail formation={formation} />
@@ -1083,7 +1133,7 @@ const FormationRow = function FormationRow({
             {formation.players.length} {playerNoun(formation.kind)}
           </div>
         </div>
-      </button>
+      </FormationTileLink>
       {!reorderMode && !selectionMode && (
         <div className="shrink-0">
           <ActionMenu items={items} />
