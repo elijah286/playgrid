@@ -157,29 +157,28 @@ class MainViewController: CAPBridgeViewController {
 
     // MARK: - Overscroll bounce
 
-    /// Enable WKWebView's *vertical* rubber-band overscroll at the
-    /// UIScrollView layer.
+    /// Disable WKWebView's rubber-band overscroll at the UIScrollView layer,
+    /// in every direction.
     ///
-    /// This used to be fully DISABLED (`bounces = false`) to stop a downward
-    /// drag at the top of the page from pulling the sticky header below the
-    /// status bar (the "white gap"). We now allow the vertical bounce again:
+    /// The top-level page bounce is owned by UIKit, NOT the web content — so
+    /// CSS (`overscroll-behavior`, min-height hacks) cannot control it; only
+    /// these scrollView flags can. That's why the web-only attempts had no
+    /// effect. We turn it fully OFF:
     ///
-    ///   1. The top-of-page pull is intercepted by the JS pull-to-refresh
-    ///      gesture (src/components/native/PullToRefresh.tsx), which calls
-    ///      preventDefault on the touch and drives its own indicator — so the
-    ///      native top bounce never fires there and the white gap can't
-    ///      reappear on normal pages.
-    ///   2. Coaches with a short playbook (a few plays that fit on screen)
-    ///      need the standard "pull and it gives, release and it snaps back"
-    ///      cue, or the list feels frozen. `alwaysBounceVertical = true` makes
-    ///      the page rubber-band even when its content fits the viewport —
-    ///      which CSS / a min-height hack cannot do, because (per WebKit) the
-    ///      top-level bounce is owned by UIKit, not the web content. This is
-    ///      why the earlier web-only attempts had no effect.
+    ///   - A downward drag at the TOP no longer pulls the sticky colored
+    ///     header below the status bar (the "white gap").
+    ///   - An upward drag at the BOTTOM no longer exposes dead space beneath
+    ///     the content.
     ///
-    /// Horizontal bounce and zoom bounce stay OFF: the app never scrolls
-    /// sideways and pinch-zoom is disabled, so a sideways/zoom rubber-band
-    /// would only ever be an accidental, off-axis gesture.
+    /// The page still scrolls normally for long content — `bounces` only
+    /// governs the rubber-band at the edges — it simply stops hard at each
+    /// edge now. Pull-to-refresh (src/components/native/PullToRefresh.tsx) is
+    /// unaffected: it's a JS touch-delta gesture that preventDefaults and
+    /// drives its own indicator, independent of the native bounce.
+    ///
+    /// (This restores the original `bounces = false` behavior; the interim
+    /// "allow a short-list bounce cue" experiment made the app feel unglued
+    /// from its chrome and is reverted.)
     ///
     /// NSLog output appears in `xcrun simctl spawn <udid> log stream` and the
     /// Xcode console attached to a physical device.
@@ -188,8 +187,8 @@ class MainViewController: CAPBridgeViewController {
             NSLog("[XOGrid] configureBounce(\(label)) SKIPPED — webView is nil")
             return
         }
-        scrollView.bounces = true
-        scrollView.alwaysBounceVertical = true
+        scrollView.bounces = false
+        scrollView.alwaysBounceVertical = false
         scrollView.alwaysBounceHorizontal = false
         scrollView.bouncesZoom = false
         NSLog(

@@ -790,19 +790,18 @@ html.native-shell.native-ready #native-loading-overlay {
   .indeterminate-bar::after { animation: none; width: 100%; opacity: 0.5; }
 }
 
-/* Lock the native rubber-band bounce app-wide. The page must not scroll past
- * its content in either direction: the TOP pull dragged the sticky colored
- * header down off the status bar (exposing a white gap), and the BOTTOM pull
- * exposed dead space beneath the content — both read as the app coming
- * "unglued" from its chrome. Custom pull-to-refresh (PullToRefresh.tsx) is
- * unaffected: it drives its own indicator off touch deltas, not the native
- * bounce. Scoped to `.native-shell` (added pre-paint in layout.tsx) so web
- * users are untouched. Requires iOS 16+ in WKWebView.
+/* Suppress scroll-chaining / overscroll glow app-wide. NOTE: on iOS this does
+ * NOT stop the top-level rubber-band bounce — that's owned by UIKit's
+ * UIScrollView, disabled natively in ios/App/App/MainViewController.swift
+ * (`configureBounce`), because WebKit ignores `overscroll-behavior` on the
+ * document scroller. This rule still earns its keep: it kills the Android
+ * WebView overscroll glow/stretch and stops nested scrollers from chaining
+ * their scroll to the page. Scoped to `.native-shell` so web is untouched.
  *
- * (This subsumes the editor's `.no-overscroll-bounce` opt-out — that class,
- * still toggled by EditorOverscrollLock, is now redundant but harmless. The
- * old `min-height: calc(100dvh + 1px)` hack that force-enabled bounce on short
- * pages is intentionally gone: with bounce locked there's nothing to enable.) */
+ * (The editor's `.no-overscroll-bounce` class, still toggled by
+ * EditorOverscrollLock, is now redundant but harmless. The old
+ * `min-height: calc(100dvh + 1px)` hack that force-enabled bounce on short
+ * pages is intentionally gone.) */
 html.native-shell,
 html.native-shell body {
   overscroll-behavior: none;
