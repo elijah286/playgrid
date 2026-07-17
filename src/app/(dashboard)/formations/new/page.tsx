@@ -1,7 +1,5 @@
-import {
-  FormationEditorClient,
-  type FormationEditorKind,
-} from "@/features/formations/FormationEditorClient";
+import { FormationEditorClient } from "@/features/formations/FormationEditorClient";
+import type { FormationEditorKind } from "@/features/formations/formationKind";
 import { ExamplePreviewProvider } from "@/features/admin/ExamplePreviewContext";
 import type { SportVariant } from "@/domain/play/types";
 import { createClient } from "@/lib/supabase/server";

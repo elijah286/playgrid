@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft,
   ChevronLeft,
   ChevronRight,
   FilePlus,
@@ -19,6 +18,7 @@ import {
   type SavedFormation,
 } from "@/app/actions/formations";
 import { PlaybookFormationSearchMenu } from "@/features/formations/PlaybookFormationSearchMenu";
+import { BackIcon } from "@/components/ui/LinkPendingSpinner";
 import {
   Button,
   Input,
@@ -40,8 +40,12 @@ import {
   sportProfileForVariant,
 } from "@/domain/play/factory";
 import type { PlayDocument, Player, SportVariant } from "@/domain/play/types";
+import { KIND_LABEL, type FormationEditorKind } from "./formationKind";
+
+// NOT re-exported. Re-exporting from a "use client" module makes the export a
+// client reference again — the very bug this move fixes. Consumers import from
+// ./formationKind directly.
 import { fieldAspectFor } from "@/domain/play/render-config";
-import { defaultSettingsForVariant } from "@/domain/playbook/settings";
 
 const SPORT_OPTIONS = (
   Object.entries(SPORT_VARIANT_LABELS) as [SportVariant, string][]
@@ -58,48 +62,6 @@ const SPORT_OPTIONS = (
 function sportOptionsForKind(kind: FormationEditorKind) {
   if (kind !== "special_teams") return SPORT_OPTIONS;
   return SPORT_OPTIONS.filter((o) => o.value === "tackle_11");
-}
-
-/** Which side of the ball this editor is drawing. */
-export type FormationEditorKind = "offense" | "defense" | "special_teams";
-
-/**
- * A stored `formations.kind` as an editor side.
- *
- * FormationKind is aliased to PlayType, which also carries "practice_plan" —
- * not a thing this editor draws. Callers used to narrow with an inline ternary
- * (`kind === "defense" ? "defense" : "offense"`), which was correct until
- * special teams shipped and then silently collapsed ST formations to offense.
- * TypeScript can't catch that: the narrowed union is a valid subset.
- *
- * So the mapping lives here, next to the type, and is exhaustive by
- * construction — a new side added to FormationEditorKind fails the build here
- * rather than degrading quietly at a call site.
- */
-export function formationEditorKind(kind: string | null | undefined): FormationEditorKind {
-  return kind === "defense" || kind === "special_teams" ? kind : "offense";
-}
-
-/** One label per side, so the picker and the read-only text can't drift. */
-const KIND_LABEL: Record<FormationEditorKind, string> = {
-  offense: "Offense",
-  defense: "Defense",
-  special_teams: "Special teams",
-};
-
-/**
- * Special teams is tackle-only — `specialTeamsTemplates` is authored for 11
- * players, and every other surface gates the option the same way. Offering it
- * on a 5v5 playbook would advertise a roster we can't produce.
- */
-export function kindOptionsForVariant(
-  variant: SportVariant,
-): { value: FormationEditorKind; label: string }[] {
-  const kinds: FormationEditorKind[] =
-    variant === "tackle_11"
-      ? ["offense", "defense", "special_teams"]
-      : ["offense", "defense"];
-  return kinds.map((k) => ({ value: k, label: KIND_LABEL[k] }));
 }
 
 const NAME_PLACEHOLDER: Record<FormationEditorKind, string> = {
@@ -406,7 +368,17 @@ export function FormationEditorClient(props: Props) {
       {/* Header */}
       <header className="flex flex-wrap items-center gap-3 border-b border-border pb-4">
         <Link href={backHref}>
-          <Button variant="ghost" size="sm" leftIcon={ArrowLeft}>
+          {/* Swap the arrow for a spinner while the nav is in flight, same as
+              the play editor's back link — going back is a dynamic route too,
+              and a dead-looking button gets tapped twice. BackIcon reads the
+              nearest ancestor Link's pending state, so it must stay inside
+              this Link. */}
+          {/* BackIcon as a child rather than `leftIcon`: that prop is typed
+              LucideIcon and BackIcon is a plain component. The button's own
+              gap-1.5 spaces it identically, which beats widening a shared
+              primitive's type for one caller. */}
+          <Button variant="ghost" size="sm">
+            <BackIcon className="size-4" />
             {backLabel}
           </Button>
         </Link>

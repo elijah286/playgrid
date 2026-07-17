@@ -108,7 +108,7 @@ import {
   materializeStarterFormationAction,
 } from "@/app/actions/formations";
 import type { SavedFormation } from "@/app/actions/formations";
-import type { FormationEditorKind } from "@/features/formations/FormationEditorClient";
+import type { FormationEditorKind } from "@/features/formations/formationKind";
 import { PlaybookFormationsTab } from "./PlaybookFormationsTab";
 import { GameResultsPanel } from "@/features/game-results/GameResultsPanel";
 import { CopyToPlaybookDialog, type CopyTarget } from "@/features/playbooks/CopyToPlaybookDialog";

@@ -10,7 +10,7 @@
  * for a variant, and that each side brings its own players and glyph.
  */
 import { describe, expect, it } from "vitest";
-import { formationEditorKind, kindOptionsForVariant } from "./FormationEditorClient";
+import { formationEditorKind, kindOptionsForVariant } from "./formationKind";
 import {
   defaultDefendersForVariant,
   defaultPlayersForVariant,

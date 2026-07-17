@@ -3,10 +3,8 @@ import {
   listFormationsAction,
   listFormationsForPlaybookAction,
 } from "@/app/actions/formations";
-import {
-  FormationEditorClient,
-  formationEditorKind,
-} from "@/features/formations/FormationEditorClient";
+import { FormationEditorClient } from "@/features/formations/FormationEditorClient";
+import { formationEditorKind } from "@/features/formations/formationKind";
 import type { SportVariant } from "@/domain/play/types";
 
 export const metadata = { title: "Edit Formation — XO Gridmaker" };
