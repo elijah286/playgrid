@@ -96,6 +96,21 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  // Pin the layout viewport to device width at 100% scale, and — critically —
+  // set a scale FLOOR of 1. Without a floor, iOS WKWebView "shrink-to-fit":
+  // the moment ANY element momentarily overflows the viewport width (a
+  // late-rendering banner, an async data-driven re-render like the 5s offline
+  // refresh, a field a few px too wide), iOS zooms the ENTIRE page out to fit
+  // and leaves it there until the next full reload. That is the "whole content
+  // is slightly too small, pull-to-refresh fixes it, then it reverts after a
+  // few seconds" bug: a page-level zoom, not a single mis-sized element, which
+  // is why capping individual element widths only ever whack-a-moled it.
+  // `minimumScale: 1` forbids the zoom-out entirely — overflow now scrolls or
+  // clips instead of shrinking the page. Zoom-IN is left unrestricted so
+  // accessibility pinch-zoom still works (no maximumScale / userScalable lock).
+  width: "device-width",
+  initialScale: 1,
+  minimumScale: 1,
   // viewportFit=cover lets the WebView render edge-to-edge into the
   // status-bar zone and behind the home indicator. Components opt into
   // safe-area insets where their content needs to clear those zones —
