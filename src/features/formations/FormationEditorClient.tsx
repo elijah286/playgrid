@@ -326,7 +326,15 @@ export function FormationEditorClient(props: Props) {
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    // Same width cap as the play editor, deliberately the same class rather
+    // than a copy of its calc — the two editors show the same field and drifted
+    // apart precisely because they sized it independently. `.play-editor-content`
+    // caps this wrapper (and so the header and the grid below) to the field at
+    // its natural max size, reading `--field-aspect` from here.
+    <div
+      className="play-editor-content flex flex-col gap-5"
+      style={{ ["--field-aspect" as string]: String(fieldAspect) }}
+    >
       {isPreview && <ExamplePreviewBanner />}
       {/* Header */}
       <header className="flex flex-wrap items-center gap-3 border-b border-border pb-4">
@@ -460,7 +468,10 @@ export function FormationEditorClient(props: Props) {
       </div>
 
       {/* Editor area */}
-      <div className="grid min-h-0 gap-5 lg:grid-cols-[1fr_280px]">
+      {/* Matches the play editor's grid: minmax(0,1fr) so the field column can
+          actually shrink, and a 320px sidebar (was 280px) so the two editors'
+          inspectors are the same width. */}
+      <div className="grid min-h-0 min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         {/* Canvas */}
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2 text-xs text-muted">
@@ -470,11 +481,21 @@ export function FormationEditorClient(props: Props) {
               role, and style.
             </span>
           </div>
-          {/* Fixed 8:5 canvas — sport type changes field proportions inside
-              but never resizes this box. Green bg hides any letterboxing. */}
+          {/* The field's own aspect, same as the play editor — not a fixed box.
+              The 8:5 this used to hardcode is flag_7v7's ratio, so 7v7 looked
+              right by coincidence while flag_5v5 (1.33) rendered 20% too wide
+              and tackle_11 (2.83) far too narrow, each letterboxed against the
+              green backdrop that hid the mismatch. Switching Sport type now
+              reshapes the box, which is the honest outcome: it IS a different
+              field. `field-viewport` adds the shared mobile height cap. */}
           <div
-            className="relative w-full overflow-hidden rounded-xl bg-[#2D8B4E]"
-            style={{ aspectRatio: "8 / 5" }}
+            className="field-viewport relative mx-auto w-full overflow-hidden rounded-xl bg-surface-inset"
+            style={
+              {
+                aspectRatio: `${fieldAspect} / 1`,
+                ["--field-aspect" as string]: String(fieldAspect),
+              } as React.CSSProperties
+            }
           >
             <EditorCanvas
               doc={doc}
