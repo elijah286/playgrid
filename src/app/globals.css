@@ -790,32 +790,22 @@ html.native-shell.native-ready #native-loading-overlay {
   .indeterminate-bar::after { animation: none; width: 100%; opacity: 0.5; }
 }
 
-/* Native rubber-band bounce: allowed app-wide (overscroll-behavior: auto, the
- * default) so a coach can pull a short list — e.g. a playbook with 4 plays —
- * and feel it give, a "nothing more below" cue, instead of the page feeling
- * frozen. The TOP pull that used to drag the sticky header below the status
- * bar (exposing a white gap) is now owned by pull-to-refresh
- * (PullToRefresh.tsx), which preventDefaults it — so the bounce only manifests
- * at the bottom. The editor route opts out via `.no-overscroll-bounce`
- * (EditorOverscrollLock): bottom-bounce adds nothing on that focused surface,
- * and edit mode suppresses pull-to-refresh, which would otherwise reopen the
- * gap. Scoped to `.native-shell` (added pre-paint in layout.tsx) so web users
- * are untouched. Requires iOS 16+ in WKWebView. */
-html.native-shell.no-overscroll-bounce,
-html.native-shell.no-overscroll-bounce body {
+/* Lock the native rubber-band bounce app-wide. The page must not scroll past
+ * its content in either direction: the TOP pull dragged the sticky colored
+ * header down off the status bar (exposing a white gap), and the BOTTOM pull
+ * exposed dead space beneath the content — both read as the app coming
+ * "unglued" from its chrome. Custom pull-to-refresh (PullToRefresh.tsx) is
+ * unaffected: it drives its own indicator off touch deltas, not the native
+ * bounce. Scoped to `.native-shell` (added pre-paint in layout.tsx) so web
+ * users are untouched. Requires iOS 16+ in WKWebView.
+ *
+ * (This subsumes the editor's `.no-overscroll-bounce` opt-out — that class,
+ * still toggled by EditorOverscrollLock, is now redundant but harmless. The
+ * old `min-height: calc(100dvh + 1px)` hack that force-enabled bounce on short
+ * pages is intentionally gone: with bounce locked there's nothing to enable.) */
+html.native-shell,
+html.native-shell body {
   overscroll-behavior: none;
-}
-
-/* iOS only rubber-bands a scroll view that actually has somewhere to scroll.
- * A short list — a playbook with a few plays — fits the viewport, so on its
- * own it sits dead: no give, feels frozen. Force the scroll root a hair taller
- * than the viewport so the page is always minimally scrollable; iOS then
- * rubber-bands it (the bounce itself is full-sized, not limited to that 1px).
- * Overrides the `min-h-[100dvh]` utility on <body>. Scoped to bounce-enabled
- * native views — the editor opts out via `.no-overscroll-bounce`. The extra
- * pixel sits below the fold, invisible. */
-html.native-shell:not(.no-overscroll-bounce) body {
-  min-height: calc(100dvh + 1px);
 }
 
 /* Safe-area handling: only horizontal padding goes on <body>. Vertical
