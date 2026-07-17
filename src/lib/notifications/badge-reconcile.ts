@@ -82,11 +82,16 @@ export async function reconcileBadgeForUser(
       return { ok: true, status: "skipped", reason: "count-underivable" };
     }
 
-    const stale = tokens.filter((t) => {
-      // Never badged and nothing to show → the icon is already clean.
-      if (t.last_badge === null) return count > 0;
-      return t.last_badge !== count;
-    });
+    // NULL is UNKNOWN, not "clean" — so it counts as stale and we reconcile once
+    // to establish a known state. This matters enormously right after the
+    // last_badge migration: every installed device is NULL, and those are
+    // precisely the devices whose badge may be stuck. Reading NULL as "never
+    // badged, nothing to clear" would skip the entire population this exists to
+    // repair (verified: the reporting account had last_badge NULL + count 0 —
+    // i.e. exactly the stuck case — and would have been passed over).
+    // Cost of being wrong the other way is one silent badge-only push per device,
+    // once, which is why NULL resolves toward acting rather than assuming.
+    const stale = tokens.filter((t) => t.last_badge !== count);
     if (stale.length === 0) return { ok: true, status: "already-current", count };
 
     // title/body empty → buildApnsPayload emits no alert and no sound, so this

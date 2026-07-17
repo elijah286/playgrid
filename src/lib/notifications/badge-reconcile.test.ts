@@ -89,14 +89,24 @@ describe("reconcileBadgeForUser", () => {
     expect(sendApnsToTokens).toHaveBeenCalledTimes(1);
   });
 
-  it("skips a never-badged device with an empty inbox (nothing stuck to clear)", async () => {
+  // THE regression that matters. Right after the last_badge migration every
+  // installed device is NULL — and those are exactly the devices whose badge may
+  // be stuck. An earlier cut read NULL as "never badged, nothing to clear" and
+  // skipped them, which would have left every reported stuck badge (including
+  // the account that reported the bug: last_badge NULL, count 0) unrepaired.
+  // NULL is UNKNOWN: reconcile once to establish a known state.
+  it("reconciles a NULL (unknown) device even when the count is 0 — the stuck case", async () => {
     computeInboxBadgeCount.mockResolvedValue(0);
-    const { admin } = makeAdmin([{ id: "d1", token: "tok", last_badge: null }]);
+    const { admin, updates } = makeAdmin([{ id: "d1", token: "tok", last_badge: null }]);
 
     const res = await reconcileBadgeForUser(admin, "u1");
 
-    expect(res).toEqual({ ok: true, status: "already-current", count: 0 });
-    expect(sendApnsToTokens).not.toHaveBeenCalled();
+    expect(res).toMatchObject({ ok: true, status: "reconciled", count: 0 });
+    expect(sendApnsToTokens).toHaveBeenCalledTimes(1);
+    const [, tokens] = sendApnsToTokens.mock.calls[0];
+    expect(tokens).toEqual([{ id: "d1", token: "tok", badge: 0 }]);
+    // And it only happens once per device — last_badge is now known.
+    expect(updates).toContainEqual({ last_badge: 0, ids: ["d1"] });
   });
 
   it("badges a never-badged device when there IS something to show", async () => {
