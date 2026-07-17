@@ -33,6 +33,7 @@ import {
   createEmptyPlayDocument,
   defaultDefendersForVariant,
   defaultPlayersForVariant,
+  defaultSpecialTeamsPlayers,
   SPORT_VARIANT_LABELS,
   sportProfileForVariant,
 } from "@/domain/play/factory";
@@ -44,11 +45,47 @@ const SPORT_OPTIONS = (
   Object.entries(SPORT_VARIANT_LABELS) as [SportVariant, string][]
 ).map(([value, label]) => ({ value, label }));
 
+/** Which side of the ball this editor is drawing. */
+export type FormationEditorKind = "offense" | "defense" | "special_teams";
+
 /**
- * Which side of the ball this editor is drawing. A subset of
- * `FormationKind` — special teams isn't buildable here yet.
+ * Special teams is tackle-only — `specialTeamsTemplates` is authored for 11
+ * players, and every other surface gates the option the same way. Offering it
+ * on a 5v5 playbook would advertise a roster we can't produce.
  */
-export type FormationEditorKind = "offense" | "defense";
+export function kindOptionsForVariant(
+  variant: SportVariant,
+): { value: FormationEditorKind; label: string }[] {
+  const opts: { value: FormationEditorKind; label: string }[] = [
+    { value: "offense", label: "Offense" },
+    { value: "defense", label: "Defense" },
+  ];
+  if (variant === "tackle_11") opts.push({ value: "special_teams", label: "Special teams" });
+  return opts;
+}
+
+const NAME_PLACEHOLDER: Record<FormationEditorKind, string> = {
+  offense: "e.g. Trips Right",
+  defense: "e.g. Cover 3",
+  special_teams: "e.g. Punt",
+};
+
+/** Offense is the unmarked default, so it reads "New formation" — same
+ *  convention as the unbadged offense tiles on the Plays and Formations tabs.
+ *  Trailing space is deliberate; the qualifier is optional. */
+const HEADING_QUALIFIER: Record<FormationEditorKind, string> = {
+  offense: "",
+  defense: "defensive ",
+  special_teams: "special teams ",
+};
+
+/** The blank roster for a side. One place, so the initial document, the Type
+ *  switch, and the variant switch can't disagree about what a defense is. */
+function defaultPlayersForKind(kind: FormationEditorKind, variant: SportVariant): Player[] {
+  if (kind === "defense") return defaultDefendersForVariant(variant);
+  if (kind === "special_teams") return defaultSpecialTeamsPlayers(variant);
+  return defaultPlayersForVariant(variant);
+}
 
 type Props =
   | {
@@ -99,8 +136,13 @@ export function FormationEditorClient(props: Props) {
   // Never inferred from the players: a coach who relabels every defender to
   // "Other" must not have their defensive formation silently become an
   // offensive one on the next save.
-  const kind: FormationEditorKind = props.mode === "edit" ? props.kind : (props.kind ?? "offense");
-  const isDefense = kind === "defense";
+  //
+  // Editable while creating (the Type control below), fixed once saved:
+  // updateFormationAction never rewrites `kind`, and flipping a saved
+  // formation's side would strand the plays already linked to it.
+  const [kind, setKind] = useState<FormationEditorKind>(
+    props.mode === "edit" ? props.kind : (props.kind ?? "offense"),
+  );
 
   /* ── name + sport variant ── */
   const [name, setName] = useState(
@@ -114,60 +156,54 @@ export function FormationEditorClient(props: Props) {
    * metadata.playType to decide which way to clamp a dragged player against
    * the LOS (defenders above, offense below); without it a defender whose
    * role is "Other" gets clamped as offense and can be dragged onto the
-   * offense's side of the ball. */
-  const withDefensePlayType = (d: PlayDocument): PlayDocument =>
-    isDefense ? { ...d, metadata: { ...d.metadata, playType: "defense" } } : d;
+   * offense's side of the ball. It also drives which roles the inspector
+   * offers. */
+  const buildDoc = (
+    k: FormationEditorKind,
+    v: SportVariant,
+    players: Player[],
+  ): PlayDocument => {
+    const base = createEmptyPlayDocument({ sportProfile: sportProfileForVariant(v) });
+    return {
+      ...base,
+      metadata: { ...base.metadata, playType: k },
+      layers: { ...base.layers, players },
+    };
+  };
 
   const initialDoc =
     props.mode === "edit"
-      ? (() => {
-          const base = createEmptyPlayDocument({
-            sportProfile: sportProfileForVariant(props.initialVariant),
-          });
-          return withDefensePlayType({
-            ...base,
-            layers: { ...base.layers, players: props.initialPlayers },
-          });
-        })()
-      : (() => {
-          // createEmptyPlayDocument seeds the offensive default set, so only
-          // the defensive arm needs to swap the players out.
-          const base = createEmptyPlayDocument({
-            sportProfile: sportProfileForVariant(defaultVariant),
-          });
-          if (!isDefense) return base;
-          return withDefensePlayType({
-            ...base,
-            layers: {
-              ...base.layers,
-              players: defaultDefendersForVariant(defaultVariant),
-            },
-          });
-        })();
+      ? buildDoc(props.kind, props.initialVariant, props.initialPlayers)
+      : buildDoc(
+          props.kind ?? "offense",
+          defaultVariant,
+          defaultPlayersForKind(props.kind ?? "offense", defaultVariant),
+        );
 
   const { doc, dispatch, replaceDocument } = usePlayEditor(initialDoc);
 
   /* ── selection state ── */
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
 
+  /* ── side change swaps the roster (and its iconography) ── */
+  function handleKindChange(v: string) {
+    const next = v as FormationEditorKind;
+    setKind(next);
+    replaceDocument(buildDoc(next, variant, defaultPlayersForKind(next, variant)));
+    setSelectedPlayerId(null);
+  }
+
   /* ── sport-variant change resets the canvas ── */
   function handleVariantChange(v: string) {
     const next = v as SportVariant;
     setVariant(next);
-    const freshDoc = createEmptyPlayDocument({
-      sportProfile: sportProfileForVariant(next),
-    });
-    replaceDocument(
-      withDefensePlayType({
-        ...freshDoc,
-        layers: {
-          ...freshDoc.layers,
-          players: isDefense
-            ? defaultDefendersForVariant(next)
-            : defaultPlayersForVariant(next),
-        },
-      }),
-    );
+    // Special teams only exists in tackle. Leaving the Type on special teams
+    // after switching to 5v5 would leave a side the roster can't fill, so it
+    // falls back to offense rather than rendering an empty field.
+    const nextKind: FormationEditorKind =
+      kind === "special_teams" && next !== "tackle_11" ? "offense" : kind;
+    if (nextKind !== kind) setKind(nextKind);
+    replaceDocument(buildDoc(nextKind, next, defaultPlayersForKind(nextKind, next)));
     setSelectedPlayerId(null);
   }
 
@@ -300,13 +336,7 @@ export function FormationEditorClient(props: Props) {
           </Button>
         </Link>
         <h1 className="text-lg font-bold text-foreground">
-          {props.mode === "edit"
-            ? isDefense
-              ? "Edit defensive formation"
-              : "Edit formation"
-            : isDefense
-              ? "New defensive formation"
-              : "New formation"}
+          {`${props.mode === "edit" ? "Edit" : "New"} ${HEADING_QUALIFIER[kind]}formation`}
         </h1>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -400,12 +430,30 @@ export function FormationEditorClient(props: Props) {
             </p>
           ) : null}
         </div>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium text-muted">Type</label>
+          <Select
+            value={kind}
+            onChange={handleKindChange}
+            options={kindOptionsForVariant(variant)}
+            className="w-40"
+            // Fixed once saved: updateFormationAction never rewrites `kind`,
+            // and flipping a saved formation's side would strand the plays
+            // already linked to it.
+            disabled={props.mode === "edit"}
+          />
+          {props.mode === "edit" ? (
+            <p className="text-[11px] text-muted">
+              Set when the formation was created.
+            </p>
+          ) : null}
+        </div>
         <div className="flex flex-1 flex-col gap-1.5">
           <label className="text-xs font-medium text-muted">Formation name</label>
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder={isDefense ? "e.g. Cover 3" : "e.g. Trips Right"}
+            placeholder={NAME_PLACEHOLDER[kind]}
             onKeyDown={(e) => e.key === "Enter" && handleSave()}
           />
         </div>

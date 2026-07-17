@@ -108,6 +108,7 @@ import {
   materializeStarterFormationAction,
 } from "@/app/actions/formations";
 import type { SavedFormation } from "@/app/actions/formations";
+import type { FormationEditorKind } from "@/features/formations/FormationEditorClient";
 import { PlaybookFormationsTab } from "./PlaybookFormationsTab";
 import { GameResultsPanel } from "@/features/game-results/GameResultsPanel";
 import { CopyToPlaybookDialog, type CopyTarget } from "@/features/playbooks/CopyToPlaybookDialog";
@@ -132,6 +133,7 @@ import { TrashDrawer } from "@/features/versions/TrashDrawer";
 import type { Player, PlayType, Route, SpecialTeamsUnit, SportVariant, Zone } from "@/domain/play/types";
 import {
   defaultDefendersForVariant,
+  defaultSpecialTeamsPlayers,
   defaultPlayersForVariant,
   resolveEndDecoration,
   resolveRouteStroke,
@@ -1225,7 +1227,7 @@ function PlaybookDetailClientInner({
     });
   }
 
-  async function createAndGoToFormationEditor(kind: "offense" | "defense" = "offense") {
+  async function createAndGoToFormationEditor(kind: FormationEditorKind = "offense") {
     // Preview mode: go straight to the formation editor with a preview
     // flag — there's no play to anchor returnToPlay against.
     if (isPreview) {
@@ -1242,8 +1244,14 @@ function PlaybookDetailClientInner({
     setCreating(true);
     // The anchor play must match the side being drawn, otherwise saving a
     // defensive formation would bounce the coach back into an offensive play.
+    const anchorPlayers =
+      kind === "defense"
+        ? defaultDefenders
+        : kind === "special_teams"
+          ? defaultSpecialTeamsPlayers(variant)
+          : defaultPlayers;
     const res = await createPlayAction(playbookId, {
-      initialPlayers: kind === "defense" ? defaultDefenders : defaultPlayers,
+      initialPlayers: anchorPlayers,
       variant,
       playerCount: playbookPlayerCount,
       playType: kind,
@@ -3162,6 +3170,22 @@ function PlaybookDetailClientInner({
                             </button>
                           ))}
                         </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            type="button"
+                            className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
+                            onClick={() => void createAndGoToFormationEditor("special_teams")}
+                          >
+                            <div className="flex size-20 items-center justify-center rounded-md bg-surface-raised text-muted">
+                              <Plus className="size-7" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-foreground">Create new formation</p>
+                              <p className="text-xs text-muted">Design from scratch</p>
+                            </div>
+                          </button>
+                        </div>
+
                         {(() => {
                           const st = availableFormations.filter((f) => f.kind === "special_teams");
                           if (st.length === 0) return null;

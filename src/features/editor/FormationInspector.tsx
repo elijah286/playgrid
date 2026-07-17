@@ -32,20 +32,32 @@ const DEFENSE_ROLE_OPTIONS: { value: PlayerRole; label: string }[] = [
   { value: "OTHER", label: "Other" },
 ];
 
+const SPECIAL_TEAMS_ROLE_OPTIONS: { value: PlayerRole; label: string }[] = [
+  { value: "K", label: "K" },
+  { value: "P", label: "P" },
+  { value: "LS", label: "LS" },
+  { value: "ST", label: "ST" },
+  { value: "OTHER", label: "Other" },
+];
+
 /**
  * Which role list to offer, keyed off the DOCUMENT's side rather than the
  * selected player's current role.
  *
- * Reading it off the player makes "Other" a one-way trap: OTHER is in both
- * lists, so a defender relabelled to Other is no longer a defensive role,
- * the select flips to the offensive list, and there is no way back to CB.
- * The document knows the side unconditionally and can't be relabelled out
- * of it.
+ * Reading it off the player makes "Other" a one-way trap: OTHER is in every
+ * list, so a defender relabelled to Other is no longer a defensive role, the
+ * select flips to the offensive list, and there is no way back to CB. The
+ * document knows the side unconditionally and can't be relabelled out of it.
  */
 function roleOptionsFor(doc: PlayDocument): { value: PlayerRole; label: string }[] {
-  return (doc.metadata.playType ?? "offense") === "defense"
-    ? DEFENSE_ROLE_OPTIONS
-    : OFFENSE_ROLE_OPTIONS;
+  switch (doc.metadata.playType ?? "offense") {
+    case "defense":
+      return DEFENSE_ROLE_OPTIONS;
+    case "special_teams":
+      return SPECIAL_TEAMS_ROLE_OPTIONS;
+    default:
+      return OFFENSE_ROLE_OPTIONS;
+  }
 }
 
 const FILL_COLORS = [

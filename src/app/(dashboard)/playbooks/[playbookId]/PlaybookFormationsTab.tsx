@@ -213,14 +213,10 @@ export function PlaybookFormationsTab({
   }, [filtersOpen]);
 
   /**
-   * Create for the side you're looking at. Filtering to Defense and then
-   * getting a QB and receivers would be a small betrayal, and the editor has
-   * no side switcher to recover with — `kind` is fixed at create time. When
-   * no side is selected we default to offense, which is what this button has
-   * always made.
-   *
-   * The label follows suit ("New defense formation") so the button states its
-   * outcome rather than depending on the coach remembering the filter.
+   * Seed the editor's Type control with the side you're looking at — filtering
+   * to Defense and landing on a QB and receivers would be a small betrayal.
+   * It's only a default now: the editor asks, and the coach can change it
+   * there before saving.
    */
   const newFormationKind: FormationKind =
     kindFilter === "all" ? "offense" : kindFilter;

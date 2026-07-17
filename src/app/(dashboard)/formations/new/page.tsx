@@ -11,9 +11,12 @@ export const metadata = { title: "New Formation — XO Gridmaker" };
 
 const VALID_VARIANTS: SportVariant[] = ["flag_5v5", "flag_7v7", "other", "tackle_11"];
 
-// Special teams formations aren't buildable here yet — an unrecognised
-// ?kind= falls back to offense rather than 404ing.
-const VALID_KINDS: FormationEditorKind[] = ["offense", "defense"];
+// An unrecognised ?kind= falls back to offense rather than 404ing. Special
+// teams is only offered for tackle_11 (the editor's Type control gates it),
+// but it's accepted here for any variant — the editor resets it to offense if
+// the variant can't support it, which keeps this validation dumb and the
+// variant rule in one place.
+const VALID_KINDS: FormationEditorKind[] = ["offense", "defense", "special_teams"];
 
 type Props = {
   searchParams: Promise<{

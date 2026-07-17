@@ -957,6 +957,23 @@ export function defaultDefendersForVariant(
   return defenseTemplatesForVariant(variant)[0].players.map((p) => ({ ...p }));
 }
 
+/**
+ * The blank special-teams roster. Squares, sky-blue — `mkST`'s styling, so a
+ * coach can tell a punt unit from an offense at a glance.
+ *
+ * Special teams is tackle-only (`specialTeamsTemplates` is authored for 11
+ * players and the UI gates the option on `tackle_11`), so this returns [] for
+ * any other variant rather than inventing a flag punt team. Callers should not
+ * offer the special-teams option outside tackle in the first place — the empty
+ * return is a backstop, not a fallback to lean on.
+ */
+export function defaultSpecialTeamsPlayers(variant: SportVariant): Player[] {
+  if (variant !== "tackle_11") return [];
+  const templates = specialTeamsTemplates();
+  if (templates.length === 0) return [];
+  return templates[0].players.map((p) => ({ ...p }));
+}
+
 /* ------------------------------------------------------------------ */
 /*  Special teams templates (tackle only)                             */
 /* ------------------------------------------------------------------ */
