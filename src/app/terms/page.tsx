@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BackToProductCta } from "@/components/legal/BackToProductCta";
 
 export const metadata: Metadata = {
   title: "Terms of Service · XO Gridmaker",
@@ -10,6 +11,10 @@ export default function TermsPage() {
     <article className="mx-auto max-w-2xl px-6 py-16 text-foreground">
       <h1 className="text-3xl font-extrabold tracking-tight">Terms of Service</h1>
       <p className="mt-2 text-sm text-muted">Last updated: June 18, 2026</p>
+
+      <div className="mt-8">
+        <BackToProductCta />
+      </div>
 
       <div className="mt-8 space-y-6 text-sm leading-relaxed text-muted">
         <section>

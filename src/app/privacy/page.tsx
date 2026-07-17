@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BackToProductCta } from "@/components/legal/BackToProductCta";
 
 export const metadata: Metadata = {
   title: "Privacy Policy · XO Gridmaker",
@@ -14,6 +15,10 @@ export default function PrivacyPage() {
     <article className="mx-auto max-w-2xl px-6 py-16 text-foreground">
       <h1 className="text-3xl font-extrabold tracking-tight">Privacy Policy</h1>
       <p className="mt-2 text-sm text-muted">Last updated: June 17, 2026</p>
+
+      <div className="mt-8">
+        <BackToProductCta />
+      </div>
 
       {/* The "Your rights" section below already covers deletion — keep that
           and the new dedicated section consistent if either is edited. */}
