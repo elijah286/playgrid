@@ -11,11 +11,7 @@ export const metadata = { title: "New Formation — XO Gridmaker" };
 
 const VALID_VARIANTS: SportVariant[] = ["flag_5v5", "flag_7v7", "other", "tackle_11"];
 
-// An unrecognised ?kind= falls back to offense rather than 404ing. Special
-// teams is only offered for tackle_11 (the editor's Type control gates it),
-// but it's accepted here for any variant — the editor resets it to offense if
-// the variant can't support it, which keeps this validation dumb and the
-// variant rule in one place.
+// An unrecognised ?kind= falls back to offense rather than 404ing.
 const VALID_KINDS: FormationEditorKind[] = ["offense", "defense", "special_teams"];
 
 type Props = {
@@ -65,11 +61,20 @@ export default async function NewFormationPage({ searchParams }: Props) {
     }
   }
 
+  // Special teams fields 11 and only tackle has a roster for it. The side is
+  // fixed once the editor opens — it has no control to recover with — so a
+  // hand-typed ?kind=special_teams on a 5v5 playbook would strand the coach on
+  // an empty field. Resolve it here, where the variant is already known.
+  const kind: FormationEditorKind =
+    queryKind === "special_teams" && initialVariant !== "tackle_11"
+      ? "offense"
+      : queryKind;
+
   return (
     <ExamplePreviewProvider isPreview={isPreview}>
       <FormationEditorClient
         mode="new"
-        kind={queryKind}
+        kind={kind}
         initialVariant={initialVariant}
         lockVariant={lockVariant}
         returnToPlay={returnToPlay}

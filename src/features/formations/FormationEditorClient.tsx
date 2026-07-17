@@ -47,6 +47,19 @@ const SPORT_OPTIONS = (
   Object.entries(SPORT_VARIANT_LABELS) as [SportVariant, string][]
 ).map(([value, label]) => ({ value, label }));
 
+/**
+ * Sport types this side can actually be built for.
+ *
+ * Special teams fields 11 and only tackle has a roster for it. The side is
+ * fixed once the editor opens, so an unlocked Sport type could otherwise strand
+ * a special-teams formation on 5v5 with no players and no way back. Removing
+ * the impossible options beats resetting the coach's Type behind their back.
+ */
+function sportOptionsForKind(kind: FormationEditorKind) {
+  if (kind !== "special_teams") return SPORT_OPTIONS;
+  return SPORT_OPTIONS.filter((o) => o.value === "tackle_11");
+}
+
 /** Which side of the ball this editor is drawing. */
 export type FormationEditorKind = "offense" | "defense" | "special_teams";
 
@@ -131,17 +144,16 @@ export function FormationEditorClient(props: Props) {
       ? props.initialVariant
       : (props.initialVariant ?? "flag_7v7");
 
-  // Comes from the `formations.kind` column on edit, and ?kind= on create.
-  // Never inferred from the players: a coach who relabels every defender to
-  // "Other" must not have their defensive formation silently become an
-  // offensive one on the next save.
+  // Comes from the `formations.kind` column on edit, and ?kind= on create —
+  // the New formation picker asks before routing here. Fixed for the life of
+  // the editor, hence a const rather than state: nothing in here can change
+  // it, so it can't be got wrong.
   //
-  // Editable while creating (the Type control below), fixed once saved:
-  // updateFormationAction never rewrites `kind`, and flipping a saved
-  // formation's side would strand the plays already linked to it.
-  const [kind, setKind] = useState<FormationEditorKind>(
-    props.mode === "edit" ? props.kind : (props.kind ?? "offense"),
-  );
+  // Never inferred from the players either: a coach who relabels every
+  // defender to "Other" must not have their defensive formation silently
+  // become an offensive one on the next save.
+  const kind: FormationEditorKind =
+    props.mode === "edit" ? props.kind : (props.kind ?? "offense");
 
   /* ── name + sport variant ── */
   const [name, setName] = useState(
@@ -229,25 +241,11 @@ export function FormationEditorClient(props: Props) {
     addPlayerAt({ x: 0.5, y: losY + dir * 0.08 });
   };
 
-  /* ── side change swaps the roster (and its iconography) ── */
-  function handleKindChange(v: string) {
-    const next = v as FormationEditorKind;
-    setKind(next);
-    replaceDocument(buildDoc(next, variant, defaultPlayersForKind(next, variant)));
-    setSelectedPlayerId(null);
-  }
-
   /* ── sport-variant change resets the canvas ── */
   function handleVariantChange(v: string) {
     const next = v as SportVariant;
     setVariant(next);
-    // Special teams only exists in tackle. Leaving the Type on special teams
-    // after switching to 5v5 would leave a side the roster can't fill, so it
-    // falls back to offense rather than rendering an empty field.
-    const nextKind: FormationEditorKind =
-      kind === "special_teams" && next !== "tackle_11" ? "offense" : kind;
-    if (nextKind !== kind) setKind(nextKind);
-    replaceDocument(buildDoc(nextKind, next, defaultPlayersForKind(nextKind, next)));
+    replaceDocument(buildDoc(kind, next, defaultPlayersForKind(kind, next)));
     setSelectedPlayerId(null);
   }
 
@@ -488,35 +486,26 @@ export function FormationEditorClient(props: Props) {
             <Select
               value={variant}
               onChange={handleVariantChange}
-              options={SPORT_OPTIONS}
+              options={sportOptionsForKind(kind)}
               className="w-44"
             />
           )}
         </div>
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-medium text-muted">Type</label>
-          {/* Chosen at creation, stated thereafter — same treatment as Sport
-              type, and for the same reason: a disabled dropdown offers a
-              choice it won't honour.
+          {/* Always stated, never a control. The side is chosen before the
+              editor opens (the New formation picker, or the side you were on
+              in the new-play dialog) and is fixed from then on.
 
-              Deliberately not editable after the fact. Flipping a saved
-              formation's side isn't a field change — the players would have
-              to convert (receivers to defenders, circles to triangles), the
-              layout would have to mirror across the LOS, and every play
-              already linked to it would inherit the result. That's a
-              conversion feature, not a select. */}
-          {props.mode === "edit" ? (
-            <p className="flex h-9 items-center text-sm font-medium text-foreground">
-              {KIND_LABEL[kind]}
-            </p>
-          ) : (
-            <Select
-              value={kind}
-              onChange={handleKindChange}
-              options={kindOptionsForVariant(variant)}
-              className="w-40"
-            />
-          )}
+              Changing it isn't a field edit: the players would have to convert
+              (receivers into defenders, circles into triangles), the layout
+              would have to mirror across the LOS, and on a saved formation
+              every play already linked to it would inherit the result. That's
+              a conversion feature. Until it exists, the honest UI is to state
+              the answer rather than offer a select that has to undo itself. */}
+          <p className="flex h-9 items-center text-sm font-medium text-foreground">
+            {KIND_LABEL[kind]}
+          </p>
         </div>
         <div className="flex flex-1 flex-col gap-1.5">
           <label className="text-xs font-medium text-muted">Formation name</label>

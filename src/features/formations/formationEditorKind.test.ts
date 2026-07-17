@@ -1,9 +1,10 @@
 /**
  * Creating a formation asks which side it's for, and the roster follows.
  *
- * Before this, the editor inferred the side from the Formations tab's filter
- * and there was no way to change it once open — and it always drew the
- * offensive roster, so a "defensive formation" arrived as a QB and receivers.
+ * The side is picked BEFORE the editor opens and is fixed from then on —
+ * converting a saved formation between sides would mean converting its
+ * players, mirroring the layout across the LOS, and pushing the result into
+ * every play already linked to it.
  *
  * These pin the two halves the coach actually sees: which sides are offered
  * for a variant, and that each side brings its own players and glyph.
@@ -74,9 +75,33 @@ describe("the roster adapts to the side", () => {
   });
 
   it("special teams yields nothing outside tackle — the option is never offered there", () => {
-    // Backstop, not a fallback: kindOptionsForVariant already withholds the
-    // option, and the editor resets to offense if the variant changes under it.
+    // Backstop, not a fallback. Three gates keep it unreachable: the New
+    // formation picker withholds the option outside tackle, the page rewrites
+    // a hand-typed ?kind=special_teams to offense, and the editor's Sport type
+    // won't offer a non-tackle variant to a special-teams formation.
     expect(defaultSpecialTeamsPlayers("flag_5v5")).toEqual([]);
     expect(kindOptionsForVariant("flag_5v5").some((o) => o.value === "special_teams")).toBe(false);
+  });
+});
+
+describe("sport type and side can't contradict each other", () => {
+  // The editor has no Type control, so there is nothing to recover with if a
+  // side and a variant disagree. Every offered pairing must be buildable.
+  it.each(["flag_5v5", "flag_6v6", "flag_7v7", "tackle_11"] as const)(
+    "%s — every offered side has a roster",
+    (v) => {
+      for (const opt of kindOptionsForVariant(v)) {
+        expect(rosterFor(opt.value, v).length).toBeGreaterThan(0);
+      }
+    },
+  );
+
+  it("special teams is offered only where it can be built", () => {
+    const offered = (v: SportVariant) =>
+      kindOptionsForVariant(v).some((o) => o.value === "special_teams");
+    const buildable = (v: SportVariant) => defaultSpecialTeamsPlayers(v).length > 0;
+    for (const v of ["flag_5v5", "flag_6v6", "flag_7v7", "tackle_11"] as const) {
+      expect(offered(v)).toBe(buildable(v));
+    }
   });
 });

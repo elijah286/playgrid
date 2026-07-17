@@ -67,6 +67,7 @@ import {
   Card,
   EmptyState,
   Input,
+  Modal,
   SegmentedControl,
   useToast,
   type ActionMenuItem,
@@ -152,6 +153,48 @@ const KIND_FILTER_LABELS: Record<Exclude<FormationKind, "practice_plan">, string
 };
 
 /**
+ * The sides offered when creating a formation.
+ *
+ * Asked up front because the answer is permanent: converting a saved formation
+ * between sides would mean converting its players, mirroring the layout across
+ * the LOS, and pushing the result into every play already linked to it. Better
+ * to ask once than to show a control that won't honour the answer.
+ *
+ * The glyph and colour of each option are the ones the coach will actually get
+ * on the field — circle, red triangle, blue square — so the choice previews
+ * itself rather than being three words.
+ */
+const NEW_FORMATION_KINDS: {
+  value: FormationKind;
+  label: string;
+  blurb: string;
+  glyph: string;
+  swatch: string;
+}[] = [
+  {
+    value: "offense",
+    label: "Offense",
+    blurb: "Quarterback, receivers, backs",
+    glyph: "●",
+    swatch: "bg-slate-500/10 text-slate-600 dark:text-slate-300",
+  },
+  {
+    value: "defense",
+    label: "Defense",
+    blurb: "Corners, safeties, linebackers",
+    glyph: "▼",
+    swatch: "bg-red-500/10 text-red-600 dark:text-red-400",
+  },
+  {
+    value: "special_teams",
+    label: "Special teams",
+    blurb: "Punt, kickoff, field goal",
+    glyph: "■",
+    swatch: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+  },
+];
+
+/**
  * Does this formation survive the tab's filters?
  *
  * Extracted and exported so it can be tested directly. It also exists to
@@ -213,28 +256,23 @@ export function PlaybookFormationsTab({
   }, [filtersOpen]);
 
   /**
-   * Seed the editor's Type control with the side you're looking at — filtering
-   * to Defense and landing on a QB and receivers would be a small betrayal.
-   * It's only a default now: the editor asks, and the coach can change it
-   * there before saving.
+   * The side is chosen before the editor opens, and fixed from then on —
+   * converting a saved formation between sides would mean converting its
+   * players, mirroring the layout across the LOS, and pushing the result into
+   * every play already linked to it. So we ask here rather than offer a
+   * control the editor won't honour.
    */
-  const newFormationKind: FormationKind =
-    kindFilter === "all" ? "offense" : kindFilter;
+  const [kindPickerOpen, setKindPickerOpen] = useState(false);
 
-  const newFormationHref = (() => {
+  const newFormationHref = (kind: FormationKind) => {
     const q = new URLSearchParams({
       variant,
       returnToPlaybook: playbookId,
-      kind: newFormationKind,
+      kind,
     });
     if (isPreview) q.set("preview", "1");
     return `/formations/new?${q.toString()}`;
-  })();
-
-  const newFormationLabel =
-    newFormationKind === "offense"
-      ? "New formation"
-      : `New ${newFormationKind === "defense" ? "defense" : "special teams"} formation`;
+  };
 
   const viewed = useMemo(
     () => formations.filter((f) => (view === "archived" ? f.isArchived : !f.isArchived)),
@@ -516,11 +554,13 @@ export function PlaybookFormationsTab({
           >
             {reorderMode && <span>Done</span>}
           </Button>
-          <Link href={newFormationHref} className="ml-auto sm:order-6 sm:ml-0">
-            <Button variant="primary" className="whitespace-nowrap">
-              {newFormationLabel}
-            </Button>
-          </Link>
+          <Button
+            variant="primary"
+            className="ml-auto whitespace-nowrap sm:order-6 sm:ml-0"
+            onClick={() => setKindPickerOpen(true)}
+          >
+            New formation
+          </Button>
         </div>
         <div className="flex items-end gap-2 sm:contents">
           <div className="min-w-[200px] flex-1 sm:order-2">
@@ -547,11 +587,9 @@ export function PlaybookFormationsTab({
           }
           action={
             !q && view === "active" ? (
-              <Link href={newFormationHref}>
-                <Button variant="primary" leftIcon={Plus}>
-                  {newFormationLabel}
-                </Button>
-              </Link>
+              <Button variant="primary" leftIcon={Plus} onClick={() => setKindPickerOpen(true)}>
+                New formation
+              </Button>
             ) : undefined
           }
         />
@@ -753,6 +791,41 @@ export function PlaybookFormationsTab({
           </div>
         </div>
       )}
+
+      <Modal
+        open={kindPickerOpen}
+        onClose={() => setKindPickerOpen(false)}
+        title="New formation"
+      >
+        <p className="mb-4 text-sm text-muted">
+          Which side of the ball is this formation for?
+        </p>
+        <div className="grid gap-2">
+          {NEW_FORMATION_KINDS.filter(
+            // Special teams fields 11 — tackle is the only variant with a
+            // roster for it, and the same gate is applied in the editor.
+            (k) => k.value !== "special_teams" || variant === "tackle_11",
+          ).map((k) => (
+            <Link
+              key={k.value}
+              href={newFormationHref(k.value)}
+              onClick={() => setKindPickerOpen(false)}
+              className="flex items-center gap-3 rounded-xl border border-border bg-surface-inset p-3 text-left transition-colors hover:border-primary hover:bg-primary/5"
+            >
+              <span
+                aria-hidden
+                className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${k.swatch}`}
+              >
+                {k.glyph}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-foreground">{k.label}</span>
+                <span className="block text-xs text-muted">{k.blurb}</span>
+              </span>
+            </Link>
+          ))}
+        </div>
+      </Modal>
 
       {copyTarget && (
         <CopyToPlaybookDialog
