@@ -4,8 +4,8 @@
  * Two halves ship the icon badge: the server sets `aps.badge` on every push
  * (works on any build — it's just a payload field), and `NativeBadgeSync` syncs
  * the icon to the live count while the app is open. The second half needs the
- * `@capawesome/capacitor-badge` native plugin, which only exists from iOS 1.1.0
- * (build 12). On every earlier install the badge is therefore a ONE-WAY RATCHET:
+ * `@capawesome/capacitor-badge` native plugin, which only exists from iOS 1.0.2
+ * (build 14). On every earlier install the badge is therefore a ONE-WAY RATCHET:
  * pushes raise it, nothing lowers it. A coach who got a push for a pending item
  * and then resolved it keeps a "1" over an empty inbox, permanently.
  *
