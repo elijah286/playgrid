@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FilePlus,
+  Plus,
   Save,
   MousePointer,
 } from "lucide-react";
@@ -34,6 +35,7 @@ import {
   defaultDefendersForVariant,
   defaultPlayersForVariant,
   defaultSpecialTeamsPlayers,
+  newPlayerForKind,
   SPORT_VARIANT_LABELS,
   sportProfileForVariant,
 } from "@/domain/play/factory";
@@ -150,6 +152,11 @@ export function FormationEditorClient(props: Props) {
   );
   const [variant, setVariant] = useState<SportVariant>(defaultVariant);
 
+  // Editing always locks: handleVariantChange resets the canvas, which on a
+  // saved formation means discarding the layout the coach is here to edit.
+  const variantLocked =
+    props.mode === "edit" || props.lockVariant === true;
+
   /* ── play-document state (drives the canvas) ──
    *
    * The scratch document must declare its side. EditorCanvas reads
@@ -184,6 +191,46 @@ export function FormationEditorClient(props: Props) {
 
   /* ── selection state ── */
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+
+  /**
+   * How many players this side fields in this game type, and how far off we
+   * are. Applies to every side, not just offense — a 6th defender in 5v5 is
+   * exactly as wrong as a 6th receiver.
+   *
+   * A warning, never a block: coaches build mid-thought, and a formation that's
+   * one short while they drag the next player in isn't an error. Special teams
+   * has no count of its own on SportProfile; it fields the same 11 as offense
+   * in tackle, which is the only variant that offers it.
+   */
+  const expectedPlayerCount =
+    kind === "defense"
+      ? doc.sportProfile.defensePlayerCount
+      : doc.sportProfile.offensePlayerCount;
+  const actualPlayerCount = doc.layers.players.length;
+  const countDelta = actualPlayerCount - expectedPlayerCount;
+
+  /* ── add a player ── */
+  const addPlayerAt = (position: { x: number; y: number }) => {
+    const player = newPlayerForKind(kind, position, doc.layers.players);
+    dispatch({ type: "player.add", player });
+    setSelectedPlayerId(player.id);
+  };
+
+  /** Drop a new player in open space rather than on top of someone. Walks
+   *  down from just behind the LOS (or just in front, for defense) until it
+   *  finds a gap, then gives up and takes the middle — the coach can drag it. */
+  const addPlayerCentered = () => {
+    const losY = typeof doc.lineOfScrimmageY === "number" ? doc.lineOfScrimmageY : 0.4;
+    const dir = kind === "defense" ? 1 : -1;
+    const taken = doc.layers.players.map((p) => p.position);
+    for (let step = 1; step <= 6; step++) {
+      const y = losY + dir * step * 0.06;
+      if (y < 0.05 || y > 0.95) break;
+      const clear = taken.every((t) => Math.hypot(t.x - 0.5, t.y - y) > 0.06);
+      if (clear) return addPlayerAt({ x: 0.5, y });
+    }
+    addPlayerAt({ x: 0.5, y: losY + dir * 0.08 });
+  };
 
   /* ── side change swaps the roster (and its iconography) ── */
   function handleKindChange(v: string) {
@@ -421,22 +468,28 @@ export function FormationEditorClient(props: Props) {
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-medium text-muted">Sport type</label>
-          <Select
-            value={variant}
-            onChange={handleVariantChange}
-            options={SPORT_OPTIONS}
-            className="w-44"
-            // Locked when entering from a specific playbook — a mismatched
-            // variant would silently hide the formation from that playbook's
-            // Formations tab. Also locked in edit mode (changing variant
-            // would orphan the existing player layout).
-            disabled={props.mode === "new" && props.lockVariant === true}
-          />
-          {props.mode === "new" && props.lockVariant === true ? (
-            <p className="text-[11px] text-muted">
-              Locked to this playbook&apos;s sport type.
+          {/* Locked when entering from a specific playbook (a mismatched
+              variant would silently hide the formation from that playbook's
+              Formations tab), and when editing (changing variant resets the
+              canvas, which would throw away the saved layout).
+
+              A disabled dropdown promises a choice it won't honour, so when
+              it's locked we just state the value. NB the old `disabled` prop
+              only covered the "new" arm — edit mode rendered an ENABLED
+              select despite its comment claiming otherwise, so changing sport
+              type while editing silently wiped the formation's players. */}
+          {variantLocked ? (
+            <p className="flex h-9 items-center text-sm font-medium text-foreground">
+              {SPORT_VARIANT_LABELS[variant]}
             </p>
-          ) : null}
+          ) : (
+            <Select
+              value={variant}
+              onChange={handleVariantChange}
+              options={SPORT_OPTIONS}
+              className="w-44"
+            />
+          )}
         </div>
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-medium text-muted">Type</label>
@@ -506,6 +559,7 @@ export function FormationEditorClient(props: Props) {
               selectedNodeId={null}
               selectedSegmentId={null}
               onSelectPlayer={setSelectedPlayerId}
+              onAddPlayer={addPlayerAt}
               onSelectRoute={() => {}}
               onSelectNode={() => {}}
               onSelectSegment={() => {}}
@@ -520,13 +574,44 @@ export function FormationEditorClient(props: Props) {
         </div>
 
         {/* Inspector */}
-        <aside className="rounded-xl border border-border bg-surface-raised p-4">
+        <aside className="flex flex-col gap-3 rounded-xl border border-border bg-surface-raised p-4">
           <FormationInspector
             doc={doc}
             dispatch={dispatch}
             selectedPlayerId={selectedPlayerId}
             onSelectPlayer={setSelectedPlayerId}
           />
+
+          {/* Players can be deleted from the inspector, so there has to be a
+              way back. Clicking the canvas adds one too, but that's invisible
+              — a coach who deletes a player has no reason to guess it. */}
+          {selectedPlayerId === null && (
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                leftIcon={Plus}
+                onClick={addPlayerCentered}
+                className="w-full"
+              >
+                Add player
+              </Button>
+              <p className="text-[11px] text-muted">
+                Or click anywhere on the field.
+              </p>
+            </>
+          )}
+
+          {countDelta !== 0 && (
+            <p
+              role="status"
+              className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-700 dark:text-amber-400"
+            >
+              {countDelta > 0
+                ? `${actualPlayerCount} players — ${SPORT_VARIANT_LABELS[variant]} fields ${expectedPlayerCount}. You can still save this, but it won't match the game type.`
+                : `${actualPlayerCount} of ${expectedPlayerCount} players for ${SPORT_VARIANT_LABELS[variant]}.`}
+            </p>
+          )}
         </aside>
       </div>
     </div>

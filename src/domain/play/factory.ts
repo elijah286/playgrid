@@ -958,6 +958,39 @@ export function defaultDefendersForVariant(
 }
 
 /**
+ * A brand-new player for a side, ready to drop on the field.
+ *
+ * The three mk* factories are private and each side's look lives in exactly
+ * one of them, so a caller adding a player has no way to build one correctly
+ * by hand — it would have to duplicate the fill, stroke and shape and then
+ * drift. This is the one supported way to add a player.
+ *
+ * `existing` is used only to keep the generated id unique within the document;
+ * ids must not collide (routes address their carrier by id).
+ */
+export function newPlayerForKind(
+  kind: PlayType,
+  position: { x: number; y: number },
+  existing: Player[],
+): Player {
+  const taken = new Set(existing.map((p) => p.id));
+  let n = existing.length + 1;
+  let id = `p_new_${n}`;
+  while (taken.has(id)) id = `p_new_${++n}`;
+
+  if (kind === "defense") {
+    return mkDefender(id, "LB", "D", position.x, position.y);
+  }
+  if (kind === "special_teams") {
+    return mkST(id, "ST", "ST", position.x, position.y);
+  }
+  // Offense: "OTHER" is the honest default — we can't know whether the coach
+  // means a receiver or a back, and styleForRole gives OTHER its own grey so
+  // it doesn't masquerade as a role it hasn't been assigned.
+  return mkPlayer(id, "OTHER", "P", position.x, position.y);
+}
+
+/**
  * The blank special-teams roster. Squares, sky-blue — `mkST`'s styling, so a
  * coach can tell a punt unit from an offense at a glance.
  *

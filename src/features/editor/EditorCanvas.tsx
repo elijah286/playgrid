@@ -1367,12 +1367,17 @@ function EditorCanvasImpl({
           notifyTutorialAction("segment-selected");
         } else if (target.kind === "canvas") {
           if (mode === "formation") {
-            // Formation mode: clicking canvas adds a player. Clamp to LOS
-            // so offensive players can't be spawned past the line.
+            // Formation mode: clicking canvas adds a player, clamped to its
+            // own side of the ball. The clamp follows playType the same way
+            // the drag clamp above does — clamping every side toward offense
+            // would spawn a defender on the wrong side of the line.
             if (onAddPlayer) {
+              const addingDefender = doc.metadata.playType === "defense";
               onAddPlayer({
                 x: state.origin.x,
-                y: Math.min(state.origin.y, losY),
+                y: addingDefender
+                  ? Math.max(state.origin.y, losY)
+                  : Math.min(state.origin.y, losY),
               });
             } else {
               // Deselect if no handler
@@ -1436,7 +1441,8 @@ function EditorCanvasImpl({
     [
       onSelectPlayer, onSelectRoute, onSelectNode, onSelectSegment,
       selectedPlayerId, selectedOpponentPlayerId, opponentEditable, opponentPlayers,
-      onCommitOpponentRoute, doc.layers.players, commitClickRoute, commitFreehandRoute,
+      onCommitOpponentRoute, doc.layers.players, doc.metadata.playType,
+      commitClickRoute, commitFreehandRoute,
       getAnchor, dispatch, activeShape, activeStrokePattern, mode, onAddPlayer, losY,
       onActiveStrokePatternChange, onSelectZone, cancelLongPress, detachWindowListeners,
     ],
