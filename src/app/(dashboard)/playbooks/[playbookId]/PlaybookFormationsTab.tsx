@@ -57,6 +57,7 @@ import {
   archiveFormationAction,
   deleteFormationAction,
   reorderFormationsAction,
+  type FormationKind,
   type SavedFormation,
 } from "@/app/actions/formations";
 import { CopyToPlaybookDialog, type CopyTarget } from "@/features/playbooks/CopyToPlaybookDialog";
@@ -110,6 +111,65 @@ function SortableItem({
   );
 }
 
+/**
+ * Which side of the ball a formation is for.
+ *
+ * Deliberately mirrors PlayTypeBadge in ui.tsx — same labels, same colours,
+ * same "offense is not badged" rule. A formation and a play of the same side
+ * should read identically; two vocabularies for one concept is how a coach
+ * ends up unsure whether DEF and "Defense" mean the same thing.
+ *
+ * Offense is the default and stays unbadged: 3,073 of the formations in prod
+ * are offensive, so badging them all would be noise that hides the signal.
+ * Unbadged means offense, exactly as it does on the Plays tab.
+ */
+function FormationKindBadge({ kind }: { kind: FormationKind }) {
+  if (kind === "offense") return null;
+  const cfg: Partial<Record<FormationKind, { label: string; className: string }>> = {
+    defense: { label: "DEF", className: "bg-red-500/10 text-red-700 dark:text-red-400" },
+    special_teams: { label: "ST", className: "bg-sky-500/10 text-sky-700 dark:text-sky-400" },
+  };
+  const entry = cfg[kind];
+  if (!entry) return null;
+  return (
+    <span
+      className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${entry.className}`}
+    >
+      {entry.label}
+    </span>
+  );
+}
+
+/** "5 players" reads wrong under a row of triangles. */
+function playerNoun(kind: FormationKind): string {
+  return kind === "defense" ? "defenders" : "players";
+}
+
+const KIND_FILTER_LABELS: Record<Exclude<FormationKind, "practice_plan">, string> = {
+  offense: "Offense",
+  defense: "Defense",
+  special_teams: "Special teams",
+};
+
+/**
+ * Does this formation survive the tab's filters?
+ *
+ * Extracted and exported so it can be tested directly. It also exists to
+ * defuse a trap: the search filter used to short-circuit ("no search text →
+ * return everything unfiltered"), so a kind check bolted onto the trailing
+ * predicate would have silently done nothing in the overwhelmingly common
+ * case of an empty search box. One predicate, always applied, no early out.
+ */
+export function matchesFormationFilters(
+  f: Pick<SavedFormation, "displayName" | "kind">,
+  filters: { kindFilter: FormationKind | "all"; search: string },
+): boolean {
+  if (filters.kindFilter !== "all" && f.kind !== filters.kindFilter) return false;
+  const needle = filters.search.trim().toLowerCase();
+  if (needle && !f.displayName.toLowerCase().includes(needle)) return false;
+  return true;
+}
+
 export function PlaybookFormationsTab({
   playbookId,
   playbookName,
@@ -132,6 +192,7 @@ export function PlaybookFormationsTab({
   }, [initial]);
   const [q, setQ] = useState("");
   const [view, setView] = useState<"active" | "archived">("active");
+  const [kindFilter, setKindFilter] = useState<FormationKind | "all">("all");
   const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
   const [copyTarget, setCopyTarget] = useState<CopyTarget | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -151,26 +212,65 @@ export function PlaybookFormationsTab({
     return () => document.removeEventListener("mousedown", onDoc);
   }, [filtersOpen]);
 
+  /**
+   * Create for the side you're looking at. Filtering to Defense and then
+   * getting a QB and receivers would be a small betrayal, and the editor has
+   * no side switcher to recover with — `kind` is fixed at create time. When
+   * no side is selected we default to offense, which is what this button has
+   * always made.
+   *
+   * The label follows suit ("New defense formation") so the button states its
+   * outcome rather than depending on the coach remembering the filter.
+   */
+  const newFormationKind: FormationKind =
+    kindFilter === "all" ? "offense" : kindFilter;
+
   const newFormationHref = (() => {
     const q = new URLSearchParams({
       variant,
       returnToPlaybook: playbookId,
+      kind: newFormationKind,
     });
     if (isPreview) q.set("preview", "1");
     return `/formations/new?${q.toString()}`;
   })();
+
+  const newFormationLabel =
+    newFormationKind === "offense"
+      ? "New formation"
+      : `New ${newFormationKind === "defense" ? "defense" : "special teams"} formation`;
 
   const viewed = useMemo(
     () => formations.filter((f) => (view === "archived" ? f.isArchived : !f.isArchived)),
     [formations, view],
   );
 
-  const visible = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    const sorted = [...viewed].sort((a, b) => a.sortOrder - b.sortOrder);
-    if (!needle) return sorted;
-    return sorted.filter((f) => f.displayName.toLowerCase().includes(needle));
-  }, [viewed, q]);
+  const visible = useMemo(
+    () =>
+      [...viewed]
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .filter((f) => matchesFormationFilters(f, { kindFilter, search: q })),
+    [viewed, q, kindFilter],
+  );
+
+  /**
+   * Offer a side only when the playbook can actually have one. Special teams
+   * is tackle-only, matching the Plays tab's own gate — offering an ST filter
+   * to a 5v5 coach advertises a section they can never fill.
+   */
+  const kindFilterOptions = useMemo(() => {
+    const kinds: FormationKind[] =
+      variant === "tackle_11"
+        ? ["offense", "defense", "special_teams"]
+        : ["offense", "defense"];
+    return [
+      { value: "all", label: "All" },
+      ...kinds.map((k) => ({
+        value: k,
+        label: KIND_FILTER_LABELS[k as keyof typeof KIND_FILTER_LABELS],
+      })),
+    ];
+  }, [variant]);
 
   const dragSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -329,7 +429,7 @@ export function PlaybookFormationsTab({
               title="Filters"
               className="px-2.5"
             >
-              {!(viewMode === "cards" && view === "active") && (
+              {!(viewMode === "cards" && view === "active" && kindFilter === "all") && (
                 <span aria-hidden="true">•</span>
               )}
             </Button>
@@ -352,6 +452,18 @@ export function PlaybookFormationsTab({
                       { value: "cards", label: "Grid", icon: LayoutGrid },
                       { value: "list", label: "List", icon: List },
                     ]}
+                  />
+                </div>
+                <div>
+                  <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                    Type
+                  </div>
+                  <SegmentedControl
+                    size="sm"
+                    className="w-full [&>button]:flex-1"
+                    value={kindFilter}
+                    onChange={(v) => setKindFilter(v as FormationKind | "all")}
+                    options={kindFilterOptions}
                   />
                 </div>
                 <div>
@@ -410,7 +522,7 @@ export function PlaybookFormationsTab({
           </Button>
           <Link href={newFormationHref} className="ml-auto sm:order-6 sm:ml-0">
             <Button variant="primary" className="whitespace-nowrap">
-              New formation
+              {newFormationLabel}
             </Button>
           </Link>
         </div>
@@ -441,7 +553,7 @@ export function PlaybookFormationsTab({
             !q && view === "active" ? (
               <Link href={newFormationHref}>
                 <Button variant="primary" leftIcon={Plus}>
-                  New formation
+                  {newFormationLabel}
                 </Button>
               </Link>
             ) : undefined
@@ -777,6 +889,7 @@ const FormationCard = function FormationCard({
           <h3 className="min-w-0 flex-1 truncate font-semibold text-foreground">
             {formation.displayName}
           </h3>
+          <FormationKindBadge kind={formation.kind} />
         </div>
 
         <div className="mt-2">
@@ -784,7 +897,7 @@ const FormationCard = function FormationCard({
         </div>
 
         <p className="mt-2 truncate text-xs text-muted">
-          {formation.players.length} players
+          {formation.players.length} {playerNoun(formation.kind)}
         </p>
       </button>
 
@@ -887,11 +1000,18 @@ const FormationRow = function FormationRow({
           <FormationThumbnail formation={formation} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold text-foreground">
-            {formation.displayName}
+          {/* The Plays tab omits the badge in list view because its rows sit
+              under Offense / Defense section headers. Formations aren't
+              grouped, so without a badge here the list view says nothing
+              about which side a formation is for. */}
+          <div className="flex items-center gap-1.5">
+            <span className="truncate text-sm font-semibold text-foreground">
+              {formation.displayName}
+            </span>
+            <FormationKindBadge kind={formation.kind} />
           </div>
           <div className="truncate text-xs text-muted">
-            {formation.players.length} players
+            {formation.players.length} {playerNoun(formation.kind)}
           </div>
         </div>
       </button>
