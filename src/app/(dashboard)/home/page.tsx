@@ -159,6 +159,14 @@ async function DashboardData({
     profileRes.user?.id ?? null,
   );
   const inboxAlerts = inbox.ok ? inbox.alerts : [];
+  // When the inbox load times out (DATA_TIMEOUT_MS) or errors, `inboxAlerts`
+  // comes through empty — but the app-icon badge (computed in the root layout
+  // WITHOUT this timeout, and server-side on push) still counts the real
+  // items, so the coach sees "5" on the icon and an empty inbox. Signal the
+  // failure so InboxTab can recover client-side instead of rendering a false
+  // "all caught up." Admins trip this most: their derivation also scans
+  // system_notices, so the query is heavier and likelier to exceed the budget.
+  const inboxLoadFailed = !inbox.ok;
   const activityEntries = activity.ok ? activity.entries : [];
   const initialTab: "playbooks" | "calendar" | "inbox" =
     tab === "inbox" || tab === "activity"
@@ -208,6 +216,7 @@ async function DashboardData({
           isAdmin={isAdmin}
           teamCalendarAvailable={teamCalendarAvailable}
           inboxAlerts={inboxAlerts}
+          inboxLoadFailed={inboxLoadFailed}
           activityEntries={activityEntries}
           initialTab={initialTab}
           examplePromo={examplePromo}

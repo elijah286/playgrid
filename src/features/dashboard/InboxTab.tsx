@@ -33,6 +33,7 @@ import {
   bulkArchiveAlertsAction,
   bulkDeleteAlertsAction,
   deleteAlertAction,
+  listInboxAlertsAction,
   listResolvedInboxEventsAction,
   unarchiveAlertAction,
   type AdminNoticeKind,
@@ -161,10 +162,16 @@ function saveReadKeys(keys: string[]): void {
 
 export function InboxTab({
   initialAlerts,
+  initialLoadFailed = false,
   initialActivity = [],
   isSiteAdmin = false,
 }: {
   initialAlerts: InboxAlert[];
+  /** True when the server-side inbox load (home page) failed or timed out, so
+   *  `initialAlerts` is an empty placeholder rather than a real "caught up".
+   *  Triggers a one-shot client-side re-fetch below so the list matches the
+   *  app-icon badge instead of showing a false empty state. */
+  initialLoadFailed?: boolean;
   initialActivity?: ActivityEntry[];
   /** When true, render the "View system notices" checkbox and surface
    *  admin_notice rows. Server-side flag — clients can't promote. */
@@ -175,6 +182,30 @@ export function InboxTab({
   const { resolveOptimistically, reviveOptimistically } = useInboxBadge();
   const [alerts, setAlerts] = useState<InboxAlert[]>(initialAlerts);
   const [busy, setBusy] = useState<string | null>(null);
+
+  // Recover from a failed/timed-out server-side inbox load. The home page caps
+  // its inbox query at DATA_TIMEOUT_MS and falls back to an EMPTY list on
+  // timeout — but the app-icon badge is computed without that cap (root layout
+  // + push), so a coach can see "5" on the icon and an empty inbox tab here.
+  // Re-fetch once on mount when the server flagged the load as failed; the
+  // bell drawer already fetches client-side, so this just brings the tab to
+  // parity. No cap on the client fetch — better a slightly late list than a
+  // false "all caught up." Only runs on failure, so the happy path pays no
+  // extra query.
+  const recoveredRef = useRef(false);
+  useEffect(() => {
+    if (!initialLoadFailed || recoveredRef.current) return;
+    recoveredRef.current = true;
+    let cancelled = false;
+    void (async () => {
+      const res = await listInboxAlertsAction();
+      if (cancelled || !res.ok) return;
+      setAlerts(res.alerts);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [initialLoadFailed]);
   const [sort, setSort] = useState<SortMode>("urgency");
   const [filter, setFilter] = useState<FilterKind>("all");
   // Playbook scope filter — null means "all playbooks". Stored as the

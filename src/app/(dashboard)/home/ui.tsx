@@ -1213,6 +1213,7 @@ export function DashboardClient({
   isAdmin = false,
   teamCalendarAvailable = false,
   inboxAlerts = [],
+  inboxLoadFailed = false,
   activityEntries = [],
   initialTab = "playbooks",
   examplePromo = { show: false, variant: "none", mode: "off" },
@@ -1226,6 +1227,10 @@ export function DashboardClient({
   isAdmin?: boolean;
   teamCalendarAvailable?: boolean;
   inboxAlerts?: InboxAlert[];
+  /** True when the server-side inbox load failed/timed out, so InboxTab
+   *  should recover the list client-side instead of trusting the empty
+   *  `inboxAlerts`. */
+  inboxLoadFailed?: boolean;
   activityEntries?: ActivityEntry[];
   initialTab?: HomeTab;
   examplePromo?: ExamplePromo;
@@ -1447,6 +1452,7 @@ export function DashboardClient({
       <div hidden={homeTab !== "inbox"} className="mt-4">
         <InboxTab
           initialAlerts={inboxAlerts}
+          initialLoadFailed={inboxLoadFailed}
           initialActivity={activityEntries}
           isSiteAdmin={isAdmin}
         />
