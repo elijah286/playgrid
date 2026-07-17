@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState 
 import { createPortal } from "react-dom";
 import type { PlayCommand } from "@/domain/play/commands";
 import type { Player, Point2, Route, RouteNode, RouteSegment } from "@/domain/play/types";
+import { PlayerShape } from "./PlayerShape";
 import type { UserRouteTemplatesHook } from "./useUserRouteTemplates";
 import { deriveLabelColor } from "@/domain/play/labelColor";
 import { hapticImpact, hapticSelection } from "@/lib/native/haptics";
@@ -282,61 +283,6 @@ function ClampedMenu({
   );
 }
 
-/** SVG shape primitive matching how main players render. Used for the
- *  opponent overlay so defenders show as triangles, special teams as squares,
- *  etc. — not always circles. */
-function PlayerShape({
-  shape,
-  cx,
-  cy,
-  r,
-  fill,
-  stroke,
-  strokeWidth,
-  pointerHandlers,
-}: {
-  shape: "circle" | "square" | "diamond" | "triangle" | "star" | undefined;
-  cx: number;
-  cy: number;
-  r: number;
-  fill: string;
-  stroke: string;
-  strokeWidth: number;
-  pointerHandlers?: {
-    onPointerDown?: (e: React.PointerEvent) => void;
-    style?: React.CSSProperties;
-  };
-}) {
-  const common = {
-    fill,
-    stroke,
-    strokeWidth,
-    vectorEffect: "non-scaling-stroke" as const,
-    ...pointerHandlers,
-  };
-  if (shape === "square") {
-    return <rect x={cx - r} y={cy - r} width={r * 2} height={r * 2} {...common} />;
-  }
-  if (shape === "diamond") {
-    const pts = `${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}`;
-    return <polygon points={pts} {...common} />;
-  }
-  if (shape === "star") {
-    const outer = r * 1.15;
-    const inner = outer * 0.45;
-    const pts = Array.from({ length: 10 }, (_, i) => {
-      const angle = -Math.PI / 2 + (i * Math.PI) / 5;
-      const rad = i % 2 === 0 ? outer : inner;
-      return `${cx + rad * Math.cos(angle)},${cy + rad * Math.sin(angle)}`;
-    }).join(" ");
-    return <polygon points={pts} strokeLinejoin="round" {...common} />;
-  }
-  if (shape === "triangle") {
-    const pts = `${cx},${cy + r} ${cx + r},${cy - r} ${cx - r},${cy - r}`;
-    return <polygon points={pts} {...common} />;
-  }
-  return <circle cx={cx} cy={cy} r={r} {...common} />;
-}
 
 function EditorCanvasImpl({
   doc,

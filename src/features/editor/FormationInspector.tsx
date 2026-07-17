@@ -2,13 +2,9 @@
 
 import { Button, Input, Select, Badge } from "@/components/ui";
 import type { PlayCommand } from "@/domain/play/commands";
-import type {
-  PlayDocument,
-  Player,
-  PlayerRole,
-  PlayerShape,
-} from "@/domain/play/types";
+import type { PlayDocument, PlayerRole, PlayerShape } from "@/domain/play/types";
 import { deriveLabelColor } from "@/domain/play/labelColor";
+import { PlayerShapeChip } from "./PlayerShape";
 import { notifyTutorialAction } from "@/features/tutorials/engine/notify";
 
 type Props = {
@@ -255,16 +251,17 @@ export function FormationInspector({
           onClick={() => onSelectPlayer(pl.id)}
           className="flex items-center gap-3 rounded-lg border border-border bg-surface-inset px-3 py-2 text-left transition-colors hover:border-primary hover:bg-primary/5"
         >
-          <span
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold"
-            style={{
-              backgroundColor: pl.style.fill,
-              color: deriveLabelColor(pl.style.fill),
-              border: `2px solid ${pl.style.stroke}`,
-            }}
-          >
-            {pl.label}
-          </span>
+          {/* Draw the player's actual shape, not a hardcoded circle. The
+              canvas renders a defender as a triangle; a circle here put two
+              different glyphs for the same player side by side on one
+              screen. */}
+          <PlayerShapeChip
+            shape={pl.shape}
+            label={pl.label}
+            fill={pl.style.fill}
+            stroke={pl.style.stroke}
+            labelColor={deriveLabelColor(pl.style.fill)}
+          />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-foreground">{pl.label}</p>
           </div>
