@@ -3,7 +3,10 @@ import {
   listFormationsAction,
   listFormationsForPlaybookAction,
 } from "@/app/actions/formations";
-import { FormationEditorClient } from "@/features/formations/FormationEditorClient";
+import {
+  FormationEditorClient,
+  formationEditorKind,
+} from "@/features/formations/FormationEditorClient";
 import type { SportVariant } from "@/domain/play/types";
 
 export const metadata = { title: "Edit Formation — XO Gridmaker" };
@@ -42,7 +45,16 @@ export default async function EditFormationPage({
       initialName={formation.displayName}
       initialVariant={variant}
       initialPlayers={formation.players}
-      kind={formation.kind === "defense" ? "defense" : "offense"}
+      // Total mapping, not a ternary. This read `kind === "defense" ?
+      // "defense" : "offense"` — correct while those were the only two sides,
+      // then silently wrong once special teams shipped: it collapsed an ST
+      // formation to offense, so the locked Type stated "Offense", the
+      // inspector offered QB/RB/WR (a punter's "P" isn't in that list), and
+      // Add player dropped a grey circle into a blue-square unit — while the
+      // DB row stayed special_teams, so the card's ST badge and the editor
+      // disagreed permanently. TypeScript couldn't catch it: the narrowed
+      // union is a valid subset of the wider one.
+      kind={formationEditorKind(formation.kind)}
       returnToPlaybook={returnToPlaybook}
       navFormations={navFormations}
     />

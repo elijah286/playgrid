@@ -254,7 +254,7 @@ export function FormationInspector({
         Players
       </span>
       {doc.layers.players.length === 0 && (
-        <p className="text-xs text-muted">No players. Click the canvas to add one.</p>
+        <p className="text-xs text-muted">No players. Use Add player below.</p>
       )}
       {doc.layers.players.map((pl) => (
         <button

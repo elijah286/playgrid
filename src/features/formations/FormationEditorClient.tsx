@@ -63,6 +63,23 @@ function sportOptionsForKind(kind: FormationEditorKind) {
 /** Which side of the ball this editor is drawing. */
 export type FormationEditorKind = "offense" | "defense" | "special_teams";
 
+/**
+ * A stored `formations.kind` as an editor side.
+ *
+ * FormationKind is aliased to PlayType, which also carries "practice_plan" —
+ * not a thing this editor draws. Callers used to narrow with an inline ternary
+ * (`kind === "defense" ? "defense" : "offense"`), which was correct until
+ * special teams shipped and then silently collapsed ST formations to offense.
+ * TypeScript can't catch that: the narrowed union is a valid subset.
+ *
+ * So the mapping lives here, next to the type, and is exhaustive by
+ * construction — a new side added to FormationEditorKind fails the build here
+ * rather than degrading quietly at a call site.
+ */
+export function formationEditorKind(kind: string | null | undefined): FormationEditorKind {
+  return kind === "defense" || kind === "special_teams" ? kind : "offense";
+}
+
 /** One label per side, so the picker and the read-only text can't drift. */
 const KIND_LABEL: Record<FormationEditorKind, string> = {
   offense: "Offense",
@@ -89,6 +106,14 @@ const NAME_PLACEHOLDER: Record<FormationEditorKind, string> = {
   offense: "e.g. Trips Right",
   defense: "e.g. Cover 3",
   special_teams: "e.g. Punt",
+};
+
+/** "5v5 Flag defense fields 5" — names the side the count belongs to, since
+ *  offense and defense can field different numbers. */
+const KIND_NOUN: Record<FormationEditorKind, string> = {
+  offense: "offense",
+  defense: "defense",
+  special_teams: "special teams",
 };
 
 /** The blank roster for a side. One place, so the initial document, the Type
@@ -454,15 +479,19 @@ export function FormationEditorClient(props: Props) {
         </div>
       </header>
 
-      {(() => {
-        const max = defaultSettingsForVariant(variant).maxPlayers;
-        const count = doc.layers.players.length;
-        return count > max ? (
-          <p className="-mt-2 text-xs font-medium text-danger">
-            {count} players — {SPORT_VARIANT_LABELS[variant]} allows only {max}.
-          </p>
-        ) : null;
-      })()}
+      {/* One warning, not two. This replaced a red "N players — 5v5 Flag
+          allows only 5" banner that (a) stated a prohibition it never
+          enforced — Save always worked — (b) only fired when OVER, so a
+          formation one player SHORT looked fine, and (c) read the playbook's
+          maxPlayers rather than the side's roster, so it couldn't speak about
+          defense. Amber because it warns; red promised a block. */}
+      {countDelta !== 0 && (
+        <p role="status" className="-mt-2 text-xs font-medium text-amber-700 dark:text-amber-400">
+          {countDelta > 0
+            ? `${actualPlayerCount} players — ${SPORT_VARIANT_LABELS[variant]} ${KIND_NOUN[kind]} fields ${expectedPlayerCount}. You can still save this, but it won't match the game type.`
+            : `${actualPlayerCount} of ${expectedPlayerCount} players — ${SPORT_VARIANT_LABELS[variant]} ${KIND_NOUN[kind]} fields ${expectedPlayerCount}.`}
+        </p>
+      )}
 
       {/* Name + sport row */}
       <div className="flex flex-wrap items-end gap-3">
@@ -557,7 +586,6 @@ export function FormationEditorClient(props: Props) {
               selectedNodeId={null}
               selectedSegmentId={null}
               onSelectPlayer={setSelectedPlayerId}
-              onAddPlayer={addPlayerAt}
               onSelectRoute={() => {}}
               onSelectNode={() => {}}
               onSelectSegment={() => {}}
@@ -581,35 +609,19 @@ export function FormationEditorClient(props: Props) {
           />
 
           {/* Players can be deleted from the inspector, so there has to be a
-              way back. Clicking the canvas adds one too, but that's invisible
-              — a coach who deletes a player has no reason to guess it. */}
-          {selectedPlayerId === null && (
-            <>
-              <Button
-                variant="secondary"
-                size="sm"
-                leftIcon={Plus}
-                onClick={addPlayerCentered}
-                className="w-full"
-              >
-                Add player
-              </Button>
-              <p className="text-[11px] text-muted">
-                Or click anywhere on the field.
-              </p>
-            </>
-          )}
-
-          {countDelta !== 0 && (
-            <p
-              role="status"
-              className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-700 dark:text-amber-400"
-            >
-              {countDelta > 0
-                ? `${actualPlayerCount} players — ${SPORT_VARIANT_LABELS[variant]} fields ${expectedPlayerCount}. You can still save this, but it won't match the game type.`
-                : `${actualPlayerCount} of ${expectedPlayerCount} players for ${SPORT_VARIANT_LABELS[variant]}.`}
-            </p>
-          )}
+              way back. Always available, including while a player is selected
+              — gating it on the all-players view would mean deselecting first
+              for no reason. Adding is deliberately explicit: clicking the
+              field used to add a player, which fired on any stray click. */}
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={Plus}
+            onClick={addPlayerCentered}
+            className="w-full"
+          >
+            Add player
+          </Button>
         </aside>
       </div>
     </div>

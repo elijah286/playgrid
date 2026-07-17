@@ -1,5 +1,5 @@
 import type { PlayCommand } from "./commands";
-import type { PlayDocument, PlayerShape, Point2, RouteSegment } from "./types";
+import type { PlayDocument, PlayerShape, Point2, RouteSegment, Zone } from "./types";
 import { uid } from "./factory";
 import { delaySecondsToSteps } from "./animation";
 
@@ -91,7 +91,6 @@ function formationPositionToPlay(
   position: Point2,
   formationLosY: number,
 ): Point2 {
-  const FORM_FIELD_LEN = 25;
   const playLosY = typeof doc.lineOfScrimmageY === "number" ? doc.lineOfScrimmageY : 0.4;
   const playFieldLen = doc.sportProfile.fieldLengthYds;
   const yardsFromLos = (position.y - formationLosY) * FORM_FIELD_LEN;
@@ -101,23 +100,63 @@ function formationPositionToPlay(
   };
 }
 
+/** All stored formations — and the catalog zone renders — use this window. */
+const FORM_FIELD_LEN = 25;
+
+/**
+ * Move a catalog coverage's zones into this play's coordinate space.
+ *
+ * The zones arrive from the diagram converter, which always renders in the
+ * canonical 0.4-LOS / 25-yard window regardless of the play's own settings.
+ * The defenders get mapped through `formationPositionToPlay`; the zones must
+ * take the same trip or they drift apart from the very players that own them.
+ * A coach who has changed the field window (FieldSizeControls' yard spinners —
+ * available on any play, no playType gate) would otherwise see a Cover 2 shell
+ * floating yards behind its own corners.
+ *
+ * Height rescales too: `size.h` is a normalized half-extent, so it means a
+ * different number of yards in a 40-yard window than in a 25-yard one.
+ */
+function formationZonesToPlay(
+  doc: PlayDocument,
+  zones: readonly Zone[],
+  formationLosY: number,
+): Zone[] {
+  const playFieldLen = doc.sportProfile.fieldLengthYds;
+  if (playFieldLen === FORM_FIELD_LEN && (doc.lineOfScrimmageY ?? 0.4) === formationLosY) {
+    return [...zones];
+  }
+  const scale = FORM_FIELD_LEN / playFieldLen;
+  return zones.map((z) => ({
+    ...z,
+    center: formationPositionToPlay(doc, z.center, formationLosY),
+    size: { w: z.size.w, h: z.size.h * scale },
+  }));
+}
+
 /**
  * What a `document.replaceDefensiveFormation` would destroy that the coach
  * cannot get back, so the UI can ask first — and stay silent otherwise.
  *
- * Deliberately does NOT count zones. Zones are REPLACED by the target
- * coverage's, not deleted, and on most defensive plays they were installed by
- * us at creation rather than drawn by the coach — warning about losing them
- * would be both untrue and a nag on every swap, which is how confirms get
- * trained away. Defender paths (blitz arrows, man lines) are the coach's own
- * work and have no equivalent in the target front, so they're the real loss.
+ * Zones depend on what's ARRIVING, which is why `incomingZones` is a
+ * parameter rather than something this can infer. Swap to a catalog starter
+ * and its coverage replaces the old one — nothing is lost, and warning would
+ * be untrue and a nag on every swap, which is how confirms get trained away.
+ * Swap to a coach-drawn formation, or to a man coverage that draws no zones,
+ * and the existing zones are DELETED. An earlier version ignored zones
+ * entirely on the "they're replaced" reasoning and silently binned hand-drawn
+ * coverage in exactly that case.
+ *
+ * Defender paths (blitz arrows, man lines) are always the coach's own work and
+ * have no equivalent in the target front, so they always count.
  */
-export function defensiveSwapDiscards(doc: PlayDocument): {
-  defenderPaths: number;
-  any: boolean;
-} {
+export function defensiveSwapDiscards(
+  doc: PlayDocument,
+  incomingZones: readonly Zone[] = [],
+): { defenderPaths: number; zonesLost: number; any: boolean } {
   const defenderPaths = doc.layers.routes.length;
-  return { defenderPaths, any: defenderPaths > 0 };
+  const zonesLost = incomingZones.length === 0 ? (doc.layers.zones?.length ?? 0) : 0;
+  return { defenderPaths, zonesLost, any: defenderPaths > 0 || zonesLost > 0 };
 }
 
 function flipPoint(p: Point2, axis: "horizontal" | "vertical"): Point2 {
@@ -723,7 +762,12 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
       return {
         ...doc,
         metadata,
-        layers: { ...doc.layers, players, routes: [], zones: cmd.zones ?? [] },
+        layers: {
+          ...doc.layers,
+          players,
+          routes: [],
+          zones: formationZonesToPlay(doc, cmd.zones ?? [], losY),
+        },
       };
     }
 

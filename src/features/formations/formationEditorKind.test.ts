@@ -10,7 +10,7 @@
  * for a variant, and that each side brings its own players and glyph.
  */
 import { describe, expect, it } from "vitest";
-import { kindOptionsForVariant } from "./FormationEditorClient";
+import { formationEditorKind, kindOptionsForVariant } from "./FormationEditorClient";
 import {
   defaultDefendersForVariant,
   defaultPlayersForVariant,
@@ -103,5 +103,29 @@ describe("sport type and side can't contradict each other", () => {
     for (const v of ["flag_5v5", "flag_6v6", "flag_7v7", "tackle_11"] as const) {
       expect(offered(v)).toBe(buildable(v));
     }
+  });
+});
+
+describe("formationEditorKind", () => {
+  // Reopening a saved formation used to narrow with an inline
+  // `kind === "defense" ? "defense" : "offense"`. Correct while those were the
+  // only two sides; silently wrong the moment special teams shipped — a punt
+  // unit reopened as "Offense", the inspector offered QB/RB/WR (a punter's "P"
+  // isn't in that list), and Add player dropped a grey circle into a
+  // blue-square unit, while the DB row stayed special_teams so the card's ST
+  // badge and the editor disagreed forever. TypeScript can't catch it: the
+  // narrowed union is a valid subset of the wider one.
+  it("round-trips every side a formation can be saved as", () => {
+    expect(formationEditorKind("offense")).toBe("offense");
+    expect(formationEditorKind("defense")).toBe("defense");
+    expect(formationEditorKind("special_teams")).toBe("special_teams");
+  });
+
+  it("falls back to offense for values this editor can't draw", () => {
+    // FormationKind is aliased to PlayType, which also carries practice_plan.
+    expect(formationEditorKind("practice_plan")).toBe("offense");
+    expect(formationEditorKind(null)).toBe("offense");
+    expect(formationEditorKind(undefined)).toBe("offense");
+    expect(formationEditorKind("nonsense")).toBe("offense");
   });
 });

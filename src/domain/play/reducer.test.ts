@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyCommand, defensiveSwapDiscards } from "./reducer";
 import { createEmptyPlayDocument, defaultDefendersForVariant } from "./factory";
-import type { Player } from "./types";
+import type { PlayDocument, Player } from "./types";
 
 describe("applyCommand", () => {
   it("moves a player", () => {
@@ -270,40 +270,107 @@ describe("document.replaceDefensiveFormation", () => {
 });
 
 describe("defensiveSwapDiscards", () => {
+  const zone = (id: string) => ({
+    id, kind: "ellipse" as const, center: { x: 0.5, y: 0.5 },
+    size: { w: 0.1, h: 0.1 }, label: "Hook", style: { fill: "#0002", stroke: "#000" },
+  });
+  const docWith = (zones: unknown[], routes: unknown[]) => {
+    const d = createEmptyPlayDocument({ metadata: { playType: "defense" } as never });
+    return { ...d, layers: { ...d.layers, routes: routes as never, zones: zones as never } };
+  };
+
   it("reports nothing to lose on a fresh play, so the UI can skip the warning", () => {
-    const doc = createEmptyPlayDocument({ metadata: { playType: "defense" } as never });
-    const d = defensiveSwapDiscards({ ...doc, layers: { ...doc.layers, routes: [], zones: [] } });
+    const d = defensiveSwapDiscards(docWith([], []), [zone("z_in")]);
     expect(d.any).toBe(false);
     expect(d.defenderPaths).toBe(0);
+    expect(d.zonesLost).toBe(0);
   });
 
-  it("does NOT warn about zones — they are replaced by the target's, not lost", () => {
-    // Most zones on a defensive play were installed by us at creation, not
-    // drawn by the coach. Warning about them would be untrue AND would nag on
-    // every single swap, which is how confirms get trained away.
-    const doc = createEmptyPlayDocument({ metadata: { playType: "defense" } as never });
-    const zonesOnly = {
-      ...doc,
-      layers: {
-        ...doc.layers,
-        routes: [],
-        zones: [{ id: "z1", kind: "ellipse", center: { x: 0.5, y: 0.5 }, size: { w: 0.1, h: 0.1 }, label: "Hook", style: { fill: "#0002", stroke: "#000" } }] as never,
-      },
-    };
-    expect(defensiveSwapDiscards(zonesOnly).any).toBe(false);
+  it("does NOT warn about zones the target REPLACES — that would nag on every swap", () => {
+    // Swapping Cover 2 -> Tampa 2: the incoming coverage replaces the old one.
+    // Most zones on a defensive play were installed by us at creation anyway.
+    const d = defensiveSwapDiscards(docWith([zone("z1")], []), [zone("z_in")]);
+    expect(d.zonesLost).toBe(0);
+    expect(d.any).toBe(false);
   });
 
-  it("counts defender paths so the confirm can name what's lost", () => {
-    const doc = createEmptyPlayDocument();
-    const withWork = {
-      ...doc,
-      layers: {
-        ...doc.layers,
-        routes: [{ id: "r1", carrierPlayerId: "d1", kind: "path", nodes: [] }] as never,
-        zones: [{ id: "z1", kind: "ellipse", center: { x: 0.5, y: 0.5 }, size: { w: 0.1, h: 0.1 }, label: "Hook", style: { fill: "#0002", stroke: "#000" } }] as never,
-      },
-    };
-    const d = defensiveSwapDiscards(withWork);
-    expect(d).toEqual({ defenderPaths: 1, any: true });
+  it("DOES warn when the target brings no coverage — those zones are deleted", () => {
+    // A coach-drawn formation (semantic_key custom_*) or a pure-man look
+    // resolves to no zones, so the coach's hand-drawn zones are binned. An
+    // earlier version ignored zones entirely and lost them silently.
+    const d = defensiveSwapDiscards(docWith([zone("z1"), zone("z2")], []), []);
+    expect(d.zonesLost).toBe(2);
+    expect(d.any).toBe(true);
+  });
+
+  it("always counts defender paths — no target front has an equivalent", () => {
+    const withPath = docWith([], [{ id: "r1", carrierPlayerId: "d1", kind: "path", nodes: [] }]);
+    expect(defensiveSwapDiscards(withPath, [zone("z_in")])).toEqual({
+      defenderPaths: 1, zonesLost: 0, any: true,
+    });
+    expect(defensiveSwapDiscards(withPath, [])).toEqual({
+      defenderPaths: 1, zonesLost: 0, any: true,
+    });
+  });
+});
+
+describe("document.replaceDefensiveFormation — zone coordinate space", () => {
+  /** Catalog zones always arrive in the canonical 0.4-LOS / 25-yd window. */
+  const catalogZone = {
+    id: "z_deep", kind: "ellipse" as const,
+    center: { x: 0.5, y: 0.6 }, // 5 yds downfield of a 0.4 LOS in a 25-yd window
+    size: { w: 0.2, h: 0.2 }, label: "Deep", style: { fill: "#0002", stroke: "#000" },
+  };
+  const target: Player[] = [
+    { id: "def_cb", role: "CB", label: "CB", position: { x: 0.15, y: 0.6 }, eligible: false, shape: "triangle", style: { fill: "#EF4444", stroke: "#991b1b", labelColor: "#fff" } },
+  ];
+
+  function defensivePlay(over: Partial<PlayDocument> = {}): PlayDocument {
+    const d = createEmptyPlayDocument({ metadata: { playType: "defense" } as never });
+    return { ...d, metadata: { ...d.metadata, playType: "defense" }, ...over };
+  }
+
+  it("moves zones into the play's space alongside the defenders that own them", () => {
+    // A coach who widened the field window (FieldSizeControls) has losY 0.25
+    // and a 40-yd field. The defender is transformed; the zone must take the
+    // same trip or the shell floats yards away from its own corners.
+    const doc = defensivePlay({
+      lineOfScrimmageY: 0.25,
+      sportProfile: { ...createEmptyPlayDocument().sportProfile, fieldLengthYds: 40 },
+    });
+    const next = applyCommand(doc, {
+      type: "document.replaceDefensiveFormation",
+      formationId: "f1", formationName: "Cover 2",
+      players: target, zones: [catalogZone] as never, formationLosY: 0.4,
+    });
+    // Both authored 5 yds downfield -> 0.25 + 5/40 = 0.375.
+    expect(next.layers.players[0].position.y).toBeCloseTo(0.375, 5);
+    expect(next.layers.zones![0].center.y).toBeCloseTo(0.375, 5);
+  });
+
+  it("rescales zone height — a normalized half-extent means different yards per window", () => {
+    const doc = defensivePlay({
+      lineOfScrimmageY: 0.25,
+      sportProfile: { ...createEmptyPlayDocument().sportProfile, fieldLengthYds: 40 },
+    });
+    const next = applyCommand(doc, {
+      type: "document.replaceDefensiveFormation",
+      formationId: "f1", formationName: "Cover 2",
+      players: target, zones: [catalogZone] as never, formationLosY: 0.4,
+    });
+    // 0.2 of a 25-yd window = 5 yds; in a 40-yd window that's 0.125.
+    expect(next.layers.zones![0].size.h).toBeCloseTo(0.125, 5);
+    expect(next.layers.zones![0].size.w).toBe(0.2); // width is unrelated to the window
+  });
+
+  it("leaves zones untouched when the play already uses the canonical window", () => {
+    const doc = defensivePlay();
+    const next = applyCommand(doc, {
+      type: "document.replaceDefensiveFormation",
+      formationId: "f1", formationName: "Cover 2",
+      players: target, zones: [catalogZone] as never, formationLosY: 0.4,
+    });
+    expect(next.layers.zones![0].center).toEqual(catalogZone.center);
+    expect(next.layers.zones![0].size).toEqual(catalogZone.size);
   });
 });

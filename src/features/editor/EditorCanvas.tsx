@@ -142,7 +142,6 @@ type Props = {
   /** Editor mode: routes (default) or formation */
   mode?: "routes" | "formation";
   /** Called when user clicks empty canvas in formation mode */
-  onAddPlayer?: (position: import("@/domain/play/types").Point2) => void;
   /** Field background color theme */
   fieldBackground?: "green" | "white" | "black" | "gray";
   /** Resolved league field structure (length, no-run yardage, first-down
@@ -304,7 +303,6 @@ function EditorCanvasImpl({
   activeWidth,
   fieldAspect = 1,
   mode = "routes",
-  onAddPlayer,
   fieldBackground,
   fieldStructure = null,
   playbookColor = null,
@@ -1367,22 +1365,10 @@ function EditorCanvasImpl({
           notifyTutorialAction("segment-selected");
         } else if (target.kind === "canvas") {
           if (mode === "formation") {
-            // Formation mode: clicking canvas adds a player, clamped to its
-            // own side of the ball. The clamp follows playType the same way
-            // the drag clamp above does — clamping every side toward offense
-            // would spawn a defender on the wrong side of the line.
-            if (onAddPlayer) {
-              const addingDefender = doc.metadata.playType === "defense";
-              onAddPlayer({
-                x: state.origin.x,
-                y: addingDefender
-                  ? Math.max(state.origin.y, losY)
-                  : Math.min(state.origin.y, losY),
-              });
-            } else {
-              // Deselect if no handler
-              onSelectPlayer(null);
-            }
+            // Canvas click deselects. It used to ADD a player, which fired on
+            // any stray click near the field — adding is an explicit action
+            // via the inspector's "Add player" button.
+            onSelectPlayer(null);
           } else {
             // Canvas click (no drag) — route mode
             const anchor = getAnchor();
@@ -1441,9 +1427,9 @@ function EditorCanvasImpl({
     [
       onSelectPlayer, onSelectRoute, onSelectNode, onSelectSegment,
       selectedPlayerId, selectedOpponentPlayerId, opponentEditable, opponentPlayers,
-      onCommitOpponentRoute, doc.layers.players, doc.metadata.playType,
+      onCommitOpponentRoute, doc.layers.players,
       commitClickRoute, commitFreehandRoute,
-      getAnchor, dispatch, activeShape, activeStrokePattern, mode, onAddPlayer, losY,
+      getAnchor, dispatch, activeShape, activeStrokePattern, mode,
       onActiveStrokePatternChange, onSelectZone, cancelLongPress, detachWindowListeners,
     ],
   );

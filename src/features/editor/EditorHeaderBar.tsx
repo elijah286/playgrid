@@ -255,8 +255,8 @@ export function EditorHeaderBar({
                     currentId={formationId ?? null}
                     currentName={formation ?? ""}
                     allFormations={allFormations}
+                    doc={doc}
                     playType={(doc.metadata.playType ?? "offense") === "defense" ? "defense" : "offense"}
-                    discards={defensiveSwapDiscards(doc)}
                     dispatch={dispatch}
                     onSaveAsNewFormation={onSaveAsNewFormation}
                   />
@@ -435,20 +435,21 @@ function FormationTitlePicker({
   currentId,
   currentName,
   allFormations,
+  doc,
   playType,
-  discards,
   dispatch,
   onSaveAsNewFormation,
 }: {
   currentId: string | null;
   currentName: string;
   allFormations: SavedFormation[];
+  /** Needed to work out what a defensive swap would destroy — which depends on
+   *  BOTH the play's current zones/paths and the target's coverage, so it can
+   *  only be computed once the coach picks. */
+  doc: PlayDocument;
   /** Which side's formations to offer. A defensive play must never be shown
    *  offensive formations — applying one would put receivers on the field. */
   playType: "offense" | "defense";
-  /** What a defensive swap would discard, so we only confirm when there's
-   *  actually something to lose. */
-  discards: { defenderPaths: number; any: boolean };
   dispatch: (c: PlayCommand) => void;
   onSaveAsNewFormation: (name: string) => void | Promise<void>;
 }) {
@@ -537,15 +538,26 @@ function FormationTitlePicker({
       // to none, which is correct rather than a fallback.
       const zones = defenseStarterZones(f.semanticKey);
 
-      // Only ask about the defender paths — the coach's own work, with no
-      // equivalent in the target front. Zones are replaced, not lost, so
-      // warning about them would nag on every swap.
+      // What's actually lost depends on what's arriving: a starter's coverage
+      // REPLACES the old zones (nothing lost, no nag), but a coach-drawn
+      // formation or a man look brings none, so the existing zones are
+      // deleted. Hence passing `zones` in rather than judging from the doc.
+      const discards = defensiveSwapDiscards(doc, zones);
       if (discards.any) {
-        const n = discards.defenderPaths;
+        const lost = [
+          discards.defenderPaths > 0
+            ? `${discards.defenderPaths} defender path${discards.defenderPaths === 1 ? "" : "s"}`
+            : null,
+          discards.zonesLost > 0
+            ? `${discards.zonesLost} zone${discards.zonesLost === 1 ? "" : "s"}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" and ");
         const ok = window.confirm(
           `Change this play to ${f.displayName}?\n\n` +
-            `${f.displayName} lines up different defenders, so the ${n} defender ` +
-            `path${n === 1 ? "" : "s"} you've drawn will be cleared.`,
+            `${f.displayName} lines up different defenders, so the ${lost} ` +
+            `you've drawn will be cleared.`,
         );
         if (!ok) return;
       }
