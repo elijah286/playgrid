@@ -424,7 +424,43 @@ export async function sendPushToUsers(opts: {
       .in("id", deadApnsIds);
   }
 
+  // Record the badge each surviving token now shows, so the reconcile path can
+  // tell a stuck icon from a correct one and skip the no-op push. Grouped by
+  // value: a fan-out is typically 1–3 users, so this is one small update per
+  // distinct count. Best-effort — a miss only costs a redundant reconcile push.
+  await recordDeliveredBadges(
+    opts.admin,
+    tokens.filter((t) => !deadFcmIds.includes(t.id) && !deadApnsIds.includes(t.id)),
+    badgeFor,
+  );
+
   return { delivered, configured: true };
+}
+
+/**
+ * Persist `device_tokens.last_badge` for tokens we just badged. Skips tokens the
+ * send carried no badge for (a wide broadcast past MAX_BADGE_RECIPIENTS), since
+ * those left whatever was already on the icon untouched — recording a value we
+ * didn't send would make the reconcile skip a genuinely stuck badge.
+ */
+async function recordDeliveredBadges(
+  admin: Admin,
+  tokens: TokenRow[],
+  badgeFor: (userId: string) => number | undefined,
+): Promise<void> {
+  const idsByBadge = new Map<number, string[]>();
+  for (const t of tokens) {
+    const b = badgeFor(t.user_id);
+    if (typeof b !== "number") continue;
+    const list = idsByBadge.get(b);
+    if (list) list.push(t.id);
+    else idsByBadge.set(b, [t.id]);
+  }
+  await Promise.all(
+    Array.from(idsByBadge.entries()).map(([badge, ids]) =>
+      admin.from("device_tokens").update({ last_badge: badge }).in("id", ids),
+    ),
+  );
 }
 
 /** Test seam: clear the cached access token between unit tests. */

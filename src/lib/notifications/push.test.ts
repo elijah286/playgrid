@@ -165,10 +165,16 @@ describe("sendPushToUsers", () => {
     });
 
     expect(res.delivered).toBe(1);
-    expect(admin.__updates).toHaveLength(1);
-    expect(admin.__updates[0].table).toBe("device_tokens");
-    expect(admin.__updates[0].ids).toEqual(["t2"]);
-    expect(admin.__updates[0].payload.disabled_reason).toBe("fcm_unregistered");
+    // The send also records last_badge for the surviving token, so target the
+    // disable specifically rather than asserting the total update count.
+    const disables = admin.__updates.filter((u) => u.payload.disabled_reason);
+    expect(disables).toHaveLength(1);
+    expect(disables[0].table).toBe("device_tokens");
+    expect(disables[0].ids).toEqual(["t2"]);
+    expect(disables[0].payload.disabled_reason).toBe("fcm_unregistered");
+    // The dead token must never be remembered as badged — it never got one.
+    const badgeWrites = admin.__updates.filter((u) => "last_badge" in u.payload);
+    expect(badgeWrites.every((u) => !u.ids.includes("t2"))).toBe(true);
   });
 
   it("threads each recipient's inbox count into the FCM notification_count badge", async () => {

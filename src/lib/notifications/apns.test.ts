@@ -138,6 +138,21 @@ describe("buildApnsPayload", () => {
     expect(JSON.parse(buildApnsPayload({ title: "T", body: "B", badge: -4 })).aps.badge).toBe(0);
     expect(JSON.parse(buildApnsPayload({ title: "T", body: "B", badge: 2.9 })).aps.badge).toBe(2);
   });
+
+  // The badge-reconcile path (badge-reconcile.ts) repairs a stuck icon on builds
+  // that predate the badge plugin, where APNs is the only lever left. It relies
+  // on this exact shape: badge alone, no alert and no sound, so the icon updates
+  // without showing the coach a banner for a notification that doesn't exist.
+  // An alert or sound creeping in here would spam every one of those coaches.
+  it("builds a badge-only payload — no alert, no sound — for a bare badge write", () => {
+    const payload = JSON.parse(buildApnsPayload({ title: "", body: "", badge: 0 }));
+    expect(payload).toEqual({ aps: { badge: 0 } });
+    expect(payload.aps.sound).toBeUndefined();
+    expect(payload.aps.alert).toBeUndefined();
+    // Not content-available: that would make it an apns-push-type: background
+    // push, which Apple throttles and may drop — no good for clearing an icon.
+    expect(payload.aps["content-available"]).toBeUndefined();
+  });
 });
 
 describe("classifyApnsResponse", () => {

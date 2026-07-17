@@ -26,21 +26,21 @@ afterEach(() => {
 describe("setAppBadge", () => {
   it("no-ops (never touches the plugin) when not in the native app", async () => {
     setNative(false);
-    await expect(setAppBadge(4)).resolves.toBeUndefined();
+    await expect(setAppBadge(4)).resolves.toBe(false);
     expect(set).not.toHaveBeenCalled();
     expect(clear).not.toHaveBeenCalled();
   });
 
   it("sets the absolute count on native", async () => {
     setNative(true);
-    await setAppBadge(3);
+    await expect(setAppBadge(3)).resolves.toBe(true);
     expect(set).toHaveBeenCalledWith({ count: 3 });
     expect(clear).not.toHaveBeenCalled();
   });
 
   it("clears the icon when the count is 0", async () => {
     setNative(true);
-    await setAppBadge(0);
+    await expect(setAppBadge(0)).resolves.toBe(true);
     expect(clear).toHaveBeenCalledTimes(1);
     expect(set).not.toHaveBeenCalled();
   });
@@ -65,13 +65,28 @@ describe("setAppBadge", () => {
     setNative(true);
     checkPermissions.mockResolvedValueOnce({ display: "denied" });
     requestPermissions.mockResolvedValueOnce({ display: "denied" });
-    await setAppBadge(2);
+    await expect(setAppBadge(2)).resolves.toBe(false);
     expect(set).not.toHaveBeenCalled();
   });
 
   it("clearAppBadge clears the icon", async () => {
     setNative(true);
-    await clearAppBadge();
+    await expect(clearAppBadge()).resolves.toBe(true);
     expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  // The stuck-badge case (iOS <= 1.0.1). The JS package is in the web bundle —
+  // the app loads the live site — so the dynamic import RESOLVES; it's the
+  // native bridge that rejects, because the plugin isn't compiled into that
+  // binary. Returning false here is what tells NativeBadgeSync the icon is out
+  // of its hands and a server-side reconcile is the only way to clear it.
+  // If this ever silently returned true, the badge would stay stuck forever.
+  it("returns false when the native plugin is missing from the build", async () => {
+    setNative(true);
+    clear.mockRejectedValueOnce(new Error('Badge does not have an implementation of "clear".'));
+    await expect(setAppBadge(0)).resolves.toBe(false);
+
+    set.mockRejectedValueOnce(new Error('Badge does not have an implementation of "set".'));
+    await expect(setAppBadge(5)).resolves.toBe(false);
   });
 });
