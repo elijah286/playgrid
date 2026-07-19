@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Bell, Calendar, Home, MessageCircle, Sparkles, Users } from "lucide-react";
+import { openCoachCal } from "@/features/coach-ai/openCoachCal";
 
 /**
  * The one stable footer of the new shell — identical on every screen:
@@ -31,7 +32,9 @@ export function PreviewBottomNav() {
   return (
     <nav
       aria-label="Primary"
-      className="fixed bottom-0 left-0 z-30 flex w-screen items-stretch border-t border-border bg-surface-raised sm:hidden"
+      // z-40 (not z-30) so the mobile Coach Cal half-sheet (z-30) slides up
+      // BEHIND the footer as designed, matching the production bottom navs.
+      className="fixed bottom-0 left-0 z-40 flex w-screen items-stretch border-t border-border bg-surface-raised sm:hidden"
       style={{
         paddingBottom: "env(safe-area-inset-bottom, 0px)",
         paddingLeft: "env(safe-area-inset-left, 0px)",
@@ -41,10 +44,13 @@ export function PreviewBottomNav() {
       {SLOTS.map((s) => {
         const active = s.match(pathname);
         if (s.center) {
+          // Opens Coach Cal as a floating/dockable dialog over the current
+          // screen (not full-screen), so the coach keeps the main view.
           return (
-            <Link
+            <button
               key={s.href}
-              href={s.href}
+              type="button"
+              onClick={() => openCoachCal()}
               aria-label={s.label}
               className="flex min-h-[48px] flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[11px] font-semibold text-muted"
             >
@@ -52,7 +58,7 @@ export function PreviewBottomNav() {
                 <s.Icon className="size-5" aria-hidden />
               </span>
               <span className="truncate">{s.label}</span>
-            </Link>
+            </button>
           );
         }
         return (

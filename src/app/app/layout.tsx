@@ -9,6 +9,8 @@ import {
 } from "@/features/preview-shell/selected-team-server";
 import { listShellTeams } from "@/features/preview-shell/team-context";
 import { PreviewChrome } from "@/features/preview-shell/PreviewChrome";
+import { getShellCoachCalProps } from "@/features/preview-shell/coach-cal-props";
+import { CoachAiLauncher } from "@/features/coach-ai/CoachAiLauncher";
 
 /**
  * Layout for the new-UX preview shell. THE GATE: only a user who is both
@@ -54,19 +56,43 @@ export default async function AppShellLayout({
       ? selected
       : ALL_TEAMS;
 
+  const cal = await getShellCoachCalProps(user.id, role === "admin");
+
   return (
-    <PreviewChrome
-      teams={teams}
-      selected={selectedResolved}
-      footballLibraryAvailable={footballLibraryAvailable}
-      user={{
-        email: user.email ?? "",
-        displayName: (profile?.display_name as string | null) ?? null,
-        avatarUrl: (profile?.avatar_url as string | null) ?? null,
-        isAdmin: role === "admin",
-      }}
-    >
-      {children}
-    </PreviewChrome>
+    <>
+      <PreviewChrome
+        teams={teams}
+        selected={selectedResolved}
+        footballLibraryAvailable={footballLibraryAvailable}
+        user={{
+          email: user.email ?? "",
+          displayName: (profile?.display_name as string | null) ?? null,
+          avatarUrl: (profile?.avatar_url as string | null) ?? null,
+          isAdmin: role === "admin",
+        }}
+      >
+        {children}
+      </PreviewChrome>
+      {/* The shell's own Coach Cal launcher — SiteHeader's global one is
+          unmounted on /app. acceptGlobalCommands so the shell's Cal buttons
+          (openCoachCal) open it as a floating/dockable dialog over the main
+          view, never full-screen. Wrapped in `hidden` (mirrors SiteHeaderShell)
+          to suppress the launcher's built-in in-flow trigger button — the shell
+          surfaces its own Cal buttons — while the portaled dialog + the
+          coach-cal:open listener stay alive. */}
+      <div className="hidden">
+        <CoachAiLauncher
+          acceptGlobalCommands
+          playbookId={selectedResolved !== ALL_TEAMS ? selectedResolved : null}
+          isAdmin={cal.isAdmin}
+          canDebugCal={cal.canDebugCal}
+          entitled={cal.entitled}
+          evalDays={cal.evalDays}
+          imageUploadAvailable={cal.imageUploadAvailable}
+          userTier={cal.userTier}
+          coachProTrialUsed={cal.coachProTrialUsed}
+        />
+      </div>
+    </>
   );
 }

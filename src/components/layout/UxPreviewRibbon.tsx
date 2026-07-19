@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { FlaskConical, Loader2 } from "lucide-react";
 import { setUxPreviewActiveAction } from "@/app/actions/ux-preview";
 
@@ -17,8 +17,16 @@ import { setUxPreviewActiveAction } from "@/app/actions/ux-preview";
  */
 export function UxPreviewRibbon({ active }: { active: boolean }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [pending, startTransition] = useTransition();
   const ref = useRef<HTMLDivElement>(null);
+  // On /app the ribbon is the TOPMOST element (the production SiteHeader that
+  // normally owns the notch clearance is hidden there), so it must inset itself
+  // below the status bar / notch — otherwise everything below it (the shell
+  // header controls) renders behind the iOS status bar. On production routes
+  // the header owns that, so the ribbon keeps its normal padding. env() is 0 on
+  // the web, so this only adds space on a notched native/standalone device.
+  const onAppShell = pathname === "/app" || (pathname?.startsWith("/app/") ?? false);
 
   // Publish the ribbon's height so the new-UX shell can bound itself to the
   // remaining viewport (height: calc(100dvh - var(--ux-ribbon-h))) — a fixed
@@ -53,6 +61,11 @@ export function UxPreviewRibbon({ active }: { active: boolean }) {
       ref={ref}
       role="status"
       data-ux-ribbon
+      style={
+        onAppShell
+          ? { paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.375rem)" }
+          : undefined
+      }
       className={`flex items-center justify-center gap-2 px-3 py-1.5 text-center text-xs font-semibold ${
         active
           ? "bg-brand-orange text-white"

@@ -1,8 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BookOpen, GraduationCap, Layers, Shield, Sparkles } from "lucide-react";
+import { openCoachCal } from "@/features/coach-ai/openCoachCal";
 import { ShellAlertsButton } from "@/features/preview-shell/ShellAlertsButton";
 import { ShellAccountMenu } from "@/features/preview-shell/ShellAccountMenu";
 import { TeamSwitcher } from "@/features/preview-shell/TeamSwitcher";
@@ -42,10 +44,32 @@ export function PreviewChrome({
       className="flex flex-col overflow-hidden bg-surface"
       style={{ height: "calc(100dvh - var(--ux-ribbon-h, 28px))" }}
     >
-      {/* Mobile top bar (desktop uses the sidebar instead) */}
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-surface-raised px-4 py-2.5 sm:hidden">
-        <TeamSwitcher teams={teams} selected={selected} />
-        <div className="flex items-center gap-1.5">
+      {/* Persistent top bar. Desktop shows the brand (nav lives in the
+          sidebar); mobile shows the team switcher (no sidebar there). */}
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-surface-raised px-4 py-2">
+        <div className="flex min-w-0 items-center gap-3">
+          <Link
+            href="/app/home"
+            className="hidden shrink-0 items-center gap-2 sm:flex"
+            aria-label="XO Gridmaker home"
+          >
+            <Image
+              src="/brand/xogridmaker_monogram.svg"
+              alt=""
+              width={28}
+              height={28}
+              className="size-7"
+              unoptimized
+            />
+            <span className="text-sm font-black tracking-tight text-foreground">
+              XO Gridmaker
+            </span>
+          </Link>
+          <div className="min-w-0 sm:hidden">
+            <TeamSwitcher teams={teams} selected={selected} />
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
           <ShellAlertsButton />
           <ShellAccountMenu
             user={user}
@@ -69,14 +93,6 @@ export function PreviewChrome({
               isAdmin={user.isAdmin}
             />
           </nav>
-          <div className="shrink-0 border-t border-border p-3">
-            <ShellAccountMenu
-              user={user}
-              footballLibraryAvailable={footballLibraryAvailable}
-              variant="full"
-              openUp
-            />
-          </div>
         </aside>
 
         {/* Main — the ONLY scroll container. */}
@@ -90,20 +106,18 @@ export function PreviewChrome({
   );
 }
 
-/** Prominent Coach Cal action — the AI assistant should read as a headline
- *  feature, not a footnote link. */
+/** Prominent Coach Cal action — opens the launcher as a floating/dockable
+ *  dialog over the main view (openCoachCal), never full-screen. */
 function CalCta() {
-  const pathname = usePathname() ?? "";
-  const active = pathname.startsWith("/coach-cal");
   return (
-    <Link
-      href="/coach-cal/chat"
-      aria-current={active ? "page" : undefined}
-      className="mt-2 flex items-center gap-2.5 rounded-xl bg-gradient-to-br from-primary to-primary-dark px-3 py-2.5 text-sm font-bold text-white shadow-card transition-opacity hover:opacity-95"
+    <button
+      type="button"
+      onClick={() => openCoachCal()}
+      className="mt-2 flex w-full items-center gap-2.5 rounded-xl bg-gradient-to-br from-primary to-primary-dark px-3 py-2.5 text-sm font-bold text-white shadow-card transition-opacity hover:opacity-95"
     >
       <Sparkles className="size-5" aria-hidden />
       Coach Cal
-    </Link>
+    </button>
   );
 }
 

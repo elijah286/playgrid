@@ -15,6 +15,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { signOutAction } from "@/app/actions/auth";
+import { openCoachCal } from "@/features/coach-ai/openCoachCal";
 import type { ShellUser } from "@/features/preview-shell/types";
 
 function initialsFor(user: ShellUser): string {
@@ -128,7 +129,18 @@ export function ShellAccountMenu({
           </div>
 
           <div className="py-1">
-            <MenuLink href="/coach-cal/chat" label="Coach Cal" Icon={Sparkles} onNav={() => setOpen(false)} />
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                openCoachCal();
+              }}
+              className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-foreground transition-colors hover:bg-surface-inset"
+            >
+              <Sparkles className="size-4 text-muted" aria-hidden />
+              Coach Cal
+            </button>
             <MenuLink href="/account" label="Account" Icon={CreditCard} onNav={() => setOpen(false)} />
             <MenuLink href="/learn" label="Learning Center" Icon={GraduationCap} onNav={() => setOpen(false)} />
           </div>
