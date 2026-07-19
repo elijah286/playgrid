@@ -20,9 +20,12 @@ const FALLBACK_COLOR = "#64748B";
 export function TeamSwitcher({
   teams,
   selected,
+  block = false,
 }: {
   teams: ShellTeam[];
   selected: string;
+  /** Full-width block trigger (desktop sidebar) vs the compact pill (mobile header). */
+  block?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -53,7 +56,11 @@ export function TeamSwitcher({
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="inline-flex max-w-[60vw] items-center gap-2 rounded-full border border-border bg-surface-raised py-1 pl-1.5 pr-2.5 text-sm font-bold text-foreground transition-colors hover:bg-surface-inset"
+        className={`min-h-11 items-center gap-2 border border-border bg-surface-raised text-sm font-bold text-foreground transition-colors hover:bg-surface-inset ${
+          block
+            ? "flex w-full rounded-xl px-2 py-1.5"
+            : "inline-flex max-w-[60vw] rounded-full py-1 pl-1.5 pr-2.5"
+        }`}
       >
         <TeamMark team={current} />
         <span className="truncate">{current ? current.name : "All teams"}</span>
@@ -75,7 +82,9 @@ export function TeamSwitcher({
           <div
             role="menu"
             aria-label="Switch team"
-            className="absolute left-0 top-full z-50 mt-2 w-64 overflow-hidden rounded-2xl border border-border bg-surface-raised shadow-elevated"
+            className={`absolute top-full z-50 mt-2 max-h-[calc(100dvh-5rem)] overflow-y-auto rounded-2xl border border-border bg-surface-raised shadow-elevated ${
+              block ? "left-0 right-0" : "left-0 w-64"
+            }`}
           >
             <div className="flex items-center justify-between px-3 py-2">
               <span className="text-xs font-bold uppercase tracking-wide text-muted">

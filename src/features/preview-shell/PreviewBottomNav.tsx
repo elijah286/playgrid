@@ -73,11 +73,18 @@ export function PreviewBottomNav() {
   );
 }
 
-/** Desktop left-rail counterpart — same destinations, same order. */
+/** Desktop primary nav list — rendered inside the sidebar's own <nav> in
+ *  PreviewChrome (Coach Cal is a prominent CTA there, not a list item). */
 export function PreviewSideNav() {
   const pathname = usePathname() ?? "/app/home";
+  const linkCls = (active: boolean) =>
+    `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+      active
+        ? "bg-primary-light text-primary-dark"
+        : "text-muted hover:bg-surface-inset hover:text-foreground"
+    }`;
   return (
-    <nav aria-label="Primary" className="hidden sm:flex sm:flex-col sm:gap-1">
+    <div className="flex flex-col gap-1">
       {SLOTS.filter((s) => !s.center).map((s) => {
         const active = s.match(pathname);
         return (
@@ -85,11 +92,7 @@ export function PreviewSideNav() {
             key={s.href}
             href={s.href}
             aria-current={active ? "page" : undefined}
-            className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
-              active
-                ? "bg-primary-light text-primary-dark"
-                : "text-muted hover:bg-surface-inset hover:text-foreground"
-            }`}
+            className={linkCls(active)}
           >
             <s.Icon className="size-5" aria-hidden />
             {s.label}
@@ -99,22 +102,11 @@ export function PreviewSideNav() {
       <Link
         href="/app/alerts"
         aria-current={pathname.startsWith("/app/alerts") ? "page" : undefined}
-        className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
-          pathname.startsWith("/app/alerts")
-            ? "bg-primary-light text-primary-dark"
-            : "text-muted hover:bg-surface-inset hover:text-foreground"
-        }`}
+        className={linkCls(pathname.startsWith("/app/alerts"))}
       >
         <Bell className="size-5" aria-hidden />
         Alerts
       </Link>
-      <Link
-        href="/coach-cal/chat"
-        className="mt-1 flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold text-muted transition-colors hover:bg-surface-inset hover:text-foreground"
-      >
-        <Sparkles className="size-5" aria-hidden />
-        Coach Cal
-      </Link>
-    </nav>
+    </div>
   );
 }

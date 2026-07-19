@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getRequestUser } from "@/lib/supabase/request-user";
 import { createClient } from "@/lib/supabase/server";
 import { resolveUxPreview } from "@/lib/site/ux-preview";
+import { isFootballLibraryAvailable } from "@/lib/learn/access";
 import {
   readSelectedTeam,
   ALL_TEAMS,
@@ -41,7 +42,10 @@ export default async function AppShellLayout({
   });
   if (!ux.allowed || !ux.active) redirect("/home");
 
-  const teams = await listShellTeams();
+  const [teams, footballLibraryAvailable] = await Promise.all([
+    listShellTeams(),
+    isFootballLibraryAvailable(),
+  ]);
 
   const selected = await readSelectedTeam();
   // If the cookie points at a team the user no longer has, fall back to All.
@@ -54,6 +58,7 @@ export default async function AppShellLayout({
     <PreviewChrome
       teams={teams}
       selected={selectedResolved}
+      footballLibraryAvailable={footballLibraryAvailable}
       user={{
         email: user.email ?? "",
         displayName: (profile?.display_name as string | null) ?? null,

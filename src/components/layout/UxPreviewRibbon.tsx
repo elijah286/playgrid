@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useEffect, useRef, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { FlaskConical, Loader2 } from "lucide-react";
 import { setUxPreviewActiveAction } from "@/app/actions/ux-preview";
@@ -18,6 +18,25 @@ import { setUxPreviewActiveAction } from "@/app/actions/ux-preview";
 export function UxPreviewRibbon({ active }: { active: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Publish the ribbon's height so the new-UX shell can bound itself to the
+  // remaining viewport (height: calc(100dvh - var(--ux-ribbon-h))) — a fixed
+  // frame where only the main content scrolls. Inert on production (nothing
+  // reads the var there).
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const publish = () => root.style.setProperty("--ux-ribbon-h", `${el.offsetHeight}px`);
+    publish();
+    const ro = new ResizeObserver(publish);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty("--ux-ribbon-h");
+    };
+  }, []);
 
   const toggle = () => {
     const next = !active;
@@ -31,7 +50,9 @@ export function UxPreviewRibbon({ active }: { active: boolean }) {
 
   return (
     <div
+      ref={ref}
       role="status"
+      data-ux-ribbon
       className={`flex items-center justify-center gap-2 px-3 py-1.5 text-center text-xs font-semibold ${
         active
           ? "bg-brand-orange text-white"

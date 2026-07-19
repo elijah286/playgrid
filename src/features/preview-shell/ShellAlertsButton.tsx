@@ -16,7 +16,7 @@ export function ShellAlertsButton() {
     <Link
       href="/app/alerts"
       aria-label={count > 0 ? `Alerts — ${count}${urgent ? " urgent" : ""}` : "Alerts"}
-      className="relative inline-flex size-9 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-inset hover:text-foreground"
+      className="relative inline-flex size-11 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-inset hover:text-foreground"
     >
       <Bell className="size-5" aria-hidden />
       {count > 0 && (

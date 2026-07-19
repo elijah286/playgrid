@@ -45,11 +45,12 @@ export default async function TeamChannelPage({
     | null;
 
   return (
-    // Fill the space between the shell's sticky header (~53px) + the main's
-    // pt-4 (16px) above, and the fixed bottom nav (~64px + safe area) below.
-    // The chat renders inline (layout="inline") so it stays inside this frame
-    // instead of position:fixed'ing to the production header/nav offsets.
-    <div className="mx-auto flex h-[calc(100dvh-8.5rem)] max-w-2xl flex-col sm:h-[calc(100dvh-7rem)]">
+    // Fill the shell's main scroll frame (main is a bounded flex child whose
+    // pb-24 already reserves the fixed bottom nav), so the composer always
+    // lands above the nav regardless of ribbon/header height. The chat renders
+    // inline (layout="inline") so it stays inside this frame rather than
+    // position:fixed'ing to the production header/nav offsets.
+    <div className="mx-auto flex h-full max-w-2xl flex-col">
       <Link
         href="/app/messages"
         className="mb-2 inline-flex items-center gap-1 text-sm font-semibold text-muted transition-colors hover:text-foreground"

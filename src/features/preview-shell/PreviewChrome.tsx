@@ -1,8 +1,10 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { BookOpen, GraduationCap, Layers, Shield, Sparkles } from "lucide-react";
 import { ShellAlertsButton } from "@/features/preview-shell/ShellAlertsButton";
+import { ShellAccountMenu } from "@/features/preview-shell/ShellAccountMenu";
 import { TeamSwitcher } from "@/features/preview-shell/TeamSwitcher";
 import {
   PreviewBottomNav,
@@ -10,66 +12,142 @@ import {
 } from "@/features/preview-shell/PreviewBottomNav";
 import type { ShellTeam, ShellUser } from "@/features/preview-shell/types";
 
-function initialsFor(user: ShellUser): string {
-  const src = user.displayName?.trim() || user.email;
-  const parts = src.split(/[\s@._-]+/).filter(Boolean);
-  return parts.slice(0, 2).map((p) => p[0]!.toUpperCase()).join("") || "?";
-}
-
 /**
- * The new shell's frame: a constant header (persistent team switcher + Alerts +
- * account) that never changes across screens, a desktop left rail, and the
- * mobile bottom nav. The production SiteHeader/footer are hidden on /app via
- * HideOnAppShell, so this is the only chrome here.
+ * The new shell's frame: a persistent team switcher + primary nav + a prominent
+ * Coach Cal action + the "everything else" account menu (Learning Center,
+ * Football Library, tutorials, Site Admin, sign out). Desktop puts all of this
+ * in a fixed left sidebar; mobile uses a top bar + bottom nav. Production
+ * chrome is hidden on /app, so this is the only chrome here.
  */
 export function PreviewChrome({
   teams,
   selected,
   user,
+  footballLibraryAvailable,
   children,
 }: {
   teams: ShellTeam[];
   selected: string;
   user: ShellUser;
+  footballLibraryAvailable: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div data-app-shell className="flex min-h-[100dvh] flex-col bg-surface">
-      <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-border bg-surface-raised/85 px-4 py-2.5 backdrop-blur-lg">
+    <div
+      data-app-shell
+      // Fixed frame: bound to the viewport minus the preview ribbon (which
+      // publishes --ux-ribbon-h). The 28px default keeps SSR/first paint from
+      // overflowing before the ribbon's ResizeObserver refines it. Only <main>
+      // scrolls.
+      className="flex flex-col overflow-hidden bg-surface"
+      style={{ height: "calc(100dvh - var(--ux-ribbon-h, 28px))" }}
+    >
+      {/* Mobile top bar (desktop uses the sidebar instead) */}
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-surface-raised px-4 py-2.5 sm:hidden">
         <TeamSwitcher teams={teams} selected={selected} />
         <div className="flex items-center gap-1.5">
           <ShellAlertsButton />
-          <Link
-            href="/account"
-            aria-label="Account"
-            className="relative grid size-8 shrink-0 place-items-center overflow-hidden rounded-full bg-primary text-xs font-bold text-white ring-1 ring-border"
-          >
-            {user.avatarUrl ? (
-              <Image
-                src={user.avatarUrl}
-                alt=""
-                fill
-                sizes="32px"
-                className="object-cover"
-                unoptimized
-              />
-            ) : (
-              initialsFor(user)
-            )}
-          </Link>
+          <ShellAccountMenu
+            user={user}
+            footballLibraryAvailable={footballLibraryAvailable}
+            variant="avatar"
+          />
         </div>
       </header>
 
-      <div className="mx-auto flex w-full max-w-6xl flex-1">
-        <aside className="hidden shrink-0 sm:block sm:w-52 sm:border-r sm:border-border sm:p-3">
-          <PreviewSideNav />
+      <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1">
+        {/* Desktop sidebar — fixed; only the nav list inside scrolls. */}
+        <aside className="hidden w-60 shrink-0 flex-col border-r border-border sm:flex">
+          <div className="shrink-0 border-b border-border p-3">
+            <TeamSwitcher teams={teams} selected={selected} block />
+          </div>
+          <nav className="min-h-0 flex-1 overflow-y-auto p-3">
+            <PreviewSideNav />
+            <CalCta />
+            <ExploreNav
+              footballLibraryAvailable={footballLibraryAvailable}
+              isAdmin={user.isAdmin}
+            />
+          </nav>
+          <div className="shrink-0 border-t border-border p-3">
+            <ShellAccountMenu
+              user={user}
+              footballLibraryAvailable={footballLibraryAvailable}
+              variant="full"
+              openUp
+            />
+          </div>
         </aside>
-        <main className="min-w-0 flex-1 px-4 pb-24 pt-4 sm:px-6 sm:pb-10">
+
+        {/* Main — the ONLY scroll container. */}
+        <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-24 pt-4 sm:px-6 sm:pb-10">
           {children}
         </main>
       </div>
 
       <PreviewBottomNav />
+    </div>
+  );
+}
+
+/** Prominent Coach Cal action — the AI assistant should read as a headline
+ *  feature, not a footnote link. */
+function CalCta() {
+  const pathname = usePathname() ?? "";
+  const active = pathname.startsWith("/coach-cal");
+  return (
+    <Link
+      href="/coach-cal/chat"
+      aria-current={active ? "page" : undefined}
+      className="mt-2 flex items-center gap-2.5 rounded-xl bg-gradient-to-br from-primary to-primary-dark px-3 py-2.5 text-sm font-bold text-white shadow-card transition-opacity hover:opacity-95"
+    >
+      <Sparkles className="size-5" aria-hidden />
+      Coach Cal
+    </Link>
+  );
+}
+
+/** Secondary destinations that aren't team-scoped — surfaced in the sidebar so
+ *  they're discoverable (also in the account menu for completeness). */
+function ExploreNav({
+  footballLibraryAvailable,
+  isAdmin,
+}: {
+  footballLibraryAvailable: boolean;
+  isAdmin: boolean;
+}) {
+  const pathname = usePathname() ?? "";
+  const items = [
+    ...(footballLibraryAvailable
+      ? [{ href: "/learn/library", label: "Football library", Icon: BookOpen }]
+      : []),
+    { href: "/learn/using-xo", label: "App tutorials", Icon: GraduationCap },
+    { href: "/examples", label: "Examples", Icon: Layers },
+    ...(isAdmin ? [{ href: "/settings", label: "Site Admin", Icon: Shield }] : []),
+  ];
+  return (
+    <div className="mt-4">
+      <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wide text-muted">
+        Explore
+      </p>
+      {items.map((it) => {
+        const active = pathname === it.href || pathname.startsWith(`${it.href}/`);
+        return (
+          <Link
+            key={it.href}
+            href={it.href}
+            aria-current={active ? "page" : undefined}
+            className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+              active
+                ? "bg-primary-light text-primary-dark"
+                : "text-muted hover:bg-surface-inset hover:text-foreground"
+            }`}
+          >
+            <it.Icon className="size-5" aria-hidden />
+            {it.label}
+          </Link>
+        );
+      })}
     </div>
   );
 }
