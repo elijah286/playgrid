@@ -34,7 +34,7 @@ export function PreviewChrome({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-[100dvh] flex-col bg-surface">
+    <div data-app-shell className="flex min-h-[100dvh] flex-col bg-surface">
       <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-border bg-surface-raised/85 px-4 py-2.5 backdrop-blur-lg">
         <TeamSwitcher teams={teams} selected={selected} />
         <div className="flex items-center gap-1.5">

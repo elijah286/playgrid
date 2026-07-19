@@ -947,3 +947,15 @@ body.play-field-fullscreen .field-viewport {
   top: calc(env(safe-area-inset-top) + 0.75rem);
   right: calc(env(safe-area-inset-right) + 0.75rem);
 }
+
+/* New-UX shell (/app) has its own fixed bottom nav (PreviewBottomNav, ~48px +
+ * safe area) that the production layout doesn't. Any floating dock anchored at
+ * bottom-6 (e.g. the formations reorder bar) would sit ON TOP of that nav on
+ * mobile, covering its tap targets. Lift such docks above the nav — scoped to
+ * the shell (data-app-shell) + mobile only, so production is byte-for-byte
+ * unaffected. */
+@media (max-width: 639px) {
+  [data-app-shell] .coach-dock-aware {
+    bottom: calc(48px + env(safe-area-inset-bottom, 0px) + 0.75rem);
+  }
+}

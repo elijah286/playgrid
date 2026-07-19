@@ -4,10 +4,18 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Check, ExternalLink, Loader2 } from "lucide-react";
+import { LogoPicker } from "@/components/ui/LogoPicker";
+import { PlaybookRulesForm } from "@/features/playbooks/PlaybookRulesForm";
+import {
+  normalizePlaybookSettings,
+  type PlaybookSettings,
+} from "@/domain/playbook/settings";
+import type { SportVariant } from "@/domain/play/types";
 import {
   renamePlaybookAction,
   updatePlaybookSeasonAction,
   updatePlaybookAppearanceAction,
+  updatePlaybookSettingsAction,
   updateRosterApprovalRequiredAction,
 } from "@/app/actions/playbooks";
 
@@ -22,16 +30,19 @@ type Team = {
   season: string | null;
   color: string | null;
   logoUrl: string | null;
+  sportVariant: SportVariant;
 };
 type Res = { ok: true } | { ok: false; error: string };
 
 export function SettingsClient({
   team,
   approvalRequired,
+  settings,
   canManage,
 }: {
   team: Team;
   approvalRequired: boolean;
+  settings: PlaybookSettings | null;
   canManage: boolean;
 }) {
   const router = useRouter();
@@ -40,19 +51,39 @@ export function SettingsClient({
   const [season, setSeason] = useState(team.season ?? "");
   const [color, setColor] = useState(team.color ?? "#134e2a");
   const [approval, setApproval] = useState(approvalRequired);
+  const [logoUrl, setLogoUrl] = useState(team.logoUrl ?? "");
+  const [rules, setRules] = useState<PlaybookSettings | null>(settings);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+
+  const logoDirty = logoUrl !== (team.logoUrl ?? "");
+  // Compare a NORMALIZED projection of the edited rules against the (already
+  // normalized) server settings — otherwise cosmetic server normalization
+  // (null rushingYards→0, capability re-ordering) leaves Save stuck "dirty"
+  // after a successful save. Projecting (rather than resetting `rules` on every
+  // settings change) avoids clobbering in-progress edits when another card's
+  // save triggers router.refresh().
+  const rulesDirty =
+    !!rules &&
+    !!settings &&
+    JSON.stringify(normalizePlaybookSettings(rules, team.sportVariant)) !==
+      JSON.stringify(settings);
 
   const run = (key: string, fn: () => Promise<Res>, optimistic?: () => void) => {
     setError(null);
     setSaved(null);
     optimistic?.();
     startTransition(async () => {
-      const r = await fn();
-      if (!r.ok) setError(r.error);
-      else {
-        setSaved(key);
-        router.refresh();
+      try {
+        const r = await fn();
+        if (!r.ok) setError(r.error);
+        else {
+          setSaved(key);
+          router.refresh();
+        }
+      } catch {
+        // A rejected server action THROWS — surface it, never a silent no-op.
+        setError("Couldn't save — check your connection and try again.");
       }
     });
   };
@@ -108,14 +139,21 @@ export function SettingsClient({
               key={c}
               type="button"
               aria-label={`Use ${c}`}
+              disabled={pending}
               onClick={() =>
                 run(
                   "color",
-                  () => updatePlaybookAppearanceAction(team.id, { logo_url: team.logoUrl, color: c }),
+                  // Preserve the freshest client logo (not the render-time prop,
+                  // which is stale during a logo save's refresh window).
+                  () =>
+                    updatePlaybookAppearanceAction(team.id, {
+                      logo_url: logoUrl.trim() || null,
+                      color: c,
+                    }),
                   () => setColor(c),
                 )
               }
-              className="grid size-8 place-items-center rounded-lg ring-2 ring-offset-2 ring-offset-surface-raised transition-transform hover:scale-105"
+              className="grid size-8 place-items-center rounded-lg ring-2 ring-offset-2 ring-offset-surface-raised transition-transform hover:scale-105 disabled:opacity-50"
               style={{ backgroundColor: c, boxShadow: color === c ? undefined : "none" }}
             >
               {color === c && <Check className="size-4 text-white" aria-hidden />}
@@ -123,6 +161,52 @@ export function SettingsClient({
           ))}
         </div>
       </Card>
+
+      {/* Logo */}
+      <Card label="Team logo" savedNow={saved === "logo"}>
+        <div className="space-y-2.5">
+          <LogoPicker value={logoUrl} onChange={setLogoUrl} disabled={pending} />
+          <div className="flex justify-end">
+            <SaveBtn
+              disabled={pending || !logoDirty}
+              onClick={() =>
+                run("logo", () =>
+                  updatePlaybookAppearanceAction(team.id, {
+                    logo_url: logoUrl.trim() || null,
+                    // Preserve the raw server color (may be null) so a logo-only
+                    // save never persists the display-fallback color.
+                    color: team.color,
+                  }),
+                )
+              }
+              pending={pending}
+            />
+          </div>
+        </div>
+      </Card>
+
+      {/* Game rules */}
+      {rules && (
+        <Card label="Game rules" savedNow={saved === "rules"}>
+          <div className="space-y-3">
+            <PlaybookRulesForm
+              value={rules}
+              onChange={setRules}
+              sportVariant={team.sportVariant}
+              disabled={pending}
+            />
+            <div className="flex justify-end">
+              <SaveBtn
+                disabled={pending || !rulesDirty}
+                onClick={() =>
+                  run("rules", () => updatePlaybookSettingsAction(team.id, rules))
+                }
+                pending={pending}
+              />
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Roster approval */}
       <Card label="Approve new players" savedNow={saved === "approval"}>
@@ -160,11 +244,13 @@ export function SettingsClient({
         <p className="rounded-lg bg-danger-light px-3 py-2 text-xs text-danger">{error}</p>
       )}
 
+      {/* Danger zone (archive / delete / leave) stays a handoff — destructive
+          and its success handlers redirect out of the team context. */}
       <Link
         href={`/playbooks/${team.id}`}
         className="flex items-center justify-between gap-2 rounded-xl border border-border bg-surface-raised px-4 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-surface-inset"
       >
-        <span>Logo, game rules &amp; more</span>
+        <span>Archive or delete this team</span>
         <ExternalLink className="size-4 text-muted" aria-hidden />
       </Link>
     </div>
