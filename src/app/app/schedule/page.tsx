@@ -1,12 +1,9 @@
-import {
-  listUpcomingEventsAcrossPlaybooksAction,
-  listMyCoachablePlaybooksAction,
-} from "@/app/actions/calendar";
-import { getDashboardSummaryAction } from "@/app/actions/plays";
+import { listUpcomingEventsAcrossPlaybooksAction } from "@/app/actions/calendar";
 import {
   readSelectedTeam,
   ALL_TEAMS,
 } from "@/features/preview-shell/selected-team-server";
+import { listShellTeams } from "@/features/preview-shell/team-context";
 import {
   ScheduleClient,
   type ScheduleEvent,
@@ -20,21 +17,20 @@ import {
  */
 export default async function AppSchedulePage() {
   const selected = await readSelectedTeam();
-  const [evRes, summary, coachRes] = await Promise.all([
+  const [evRes, shellTeams] = await Promise.all([
     listUpcomingEventsAcrossPlaybooksAction(),
-    getDashboardSummaryAction(),
-    listMyCoachablePlaybooksAction(),
+    listShellTeams(), // cached from the shell layout — no extra query
   ]);
 
-  const teams: ScheduleTeam[] = summary.ok
-    ? summary.data.playbooks
-        .filter((p) => !p.is_default && !p.is_archived && !p.is_example)
-        .map((p) => ({ id: p.id, name: p.name, color: p.color }))
-    : [];
-
-  const coachable: ScheduleTeam[] = coachRes.ok
-    ? coachRes.playbooks.map((p) => ({ id: p.id, name: p.name, color: p.color }))
-    : [];
+  const teams: ScheduleTeam[] = shellTeams.map((t) => ({
+    id: t.id,
+    name: t.name,
+    color: t.color,
+  }));
+  // Coaches can create events; derive from the same cached list (no separate query).
+  const coachable: ScheduleTeam[] = shellTeams
+    .filter((t) => t.role === "owner" || t.role === "editor")
+    .map((t) => ({ id: t.id, name: t.name, color: t.color }));
 
   let events = evRes.ok ? evRes.events : [];
   if (selected !== ALL_TEAMS) events = events.filter((e) => e.playbookId === selected);

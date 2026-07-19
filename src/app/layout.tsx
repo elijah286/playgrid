@@ -298,10 +298,6 @@ export default async function RootLayout({
                 initialUrgent={inboxUrgent}
               >
                 <ConfigBanner />
-                {/* New-UX preview ribbon — only for allowlisted/admin users
-                    who have opted in via the flag. Invisible to everyone else
-                    (uxPreview.allowed is false while `new_shell` is off). */}
-                {uxPreview.allowed && <UxPreviewRibbon active={uxPreview.active} />}
                 {/* Production chrome hides inside the new-UX shell (/app/*),
                     which provides its own header/nav. Pathname-gated → zero
                     effect on any production route. */}
@@ -310,6 +306,11 @@ export default async function RootLayout({
                   <IosAppBanner />
                   <SiteHeader />
                 </HideOnAppShell>
+                {/* New-UX preview ribbon — sits JUST BELOW the header (not above
+                    it, which collided with the sticky header/notch on mobile).
+                    Only for allowlisted/admin users who've opted in; invisible
+                    to everyone else. */}
+                {uxPreview.allowed && <UxPreviewRibbon active={uxPreview.active} />}
                 <div className="flex flex-1 flex-col">{children}</div>
                 <HideOnAppShell>
                   <SiteFooter />

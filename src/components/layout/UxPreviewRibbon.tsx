@@ -40,9 +40,7 @@ export function UxPreviewRibbon({ active }: { active: boolean }) {
     >
       <FlaskConical className="size-3.5 shrink-0" aria-hidden />
       <span className="truncate">
-        {active
-          ? "New UX preview is ON — a scaffold; production is unaffected for everyone else."
-          : "You have early access to the new UX preview."}
+        {active ? "New UX preview" : "New UX — early access"}
       </span>
       <button
         type="button"

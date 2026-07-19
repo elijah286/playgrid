@@ -22,7 +22,6 @@ export type HomeTeam = {
   color: string | null;
   logoUrl: string | null;
   season: string | null;
-  playCount: number;
 };
 
 export type TodayEvent = {
@@ -180,9 +179,7 @@ export function HomeToday({
                     {t.name}
                   </span>
                   <span className="block truncate text-[11px] text-muted">
-                    {[t.season, `${t.playCount} ${t.playCount === 1 ? "play" : "plays"}`]
-                      .filter(Boolean)
-                      .join(" · ")}
+                    {t.season || "Open team"}
                   </span>
                 </span>
               </button>

@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { ChevronRight, MessageCircle } from "lucide-react";
-import { getDashboardSummaryAction } from "@/app/actions/plays";
 import {
   listPlaybookMessagesAction,
   getPlaybookUnreadCountAction,
@@ -9,6 +8,7 @@ import {
   readSelectedTeam,
   ALL_TEAMS,
 } from "@/features/preview-shell/selected-team-server";
+import { listShellTeams } from "@/features/preview-shell/team-context";
 
 const FALLBACK = "#64748B";
 
@@ -34,10 +34,7 @@ function relTime(iso: string | null): string {
  */
 export default async function AppMessagesPage() {
   const selected = await readSelectedTeam();
-  const summary = await getDashboardSummaryAction();
-  let teams = summary.ok
-    ? summary.data.playbooks.filter((p) => !p.is_default && !p.is_archived && !p.is_example)
-    : [];
+  let teams = await listShellTeams(); // cached from the shell layout
   if (selected !== ALL_TEAMS) teams = teams.filter((t) => t.id === selected);
 
   const rows = await Promise.all(
@@ -51,7 +48,7 @@ export default async function AppMessagesPage() {
         id: t.id,
         name: t.name,
         color: t.color,
-        logoUrl: t.logo_url,
+        logoUrl: t.logoUrl,
         lastBody: last ? (last.deletedAt ? "Message deleted" : last.body) : null,
         lastAuthor: last?.author?.displayName ?? null,
         lastAt: last?.createdAt ?? null,

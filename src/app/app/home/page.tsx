@@ -1,10 +1,10 @@
 import { listUpcomingEventsAcrossPlaybooksAction } from "@/app/actions/calendar";
 import { listInboxAlertsAction } from "@/app/actions/inbox";
-import { getDashboardSummaryAction } from "@/app/actions/plays";
 import {
   readSelectedTeam,
   ALL_TEAMS,
 } from "@/features/preview-shell/selected-team-server";
+import { listShellTeams } from "@/features/preview-shell/team-context";
 import {
   HomeToday,
   type TodayEvent,
@@ -29,24 +29,19 @@ const NEEDS_YOU_KINDS = new Set([
  */
 export default async function AppHomePage() {
   const selected = await readSelectedTeam();
-  const [evRes, alertRes, summary] = await Promise.all([
+  const [evRes, alertRes] = await Promise.all([
     listUpcomingEventsAcrossPlaybooksAction(),
     listInboxAlertsAction(),
-    getDashboardSummaryAction(),
   ]);
 
-  const teams: HomeTeam[] = summary.ok
-    ? summary.data.playbooks
-        .filter((p) => !p.is_default && !p.is_archived && !p.is_example)
-        .map((p) => ({
-          id: p.id,
-          name: p.name,
-          color: p.color,
-          logoUrl: p.logo_url,
-          season: p.season,
-          playCount: p.play_count,
-        }))
-    : [];
+  // Cached from the shell layout — no extra query.
+  const teams: HomeTeam[] = (await listShellTeams()).map((t) => ({
+    id: t.id,
+    name: t.name,
+    color: t.color,
+    logoUrl: t.logoUrl,
+    season: t.season,
+  }));
 
   const nowMs = Date.now();
   let events = evRes.ok ? evRes.events : [];
