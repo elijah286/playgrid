@@ -1,9 +1,10 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Users } from "lucide-react";
+import { Loader2, Plus, Users } from "lucide-react";
 import { setSelectedTeamAction } from "@/app/actions/app-shell";
+import { CreateTeamSheet } from "@/features/preview-shell/CreateTeamSheet";
 
 const FALLBACK = "#64748B";
 
@@ -19,6 +20,7 @@ type PickTeam = {
 export function TeamPicker({ teams }: { teams: PickTeam[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [creating, setCreating] = useState(false);
 
   const pick = (id: string) => {
     startTransition(async () => {
@@ -35,6 +37,15 @@ export function TeamPicker({ teams }: { teams: PickTeam[] }) {
         </span>
         <h1 className="mt-4 text-lg font-extrabold text-foreground">No teams yet</h1>
         <p className="mt-1.5 text-sm text-muted">Create your first team to get started.</p>
+        <button
+          type="button"
+          onClick={() => setCreating(true)}
+          className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-hover"
+        >
+          <Plus className="size-4" aria-hidden />
+          Create a team
+        </button>
+        {creating && <CreateTeamSheet onClose={() => setCreating(false)} />}
       </div>
     );
   }

@@ -9,6 +9,7 @@ import {
   UserPlus,
   Users,
 } from "lucide-react";
+import { ApprovalControls, approvalFor } from "./ApprovalControls";
 
 export type AlertItem = {
   key: string;
@@ -20,6 +21,8 @@ export type AlertItem = {
   who: string | null;
   body: string | null;
   href: string | null;
+  userId: string | null;
+  claimId: string | null;
 };
 
 export type ActivityItem = {
@@ -72,7 +75,9 @@ function alertHref(a: AlertItem): string {
     case "membership":
     case "coach_upgrade":
     case "roster_claim":
-      return `/playbooks/${a.playbookId}?tab=roster`;
+      // Fallback only — these normally render inline approve/deny. Stay in the
+      // shell rather than dumping to the production /playbooks roster tab.
+      return "/app/team/roster";
     default:
       return a.href || "/app/alerts";
   }
@@ -86,8 +91,8 @@ function activityText(a: ActivityItem): string {
 
 function activityHref(a: ActivityItem): string {
   if (a.kind === "play_update" && a.playId) return `/plays/${a.playId}/edit`;
-  if (a.kind === "member_joined") return `/playbooks/${a.playbookId}?tab=roster`;
-  return `/playbooks/${a.playbookId}`;
+  if (a.kind === "member_joined") return "/app/team/roster";
+  return "/app/team";
 }
 
 function relTime(iso: string): string {
@@ -131,27 +136,41 @@ export function AlertsClient({
             {needsYou.map((a) => {
               const Icon = alertIcon(a.kind);
               const color = a.playbookColor || FALLBACK;
+              const pair = approvalFor(a.kind, a.playbookId, a.userId, a.claimId);
+              const body = (
+                <>
+                  <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-warning-light text-warning">
+                    <Icon className="size-3.5" aria-hidden />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium text-foreground">{alertText(a)}</span>
+                    {!scoped && (
+                      <span
+                        className="mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
+                        style={{ backgroundColor: color }}
+                      >
+                        {a.playbookName}
+                      </span>
+                    )}
+                  </span>
+                </>
+              );
               return (
                 <li key={a.key}>
-                  <Link
-                    href={alertHref(a)}
-                    className="flex items-start gap-3 rounded-xl border border-border bg-surface-raised p-3 shadow-sm transition-colors hover:bg-surface-inset"
-                  >
-                    <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-warning-light text-warning">
-                      <Icon className="size-3.5" aria-hidden />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-medium text-foreground">{alertText(a)}</span>
-                      {!scoped && (
-                        <span
-                          className="mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
-                          style={{ backgroundColor: color }}
-                        >
-                          {a.playbookName}
-                        </span>
-                      )}
-                    </span>
-                  </Link>
+                  {pair ? (
+                    // Actionable inline — approve/deny without leaving the shell.
+                    <div className="flex items-center gap-3 rounded-xl border border-border bg-surface-raised p-3 shadow-sm">
+                      {body}
+                      <ApprovalControls pair={pair} />
+                    </div>
+                  ) : (
+                    <Link
+                      href={alertHref(a)}
+                      className="flex items-start gap-3 rounded-xl border border-border bg-surface-raised p-3 shadow-sm transition-colors hover:bg-surface-inset"
+                    >
+                      {body}
+                    </Link>
+                  )}
                 </li>
               );
             })}

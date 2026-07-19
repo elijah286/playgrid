@@ -78,11 +78,14 @@ export default async function AppHomePage() {
     .map((a) => ({
       key: a.key,
       kind: a.kind,
+      playbookId: a.playbookId,
       playbookName: a.playbookName,
       playbookColor: a.playbookColor,
       eventTitle: a.eventTitle ?? null,
       who: a.displayName ?? null,
       body: a.body ?? null,
+      userId: a.userId ?? null,
+      claimId: a.claimId ?? null,
     }));
 
   const offline = !evRes.ok && !alertRes.ok;

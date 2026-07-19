@@ -7,6 +7,7 @@ import Link from "next/link";
 import { Check, ChevronDown, Loader2, Plus, X } from "lucide-react";
 import { setSelectedTeamAction } from "@/app/actions/app-shell";
 import { ALL_TEAMS } from "@/features/preview-shell/selected-team";
+import { CreateTeamSheet } from "@/features/preview-shell/CreateTeamSheet";
 import type { ShellTeam } from "@/features/preview-shell/types";
 
 const FALLBACK_COLOR = "#64748B";
@@ -25,6 +26,7 @@ export function TeamSwitcher({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [pending, startTransition] = useTransition();
   const current = teams.find((t) => t.id === selected) ?? null;
 
@@ -125,17 +127,22 @@ export function TeamSwitcher({
                 </button>
               ))}
             </div>
-            <Link
-              href="/home"
-              onClick={() => setOpen(false)}
-              className="flex items-center gap-2 border-t border-border px-3 py-2.5 text-sm font-semibold text-primary hover:bg-surface-inset"
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setCreating(true);
+              }}
+              className="flex w-full items-center gap-2 border-t border-border px-3 py-2.5 text-left text-sm font-semibold text-primary hover:bg-surface-inset"
             >
               <Plus className="size-4" />
               New team
-            </Link>
+            </button>
           </div>
         </>
       )}
+
+      {creating && <CreateTeamSheet onClose={() => setCreating(false)} />}
     </div>
   );
 }

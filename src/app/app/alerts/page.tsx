@@ -49,6 +49,9 @@ export default async function AppAlertsPage() {
     who: a.displayName ?? null,
     body: a.body ?? null,
     href: a.href ?? null,
+    // Threaded through so the row can approve/deny inline (rank 4).
+    userId: a.userId ?? null,
+    claimId: a.claimId ?? null,
   }));
 
   const activity: ActivityItem[] = acts.map((a) => ({

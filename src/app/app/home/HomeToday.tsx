@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -15,6 +15,8 @@ import {
   Users,
 } from "lucide-react";
 import { setSelectedTeamAction } from "@/app/actions/app-shell";
+import { ApprovalControls, approvalFor } from "@/app/app/alerts/ApprovalControls";
+import { CreateTeamSheet } from "@/features/preview-shell/CreateTeamSheet";
 
 export type HomeTeam = {
   id: string;
@@ -40,11 +42,14 @@ export type TodayEvent = {
 export type NeedsYouItem = {
   key: string;
   kind: string;
+  playbookId: string;
   playbookName: string;
   playbookColor: string | null;
   eventTitle: string | null;
   who: string | null;
   body: string | null;
+  userId: string | null;
+  claimId: string | null;
 };
 
 const FALLBACK = "#64748B";
@@ -113,6 +118,7 @@ export function HomeToday({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [creating, setCreating] = useState(false);
   const dateLabel = new Date().toLocaleDateString(undefined, {
     weekday: "long",
     month: "long",
@@ -150,9 +156,13 @@ export function HomeToday({
         {teams.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted">
             No teams yet.{" "}
-            <Link href="/home" className="font-semibold text-primary">
-              Create a playbook
-            </Link>
+            <button
+              type="button"
+              onClick={() => setCreating(true)}
+              className="font-semibold text-primary hover:underline"
+            >
+              Create a team
+            </button>
             .
           </div>
         ) : (
@@ -265,11 +275,9 @@ export function HomeToday({
           <ul className="space-y-2">
             {needsYou.map((a) => {
               const color = a.playbookColor || FALLBACK;
-              return (
-                <li
-                  key={a.key}
-                  className="flex items-start gap-2.5 rounded-xl border border-border bg-surface-raised p-3 shadow-sm"
-                >
+              const pair = approvalFor(a.kind, a.playbookId, a.userId, a.claimId);
+              const inner = (
+                <>
                   <span className="mt-1.5 size-2 shrink-0 rounded-full bg-warning" aria-hidden />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm text-foreground">{needsYouText(a)}</p>
@@ -282,6 +290,29 @@ export function HomeToday({
                       </span>
                     )}
                   </div>
+                </>
+              );
+              // Actionable → approve/deny inline. RSVP → open the schedule.
+              // Everything else → the Alerts inbox. No more inert rows.
+              if (pair) {
+                return (
+                  <li
+                    key={a.key}
+                    className="flex items-center gap-2.5 rounded-xl border border-border bg-surface-raised p-3 shadow-sm"
+                  >
+                    {inner}
+                    <ApprovalControls pair={pair} />
+                  </li>
+                );
+              }
+              return (
+                <li key={a.key}>
+                  <Link
+                    href={a.kind === "rsvp_pending" ? "/app/schedule" : "/app/alerts"}
+                    className="flex items-start gap-2.5 rounded-xl border border-border bg-surface-raised p-3 shadow-sm transition-colors hover:bg-surface-inset"
+                  >
+                    {inner}
+                  </Link>
                 </li>
               );
             })}
@@ -302,6 +333,8 @@ export function HomeToday({
           <QuickAction href="/app/team/roster" Icon={Users} label="Roster" />
         </div>
       </section>
+
+      {creating && <CreateTeamSheet onClose={() => setCreating(false)} />}
     </div>
   );
 }
