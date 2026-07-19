@@ -1,9 +1,6 @@
 import Link from "next/link";
 import { ChevronRight, MessageCircle } from "lucide-react";
-import {
-  listPlaybookMessagesAction,
-  getPlaybookUnreadCountAction,
-} from "@/app/actions/playbook-messages";
+import { createClient } from "@/lib/supabase/server";
 import {
   readSelectedTeam,
   ALL_TEAMS,
@@ -11,6 +8,15 @@ import {
 import { listShellTeams } from "@/features/preview-shell/team-context";
 
 const FALLBACK = "#64748B";
+
+type Summary = {
+  playbook_id: string;
+  last_body: string | null;
+  last_created_at: string | null;
+  last_author_name: string | null;
+  last_deleted: boolean | null;
+  unread: number | null;
+};
 
 function relTime(iso: string | null): string {
   if (!iso) return "";
@@ -29,34 +35,36 @@ function relTime(iso: string | null): string {
 /**
  * Cross-team conversation list — the "did anyone message any of my teams?"
  * view the production lobby is missing. One row per team (last message +
- * unread), opening into that team's single channel. Same data as the
- * production per-team chat.
+ * unread), opening into that team's single channel.
+ *
+ * Perf: last-message + unread for every team come from ONE round-trip
+ * (shell_message_summaries RPC) rather than 2 queries per team.
  */
 export default async function AppMessagesPage() {
   const selected = await readSelectedTeam();
   let teams = await listShellTeams(); // cached from the shell layout
   if (selected !== ALL_TEAMS) teams = teams.filter((t) => t.id === selected);
 
-  const rows = await Promise.all(
-    teams.map(async (t) => {
-      const [msgRes, unreadRes] = await Promise.all([
-        listPlaybookMessagesAction(t.id, { limit: 1 }),
-        getPlaybookUnreadCountAction(t.id),
-      ]);
-      const last = msgRes.ok ? (msgRes.messages[0] ?? null) : null;
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("shell_message_summaries");
+  const byId = new Map<string, Summary>();
+  for (const s of (data ?? []) as Summary[]) byId.set(s.playbook_id, s);
+
+  const rows = teams
+    .map((t) => {
+      const s = byId.get(t.id);
       return {
         id: t.id,
         name: t.name,
         color: t.color,
         logoUrl: t.logoUrl,
-        lastBody: last ? (last.deletedAt ? "Message deleted" : last.body) : null,
-        lastAuthor: last?.author?.displayName ?? null,
-        lastAt: last?.createdAt ?? null,
-        unread: unreadRes.ok ? unreadRes.unread : 0,
+        lastBody: s?.last_body ? (s.last_deleted ? "Message deleted" : s.last_body) : null,
+        lastAuthor: s?.last_author_name ?? null,
+        lastAt: s?.last_created_at ?? null,
+        unread: s?.unread ?? 0,
       };
-    }),
-  );
-  rows.sort((a, b) => (b.lastAt ?? "").localeCompare(a.lastAt ?? ""));
+    })
+    .sort((a, b) => (b.lastAt ?? "").localeCompare(a.lastAt ?? ""));
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
