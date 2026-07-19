@@ -45,7 +45,11 @@ export default async function TeamChannelPage({
     | null;
 
   return (
-    <div className="mx-auto flex h-[calc(100dvh-9rem)] max-w-2xl flex-col">
+    // Fill the space between the shell's sticky header (~53px) + the main's
+    // pt-4 (16px) above, and the fixed bottom nav (~64px + safe area) below.
+    // The chat renders inline (layout="inline") so it stays inside this frame
+    // instead of position:fixed'ing to the production header/nav offsets.
+    <div className="mx-auto flex h-[calc(100dvh-8.5rem)] max-w-2xl flex-col sm:h-[calc(100dvh-7rem)]">
       <Link
         href="/app/messages"
         className="mb-2 inline-flex items-center gap-1 text-sm font-semibold text-muted transition-colors hover:text-foreground"
@@ -63,6 +67,7 @@ export default async function TeamChannelPage({
             avatarUrl: profile?.avatar_url ?? null,
           }}
           viewerRole={mem.role}
+          layout="inline"
           initial={{
             messages: msgRes.ok ? msgRes.messages : [],
             hasMore: msgRes.ok ? msgRes.hasMore : false,

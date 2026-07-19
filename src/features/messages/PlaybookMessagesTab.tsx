@@ -32,6 +32,15 @@ export type PlaybookMessagesTabProps = {
     hasMore: boolean;
     messagingEnabled: boolean;
   };
+  /**
+   * `"fixed"` (default) = the production playbook-page behavior: on mobile the
+   * chat pins itself with `position: fixed` to offsets tuned for the production
+   * header/banner/bottom-nav, and locks document scroll. `"inline"` = fill the
+   * parent container instead (no fixed positioning, no body-scroll lock) — used
+   * by the new shell, whose chrome heights differ, so the chat lives inside the
+   * shell's own scroll frame. Default preserves production exactly.
+   */
+  layout?: "fixed" | "inline";
 };
 
 export function PlaybookMessagesTab({
@@ -40,7 +49,9 @@ export function PlaybookMessagesTab({
   viewer,
   viewerRole,
   initial,
+  layout = "fixed",
 }: PlaybookMessagesTabProps) {
+  const inline = layout === "inline";
   const stream = useMessageStream({ playbookId, viewer, initial });
   const isOwner = viewerRole === "owner";
   const canModerate = viewerRole === "owner" || viewerRole === "editor";
@@ -88,6 +99,10 @@ export function PlaybookMessagesTab({
   // below keeps the input glued to the viewport bottom.
   useEffect(() => {
     if (typeof window === "undefined") return;
+    // Inline layout lives inside its host's own scroll frame (the new shell),
+    // so it must NOT lock the document or fix-position itself — that's only the
+    // production playbook page's behavior.
+    if (inline) return;
     const apply = () => {
       const isMobile = window.matchMedia("(max-width: 639px)").matches;
       if (isMobile) {
@@ -103,7 +118,7 @@ export function PlaybookMessagesTab({
       mq.removeEventListener("change", apply);
       document.documentElement.classList.remove("messages-mobile-lock");
     };
-  }, []);
+  }, [inline]);
 
   return (
     <div
@@ -117,7 +132,13 @@ export function PlaybookMessagesTab({
       // 100dvh covers site-header + top-tabs + chrome) capped at 760px
       // so very tall screens don't get an absurdly long chat. The
       // mobile class becomes a no-op on `sm:` and up.
-      className="messages-mobile-fixed flex flex-col overflow-hidden bg-surface-base sm:h-[calc(100dvh-340px)] sm:max-h-[760px] sm:rounded-2xl sm:border sm:border-border"
+      className={
+        inline
+          ? // Fill the host card (the shell sets its height); no fixed
+            // positioning, no mobile-lock — the shell owns the scroll frame.
+            "flex h-full flex-col overflow-hidden bg-surface-raised"
+          : "messages-mobile-fixed flex flex-col overflow-hidden bg-surface-base sm:h-[calc(100dvh-340px)] sm:max-h-[760px] sm:rounded-2xl sm:border sm:border-border"
+      }
     >
       <Header
         playbookName={playbookName}
