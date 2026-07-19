@@ -1,7 +1,10 @@
 import Link from "next/link";
-import { ListChecks, Plus } from "lucide-react";
+import { ListChecks } from "lucide-react";
 import { getSelectedTeamMeta } from "@/features/preview-shell/team-context";
 import { listPlaysAction } from "@/app/actions/plays";
+import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
+import { LoadError } from "@/features/preview-shell/LoadError";
+import { NewPlayButton } from "./NewPlayButton";
 
 /** Team → Plays (default). The team's play library over real data; each card
  *  opens the existing full-screen play editor. */
@@ -10,6 +13,7 @@ export default async function TeamPlaysPage() {
   if (!team) return null;
 
   const res = await listPlaysAction(team.id);
+  if (!res.ok) return <LoadError message={res.error} />;
   const plays = res.plays.filter((p) => !p.is_archived);
   const canEdit = team.role === "owner" || team.role === "editor";
 
@@ -20,13 +24,7 @@ export default async function TeamPlaysPage() {
           {plays.length} {plays.length === 1 ? "play" : "plays"}
         </span>
         {canEdit && (
-          <Link
-            href={`/playbooks/${team.id}`}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-bold text-white transition-colors hover:bg-primary-hover"
-          >
-            <Plus className="size-4" aria-hidden />
-            New play
-          </Link>
+          <NewPlayButton playbookId={team.id} variant={team.sportVariant} />
         )}
       </div>
 
@@ -35,17 +33,24 @@ export default async function TeamPlaysPage() {
           No plays yet.
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
           {plays.map((p) => (
             <Link
               key={p.id}
               href={`/plays/${p.id}/edit`}
-              className="overflow-hidden rounded-xl border border-border bg-surface-raised transition-colors hover:bg-surface-inset"
+              className="group block rounded-xl p-1.5 transition-colors hover:bg-surface-inset"
             >
-              <div className="grid h-20 place-items-center bg-field/90">
-                <ListChecks className="size-6 text-white/70" aria-hidden />
-              </div>
-              <div className="p-2.5">
+              {p.preview ? (
+                // The real diagram — same canonical thumbnail the production
+                // playbook grid renders (pure SVG, no extra query: the preview
+                // ships with listPlaysAction). `thin` for the smaller card.
+                <PlayThumbnail preview={p.preview} thin />
+              ) : (
+                <div className="grid aspect-[16/10] w-full place-items-center rounded-lg border border-border bg-field/90">
+                  <ListChecks className="size-6 text-white/70" aria-hidden />
+                </div>
+              )}
+              <div className="px-1 pt-1.5">
                 <div className="truncate text-xs font-bold text-foreground">{p.name}</div>
                 {p.formation_name && (
                   <div className="truncate text-[11px] text-muted">{p.formation_name}</div>

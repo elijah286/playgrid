@@ -297,9 +297,9 @@ export function HomeToday({
         <div className="flex flex-wrap gap-2">
           <QuickAction href="/app/schedule" Icon={Plus} label="New event" />
           <QuickAction href="/app/messages" Icon={MessageCircle} label="Message team" />
-          <QuickAction href="/app/team" Icon={UserPlus} label="Add player" />
+          <QuickAction href="/app/team/roster" Icon={UserPlus} label="Add player" />
           <QuickAction href="/app/schedule" Icon={Calendar} label="Schedule" />
-          <QuickAction href="/app/team" Icon={Users} label="Roster" />
+          <QuickAction href="/app/team/roster" Icon={Users} label="Roster" />
         </div>
       </section>
     </div>
