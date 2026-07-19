@@ -26,6 +26,7 @@ const DEFAULTS: BetaFeatures = {
   offline_auto_cache: "off",
   photo_play_import: "me",
   new_play_sheet: "me",
+  new_shell: "off",
 };
 
 export async function getBetaFeaturesAction() {

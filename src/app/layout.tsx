@@ -29,6 +29,9 @@ import { listInboxAlertsAction } from "@/app/actions/inbox";
 import { InboxBadgeProvider } from "@/features/dashboard/InboxBadgeContext";
 import { InboxBadgeRefresher } from "@/components/layout/InboxBadgeRefresher";
 import { NativeBadgeSync } from "@/components/native/NativeBadgeSync";
+import { resolveUxPreview } from "@/lib/site/ux-preview";
+import { UxPreviewRibbon } from "@/components/layout/UxPreviewRibbon";
+import { HideOnAppShell } from "@/components/layout/HideOnAppShell";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -170,6 +173,8 @@ export default async function RootLayout({
 }>) {
   let isAuthed = false;
   let userId: string | null = null;
+  let userEmail: string | null = null;
+  let userRole: string | null = null;
   // Single request-scoped auth check, shared with SiteHeader +
   // GlobalBottomNav via React cache() (see request-user.ts) so one
   // navigation makes one getUser() round-trip instead of three. Time-bound
@@ -179,6 +184,7 @@ export default async function RootLayout({
   if (authResult.kind === "ok" && authResult.user) {
     isAuthed = true;
     userId = authResult.user.id;
+    userEmail = authResult.user.email ?? null;
   }
 
   // Server-render the initial inbox badge baseline so the bell can paint
@@ -193,6 +199,7 @@ export default async function RootLayout({
         getCachedUserRole(userId),
         listInboxAlertsAction(),
       ]);
+      userRole = role;
       const isAdmin = role === "admin";
       if (inboxRes.ok) {
         const visible = inboxRes.alerts.filter(
@@ -208,6 +215,10 @@ export default async function RootLayout({
       /* best effort — badge starts at 0 and the poller catches up */
     }
   }
+
+  // New-UX preview gate. Resolves to {allowed:false} with ~no work while the
+  // `new_shell` flag is "off" (its default), so every other user is unaffected.
+  const uxPreview = await resolveUxPreview({ isAuthed, userRole, userEmail });
 
   return (
     <html lang="en" className={`h-full scroll-smooth antialiased ${inter.variable}`} suppressHydrationWarning>
@@ -287,11 +298,22 @@ export default async function RootLayout({
                 initialUrgent={inboxUrgent}
               >
                 <ConfigBanner />
-                <AppInstallBanner />
-                <IosAppBanner />
-                <SiteHeader />
+                {/* New-UX preview ribbon — only for allowlisted/admin users
+                    who have opted in via the flag. Invisible to everyone else
+                    (uxPreview.allowed is false while `new_shell` is off). */}
+                {uxPreview.allowed && <UxPreviewRibbon active={uxPreview.active} />}
+                {/* Production chrome hides inside the new-UX shell (/app/*),
+                    which provides its own header/nav. Pathname-gated → zero
+                    effect on any production route. */}
+                <HideOnAppShell>
+                  <AppInstallBanner />
+                  <IosAppBanner />
+                  <SiteHeader />
+                </HideOnAppShell>
                 <div className="flex flex-1 flex-col">{children}</div>
-                <SiteFooter />
+                <HideOnAppShell>
+                  <SiteFooter />
+                </HideOnAppShell>
                 {/* Global mobile bottom nav for authed users, on every
                     route. Self-gates on auth and bails on routes that own
                     their own bottom bar (editor, playbook, viewer, Cal

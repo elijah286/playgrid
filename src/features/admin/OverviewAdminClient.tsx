@@ -33,6 +33,7 @@ import type {
 } from "@/app/actions/admin-activation";
 import type { StripeConfigStatus } from "@/lib/site/stripe-config";
 import { getMarketingOverviewAction } from "@/app/actions/admin-marketing";
+import { UxPreviewAdminBanner } from "@/features/admin/UxPreviewAdminBanner";
 import { cn } from "@/lib/utils";
 
 export type OverviewWindow = "7d" | "30d" | "90d" | "all";
@@ -155,6 +156,10 @@ export function OverviewAdminClient({
 
   return (
     <div className="space-y-8">
+      {/* New-UX preview control — pinned at the very top of Overview so it's
+          easy to find. Toggle your own view, set who can see it, manage the
+          allowlist. See features/admin/UxPreviewAdminBanner. */}
+      <UxPreviewAdminBanner />
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-base font-semibold text-foreground">Overview</h2>

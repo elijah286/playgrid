@@ -15,7 +15,8 @@ export type BetaFeatureKey =
   | "football_library"
   | "offline_auto_cache"
   | "photo_play_import"
-  | "new_play_sheet";
+  | "new_play_sheet"
+  | "new_shell";
 export type BetaFeatureScope = "off" | "me" | "all" | "custom";
 
 export type BetaFeatures = Record<BetaFeatureKey, BetaFeatureScope>;
@@ -54,6 +55,13 @@ const DEFAULTS: BetaFeatures = {
   // until chosen) + a blank-canvas escape hatch. Ships dark; "me" = site admins
   // preview in prod, widen to "all" from the Beta features panel once verified.
   new_play_sheet: "me",
+  // New navigation shell / UX redesign ("carry the team, not the boundary").
+  // Availability gate only — being available does NOT auto-apply the new UX;
+  // each user opts in per-session via a cookie toggle (see lib/site/ux-preview.ts),
+  // so login always defaults to the current production experience. Start "off"
+  // (nobody), flip to "me" (admins) or "custom" (allowlist) to test in prod,
+  // then "all" to ship. Off-by-default = zero effect on everyone else.
+  new_shell: "off",
 };
 
 /** Safe "everything off" fallback for callers that need a value even when
@@ -128,23 +136,33 @@ export function isBetaFeatureAvailable(
 }
 
 
+// Cached so a "custom"-scoped feature (which checks the allowlist for every
+// non-admin authed request in the root layout) doesn't add a DB round-trip to
+// each navigation. 60s TTL + a bust tag; add/remove below revalidate it.
+const fetchAllowlistEmails = unstable_cache(
+  async (feature: string): Promise<string[]> => {
+    try {
+      const admin = createServiceRoleClient();
+      const { data, error } = await admin
+        .from("beta_feature_allowlist")
+        .select("email")
+        .eq("feature", feature)
+        .order("email");
+      if (error) throw error;
+      return (data ?? []).map((row) => row.email as string);
+    } catch (e) {
+      console.error("Failed to fetch allowlist emails:", e);
+      return [];
+    }
+  },
+  ["beta-feature-allowlist"],
+  { tags: ["beta-feature-allowlist"], revalidate: 60 },
+);
+
 export async function getBetaFeatureAllowlistEmails(
   feature: BetaFeatureKey,
 ): Promise<string[]> {
-  try {
-    const admin = createServiceRoleClient();
-    const { data, error } = await admin
-      .from("beta_feature_allowlist")
-      .select("email")
-      .eq("feature", feature)
-      .order("email");
-
-    if (error) throw error;
-    return (data ?? []).map((row) => row.email);
-  } catch (e) {
-    console.error("Failed to fetch allowlist emails:", e);
-    return [];
-  }
+  return fetchAllowlistEmails(feature);
 }
 
 export async function addEmailToAllowlist(

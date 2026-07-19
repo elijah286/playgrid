@@ -15,6 +15,9 @@ import {
   getReferralSummaryForUser,
   type ReferralSummary,
 } from "@/lib/data/referral-summary";
+import { getCachedUserRole } from "@/lib/auth/profile-cache";
+import { resolveUxPreview } from "@/lib/site/ux-preview";
+import { UxPreviewAccountToggle } from "@/features/preview-shell/UxPreviewAccountToggle";
 import { AccountClient, type AccountSession } from "./ui";
 
 export default async function AccountPage() {
@@ -73,6 +76,16 @@ export default async function AccountPage() {
 
   const aiFeedbackRes = await getAiFeedbackOptInAction();
   const aiFeedbackStatus = aiFeedbackRes.ok ? aiFeedbackRes.status : "unanswered";
+
+  // New-UX preview: show the personal on/off toggle to anyone ALLOWED to
+  // preview (admin or on the `new_shell` allowlist). Resolves to allowed:false
+  // with ~no work while the flag is off, so it's invisible to everyone else.
+  const uxRole = await getCachedUserRole(user.id);
+  const uxPreview = await resolveUxPreview({
+    isAuthed: true,
+    userRole: uxRole,
+    userEmail: user.email ?? null,
+  });
 
   // Referral standing — null when the program is disabled (card hidden).
   let referral: ReferralSummary | null = null;
@@ -141,6 +154,8 @@ export default async function AccountPage() {
           Signed in as <span className="font-medium text-foreground">{user.email}</span>
         </p>
       </div>
+
+      {uxPreview.allowed && <UxPreviewAccountToggle initialActive={uxPreview.active} />}
 
       <AccountClient
         email={user.email ?? ""}
