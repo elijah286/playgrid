@@ -189,7 +189,7 @@ export const CONCEPTS: ConceptDef[] = [
     altFormations: [
       { id: "diamond", note: "Diamond formation tightens the mesh angle — rubs hit faster vs press man" },
     ],
-    whenToUse: "Best vs man coverage — the natural rub at the cross gives both crossers a free release. Also reliable as a check-down vs blitz because the drags break inside out of the rush. Avoid vs Cover 2 with a deep middle safety; the underneath shells smother the crossers.",
+    whenToUse: "Best vs man coverage — the natural rub at the cross gives both crossers a free release, and it's a reliable check-down vs blitz because the drags break inside out of the rush. It's contested against two-deep zones like Cover 2 and Tampa 2: the corners squat the flats and the crossers run into underneath traffic, so throw it on time or check to a concept that attacks the deep sideline.",
     commonMistakes: [
       "Crossers at the same depth — they collide and defenders stay glued. Aim for ~1 yard of vertical separation at the mesh point (e.g. 5 and 6).",
       "QB locks onto the first crosser; the second crosser comes open a half-tick later behind the rub.",
