@@ -223,7 +223,7 @@ export const CONCEPTS: ConceptDef[] = [
     complexity: "intermediate",
     defaultFormation: { id: "trips", strength: "right" },
     sameSideRequired: true,
-    whenToUse: "Best vs Cover 3 — the three-level stretch puts the deep defender, the curl-flat defender, and the boundary corner each in conflict. Doesn't beat 2-shell coverages with two deep safeties.",
+    whenToUse: "Best vs Cover 3 and two-deep zones alike — the same-side, three-level stretch high-lows the corner and puts the curl-flat defender in conflict, which is why the sail/flood beats Cover 2, Tampa 2, and Cover 3. It's contested against quarters (Cover 4), which keeps four defenders over the top.",
     commonMistakes: [
       "Routes stack vertically instead of stretching flat-to-deep — one defender can cover them all.",
       "Deep route runs at the wrong landmark; should be at the numbers, not the hash.",
