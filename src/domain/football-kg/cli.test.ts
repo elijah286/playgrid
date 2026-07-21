@@ -33,17 +33,17 @@ function run(args: string): string {
 describe("fb-kg CLI — list", () => {
   it("list (no args) dumps all families", () => {
     const out = run("list");
-    expect(out).toContain("Routes (26)");
+    expect(out).toContain("Routes (29)");
     expect(out).toContain("Formations (17)");
-    expect(out).toContain("Defensive Schemes (19)");
+    expect(out).toContain("Defensive Schemes (23)");
     expect(out).toContain("Concepts (21)");
-    expect(out).toContain("Reactor Patterns (30)");
-    expect(out).toContain("Total: 113 primitives");
+    expect(out).toContain("Reactor Patterns (47)");
+    expect(out).toContain("Total: 137 primitives");
   });
 
   it("list routes prints only routes", () => {
     const out = run("list routes");
-    expect(out).toContain("Routes (26)");
+    expect(out).toContain("Routes (29)");
     expect(out).not.toContain("Formations (");
     expect(out).not.toContain("Concepts (");
   });
@@ -57,18 +57,18 @@ describe("fb-kg CLI — list", () => {
   it("list --json produces valid JSON with all families", () => {
     const out = run("list --json");
     const parsed = JSON.parse(out);
-    expect(parsed.routes.length).toBe(26);
+    expect(parsed.routes.length).toBe(29);
     expect(parsed.formations.length).toBe(17);
-    expect(parsed.schemes.length).toBe(19);
+    expect(parsed.schemes.length).toBe(23);
     expect(parsed.concepts.length).toBe(21);
-    expect(parsed.reactorPatterns.length).toBe(30);
+    expect(parsed.reactorPatterns.length).toBe(47);
   });
 
   it("list routes --json produces just the routes array", () => {
     const out = run("list routes --json");
     const parsed = JSON.parse(out);
     expect(Array.isArray(parsed)).toBe(true);
-    expect(parsed.length).toBe(26);
+    expect(parsed.length).toBe(29);
     expect(parsed[0].family).toBe("route");
   });
 });
@@ -77,7 +77,7 @@ describe("fb-kg CLI — validate", () => {
   it("validate exits 0 with success message on healthy KG", () => {
     const out = run("validate");
     expect(out).toContain("KG passes all schema + cross-reference + geometry validation");
-    expect(out).toContain("26 routes");
+    expect(out).toContain("29 routes");
   });
 
   it("validate --json returns ok:true", () => {
@@ -101,10 +101,12 @@ describe("fb-kg CLI — audit", () => {
     expect(parsed.ok).toBe(true);
   });
 
-  it("audit surfaces flag_5v5 schemes gap as an informational note", () => {
-    // flag_5v5 only has Cover 1 + Cover 3 — under the threshold of 3 schemes.
+  it("flag_5v5 now has adequate scheme coverage (no gap note)", () => {
+    // flag_5v5 grew to 5 schemes (defensive-formations, 2026-07) — above the
+    // 3-scheme audit threshold, so the old under-coverage note is no longer
+    // emitted. Kept as a positive assertion of the current covered state.
     const out = run("audit");
-    expect(out).toMatch(/Only 2 schemes entries for variant "flag_5v5"/);
+    expect(out).not.toMatch(/schemes entries for variant "flag_5v5"/);
   });
 });
 
