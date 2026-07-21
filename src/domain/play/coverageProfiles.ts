@@ -76,7 +76,7 @@ export const COVERAGE_PROFILES: readonly CoverageProfile[] = [
       "Outside vertical shots — the free safety caps them over the top",
       "Quick out-breaking routes into tight man leverage",
     ],
-    beaters: ["Mesh", "Drive", "Smash", "Y-Cross"],
+    beaters: ["Mesh", "Drive", "Smash", "Y-Cross", "Four Verticals", "Levels"],
   },
   {
     coverage: "Cover 2",
@@ -124,7 +124,7 @@ export const COVERAGE_PROFILES: readonly CoverageProfile[] = [
       "Deep outside — the three-deep shell caps outside verticals",
       "The post over the middle is capped by the single-high safety",
     ],
-    beaters: ["Curl-Flat", "Slant-Flat", "Smash", "Flood", "Four Verticals"],
+    beaters: ["Curl-Flat", "Slant-Flat", "Smash", "Flood", "Four Verticals", "Snag", "Dagger", "Stick"],
   },
   {
     coverage: "Cover 4",

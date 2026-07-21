@@ -94,6 +94,23 @@ describe("evaluateMatchup — verdicts", () => {
   });
 });
 
+describe("evaluateMatchup — Tier 1 beater enrichment", () => {
+  // Concepts added to coverageProfiles.beaters so their grounded verdict
+  // matches standard doctrine (and the concept's own whenToUse). Each locks
+  // the flip "contested" → "favors_offense" that also changes Cal's output.
+  it.each([
+    ["Snag", "Cover 3"],
+    ["Dagger", "Cover 3"],
+    ["Stick", "Cover 3"],
+    ["Four Verticals", "Cover 1"],
+    ["Levels", "Cover 1"],
+  ])("grades %s as favoring the offense vs %s", (concept, coverage) => {
+    const e = evaluateMatchup({ coverageInput: coverage, conceptName: concept });
+    expect(e.verdict).toBe("favors_offense");
+    expect(e.grounded).toBe(true);
+  });
+});
+
 describe("COVERAGE_PROFILES — catalog integrity", () => {
   it("every beater names a non-empty concept string", () => {
     for (const p of COVERAGE_PROFILES) {
