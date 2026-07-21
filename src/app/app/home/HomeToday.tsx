@@ -134,7 +134,9 @@ export function HomeToday({
   };
 
   return (
-    <div className="space-y-8">
+    // Dashboard: kept at a tidy width so the list-style cards don't stretch,
+    // even though the shell now allows wider (the play grid uses that room).
+    <div className="mx-auto max-w-[1200px] space-y-8">
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight text-foreground">Today</h1>
         <p className="text-sm text-muted">{dateLabel}</p>

@@ -52,7 +52,10 @@ export function TeamHubChrome({
   const onColor = hexLuminance(color) > 0.6 ? "text-slate-900" : "text-white";
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    // Fluid: the team hub fills the shell width so the plays/formations grids
+    // can use it. Reading/form tabs (Settings, Roster) and the reused
+    // production tabs cap their own content narrower.
+    <div className="space-y-4">
       <div
         className="flex items-center gap-3 rounded-2xl p-4"
         style={{ background: `linear-gradient(135deg, ${color}, ${color}cc)` }}

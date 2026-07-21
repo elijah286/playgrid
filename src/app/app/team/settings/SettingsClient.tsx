@@ -97,7 +97,7 @@ export function SettingsClient({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="mx-auto max-w-2xl space-y-3">
       {/* Name */}
       <Card label="Team name" savedNow={saved === "name"}>
         <div className="flex gap-2">

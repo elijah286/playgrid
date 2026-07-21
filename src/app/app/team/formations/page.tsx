@@ -9,12 +9,16 @@ export default async function TeamFormationsPage() {
   const res = await listFormationsForPlaybookAction(team.id);
   const initial = res.ok ? res.formations : [];
   return (
-    <PlaybookFormationsTab
-      playbookId={team.id}
-      playbookName={team.name}
-      variant={team.sportVariant}
-      initial={initial}
-      isAdmin={false}
-    />
+    // Contained at the production playbook width — this reuses the production
+    // Formations component, which is designed for that measure.
+    <div className="mx-auto max-w-6xl">
+      <PlaybookFormationsTab
+        playbookId={team.id}
+        playbookName={team.name}
+        variant={team.sportVariant}
+        initial={initial}
+        isAdmin={false}
+      />
+    </div>
   );
 }

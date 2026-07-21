@@ -33,7 +33,7 @@ export default async function TeamPlaysPage() {
           No plays yet.
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {plays.map((p) => (
             <Link
               key={p.id}

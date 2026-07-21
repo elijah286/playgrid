@@ -9,9 +9,13 @@ export default async function TeamResultsPage() {
   if (!team) return null;
   const entitlement = await getCurrentEntitlement();
   return (
-    <GameResultsPanel
-      playbookId={team.id}
-      canUseGameMode={tierAtLeast(entitlement, "coach")}
-    />
+    // Contained at the production playbook width — reuses the production
+    // Game Results component, designed for that measure.
+    <div className="mx-auto max-w-6xl">
+      <GameResultsPanel
+        playbookId={team.id}
+        canUseGameMode={tierAtLeast(entitlement, "coach")}
+      />
+    </div>
   );
 }

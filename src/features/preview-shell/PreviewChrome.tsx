@@ -99,12 +99,14 @@ export function PreviewChrome({
           </nav>
         </aside>
 
-        {/* Main — the ONLY scroll container. Fills the remaining width, but its
-            content is centered under one generous, shell-wide cap so pages read
-            consistently and never sprawl on ultra-wide displays. Every /app page
-            inherits this width — no per-page max-width. */}
+        {/* Main — the ONLY scroll container. Fills the remaining width up to a
+            generous ceiling so grid/dashboard pages (Home, Team plays) can use
+            the space, while it still guards against sprawl on ultra-wide
+            displays. Reading/form pages cap themselves narrower (Messages,
+            Alerts, Settings) — the frame sets the max, pages choose to go
+            narrower. */}
         <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-24 pt-4 sm:px-6 sm:pb-10">
-          <div className="mx-auto w-full max-w-[1200px]">{children}</div>
+          <div className="mx-auto w-full max-w-[1600px]">{children}</div>
         </main>
       </div>
 

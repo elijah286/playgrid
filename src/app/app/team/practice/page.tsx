@@ -12,9 +12,13 @@ export default async function TeamPracticePage() {
   if (!team) return null;
   const entitlement = await getCurrentEntitlement();
   return (
-    <PlaybookPracticePlansTab
-      playbookId={team.id}
-      canUseTeamFeatures={tierAtLeast(entitlement, "coach")}
-    />
+    // Contained at the production playbook width — reuses the production
+    // Practice Plans component, designed for that measure.
+    <div className="mx-auto max-w-6xl">
+      <PlaybookPracticePlansTab
+        playbookId={team.id}
+        canUseTeamFeatures={tierAtLeast(entitlement, "coach")}
+      />
+    </div>
   );
 }

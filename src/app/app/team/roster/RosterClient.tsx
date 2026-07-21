@@ -254,7 +254,7 @@ export function RosterClient({
   }
 
   return (
-    <div className="space-y-5">
+    <div className="mx-auto max-w-3xl space-y-5">
       {canManage && (
         <div className="flex flex-wrap items-center justify-end gap-2">
           <button
