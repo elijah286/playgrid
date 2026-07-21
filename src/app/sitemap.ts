@@ -7,6 +7,7 @@ import { CONCEPTS } from "@/domain/football-kg/defs/concepts";
 import { FORMATIONS } from "@/domain/football-kg/defs/formations";
 import { ROUTE_TEMPLATES } from "@/domain/play/routeTemplates";
 import { DEFENSIVE_ALIGNMENTS } from "@/domain/play/defensiveAlignments";
+import { COVERAGE_PROFILES } from "@/domain/play/coverageProfiles";
 import { toLearnSlug } from "@/lib/learn/links";
 import { LIBRARY_VARIANTS, variantToSlug } from "@/lib/learn/variant";
 
@@ -94,6 +95,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.85,
   }));
 
+  // "Best plays to beat <coverage>" collection pages — one per profiled
+  // coverage. Head-term intent ("best plays to beat cover 3"); same priority
+  // as the variant rollups.
+  const coverageRollups: Entry[] = COVERAGE_PROFILES.map((p) => ({
+    url: `${SITE_URL}/learn/library/plays/vs/${toLearnSlug(p.coverage)}`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.85,
+  }));
+
   // Every concept gets a redirect page AND one variant-specific page
   // per supported variant. The redirect is the canonical "broad" target
   // ("mesh concept"); variant pages target long-tail ("5v5 flag mesh").
@@ -154,6 +165,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...staticEntries,
     ...libraryCategories,
     ...variantRollups,
+    ...coverageRollups,
     ...conceptEntries,
     ...formationEntries,
     ...routeEntries,
