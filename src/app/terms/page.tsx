@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { BackToProductCta } from "@/components/legal/BackToProductCta";
 
 export const metadata: Metadata = {
-  title: "Terms of Service · XO Gridmaker",
+  title: "Terms of Service",
   description: "XO Gridmaker terms of service.",
 };
 

@@ -11,7 +11,7 @@ import { getSeatDefaults } from "@/lib/site/seat-defaults-config";
 import { withFullContext } from "@/lib/seo/ld-json";
 
 export const metadata: Metadata = {
-  title: "FAQ — XO Gridmaker & Coach Cal",
+  title: { absolute: "FAQ — XO Gridmaker & Coach Cal" },
   description:
     "Answers about XO Gridmaker — what it costs, who it's for, how sharing works — plus a dedicated section on Coach Cal, the AI coaching partner that helps you build plays, plan practices, and review your playbook.",
   alternates: { canonical: "/faq" },

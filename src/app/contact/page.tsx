@@ -3,7 +3,7 @@ import { ContactForm } from "./ui";
 import { withFullContext } from "@/lib/seo/ld-json";
 
 export const metadata: Metadata = {
-  title: "Contact · XO Gridmaker",
+  title: "Contact",
   description: "Send feedback, bug reports, or feature requests.",
   alternates: { canonical: "/contact" },
   openGraph: {

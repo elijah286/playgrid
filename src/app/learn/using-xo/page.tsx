@@ -10,7 +10,7 @@ import { withFullContext } from "@/lib/seo/ld-json";
 import { LessonCard } from "./LessonCard";
 
 export const metadata: Metadata = {
-  title: "Using XO Gridmaker · Learning Center",
+  title: { absolute: "Using XO Gridmaker · Learning Center" },
   description:
     "Guided tutorials for the XO Gridmaker play editor — designing plays, building playbooks, sharing with your team, and game-day basics.",
   alternates: { canonical: "/learn/using-xo" },

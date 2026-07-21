@@ -4,7 +4,7 @@ import { getHideOwnerInfoAbout } from "@/lib/site/about-config";
 import { withFullContext } from "@/lib/seo/ld-json";
 
 export const metadata: Metadata = {
-  title: "About · XO Gridmaker",
+  title: "About",
   description: "Why XO Gridmaker exists — built by coaches, for coaches.",
   alternates: { canonical: "/about" },
   openGraph: {
