@@ -110,6 +110,17 @@ export function NativeAppShell() {
     // remaining images stream in behind it, same as any web page.
     const markReady = () => {
       document.documentElement.classList.add("native-ready");
+      // Remember that this WebView session has completed a launch, so a *warm*
+      // reload (pull-to-refresh, in-app hard nav) suppresses the cold-launch
+      // overlay instead of replaying it. sessionStorage is per browsing
+      // session: cleared when the app process is killed (→ the next true cold
+      // launch shows the frame again) but preserved across reloads. The
+      // pre-paint script in layout.tsx reads this flag before first paint.
+      try {
+        sessionStorage.setItem("xogm-launched", "1");
+      } catch {
+        /* private mode / storage disabled — overlay just shows as before */
+      }
     };
     const revealAfterPaint = () => {
       requestAnimationFrame(() => requestAnimationFrame(markReady));

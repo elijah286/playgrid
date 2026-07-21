@@ -239,7 +239,7 @@ export default async function RootLayout({
             neither can be true in a plain web browser. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var c=window.Capacitor;var bridge=!!(c&&c.isNativePlatform&&c.isNativePlatform());var ua=(navigator.userAgent||'').indexOf(${JSON.stringify(NATIVE_APP_UA_MARKER)})!==-1;if(bridge||ua){document.documentElement.classList.add('native-shell');}}catch(e){}})();`,
+            __html: `(function(){try{var c=window.Capacitor;var bridge=!!(c&&c.isNativePlatform&&c.isNativePlatform());var ua=(navigator.userAgent||'').indexOf(${JSON.stringify(NATIVE_APP_UA_MARKER)})!==-1;if(bridge||ua){var d=document.documentElement;d.classList.add('native-shell');try{if(sessionStorage.getItem('xogm-launched')){d.classList.add('native-ready');}}catch(e){}}}catch(e){}})();`,
           }}
         />
         <script
