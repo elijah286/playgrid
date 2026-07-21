@@ -80,7 +80,13 @@ jobs:
           # or www. Both hostnames are probed to catch one-sided cert issues.
           for host in xogridmaker.com www.xogridmaker.com; do
             for i in 1 2 3 4 5; do
-              code=$(curl -sL -o /dev/null -w '%{http_code}' --max-time 30 "https://${host}/")
+              # `|| true` is load-bearing: a freshly-deployed revision can
+              # cold-start slower than --max-time, so the first curl times out
+              # (exit 28). Without swallowing it, `set -e` (the default run:
+              # shell) aborts the whole step immediately — the retry loop below
+              # never runs and a healthy-but-cold deploy fails. curl still
+              # prints `000` for %{http_code} on timeout, so the loop retries.
+              code=$(curl -sL -o /dev/null -w '%{http_code}' --max-time 45 "https://${host}/" || true)
               echo "${host} attempt $i: HTTP $code"
               [ "$code" = "200" ] && break
               [ $i -eq 5 ] && { echo "smoke test failed for ${host}"; exit 1; }
