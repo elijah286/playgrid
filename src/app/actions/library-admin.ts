@@ -14,6 +14,12 @@ import {
   deleteLibraryOverride,
   type LibraryMetadataPatch,
 } from "@/lib/learn/overrides";
+import type { LibraryVariant } from "@/lib/learn/variant";
+import { CONCEPTS } from "@/domain/football-kg/defs/concepts";
+import { generateConceptSkeleton } from "@/domain/play/conceptSkeleton";
+import { playSpecToCoachDiagram } from "@/domain/play/specRenderer";
+import { coachDiagramToPlayDocument } from "@/features/coach-ai/coachDiagramConverter";
+import { toLearnSlug } from "@/lib/learn/links";
 
 /** Save an override edit. Returns ok/error; the caller renders an
  *  inline toast. After a successful save, the public library page
@@ -103,6 +109,49 @@ export async function deleteLibraryOverrideAction(input: {
     revalidatePath(`/learn/library/routes/${input.slug}`);
   }
   return result;
+}
+
+// Maps an inline-editable library prose FIELD → its override column key.
+// Only string prose fields (not commonMistakes, which is an array with its
+// own editor). Used by the on-page inline text editor.
+const TEXT_FIELD_TO_PATCH = {
+  description: "descriptionOverride",
+  body: "bodyOverride",
+  whenToUse: "whenToUseOverride",
+  whenNotToUse: "whenNotToUseOverride",
+  situationalAdjustments: "situationalAdjustmentsOverride",
+} as const satisfies Record<string, keyof LibraryMetadataPatch>;
+
+export type LibraryTextField = keyof typeof TEXT_FIELD_TO_PATCH;
+
+/** Save a single prose field from the on-page inline editor. Metadata-only
+ *  (never touches the play document). The catalog skeleton is regenerated
+ *  server-side as the seed document (used only when no override row exists
+ *  yet), so the client sends just {slug, variant, field, value}. Admin gate
+ *  is enforced downstream in `saveLibraryMetadata`. Plays only. */
+export async function saveLibraryTextAction(input: {
+  slug: string;
+  variant: LibraryVariant;
+  field: LibraryTextField;
+  value: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const patchKey = TEXT_FIELD_TO_PATCH[input.field];
+  if (!patchKey) return { ok: false, error: `Unknown field: ${input.field}` };
+  const concept = CONCEPTS.find((c) => toLearnSlug(c.name) === input.slug);
+  if (!concept) return { ok: false, error: "Concept not found." };
+  const skel = generateConceptSkeleton(concept.name, {
+    variant: input.variant,
+    strength: "right",
+  });
+  if (!skel.ok) return { ok: false, error: "Could not build the default document." };
+  const { diagram } = playSpecToCoachDiagram(skel.spec);
+  const seedDocument = coachDiagramToPlayDocument(diagram);
+  return saveLibraryMetadataAction({
+    slug: input.slug,
+    variant: input.variant,
+    metadata: { [patchKey]: input.value },
+    seedDocument,
+  });
 }
 
 // Internal: the variant id stored on the row uses underscores
