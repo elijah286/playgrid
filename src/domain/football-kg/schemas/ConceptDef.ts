@@ -180,6 +180,13 @@ export type ConceptDef = FootballPrimitiveBase & {
   whenToUse?: string;
   /** Common coaching mistakes Cal should warn about. */
   commonMistakes?: string[];
+  /** When NOT to call it — the coverages/situations where this concept
+   *  struggles (the inverse of whenToUse). Rendered on the library page. */
+  whenNotToUse?: string;
+  /** How to adjust the concept for down & distance, coverage, or game
+   *  variant (5v5 vs 11-man). This is the code default; per-(slug,variant)
+   *  nuance is layered on top via library_concept_overrides. */
+  situationalAdjustments?: string;
   /** Capability flags the playbook must have enabled (qbRun, rpoRead,
    *  blocking, trickPlay, etc.). */
   requiresCapabilities?: Capability[];
@@ -202,6 +209,8 @@ export const ConceptDefZ = FootballPrimitiveBaseZ.extend({
   reads: z.array(ConceptReadZ).optional(),
   whenToUse: z.string().min(1).optional(),
   commonMistakes: z.array(z.string().min(1)).optional(),
+  whenNotToUse: z.string().min(1).optional(),
+  situationalAdjustments: z.string().min(1).optional(),
   requiresCapabilities: z.array(CapabilityZ).optional(),
 }).refine(
   (c) => c.pattern.length > 0 || c.structural,

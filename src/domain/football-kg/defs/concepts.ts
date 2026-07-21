@@ -57,6 +57,10 @@ export const CONCEPTS: ConceptDef[] = [
       "Flat release tangles with the curl. Spacing should be at least 5 yards apart at the snap.",
       "QB stares at the curl; if zone rotates, throw the flat fast — it's the cheaper completion.",
     ],
+    whenNotToUse:
+      "Avoid it vs tight man press when the outside receiver can't separate at the top of the curl, and vs two-deep zones with a hard-squatting corner already sitting on the curl-flat level. It moves the sticks — it isn't a chunk play.",
+    situationalAdjustments:
+      "Read the flat defender: he widens to the flat, throw the curl behind him; he sinks under the curl, dump the flat fast — it's the cheaper completion. Use the clear-out route to hold the deep third so the curl has room, and take the backside option if the middle opens.",
     pattern: [
       { role: "outside_wr", family: "Curl", depthRangeYds: { min: 4, max: 7 } },
       { role: "any",        family: "Flat", depthRangeYds: { min: 0, max: 4 } },
@@ -101,6 +105,10 @@ export const CONCEPTS: ConceptDef[] = [
       "QB throws the hitch first against zone — wrong read. Check the corner first, dump the hitch if covered.",
       "Receivers cross the same vertical lane and create traffic. Outside should win to the sideline; corner climbs to the boundary.",
     ],
+    whenNotToUse:
+      "Hold it vs quarters (Cover 4), where a deep-quarter safety caps the corner and it gets bracketed — go underneath instead. The 12-15-yard corner needs a beat to develop, so it's not your answer against unblocked pressure.",
+    situationalAdjustments:
+      "Coach corner-first vs zone — the hitch is the free five yards only when the corner sinks. Vs two-deep, work the corner into the honey hole behind the squatting corner and in front of the safety; vs single-high it's a straight one-on-one for the corner.",
     pattern: [
       { role: "outside_wr", family: "Hitch",  depthRangeYds: { min: 4, max: 6 } },
       { role: "any",        family: "Corner", depthRangeYds: { min: 12, max: 18 } },
@@ -196,6 +204,10 @@ export const CONCEPTS: ConceptDef[] = [
       "Tightening the cross too close to the LOS — defenders can re-route from underneath. Cross at 5-6 yards, not below.",
       "No check-down outlet. Mesh wants an RB or center as a hot route against blitz.",
     ],
+    whenNotToUse:
+      "Skip it against a two-deep spot-drop zone that walls off the 5-yard crossers — with the underneath defenders squatting, the drags run into traffic and there's no rub to spring them. It's a move-the-chains concept, not a shot play; the deepest route is a clear-out, not the primary.",
+    situationalAdjustments:
+      "Give the QB a clear hot rule vs the blitz — the underneath outlet (the center's sit in 5v5, the flat once you have one in 6v6+) is the pressure answer. If the defense sits on the mesh, come off to the backside clear-out. On smaller flag fields tighten the mesh point so the rub happens before defenders widen around it; in 11-man, protect long enough to give the drags a beat to clear.",
     reads: [
       { progression: 1, player: "Flat / check-down", window: "vs blitz — throw immediately", coverage: "vs pressure" },
       { progression: 2, player: "Under-drag", window: "first crosser behind the LBs", coverage: "vs man" },
@@ -229,6 +241,10 @@ export const CONCEPTS: ConceptDef[] = [
       "Deep route runs at the wrong landmark; should be at the numbers, not the hash.",
       "Flat releases too late; should be the first route to declare so the underneath defender commits.",
     ],
+    whenNotToUse:
+      "Avoid it vs tight man across the board — the same-side stretch doesn't create the rubs man coverage struggles with — and vs quarters (Cover 4), which keeps four defenders deep to cap the corner. It gives up the backside, so it's not the call when you expect weak-side pressure.",
+    situationalAdjustments:
+      "Throw it high-to-low off the flat defender: he jumps the flat, the out is open; he carries the out, the flat hits. The deep corner must hit the numbers, not the hash, and the flat should declare first so the underneath defender commits. The backside route is the man/scramble outlet.",
     pattern: [
       { role: "any", family: "Corner", depthRangeYds: { min: 12, max: 18 } },
       { role: "any", family: "Out",    depthRangeYds: { min: 8,  max: 12 } },
@@ -431,6 +447,10 @@ export const CONCEPTS: ConceptDef[] = [
       "Pulling blocker gets caught on the LOS (tackle); needs a clean pull around with no hesitation.",
       "Perimeter receivers don't pull coverage away — in tackle they stalk-block the corner; in flag they need to run a deep clear or inside route so the edge isn't crowded.",
     ],
+    whenNotToUse:
+      "Don't call it into a disciplined contain / hard-edge defender who stays home — the perimeter is capped before the back can turn upfield. In flag it stalls when the rush contain player doesn't chase the mesh action.",
+    situationalAdjustments:
+      "Coach patience-then-burst: the back presses the edge to make the contain defender commit, THEN turns vertical. If the edge is sealed hard, take the cutback off the down block (tackle) or the inside route (flag). In flag, the perimeter receivers' vertical clears must pull the contain defender off the alley since blocking is illegal.",
     pattern: [],
     structural: {
       requiresCarry: { player: "back", runTypes: ["sweep", "outside_zone"] },
