@@ -15,6 +15,7 @@ import {
   DEFENSIVE_ALIGNMENTS,
   type DefensiveAlignment,
 } from "@/domain/play/defensiveAlignments";
+import { COVERAGE_PROFILES } from "@/domain/play/coverageProfiles";
 import { CONCEPTS as KG_CONCEPTS } from "@/domain/football-kg/defs/concepts";
 import { FORMATIONS } from "@/domain/football-kg/defs/formations";
 import {
@@ -184,6 +185,11 @@ export function allLibraryUrls(): string[] {
   }
   for (const slug of defenseSlugs) {
     urls.push(`/learn/library/defense/${slug}`);
+  }
+  // "Best plays to beat <coverage>" collection pages (one per profiled
+  // coverage), projected from coverageProfiles.
+  for (const p of COVERAGE_PROFILES) {
+    urls.push(`/learn/library/plays/vs/${toLearnSlug(p.coverage)}`);
   }
   return urls;
 }

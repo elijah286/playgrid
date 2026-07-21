@@ -418,7 +418,12 @@ export default async function PlayConceptVariantPage(
                         key={m.coverage}
                         className="list-disc text-base leading-relaxed text-muted"
                       >
-                        <span className="font-semibold text-foreground">{m.coverage}</span>
+                        <Link
+                          href={`/learn/library/plays/vs/${toLearnSlug(m.coverage)}`}
+                          className="font-semibold text-foreground hover:text-primary hover:underline"
+                        >
+                          {m.coverage}
+                        </Link>
                         {m.why ? ` — ${m.why}` : ""}
                       </li>
                     ))}
@@ -443,7 +448,12 @@ export default async function PlayConceptVariantPage(
                           key={m.coverage}
                           className="list-disc text-base leading-relaxed text-muted"
                         >
-                          <span className="font-semibold text-foreground">{m.coverage}</span>
+                          <Link
+                          href={`/learn/library/plays/vs/${toLearnSlug(m.coverage)}`}
+                          className="font-semibold text-foreground hover:text-primary hover:underline"
+                        >
+                          {m.coverage}
+                        </Link>
                           {m.why ? ` — ${m.why}` : ""}
                           {alts.length > 0 ? (
                             <>

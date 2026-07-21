@@ -1696,6 +1696,24 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-06-09",
   },
   {
+    id: "library-concept-matchups-guidance",
+    name: "Deeper play pages: matchups & when-not-to-use",
+    description:
+      "Football Library play pages carry richer coaching content: 'When not to use', 'How to adjust for situations', and a 'Strong / weak against' matchup breakdown showing which coverages each play beats — with links to better answers when the matchup is contested. Matchups are derived from the same coverage engine that grades plays in Coach Cal, so the pages and Cal never disagree. Site admins can correct any of the prose in place, right on the page, without a deploy.",
+    category: "Marketing site",
+    status: "ga",
+    addedDate: "2026-07-20",
+  },
+  {
+    id: "library-beat-coverage-collections",
+    name: "\"Best plays to beat [coverage]\" pages",
+    description:
+      "Football Library collection pages that answer head-term searches like 'best plays to beat Cover 3' — one indexable page per common coverage (Cover 0-4 and Tampa 2), each listing the plays that beat it with links to the full breakdown, plus where the coverage is soft and where not to attack. Projected from the coverage catalog, so the lists stay in lockstep with Coach Cal's matchup grading.",
+    category: "Marketing site",
+    status: "ga",
+    addedDate: "2026-07-20",
+  },
+  {
     id: "admin-feature-list",
     name: "Feature catalog",
     description:
