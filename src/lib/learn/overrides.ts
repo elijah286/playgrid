@@ -42,6 +42,8 @@ export type LibraryOverride = {
   bodyOverride: string | null;
   whenToUseOverride: string | null;
   commonMistakesOverride: string[] | null;
+  whenNotToUseOverride: string | null;
+  situationalAdjustmentsOverride: string | null;
   updatedAt: string;
   updatedBy: string | null;
 };
@@ -62,7 +64,7 @@ export async function loadLibraryOverride(
     const { data, error } = await supabase
       .from("library_concept_overrides")
       .select(
-        "slug, variant, document, coach_notes, description_override, body_override, when_to_use_override, common_mistakes_override, updated_at, updated_by",
+        "slug, variant, document, coach_notes, description_override, body_override, when_to_use_override, common_mistakes_override, when_not_to_use_override, situational_adjustments_override, updated_at, updated_by",
       )
       .eq("slug", slug)
       .eq("variant", variant)
@@ -96,6 +98,9 @@ export async function loadLibraryOverride(
       descriptionOverride: (data.description_override as string | null) ?? null,
       bodyOverride: (data.body_override as string | null) ?? null,
       whenToUseOverride: (data.when_to_use_override as string | null) ?? null,
+      whenNotToUseOverride: (data.when_not_to_use_override as string | null) ?? null,
+      situationalAdjustmentsOverride:
+        (data.situational_adjustments_override as string | null) ?? null,
       commonMistakesOverride,
       updatedAt: data.updated_at as string,
       updatedBy: (data.updated_by as string | null) ?? null,
@@ -117,6 +122,8 @@ export type LibraryMetadataPatch = {
   bodyOverride?: string | null;
   whenToUseOverride?: string | null;
   commonMistakesOverride?: string[] | null;
+  whenNotToUseOverride?: string | null;
+  situationalAdjustmentsOverride?: string | null;
 };
 
 /** Persist an admin's override edit. Throws on non-admin callers —
@@ -193,6 +200,10 @@ export async function saveLibraryOverride(
   if (when !== undefined) payload.when_to_use_override = when;
   const mistakes = normalizeMistakes(m.commonMistakesOverride);
   if (mistakes !== undefined) payload.common_mistakes_override = mistakes;
+  const whenNot = normalize(m.whenNotToUseOverride);
+  if (whenNot !== undefined) payload.when_not_to_use_override = whenNot;
+  const adjust = normalize(m.situationalAdjustmentsOverride);
+  if (adjust !== undefined) payload.situational_adjustments_override = adjust;
 
   const svc = createServiceRoleClient();
   const { error } = await svc
@@ -271,6 +282,10 @@ export async function saveLibraryMetadata(
   if (when !== undefined) metadataPayload.when_to_use_override = when;
   const mistakes = normalizeMistakes(metadata.commonMistakesOverride);
   if (mistakes !== undefined) metadataPayload.common_mistakes_override = mistakes;
+  const whenNot = normalize(metadata.whenNotToUseOverride);
+  if (whenNot !== undefined) metadataPayload.when_not_to_use_override = whenNot;
+  const adjust = normalize(metadata.situationalAdjustmentsOverride);
+  if (adjust !== undefined) metadataPayload.situational_adjustments_override = adjust;
 
   // Check whether the row exists. If yes → UPDATE metadata only
   // (leaves doc + coach_notes untouched). If no → INSERT seed doc +
