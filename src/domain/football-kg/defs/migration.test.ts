@@ -214,8 +214,8 @@ describe("Phase 1b migrated formations — coverage", () => {
 });
 
 describe("Phase 1b migrated schemes — coverage", () => {
-  it("has all 19 schemes from the legacy DEFENSIVE_ALIGNMENTS catalog", () => {
-    expect(FOOTBALL_KG.schemes.length).toBe(19);
+  it("has all 23 schemes from the legacy DEFENSIVE_ALIGNMENTS catalog", () => {
+    expect(FOOTBALL_KG.schemes.length).toBe(23);
   });
 
   it("every scheme has a unique id", () => {
@@ -229,15 +229,15 @@ describe("Phase 1b migrated schemes — coverage", () => {
     }
   });
 
-  it("variant coverage matches the legacy catalog (t11:7, f7:6, f6:4, f5:2)", () => {
+  it("variant coverage matches the catalog (t11:7, f7:7, f6:4, f5:5)", () => {
     const byVariant: Record<string, number> = {};
     for (const s of FOOTBALL_KG.schemes) {
       for (const v of s.variants) byVariant[v] = (byVariant[v] ?? 0) + 1;
     }
     expect(byVariant.tackle_11).toBe(7);
-    expect(byVariant.flag_7v7).toBe(6);
+    expect(byVariant.flag_7v7).toBe(7);
     expect(byVariant.flag_6v6).toBe(4);
-    expect(byVariant.flag_5v5).toBe(2);
+    expect(byVariant.flag_5v5).toBe(5);
   });
 
   it("every zone-assignment references a zone defined on the same scheme", () => {
@@ -259,8 +259,8 @@ describe("Phase 1b migrated routes — coverage", () => {
   // Per-route assertions that match the legacy routeTemplates.ts contract.
   // If a route's geometry drifts during a refactor, this catches it.
 
-  it("has all 26 routes from the legacy catalog", () => {
-    expect(FOOTBALL_KG.routes.length).toBe(26);
+  it("has all 29 routes from the legacy catalog", () => {
+    expect(FOOTBALL_KG.routes.length).toBe(29);
   });
 
   it("every route has a unique id", () => {
