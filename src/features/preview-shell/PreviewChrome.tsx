@@ -79,8 +79,10 @@ export function PreviewChrome({
         </div>
       </header>
 
-      <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1">
-        {/* Desktop sidebar — fixed; only the nav list inside scrolls. */}
+      <div className="flex min-h-0 w-full flex-1">
+        {/* Desktop sidebar — pinned to the frame's left edge (not centered), so
+            the chrome hugs the viewport the same way the header does. Fixed;
+            only the nav list inside scrolls. */}
         <aside className="hidden w-60 shrink-0 flex-col border-r border-border sm:flex">
           <div className="shrink-0 border-b border-border p-3">
             <TeamSwitcher teams={teams} selected={selected} block />
@@ -95,9 +97,12 @@ export function PreviewChrome({
           </nav>
         </aside>
 
-        {/* Main — the ONLY scroll container. */}
+        {/* Main — the ONLY scroll container. Fills the remaining width, but its
+            content is centered under one generous, shell-wide cap so pages read
+            consistently and never sprawl on ultra-wide displays. Every /app page
+            inherits this width — no per-page max-width. */}
         <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-24 pt-4 sm:px-6 sm:pb-10">
-          {children}
+          <div className="mx-auto w-full max-w-[1200px]">{children}</div>
         </main>
       </div>
 

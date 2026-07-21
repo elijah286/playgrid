@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import Link from "next/link";
 import {
   Calendar,
@@ -133,9 +134,9 @@ export function HomeToday({
   };
 
   return (
-    <div className="mx-auto max-w-2xl space-y-7">
+    <div className="space-y-8">
       <div>
-        <h1 className="text-xl font-extrabold tracking-tight text-foreground">Today</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight text-foreground">Today</h1>
         <p className="text-sm text-muted">{dateLabel}</p>
       </div>
 
@@ -166,25 +167,23 @@ export function HomeToday({
             .
           </div>
         ) : (
-          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
             {teams.map((t) => (
               <button
                 key={t.id}
                 type="button"
                 onClick={() => openTeam(t.id)}
                 disabled={pending}
-                className="flex w-40 shrink-0 flex-col gap-2 rounded-xl border border-border bg-surface-raised p-3 text-left shadow-sm transition-colors hover:bg-surface-inset"
+                className="group relative flex items-center gap-3 overflow-hidden rounded-xl border border-border bg-surface-raised py-3 pl-4 pr-3 text-left shadow-sm transition-colors hover:bg-surface-inset disabled:opacity-60"
               >
-                <span className="flex items-center justify-between">
-                  <span
-                    className="grid size-9 place-items-center rounded-lg text-sm font-black text-white"
-                    style={{ backgroundColor: t.color || FALLBACK }}
-                  >
-                    {t.name.trim().charAt(0).toUpperCase()}
-                  </span>
-                  <ChevronRight className="size-4 text-muted" aria-hidden />
-                </span>
-                <span className="min-w-0">
+                {/* Team-color accent — the identity the flat chips had lost. */}
+                <span
+                  className="absolute inset-y-0 left-0 w-1.5"
+                  style={{ backgroundColor: t.color || FALLBACK }}
+                  aria-hidden
+                />
+                <TeamCardMark team={t} />
+                <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-bold text-foreground">
                     {t.name}
                   </span>
@@ -192,12 +191,19 @@ export function HomeToday({
                     {t.season || "Open team"}
                   </span>
                 </span>
+                <ChevronRight
+                  className="size-4 shrink-0 text-muted transition-transform group-hover:translate-x-0.5"
+                  aria-hidden
+                />
               </button>
             ))}
           </div>
         )}
       </section>
 
+      {/* Up next & Needs you sit side by side on wide screens (single column
+          on mobile) — the dashboard uses the width instead of stacking. */}
+      <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
       {/* Up next */}
       <section>
         <h2 className="mb-2 text-[11px] font-bold uppercase tracking-wide text-muted">
@@ -319,6 +325,7 @@ export function HomeToday({
           </ul>
         )}
       </section>
+      </div>
 
       {/* Quick actions */}
       <section>
@@ -356,5 +363,24 @@ function QuickAction({
       <Icon className="size-4 text-muted" aria-hidden />
       {label}
     </Link>
+  );
+}
+
+/** The team's identity mark: its real logo when set, otherwise the initial on
+ *  the team color. Mirrors the sidebar TeamSwitcher so the same team looks the
+ *  same everywhere in the shell. */
+function TeamCardMark({ team }: { team: HomeTeam }) {
+  const color = team.color || FALLBACK;
+  return (
+    <span
+      className="relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-lg text-sm font-black text-white"
+      style={{ backgroundColor: color }}
+    >
+      {team.logoUrl ? (
+        <Image src={team.logoUrl} alt="" fill sizes="40px" className="object-contain p-1" />
+      ) : (
+        team.name.trim().charAt(0).toUpperCase()
+      )}
+    </span>
   );
 }
