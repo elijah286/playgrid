@@ -37,12 +37,14 @@ export function PreviewChrome({
   return (
     <div
       data-app-shell
-      // Fixed frame: bound to the viewport minus the preview ribbon (which
-      // publishes --ux-ribbon-h). The 28px default keeps SSR/first paint from
-      // overflowing before the ribbon's ResizeObserver refines it. Only <main>
-      // scrolls.
-      className="flex flex-col overflow-hidden bg-surface"
-      style={{ height: "calc(100dvh - var(--ux-ribbon-h, 28px))" }}
+      // Fixed frame bound to the full viewport — this is the only chrome on
+      // /app (production header + the old preview ribbon are both hidden here),
+      // so it owns the top safe-area inset (the notch/status bar). env() is 0 on
+      // the web, so the padding only appears on a notched native/standalone
+      // device. box-border keeps the padded frame at exactly 100dvh so only
+      // <main> scrolls.
+      className="flex flex-col overflow-hidden bg-surface box-border"
+      style={{ height: "100dvh", paddingTop: "env(safe-area-inset-top, 0px)" }}
     >
       {/* Persistent top bar. Desktop shows the brand (nav lives in the
           sidebar); mobile shows the team switcher (no sidebar there). */}

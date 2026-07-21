@@ -29,8 +29,6 @@ import { listInboxAlertsAction } from "@/app/actions/inbox";
 import { InboxBadgeProvider } from "@/features/dashboard/InboxBadgeContext";
 import { InboxBadgeRefresher } from "@/components/layout/InboxBadgeRefresher";
 import { NativeBadgeSync } from "@/components/native/NativeBadgeSync";
-import { resolveUxPreview } from "@/lib/site/ux-preview";
-import { UxPreviewRibbon } from "@/components/layout/UxPreviewRibbon";
 import { HideOnAppShell } from "@/components/layout/HideOnAppShell";
 
 const inter = Inter({
@@ -173,8 +171,6 @@ export default async function RootLayout({
 }>) {
   let isAuthed = false;
   let userId: string | null = null;
-  let userEmail: string | null = null;
-  let userRole: string | null = null;
   // Single request-scoped auth check, shared with SiteHeader +
   // GlobalBottomNav via React cache() (see request-user.ts) so one
   // navigation makes one getUser() round-trip instead of three. Time-bound
@@ -184,7 +180,6 @@ export default async function RootLayout({
   if (authResult.kind === "ok" && authResult.user) {
     isAuthed = true;
     userId = authResult.user.id;
-    userEmail = authResult.user.email ?? null;
   }
 
   // Server-render the initial inbox badge baseline so the bell can paint
@@ -199,7 +194,6 @@ export default async function RootLayout({
         getCachedUserRole(userId),
         listInboxAlertsAction(),
       ]);
-      userRole = role;
       const isAdmin = role === "admin";
       if (inboxRes.ok) {
         const visible = inboxRes.alerts.filter(
@@ -215,10 +209,6 @@ export default async function RootLayout({
       /* best effort — badge starts at 0 and the poller catches up */
     }
   }
-
-  // New-UX preview gate. Resolves to {allowed:false} with ~no work while the
-  // `new_shell` flag is "off" (its default), so every other user is unaffected.
-  const uxPreview = await resolveUxPreview({ isAuthed, userRole, userEmail });
 
   return (
     <html lang="en" className={`h-full scroll-smooth antialiased ${inter.variable}`} suppressHydrationWarning>
@@ -312,11 +302,10 @@ export default async function RootLayout({
                   <IosAppBanner />
                   <SiteHeader />
                 </HideOnAppShell>
-                {/* New-UX preview ribbon — sits JUST BELOW the header (not above
-                    it, which collided with the sticky header/notch on mobile).
-                    Only for allowlisted/admin users who've opted in; invisible
-                    to everyone else. */}
-                {uxPreview.allowed && <UxPreviewRibbon active={uxPreview.active} />}
+                {/* The new-UX switch is NOT a site-wide banner — it lives only
+                    as a pill on the Account page (UxPreviewAccountToggle) and in
+                    the /app shell's account menu. Keeping it off the global
+                    chrome avoids a persistent banner on every route. */}
                 <div className="flex flex-1 flex-col">{children}</div>
                 <HideOnAppShell>
                   <SiteFooter />
