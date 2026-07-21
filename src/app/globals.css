@@ -848,6 +848,10 @@ html.dark #native-loading-overlay .blooms { opacity: 1; }
 /* Indeterminate progress bar — used inline in flows where we don't know
  * how long a server action will take (e.g. claiming a copied playbook
  * with dozens of plays). Pure CSS so we don't need a JS animation loop. */
+@keyframes native-loading-bar {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
 .indeterminate-bar {
   position: relative;
   width: 100%;
