@@ -14,6 +14,7 @@ import { PlayEditorClient } from "@/features/editor/PlayEditorClient";
 import { isCurrentUserSiteAdmin, isFootballLibraryAvailable } from "@/lib/learn/access";
 import { loadLibraryOverride } from "@/lib/learn/overrides";
 import { toLearnSlug } from "@/lib/learn/links";
+import { routeCoachingCues } from "@/lib/coach-ai/notes-from-spec";
 import { withFullContext } from "@/lib/seo/ld-json";
 import {
   DEFAULT_LIBRARY_VARIANT,
@@ -31,6 +32,11 @@ export function generateStaticParams() {
 
 function findRouteBySlug(slug: string): RouteTemplate | null {
   return ROUTE_TEMPLATES.find((r) => toLearnSlug(r.name) === slug) ?? null;
+}
+
+/** "cover 0" → "Cover 0", "tampa 2" → "Tampa 2", "man" → "Man". */
+function coverageLabel(key: string): string {
+  return key.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 /** Pick a sensible default depth for this route. Uses the
@@ -52,14 +58,17 @@ export async function generateMetadata(
   const { slug } = await params;
   const route = findRouteBySlug(slug);
   if (!route) return { title: "Route not found" };
+  const { cue, byCoverage } = routeCoachingCues(route.name);
+  const description = cue
+    ? `${route.name} route — ${cue}.${byCoverage.length ? " Plus how to read it by coverage." : ""}`
+    : route.description ?? `The ${route.name} route — football route template.`;
   return {
     title: `${route.name} route · Football Library`,
-    description: route.description ?? `The ${route.name} route — football route template.`,
+    description,
     alternates: { canonical: `/learn/library/routes/${slug}` },
     openGraph: {
       title: `${route.name} — football route`,
-      description:
-        route.description ?? `The ${route.name} route — football route template.`,
+      description,
       url: `/learn/library/routes/${slug}`,
       type: "article",
     },
@@ -181,6 +190,7 @@ export default async function RoutePage(
   });
   const usedByVisible = usedBy.slice(0, 6);
   const usedByOverflow = usedBy.length - usedByVisible.length;
+  const cues = routeCoachingCues(route.name);
 
   const allRoutes: RouteGridItem[] = ROUTE_TEMPLATES.map((r) => ({
     name: r.name,
@@ -310,8 +320,35 @@ export default async function RoutePage(
             concepts that use this route may set a different depth.
           </p>
 
+          {cues.cue ? (
+            <section className="mt-8">
+              <h2 className="text-xl font-bold tracking-tight">How to run it</h2>
+              <p className="mt-2 text-base leading-relaxed text-muted">{cues.cue}.</p>
+            </section>
+          ) : null}
+
+          {cues.byCoverage.length > 0 ? (
+            <section className="mt-8">
+              <h2 className="text-xl font-bold tracking-tight">Reading it by coverage</h2>
+              <p className="mt-1 text-sm text-muted">
+                How to run the {route.name.toLowerCase()} against what the
+                defense shows.
+              </p>
+              <dl className="mt-3 space-y-2">
+                {cues.byCoverage.map(({ coverage, cue }) => (
+                  <div key={coverage} className="text-base leading-relaxed">
+                    <dt className="inline font-semibold text-foreground">
+                      {coverageLabel(coverage)}:{" "}
+                    </dt>
+                    <dd className="inline text-muted">{cue}.</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          ) : null}
+
           {usedBy.length > 0 ? (
-            <p className="mt-6 rounded-xl border border-border bg-surface-raised px-4 py-3 text-sm text-muted">
+            <p className="mt-8 rounded-xl border border-border bg-surface-raised px-4 py-3 text-sm text-muted">
               <strong className="font-semibold text-foreground">Concepts that use this route: </strong>
               {usedByVisible.map((c, i) => (
                 <span key={c.name}>

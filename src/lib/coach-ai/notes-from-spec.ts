@@ -1447,6 +1447,24 @@ const ROUTE_CUES_BY_COVERAGE: Record<string, Record<string, string>> = {
   },
 };
 
+/** Public accessor for the Football Library routes page: the "how to run
+ *  it" cue for a route family, plus any coverage-specific reads. Keyed the
+ *  same way the narrator keys them internally (route family name, lowercased).
+ *  Returns `cue: null` and an empty `byCoverage` for families with no cue. */
+export function routeCoachingCues(routeName: string): {
+  cue: string | null;
+  byCoverage: Array<{ coverage: string; cue: string }>;
+} {
+  const key = routeName.toLowerCase();
+  const cov = ROUTE_CUES_BY_COVERAGE[key];
+  return {
+    cue: ROUTE_CUES[key] ?? null,
+    byCoverage: cov
+      ? Object.entries(cov).map(([coverage, cue]) => ({ coverage, cue }))
+      : [],
+  };
+}
+
 const RUN_CUES: Record<NonNullable<Extract<AssignmentAction, { kind: "carry" }>["runType"]>, string> = {
   inside_zone: "press the LOS, read the first down-block, cut on the second LB's flow",
   outside_zone: "stretch wide, plant and bend back if the edge isn't sealed",
