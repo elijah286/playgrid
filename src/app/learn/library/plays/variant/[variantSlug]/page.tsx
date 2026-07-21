@@ -37,7 +37,7 @@ const VARIANT_SEO: Record<
 > = {
   flag_5v5: {
     h1: "5v5 flag football plays",
-    title: "5v5 flag football plays · Free playbook library · XO Gridmaker",
+    title: "5v5 flag football plays · Free playbook library",
     description:
       "Browse a free library of 5v5 flag football plays — pass concepts, RPOs, sweeps, and trick plays. Open any play in the XO editor and drop it into your playbook.",
     intro:
@@ -45,7 +45,7 @@ const VARIANT_SEO: Record<
   },
   flag_6v6: {
     h1: "6v6 flag football plays",
-    title: "6v6 flag football plays · Free playbook library · XO Gridmaker",
+    title: "6v6 flag football plays · Free playbook library",
     description:
       "Browse a free library of 6v6 flag football plays — pass concepts, runs, and trick plays sized for the 6-on-6 game. Open any play in the XO editor.",
     intro:
@@ -53,7 +53,7 @@ const VARIANT_SEO: Record<
   },
   flag_7v7: {
     h1: "7v7 flag football plays",
-    title: "7v7 flag football plays · Free playbook library · XO Gridmaker",
+    title: "7v7 flag football plays · Free playbook library",
     description:
       "Browse a free library of 7v7 flag football plays — Air Raid concepts, mesh, smash, four verticals, and more. Open any play in the XO editor.",
     intro:
@@ -62,7 +62,7 @@ const VARIANT_SEO: Record<
   tackle_11: {
     h1: "11-on-11 tackle football plays",
     title:
-      "11-on-11 tackle football plays · Free playbook library · XO Gridmaker",
+      "11-on-11 tackle football plays · Free playbook library",
     description:
       "Browse a free library of 11-on-11 tackle football plays — full route concepts, RPOs, runs, and trick plays with offensive line and full defense.",
     intro:

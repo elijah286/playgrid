@@ -6,7 +6,7 @@ import { toLearnSlug } from "@/lib/learn/links";
 import { CategoryIndex } from "../_CategoryIndex";
 
 export const metadata: Metadata = {
-  title: "Routes · Football library · XO Gridmaker",
+  title: "Routes · Football library",
   description:
     "Every route template in the XO Gridmaker library — slants, posts, hitches, wheels, corners, and more. The building blocks of every passing play.",
   alternates: { canonical: "/learn/library/routes" },

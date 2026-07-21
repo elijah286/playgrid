@@ -28,7 +28,7 @@ import { DefenseOverrideEditor } from "./DefenseOverrideEditor";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Edit defense (admin) · XO Gridmaker",
+  title: "Edit defense (admin)",
   robots: { index: false, follow: false },
 };
 

@@ -51,9 +51,9 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const { slug } = await params;
   const route = findRouteBySlug(slug);
-  if (!route) return { title: "Route not found · XO Gridmaker" };
+  if (!route) return { title: "Route not found" };
   return {
-    title: `${route.name} route · Football Library · XO Gridmaker`,
+    title: `${route.name} route · Football Library`,
     description: route.description ?? `The ${route.name} route — football route template.`,
     alternates: { canonical: `/learn/library/routes/${slug}` },
     openGraph: {

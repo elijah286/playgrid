@@ -40,9 +40,9 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const { slug } = await params;
   const formation = findFormationBySlug(slug);
-  if (!formation) return { title: "Formation not found · XO Gridmaker" };
+  if (!formation) return { title: "Formation not found" };
   return {
-    title: `${formation.name} formation · Football Library · XO Gridmaker`,
+    title: `${formation.name} formation · Football Library`,
     description: formation.description,
     alternates: { canonical: `/learn/library/formations/${slug}` },
     openGraph: {

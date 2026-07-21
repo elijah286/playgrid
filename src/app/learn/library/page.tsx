@@ -35,12 +35,12 @@ import {
 } from "./categoryConstants";
 
 export const metadata: Metadata = {
-  title: "Football library · Learning Center · XO Gridmaker",
+  title: "Football library · Learning Center",
   description:
     "A free, browsable library of football concepts — plays, formations, routes, and defensive schemes. Each concept opens in the XO play editor with coaching breakdowns.",
   alternates: { canonical: "/learn/library" },
   openGraph: {
-    title: "Football library · XO Gridmaker",
+    title: "Football library",
     description:
       "A free, browsable library of football concepts — plays, formations, routes, and defensive schemes.",
     url: "/learn/library",

@@ -14,7 +14,7 @@ import { DEFAULT_LIBRARY_VARIANT } from "@/lib/learn/variant";
 import { CategoryIndex } from "../_CategoryIndex";
 
 export const metadata: Metadata = {
-  title: "Defenses · Football library · XO Gridmaker",
+  title: "Defenses · Football library",
   description:
     "Every defensive scheme in the XO Gridmaker library — Cover 1, Cover 2, Cover 3, Tampa 2, Cover 0, and more. Each links to the front + coverage breakdown.",
   alternates: { canonical: "/learn/library/defense" },

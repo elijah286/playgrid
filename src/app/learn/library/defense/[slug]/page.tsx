@@ -86,9 +86,9 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const { slug } = await params;
   const group = findGroupBySlug(slug);
-  if (!group) return { title: "Defense not found · XO Gridmaker" };
+  if (!group) return { title: "Defense not found" };
   return {
-    title: `${group.name} defense · Football Library · XO Gridmaker`,
+    title: `${group.name} defense · Football Library`,
     description: group.description,
     alternates: { canonical: `/learn/library/defense/${slug}` },
     openGraph: {

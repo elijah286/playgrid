@@ -14,7 +14,7 @@ import { getLibraryVariantCookie } from "@/lib/learn/variant-preference";
 import { CategoryIndex } from "../_CategoryIndex";
 
 export const metadata: Metadata = {
-  title: "Formations · Football library · XO Gridmaker",
+  title: "Formations · Football library",
   description:
     "Every named offensive formation in the XO Gridmaker library — Trips, Spread, Bunch, Empty, Pro-I, and more. Each opens to a full coaching breakdown.",
   alternates: { canonical: "/learn/library/formations" },

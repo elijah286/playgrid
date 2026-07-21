@@ -19,7 +19,7 @@ import { RouteOverrideEditor } from "./RouteOverrideEditor";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Edit library route (admin) · XO Gridmaker",
+  title: "Edit library route (admin)",
   robots: { index: false, follow: false },
 };
 

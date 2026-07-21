@@ -23,7 +23,7 @@ import { LibraryOverrideEditor } from "./LibraryOverrideEditor";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Edit library play (admin) · XO Gridmaker",
+  title: "Edit library play (admin)",
   robots: { index: false, follow: false },
 };
 

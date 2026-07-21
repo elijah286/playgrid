@@ -64,11 +64,11 @@ export async function generateMetadata(
   const { slug, variant: variantSlug } = await params;
   const concept = findConceptBySlug(slug);
   const variant = slugToVariant(variantSlug);
-  if (!concept || !variant) return { title: "Concept not found · XO Gridmaker" };
+  if (!concept || !variant) return { title: "Concept not found" };
   const variantLabel = VARIANT_LABEL[variant];
   const canonical = `/learn/library/plays/${slug}/${variantSlug}`;
   return {
-    title: `${concept.name} (${variantLabel}) · Football Library · XO Gridmaker`,
+    title: `${concept.name} (${variantLabel}) · Football Library`,
     description: `${concept.description} Variant-specific coaching breakdown for ${variantLabel}.`,
     alternates: { canonical },
     openGraph: {

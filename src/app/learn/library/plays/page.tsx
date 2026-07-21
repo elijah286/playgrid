@@ -35,7 +35,7 @@ export async function generateMetadata(
     variantFromUrl ?? variantFromCookie ?? DEFAULT_LIBRARY_VARIANT;
   const canonical = `/learn/library/plays/variant/${variantToSlug(variant)}`;
   return {
-    title: "Plays · Football library · XO Gridmaker",
+    title: "Plays · Football library",
     description:
       "Every football play concept in the XO Gridmaker library — pass, run, RPO, and trick plays. Each opens to a real diagram rendered by the canonical play editor.",
     alternates: { canonical },

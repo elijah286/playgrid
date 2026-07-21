@@ -36,7 +36,7 @@ const COVERAGE_SEO: Record<
 > = {
   "Cover 0": {
     h1: "Best plays to beat Cover 0",
-    title: "Best plays to beat Cover 0 (zero blitz) · XO Gridmaker",
+    title: "Best plays to beat Cover 0 (zero blitz)",
     description:
       "Plays that beat Cover 0 — the no-safety, all-out man blitz. Rub/mesh releases, the quick game, and vertical shots that punish zero help over the top.",
     intro:
@@ -44,7 +44,7 @@ const COVERAGE_SEO: Record<
   },
   "Cover 1": {
     h1: "Best plays to beat Cover 1",
-    title: "Best plays to beat Cover 1 (man-free) · XO Gridmaker",
+    title: "Best plays to beat Cover 1 (man-free)",
     description:
       "Plays that beat Cover 1 man-free — crossers and rubs that spring a man defender, plus routes worked away from the single free safety.",
     intro:
@@ -52,7 +52,7 @@ const COVERAGE_SEO: Record<
   },
   "Cover 2": {
     h1: "Best plays to beat Cover 2",
-    title: "Best plays to beat Cover 2 · XO Gridmaker",
+    title: "Best plays to beat Cover 2",
     description:
       "Plays that beat Cover 2 — attack the deep-sideline honey hole and split the two safeties. Smash, flood, and four verticals lead the way.",
     intro:
@@ -60,7 +60,7 @@ const COVERAGE_SEO: Record<
   },
   "Tampa 2": {
     h1: "Best plays to beat Tampa 2",
-    title: "Best plays to beat Tampa 2 · XO Gridmaker",
+    title: "Best plays to beat Tampa 2",
     description:
       "Plays that beat Tampa 2 — the two deep honey holes outside the hashes and the flats before the corner sinks. Smash and flood are the answers.",
     intro:
@@ -68,7 +68,7 @@ const COVERAGE_SEO: Record<
   },
   "Cover 3": {
     h1: "Best plays to beat Cover 3",
-    title: "Best plays to beat Cover 3 · XO Gridmaker",
+    title: "Best plays to beat Cover 3",
     description:
       "Plays that beat Cover 3 — four underneath defenders can't cover five zones. Curl-flat, smash, flood, and snag flood the soft flats and seams.",
     intro:
@@ -76,7 +76,7 @@ const COVERAGE_SEO: Record<
   },
   "Cover 4": {
     h1: "Best plays to beat Cover 4 (quarters)",
-    title: "Best plays to beat Cover 4 quarters · XO Gridmaker",
+    title: "Best plays to beat Cover 4 quarters",
     description:
       "Plays that beat Cover 4 quarters — only three underneath defenders. Stick, snag, and the quick game attack the soft underneath and flats.",
     intro:
@@ -91,11 +91,11 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const { coverageSlug } = await params;
   const profile = findCoverageBySlug(coverageSlug);
-  if (!profile) return { title: "Coverage not found · XO Gridmaker" };
+  if (!profile) return { title: "Coverage not found" };
   const seo = COVERAGE_SEO[profile.coverage];
   const url = `/learn/library/plays/vs/${coverageSlug}`;
   return {
-    title: seo?.title ?? `Best plays to beat ${profile.coverage} · XO Gridmaker`,
+    title: seo?.title ?? `Best plays to beat ${profile.coverage}`,
     description: seo?.description ?? profile.summary,
     alternates: { canonical: url },
     openGraph: {
