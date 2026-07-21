@@ -57,28 +57,9 @@ export function NativeAppShell() {
 
     // The HTML loading overlay (rendered server-side, gated on .native-shell
     // set in <head> before paint) bridges the gap between the native splash
-    // and React hydration. It runs a one-shot launch animation, then rests on
-    // the logo + a loading bar.
-    //
-    // Dismissal adds `.native-ready` to <html>, which fades the overlay out
-    // (globals.css). We deliberately do NOT fade it the instant hydration
-    // lands — that gave the animation ~zero screen time. Instead: hide the
-    // native splash, RESTART the overlay's CSS animations from frame 0 (they
-    // began at first paint *behind* the splash, so without this they'd be
-    // partway through), then hold the overlay long enough for the play to run
-    // before revealing the app. `safetyTimer` is a near backstop if the
-    // splash-hide promise never resolves; the inline 8s watchdog in
-    // layout.tsx is the outer one.
-    const LAUNCH_HOLD_MS = 3600; // ~ the launch animation's length + a beat
+    // and React hydration. Hide the native splash now — the overlay is
+    // already on screen with the logo and progress bar.
     let hideTimer: ReturnType<typeof setTimeout> | null = null;
-    let readyDone = false;
-    const markReady = () => {
-      if (readyDone || cancelled) return;
-      readyDone = true;
-      document.documentElement.classList.add("native-ready");
-    };
-    const safetyTimer = setTimeout(markReady, 6000);
-
     void (async () => {
       try {
         const { SplashScreen } = await import("@capacitor/splash-screen");
@@ -87,31 +68,6 @@ export function NativeAppShell() {
       } catch {
         /* plugin may be absent or already hidden */
       }
-      if (cancelled || readyDone) return;
-      // Native splash has lifted — the overlay is now the visible layer.
-      // Restart its animations so the play runs from the top, then hold, then
-      // reveal the app. Best-effort: if getAnimations() is unavailable or the
-      // restart no-ops, the animation simply plays from wherever it is and the
-      // hold below still gives it screen time.
-      try {
-        const overlay = document.getElementById("native-loading-overlay");
-        overlay?.querySelectorAll("*").forEach((el) => {
-          const anims = (
-            el as Element & { getAnimations?: () => Animation[] }
-          ).getAnimations?.();
-          anims?.forEach((a) => {
-            try {
-              a.cancel();
-              a.play();
-            } catch {
-              /* ignore a single uncooperative animation */
-            }
-          });
-        });
-      } catch {
-        /* best-effort */
-      }
-      hideTimer = setTimeout(markReady, LAUNCH_HOLD_MS);
     })();
 
     // Reload-on-resume: when the app comes back to the foreground after being
@@ -145,6 +101,30 @@ export function NativeAppShell() {
         /* @capacitor/app missing (web) — ignore */
       }
     })();
+
+    // Dismiss the loading overlay as soon as the shell has hydrated and
+    // painted — NOT on window 'load', which waits for every image and font and
+    // can leave the overlay up for seconds on a slow warm load (resume / iOS
+    // webview relaunch). This effect runs after React hydration, so a double
+    // rAF guarantees the first paint has landed before we fade the overlay out;
+    // remaining images stream in behind it, same as any web page.
+    const markReady = () => {
+      document.documentElement.classList.add("native-ready");
+    };
+    const revealAfterPaint = () => {
+      requestAnimationFrame(() => requestAnimationFrame(markReady));
+    };
+    if (document.readyState === "loading") {
+      // Pre-hydration (rare for this effect): wait for the DOM to parse, not
+      // for all subresources to finish downloading.
+      document.addEventListener("DOMContentLoaded", revealAfterPaint, {
+        once: true,
+      });
+      // Safety net so a hung parse never traps the user behind the overlay.
+      hideTimer = setTimeout(markReady, 5000);
+    } else {
+      revealAfterPaint();
+    }
 
     // Register for push once authenticated. We drive this off
     // onAuthStateChange rather than a mount-time getSession() call: in the
@@ -197,7 +177,7 @@ export function NativeAppShell() {
     return () => {
       cancelled = true;
       if (hideTimer) clearTimeout(hideTimer);
-      clearTimeout(safetyTimer);
+      document.removeEventListener("DOMContentLoaded", revealAfterPaint);
       appStateHandle?.remove();
       teardownPush?.();
       authSub.subscription.unsubscribe();
