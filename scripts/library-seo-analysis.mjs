@@ -70,6 +70,9 @@ function libraryBucket(path) {
   if (!p.startsWith('/learn')) return null
   if (p === '/learn' || p === '/learn/library') return 'hub'
   if (p.startsWith('/learn/library/plays/variant/')) return 'collection: variant-rollup'
+  // "Best plays to beat <coverage>" collections. MUST precede the two-segment
+  // entity-play regex below — /plays/vs/cover-3 also matches that shape.
+  if (p.startsWith('/learn/library/plays/vs/')) return 'collection: coverage-beaters'
   if (/^\/learn\/library\/plays\/[^/]+\/[^/]+$/.test(p)) return 'entity: play (variant)'
   if (/^\/learn\/library\/plays\/[^/]+$/.test(p)) return 'entity: play (redirect)'
   if (p.startsWith('/learn/library/formations/')) return 'entity: formation'
