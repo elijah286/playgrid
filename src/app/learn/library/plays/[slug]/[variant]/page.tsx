@@ -13,7 +13,8 @@ import { NotesMarkdown } from "@/features/editor/NotesMarkdown";
 import { projectSpecToNotes } from "@/lib/coach-ai/notes-from-spec";
 import { isCurrentUserSiteAdmin, isFootballLibraryAvailable } from "@/lib/learn/access";
 import { loadLibraryOverride } from "@/lib/learn/overrides";
-import { toLearnSlug } from "@/lib/learn/links";
+import { toLearnSlug, learnLink } from "@/lib/learn/links";
+import { conceptMatchups } from "@/lib/learn/matchups";
 import { withFullContext } from "@/lib/seo/ld-json";
 import {
   LIBRARY_VARIANTS,
@@ -24,6 +25,7 @@ import {
 } from "@/lib/learn/variant";
 import { VariantNavPill } from "../../../VariantNavPill";
 import { InstallPlayButton } from "./InstallPlayButton";
+import { InlineTextEditor } from "../../../_components/InlineTextEditor";
 
 export const dynamicParams = false;
 export const revalidate = 3600;
@@ -179,6 +181,14 @@ export default async function PlayConceptVariantPage(
     override?.whenToUseOverride ?? concept.whenToUse;
   const conceptCommonMistakes =
     override?.commonMistakesOverride ?? concept.commonMistakes ?? [];
+  const conceptWhenNotToUse =
+    override?.whenNotToUseOverride ?? concept.whenNotToUse;
+  const conceptSituationalAdjustments =
+    override?.situationalAdjustmentsOverride ?? concept.situationalAdjustments;
+  // Derived from coverageProfiles (single source of truth, Rule 6), inverted
+  // to concept→coverage. `coverageGraded` is false for run/RPO/trick concepts
+  // (graded on box & front, not coverage shell) → the section is hidden.
+  const matchups = conceptMatchups(concept.name);
   // Admins see an "Edit" link in the header that opens the play in
   // the canonical editor (`/learn/library/admin/plays/[slug]/[variant]/edit`).
   // Edits there save to `library_concept_overrides`, which this page
@@ -331,12 +341,53 @@ export default async function PlayConceptVariantPage(
             </section>
           )}
 
-          {conceptWhenToUse ? (
+          {conceptWhenToUse || isAdmin ? (
             <section className="mt-8">
               <h2 className="text-xl font-bold tracking-tight">When to call it</h2>
-              <p className="mt-2 text-base leading-relaxed text-muted">
-                {conceptWhenToUse}
-              </p>
+              <div className="mt-2">
+                <InlineTextEditor
+                  slug={slug}
+                  variant={variant}
+                  field="whenToUse"
+                  value={conceptWhenToUse ?? ""}
+                  isAdmin={isAdmin}
+                  className="text-base leading-relaxed text-muted"
+                />
+              </div>
+            </section>
+          ) : null}
+
+          {conceptWhenNotToUse || isAdmin ? (
+            <section className="mt-8">
+              <h2 className="text-xl font-bold tracking-tight">When not to use</h2>
+              <div className="mt-2">
+                <InlineTextEditor
+                  slug={slug}
+                  variant={variant}
+                  field="whenNotToUse"
+                  value={conceptWhenNotToUse ?? ""}
+                  isAdmin={isAdmin}
+                  className="text-base leading-relaxed text-muted"
+                />
+              </div>
+            </section>
+          ) : null}
+
+          {conceptSituationalAdjustments || isAdmin ? (
+            <section className="mt-8">
+              <h2 className="text-xl font-bold tracking-tight">
+                How to adjust for situations
+              </h2>
+              <div className="mt-2">
+                <InlineTextEditor
+                  slug={slug}
+                  variant={variant}
+                  field="situationalAdjustments"
+                  value={conceptSituationalAdjustments ?? ""}
+                  isAdmin={isAdmin}
+                  className="text-base leading-relaxed text-muted"
+                />
+              </div>
             </section>
           ) : null}
 
@@ -350,6 +401,70 @@ export default async function PlayConceptVariantPage(
                   </li>
                 ))}
               </ul>
+            </section>
+          ) : null}
+
+          {matchups.coverageGraded ? (
+            <section className="mt-8">
+              <h2 className="text-xl font-bold tracking-tight">Strong / weak against</h2>
+              {matchups.strong.length > 0 ? (
+                <div className="mt-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
+                    Strong against
+                  </h3>
+                  <ul className="mt-1.5 space-y-1.5 pl-6">
+                    {matchups.strong.map((m) => (
+                      <li
+                        key={m.coverage}
+                        className="list-disc text-base leading-relaxed text-muted"
+                      >
+                        <span className="font-semibold text-foreground">{m.coverage}</span>
+                        {m.why ? ` — ${m.why}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {matchups.contested.length > 0 ? (
+                <div className="mt-4">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
+                    Contested
+                  </h3>
+                  <ul className="mt-1.5 space-y-1.5 pl-6">
+                    {matchups.contested.map((m) => {
+                      const alts = m.alternatives
+                        .map((name) => ({
+                          name,
+                          href: learnLink({ concept: name, category: "plays", variant }),
+                        }))
+                        .filter((a): a is { name: string; href: string } => Boolean(a.href));
+                      return (
+                        <li
+                          key={m.coverage}
+                          className="list-disc text-base leading-relaxed text-muted"
+                        >
+                          <span className="font-semibold text-foreground">{m.coverage}</span>
+                          {m.why ? ` — ${m.why}` : ""}
+                          {alts.length > 0 ? (
+                            <>
+                              {" "}
+                              <span className="text-muted">Better answers: </span>
+                              {alts.map((a, i) => (
+                                <span key={a.name}>
+                                  <Link href={a.href} className="text-primary hover:underline">
+                                    {a.name}
+                                  </Link>
+                                  {i < alts.length - 1 ? ", " : ""}
+                                </span>
+                              ))}
+                            </>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ) : null}
             </section>
           ) : null}
 
