@@ -56,9 +56,11 @@ export function PreviewChrome({
             <Image
               src="/brand/xogridmaker_monogram.svg"
               alt=""
-              width={28}
+              // The monogram is a wide 900×380 mark — size by height and let the
+              // width follow (h-7 w-auto) so it isn't squished into a square.
+              width={66}
               height={28}
-              className="size-7"
+              className="h-7 w-auto"
               unoptimized
             />
             <span className="text-sm font-black tracking-tight text-foreground">
