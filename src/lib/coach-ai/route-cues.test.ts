@@ -13,10 +13,10 @@ describe("routeCoachingCues (library routes accessor)", () => {
     expect(routeCoachingCues("hitch").cue).toBe(routeCoachingCues("HITCH").cue);
   });
 
-  it("returns a cue but no coverage reads for a cue-only route (Bubble)", () => {
+  it("returns cue + coverage reads for an enriched route (Bubble)", () => {
     const c = routeCoachingCues("Bubble");
     expect(c.cue).toBeTruthy();
-    expect(c.byCoverage).toEqual([]);
+    expect(c.byCoverage.length).toBeGreaterThan(0);
   });
 
   it("returns empty for an unknown route", () => {
