@@ -395,7 +395,6 @@ function PlaybookDetailClientInner({
   headerProps,
   isAdmin = false,
   freeMaxPlays,
-  createPlayV2 = false,
   gameModeAvailable = false,
   photoImportAvailable = false,
   newPlaySheet = false,
@@ -431,9 +430,6 @@ function PlaybookDetailClientInner({
   initialPrefs: PlaybookViewPrefs | null;
   isAdmin?: boolean;
   freeMaxPlays: number;
-  /** When true, use the unified create-play surface (Level-1 method chooser →
-   *  Level-2 type + formation) instead of the legacy formation picker. */
-  createPlayV2?: boolean;
   /** When true, render the mobile "Game" button next to the search bar. */
   gameModeAvailable?: boolean;
   /** When true, show the "Import play from photo" entry (photo_play_import beta). */
@@ -1531,8 +1527,7 @@ function PlaybookDetailClientInner({
   // skips the method chooser for the first-play hero (whose own buttons
   // already pick Cal vs. Draw).
   function startNewPlay(opts?: { startAtDraw?: boolean }) {
-    if (createPlayV2) openCreatePlayV2(opts);
-    else openFormationPicker();
+    openCreatePlayV2(opts);
   }
 
   return (
@@ -3309,10 +3304,8 @@ function PlaybookDetailClientInner({
       )}
 
       {/* Unified create-play surface + its own cap/lock/viewer modals.
-          Renders nothing until openCreatePlayV2() is called; only mounted
-          when the flag is on so the legacy picker stays the sole surface
-          otherwise. */}
-      {createPlayV2 && createPlaySheet}
+          Renders nothing until openCreatePlayV2() is called. */}
+      {createPlaySheet}
 
       {/* Modals — render at the bottom of the wrapper so they don't
           interfere with the top-of-page layout. They're position:fixed

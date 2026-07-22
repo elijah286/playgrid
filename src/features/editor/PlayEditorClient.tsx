@@ -183,10 +183,6 @@ type Props = {
   /** Remaining free Cal prompts for a non-entitled coach; null when entitled
    *  (unlimited) or unknown. Drives the empty-editor "build with Cal" nudge. */
   coachCalFreePromptsRemaining?: number | null;
-  /** When true, "New play" opens the unified create surface in place (no
-   *  bounce back to the playbook page with ?new=1). Flag-gated; falls back to
-   *  the legacy bounce when off. */
-  createPlayV2?: boolean;
   /** Free-tier per-playbook play cap, for the create surface's cap-upgrade
    *  copy. Only consulted when a create is rejected at the cap. */
   freeMaxPlays?: number;
@@ -303,7 +299,6 @@ function PlayEditorClientInner({
   coachAiAvailable = false,
   showCoachCalPromo = false,
   coachCalFreePromptsRemaining = null,
-  createPlayV2 = false,
   freeMaxPlays = FREE_MAX_PLAYS_PER_PLAYBOOK_DEFAULT,
   teamCalendarAvailable = false,
   teamMessagingAvailable = false,
@@ -1765,25 +1760,10 @@ function PlayEditorClientInner({
   }, [playId, doc.metadata.coachName, doc.metadata.formationId, doc.metadata.formation, blockIfPreview]);
 
   const newPlay = useCallback(() => {
-    // V2: open the create surface in place — no navigation. The hook owns the
-    // preview/viewer/offline diverts, so no blockIfPreview needed here.
-    if (createPlayV2) {
-      openCreatePlayV2();
-      return;
-    }
-    if (
-      blockIfPreview(
-        "Creating a play in an example playbook isn't persisted. Start your own playbook to save plays.",
-      )
-    ) {
-      return;
-    }
-    // Legacy: route back to the playbook with the formation picker
-    // auto-opened. Keeps creation consistent with the play grid's "New play"
-    // flow — the editor used to short-circuit to an empty play, which lost the
-    // formation context coaches expect when starting a new play.
-    router.push(`/playbooks/${playbookId}?tab=plays&new=1`);
-  }, [createPlayV2, openCreatePlayV2, blockIfPreview, playbookId, router]);
+    // Open the create surface in place — no navigation. The hook owns the
+    // preview/viewer/offline diverts.
+    openCreatePlayV2();
+  }, [openCreatePlayV2]);
 
   const [moveTarget, setMoveTarget] = useState<MovePlayToGroupTarget | null>(null);
   const openMoveToGroup = useCallback(
@@ -3132,9 +3112,9 @@ function PlayEditorClientInner({
           )}
       </div>
 
-      {/* In-place create surface (flag-gated). Renders nothing until the
-          header's "New play" calls openCreatePlayV2(). */}
-      {createPlayV2 && createPlaySheet}
+      {/* In-place create surface. Renders nothing until the header's "New
+          play" calls openCreatePlayV2(). */}
+      {createPlaySheet}
 
       <MovePlayToGroupDialog
         target={moveTarget}

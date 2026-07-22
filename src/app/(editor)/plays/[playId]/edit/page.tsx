@@ -185,10 +185,6 @@ export default async function PlayEditPage({ params }: Props) {
   const isPlayArchived = Boolean((res.play as { is_archived?: boolean | null }).is_archived);
 
   const isAdmin = (selfRoleResp.data?.role as string | null) === "admin";
-  const createPlayV2 = isBetaFeatureAvailable(betaFeatures.create_play_v2, {
-    isAdmin,
-    isEntitled: true,
-  });
   const isCoachInPlaybook = canEdit && !isExamplePreview;
   const gameModeAvailable = isCoachInPlaybook;
   // Drive the editor bottom nav's "More" sheet — same per-playbook
@@ -287,7 +283,6 @@ export default async function PlayEditPage({ params }: Props) {
       coachAiAvailable={coachAiAvailable}
       showCoachCalPromo={showCoachCalPromo}
       coachCalFreePromptsRemaining={coachCalFreePromptsRemaining}
-      createPlayV2={createPlayV2}
       freeMaxPlays={freeMaxPlays}
       teamCalendarAvailable={teamCalendarAvailable}
       teamMessagingAvailable={teamMessagingAvailable}

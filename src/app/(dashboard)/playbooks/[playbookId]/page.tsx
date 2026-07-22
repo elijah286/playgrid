@@ -538,10 +538,6 @@ export default async function PlaybookDetailPage({ params }: Props) {
         initialPrefs={prefsRes.ok ? prefsRes.prefs : null}
         isAdmin={isAdmin}
         freeMaxPlays={freeMaxPlays}
-        createPlayV2={isBetaFeatureAvailable(betaFeatures.create_play_v2, {
-          isAdmin,
-          isEntitled: true,
-        })}
         gameModeAvailable={gameModeAvailable}
         photoImportAvailable={photoImportAvailable}
         newPlaySheet={newPlaySheet}
