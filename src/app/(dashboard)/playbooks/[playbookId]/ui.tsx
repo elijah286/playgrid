@@ -1521,6 +1521,7 @@ function PlaybookDetailClientInner({
         headerProps.coachAiAvailable || headerProps.showCoachCalPromo,
       freeMaxPlays,
       resolvePlayName: nextPlayNameForTemplate,
+      photoImportAvailable,
     });
 
   // Single entry point every "New play" control routes through. `startAtDraw`

@@ -36,6 +36,9 @@ export type UseCreatePlayConfig = {
   showCoachCal: boolean;
   /** Free-tier per-playbook play cap, for the cap-upgrade modal copy. */
   freeMaxPlays: number;
+  /** Show the "Import from a photo" method card. True only where the
+   *  photo_play_import beta is available (admin-only today). */
+  photoImportAvailable?: boolean;
   /** Optional resolver for a nicer sequential name on template plays
    *  (e.g. "Cover 2 3"). Falls back to the template name when absent. */
   resolvePlayName?: (base: string) => string;
@@ -77,6 +80,7 @@ export function useCreatePlay(config: UseCreatePlayConfig): {
     showCoachCal,
     freeMaxPlays,
     resolvePlayName,
+    photoImportAvailable = false,
   } = config;
 
   const router = useRouter();
@@ -271,6 +275,11 @@ export function useCreatePlay(config: UseCreatePlayConfig): {
     }
   }, [playType, createWithFormation, defaultDefenders]);
 
+  const onImportPhoto = useCallback(() => {
+    setOpen(false);
+    router.push(`/playbooks/${playbookId}/import-photo`);
+  }, [router, playbookId]);
+
   const sheet = (
     <>
       <CreatePlaySheet
@@ -284,6 +293,8 @@ export function useCreatePlay(config: UseCreatePlayConfig): {
           setOpen(false);
           openCoachCal("playbook_generate_play");
         }}
+        showPhotoImport={photoImportAvailable}
+        onImportPhoto={onImportPhoto}
         variant={variant}
         playType={playType}
         onChangePlayType={setPlayType}

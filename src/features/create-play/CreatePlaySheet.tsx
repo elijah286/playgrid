@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { ArrowLeft, PencilLine, Plus, X } from "lucide-react";
+import { ArrowLeft, Camera, PencilLine, Plus, X } from "lucide-react";
 import type { Player, PlayType, SportVariant } from "@/domain/play/types";
 import type { SavedFormation } from "@/app/actions/formations";
 import type {
@@ -34,6 +34,10 @@ export type CreatePlaySheetProps = {
   /** Hide the Cal card when the viewer has no Coach Cal access at all. */
   showCoachCal: boolean;
   onGenerateWithCal: () => void;
+  /** Show the "Import from a photo" card (photo_play_import beta — admin only
+   *  today). Hidden when unavailable so non-admins never see it. */
+  showPhotoImport: boolean;
+  onImportPhoto: () => void;
 
   // ---- Level 2: draw ----
   variant: SportVariant;
@@ -166,6 +170,8 @@ export function CreatePlaySheet(props: CreatePlaySheetProps) {
 function MethodLevel({
   showCoachCal,
   onGenerateWithCal,
+  showPhotoImport,
+  onImportPhoto,
   onChooseDraw,
   creating,
 }: CreatePlaySheetProps) {
@@ -191,6 +197,27 @@ function MethodLevel({
             </span>
             <span className="block text-sm opacity-80">
               Describe a play in plain English — Cal draws it for you.
+            </span>
+          </span>
+        </button>
+      )}
+
+      {showPhotoImport && (
+        <button
+          type="button"
+          onClick={onImportPhoto}
+          disabled={creating}
+          className="group flex items-center gap-4 rounded-2xl border border-border bg-surface-base p-4 text-left transition-colors hover:border-primary hover:bg-primary/5 disabled:opacity-50"
+        >
+          <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-brand-green/10 text-brand-green">
+            <Camera className="size-7" />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-base font-bold text-foreground">
+              Import from a photo
+            </span>
+            <span className="block text-sm text-muted">
+              Snap a play sheet or hand-drawn play — we read it into a play.
             </span>
           </span>
         </button>

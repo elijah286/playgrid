@@ -186,6 +186,9 @@ type Props = {
   /** Free-tier per-playbook play cap, for the create surface's cap-upgrade
    *  copy. Only consulted when a create is rejected at the cap. */
   freeMaxPlays?: number;
+  /** Show the "Import from a photo" method card in the create surface
+   *  (photo_play_import beta — admin only today). */
+  photoImportAvailable?: boolean;
   /** Drives which links appear in the editor footer's "More" sheet —
    *  same beta-feature flags the playbook page uses to decide which
    *  tabs render. The editor doesn't host these tabs itself; the sheet
@@ -300,6 +303,7 @@ function PlayEditorClientInner({
   showCoachCalPromo = false,
   coachCalFreePromptsRemaining = null,
   freeMaxPlays = FREE_MAX_PLAYS_PER_PLAYBOOK_DEFAULT,
+  photoImportAvailable = false,
   teamCalendarAvailable = false,
   teamMessagingAvailable = false,
   gameResultsAvailable = false,
@@ -337,6 +341,7 @@ function PlayEditorClientInner({
       blockIfPreview,
       showCoachCal: coachAiAvailable || showCoachCalPromo,
       freeMaxPlays,
+      photoImportAvailable,
     });
 
   // Unified edit timeline so undo/redo unwinds the most recent change across

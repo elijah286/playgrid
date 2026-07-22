@@ -206,6 +206,15 @@ export default async function PlayEditPage({ params }: Props) {
   const practicePlansAvailable = isCoachInPlaybook;
   const viewerCanUseGameMode = isAdmin || canUseGameMode(editorEntitlement);
   const coachAiEntitled = isAdmin || canUseAiFeatures(editorEntitlement);
+  // Photo import method card in the create surface — same gate as the
+  // playbook page (photo_play_import beta; admin-only while at "me").
+  const photoImportAvailable =
+    !isExamplePreview &&
+    isCoachInPlaybook &&
+    isBetaFeatureAvailable(betaFeatures.photo_play_import, {
+      isAdmin,
+      isEntitled: coachAiEntitled,
+    });
   // Free users with trial prompts left get the real launcher, not the promo
   // (mirrors SiteHeader / the playbook page).
   const freeCalState =
@@ -284,6 +293,7 @@ export default async function PlayEditPage({ params }: Props) {
       showCoachCalPromo={showCoachCalPromo}
       coachCalFreePromptsRemaining={coachCalFreePromptsRemaining}
       freeMaxPlays={freeMaxPlays}
+      photoImportAvailable={photoImportAvailable}
       teamCalendarAvailable={teamCalendarAvailable}
       teamMessagingAvailable={teamMessagingAvailable}
       gameResultsAvailable={gameResultsAvailable}
