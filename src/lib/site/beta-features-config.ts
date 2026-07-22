@@ -16,7 +16,8 @@ export type BetaFeatureKey =
   | "offline_auto_cache"
   | "photo_play_import"
   | "new_play_sheet"
-  | "new_shell";
+  | "new_shell"
+  | "create_play_v2";
 export type BetaFeatureScope = "off" | "me" | "all" | "custom";
 
 export type BetaFeatures = Record<BetaFeatureKey, BetaFeatureScope>;
@@ -62,6 +63,12 @@ const DEFAULTS: BetaFeatures = {
   // (nobody), flip to "me" (admins) or "custom" (allowlist) to test in prod,
   // then "all" to ship. Off-by-default = zero effect on everyone else.
   new_shell: "off",
+  // Unified create-play surface (Level-1 method chooser → Level-2 type +
+  // formation) that replaces the busy formation-picker modal, plus the
+  // in-editor in-place create (no ?new=1 bounce). Availability gate: when
+  // off, every entry point falls back to the legacy formation picker. Start
+  // "off", flip to "me" for site-admin testing, then "all".
+  create_play_v2: "off",
 };
 
 /** Safe "everything off" fallback for callers that need a value even when

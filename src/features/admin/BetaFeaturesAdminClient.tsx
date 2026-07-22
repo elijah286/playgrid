@@ -87,6 +87,13 @@ const FEATURES: FeatureMeta[] = [
       "Native app only. When on, every one of a coach's playbooks auto-downloads into the on-device cache and stays fresh in the background (vs the manual per-playbook \"Download for offline\"), so the whole library works on the sideline with no signal. Reads work offline; editing still needs a connection. Start with \"Only me\" to verify on a device before widening.",
     disabledScopes: ["custom"],
   },
+  {
+    key: "create_play_v2",
+    label: "Create-play redesign",
+    description:
+      "Replaces the busy formation-picker modal with a two-step create surface (choose a method — Coach Cal or Draw — then, for Draw, pick offense/defense/special-teams and a formation or template). Also creates a new play in place from inside the editor (no bounce back to the playbook). When off, every entry point uses the legacy picker. Start with \"Only me\" to verify before widening.",
+    disabledScopes: ["custom"],
+  },
 ];
 
 const SCOPE_OPTIONS: { value: BetaFeatureScope; label: string; hint: string }[] = [

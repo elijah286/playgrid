@@ -27,6 +27,7 @@ const DEFAULTS: BetaFeatures = {
   photo_play_import: "me",
   new_play_sheet: "me",
   new_shell: "off",
+  create_play_v2: "off",
 };
 
 export async function getBetaFeaturesAction() {

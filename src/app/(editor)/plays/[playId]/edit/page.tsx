@@ -15,6 +15,7 @@ import {
   getBetaFeatures,
   isBetaFeatureAvailable,
 } from "@/lib/site/beta-features-config";
+import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
 import { PlayEditorClient } from "@/features/editor/PlayEditorClient";
 import {
   BuildYourOwnPlaybookCta,
@@ -63,6 +64,7 @@ export default async function PlayEditPage({ params }: Props) {
     betaFeatures,
     editorEntitlement,
     coachAiEvalDays,
+    freeMaxPlays,
   ] = await Promise.all([
     listPlaybookPlaysForNavigationAction(res.play.playbook_id),
     listFormationsForPlaybookAction(res.play.playbook_id),
@@ -96,6 +98,10 @@ export default async function PlayEditPage({ params }: Props) {
     getBetaFeatures(),
     getCurrentEntitlement(),
     getCoachAiEvalDays(),
+    // Global free-tier cap for the in-editor create surface's cap-upgrade
+    // copy (cached; effectively free). Owner-specific overrides aren't worth
+    // an extra round-trip on every editor load for this edge-case modal.
+    getFreeMaxPlaysPerPlaybook(),
   ]);
 
   const user = userResp.data.user;
@@ -179,6 +185,10 @@ export default async function PlayEditPage({ params }: Props) {
   const isPlayArchived = Boolean((res.play as { is_archived?: boolean | null }).is_archived);
 
   const isAdmin = (selfRoleResp.data?.role as string | null) === "admin";
+  const createPlayV2 = isBetaFeatureAvailable(betaFeatures.create_play_v2, {
+    isAdmin,
+    isEntitled: true,
+  });
   const isCoachInPlaybook = canEdit && !isExamplePreview;
   const gameModeAvailable = isCoachInPlaybook;
   // Drive the editor bottom nav's "More" sheet — same per-playbook
@@ -277,6 +287,8 @@ export default async function PlayEditPage({ params }: Props) {
       coachAiAvailable={coachAiAvailable}
       showCoachCalPromo={showCoachCalPromo}
       coachCalFreePromptsRemaining={coachCalFreePromptsRemaining}
+      createPlayV2={createPlayV2}
+      freeMaxPlays={freeMaxPlays}
       teamCalendarAvailable={teamCalendarAvailable}
       teamMessagingAvailable={teamMessagingAvailable}
       gameResultsAvailable={gameResultsAvailable}

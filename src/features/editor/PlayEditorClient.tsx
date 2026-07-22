@@ -80,6 +80,8 @@ import { notifyTutorialAction } from "@/features/tutorials/engine/notify";
 import { PlayAuthoringAutoLauncher } from "@/features/tutorials/PlayAuthoringAutoLauncher";
 import { ROUTE_TEMPLATES, instantiateTemplate } from "@/domain/play/routeTemplates";
 import type { SportVariant } from "@/domain/play/types";
+import { useCreatePlay } from "@/features/create-play/useCreatePlay";
+import { FREE_MAX_PLAYS_PER_PLAYBOOK_DEFAULT } from "@/lib/site/free-plays-config";
 
 function coerceVariant(v: string | null | undefined): SportVariant | null {
   if (v === "flag_5v5" || v === "flag_6v6" || v === "flag_7v7" || v === "tackle_11") {
@@ -181,6 +183,13 @@ type Props = {
   /** Remaining free Cal prompts for a non-entitled coach; null when entitled
    *  (unlimited) or unknown. Drives the empty-editor "build with Cal" nudge. */
   coachCalFreePromptsRemaining?: number | null;
+  /** When true, "New play" opens the unified create surface in place (no
+   *  bounce back to the playbook page with ?new=1). Flag-gated; falls back to
+   *  the legacy bounce when off. */
+  createPlayV2?: boolean;
+  /** Free-tier per-playbook play cap, for the create surface's cap-upgrade
+   *  copy. Only consulted when a create is rejected at the cap. */
+  freeMaxPlays?: number;
   /** Drives which links appear in the editor footer's "More" sheet —
    *  same beta-feature flags the playbook page uses to decide which
    *  tabs render. The editor doesn't host these tabs itself; the sheet
@@ -294,6 +303,8 @@ function PlayEditorClientInner({
   coachAiAvailable = false,
   showCoachCalPromo = false,
   coachCalFreePromptsRemaining = null,
+  createPlayV2 = false,
+  freeMaxPlays = FREE_MAX_PLAYS_PER_PLAYBOOK_DEFAULT,
   teamCalendarAvailable = false,
   teamMessagingAvailable = false,
   gameResultsAvailable = false,
@@ -318,6 +329,20 @@ function PlayEditorClientInner({
     canUndo: primaryCanUndo,
     canRedo: primaryCanRedo,
   } = usePlayEditor(initialDocument);
+
+  // Unified create-play surface for the in-editor "New play" — opens in place
+  // instead of bouncing back to the playbook page with ?new=1 (flag-gated;
+  // see `newPlay` below for the legacy fallback).
+  const { openCreatePlay: openCreatePlayV2, sheet: createPlaySheet } =
+    useCreatePlay({
+      playbookId,
+      variant: coerceVariant(playbookVariant) ?? "flag_7v7",
+      isViewer: !roleCanEdit && !isExamplePreview,
+      isPreview: isExamplePreview,
+      blockIfPreview,
+      showCoachCal: coachAiAvailable || showCoachCalPromo,
+      freeMaxPlays,
+    });
 
   // Unified edit timeline so undo/redo unwinds the most recent change across
   // BOTH the primary doc (offense) AND the custom-opponent overlay
@@ -1740,6 +1765,12 @@ function PlayEditorClientInner({
   }, [playId, doc.metadata.coachName, doc.metadata.formationId, doc.metadata.formation, blockIfPreview]);
 
   const newPlay = useCallback(() => {
+    // V2: open the create surface in place — no navigation. The hook owns the
+    // preview/viewer/offline diverts, so no blockIfPreview needed here.
+    if (createPlayV2) {
+      openCreatePlayV2();
+      return;
+    }
     if (
       blockIfPreview(
         "Creating a play in an example playbook isn't persisted. Start your own playbook to save plays.",
@@ -1747,12 +1778,12 @@ function PlayEditorClientInner({
     ) {
       return;
     }
-    // Route back to the playbook with the formation picker auto-opened.
-    // Keeps creation consistent with the play grid's "New play" flow —
-    // the editor used to short-circuit to an empty play, which lost the
+    // Legacy: route back to the playbook with the formation picker
+    // auto-opened. Keeps creation consistent with the play grid's "New play"
+    // flow — the editor used to short-circuit to an empty play, which lost the
     // formation context coaches expect when starting a new play.
     router.push(`/playbooks/${playbookId}?tab=plays&new=1`);
-  }, [blockIfPreview, playbookId, router]);
+  }, [createPlayV2, openCreatePlayV2, blockIfPreview, playbookId, router]);
 
   const [moveTarget, setMoveTarget] = useState<MovePlayToGroupTarget | null>(null);
   const openMoveToGroup = useCallback(
@@ -3100,6 +3131,10 @@ function PlayEditorClientInner({
             </aside>
           )}
       </div>
+
+      {/* In-place create surface (flag-gated). Renders nothing until the
+          header's "New play" calls openCreatePlayV2(). */}
+      {createPlayV2 && createPlaySheet}
 
       <MovePlayToGroupDialog
         target={moveTarget}

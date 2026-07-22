@@ -192,6 +192,7 @@ import { PlaybookAnchorPublisher } from "@/features/coach-ai/PlaybookAnchorPubli
 import { CoachCalCTA } from "@/features/coach-ai/CoachCalCTA";
 import { openCoachCal } from "@/features/coach-ai/openCoachCal";
 import { CoachAiIcon } from "@/features/coach-ai/CoachAiIcon";
+import { useCreatePlay } from "@/features/create-play/useCreatePlay";
 import type { PlaybookSettings } from "@/domain/playbook/settings";
 import { firstNameCased } from "@/lib/format/name";
 
@@ -394,6 +395,7 @@ function PlaybookDetailClientInner({
   headerProps,
   isAdmin = false,
   freeMaxPlays,
+  createPlayV2 = false,
   gameModeAvailable = false,
   photoImportAvailable = false,
   newPlaySheet = false,
@@ -429,6 +431,9 @@ function PlaybookDetailClientInner({
   initialPrefs: PlaybookViewPrefs | null;
   isAdmin?: boolean;
   freeMaxPlays: number;
+  /** When true, use the unified create-play surface (Level-1 method chooser →
+   *  Level-2 type + formation) instead of the legacy formation picker. */
+  createPlayV2?: boolean;
   /** When true, render the mobile "Game" button next to the search bar. */
   gameModeAvailable?: boolean;
   /** When true, show the "Import play from photo" entry (photo_play_import beta). */
@@ -1506,6 +1511,30 @@ function PlaybookDetailClientInner({
     if (window.confirm(msg)) fn();
   }
 
+  // Unified create-play surface (flag-gated). When off, every entry point
+  // falls back to the legacy openFormationPicker + modal below.
+  const { openCreatePlay: openCreatePlayV2, sheet: createPlaySheet } =
+    useCreatePlay({
+      playbookId,
+      variant,
+      playbookPlayerCount,
+      isViewer,
+      isPreview,
+      blockIfPreview,
+      showCoachCal:
+        headerProps.coachAiAvailable || headerProps.showCoachCalPromo,
+      freeMaxPlays,
+      resolvePlayName: nextPlayNameForTemplate,
+    });
+
+  // Single entry point every "New play" control routes through. `startAtDraw`
+  // skips the method chooser for the first-play hero (whose own buttons
+  // already pick Cal vs. Draw).
+  function startNewPlay(opts?: { startAtDraw?: boolean }) {
+    if (createPlayV2) openCreatePlayV2(opts);
+    else openFormationPicker();
+  }
+
   return (
     // -mt-8 cancels `<main>`'s py-8 top padding so the playbook banner
     // sits flush below the site header. Applied to the OUTER wrapper
@@ -1984,7 +2013,7 @@ function PlaybookDetailClientInner({
           <Button
             variant="primary"
             loading={creating}
-            onClick={openFormationPicker}
+            onClick={() => startNewPlay()}
             title={isViewer ? "Viewers can't create plays" : undefined}
             data-tutor="new-play-button"
             // No leftIcon: the "+" + label combo wrapped to two lines on
@@ -2163,7 +2192,10 @@ function PlaybookDetailClientInner({
         // hero so "Draw your first play" is the dominant element on the
         // page. Viewers and search-empty states keep the small card.
         initialPlays.length === 0 && !isViewer && !isPreview ? (
-          <FirstPlayHero onCreate={openFormationPicker} loading={creating} />
+          <FirstPlayHero
+            onCreate={() => startNewPlay({ startAtDraw: true })}
+            loading={creating}
+          />
         ) : (
           <EmptyState
             icon={FileText}
@@ -2176,7 +2208,7 @@ function PlaybookDetailClientInner({
             action={
               isViewer ? undefined : (
                 <div className="flex flex-col items-center gap-3 sm:flex-row">
-                  <Button variant="primary" leftIcon={Plus} onClick={openFormationPicker} loading={creating}>
+                  <Button variant="primary" leftIcon={Plus} onClick={() => startNewPlay()} loading={creating}>
                     New play
                   </Button>
                   <span className="text-xs font-semibold uppercase tracking-wide text-muted">or</span>
@@ -3275,6 +3307,12 @@ function PlaybookDetailClientInner({
           }}
         />
       )}
+
+      {/* Unified create-play surface + its own cap/lock/viewer modals.
+          Renders nothing until openCreatePlayV2() is called; only mounted
+          when the flag is on so the legacy picker stays the sole surface
+          otherwise. */}
+      {createPlayV2 && createPlaySheet}
 
       {/* Modals — render at the bottom of the wrapper so they don't
           interfere with the top-of-page layout. They're position:fixed

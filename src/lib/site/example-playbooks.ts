@@ -59,15 +59,23 @@ export async function loadHeroMarketingExample(): Promise<
  */
 export async function revalidateExampleSurfacesIfPublicPlaybook(
   playbookId: string,
+  // When the caller already knows whether the playbook is a public example
+  // (e.g. it read the row for another reason), pass it to skip the extra
+  // SELECT. Omit to have this helper resolve it itself.
+  isPublicExample?: boolean,
 ): Promise<void> {
   if (!hasSupabaseEnv()) return;
-  const svc = createServiceRoleClient();
-  const { data } = await svc
-    .from("playbooks")
-    .select("is_public_example")
-    .eq("id", playbookId)
-    .maybeSingle();
-  if (data?.is_public_example) {
+  let isPublic = isPublicExample;
+  if (isPublic === undefined) {
+    const svc = createServiceRoleClient();
+    const { data } = await svc
+      .from("playbooks")
+      .select("is_public_example")
+      .eq("id", playbookId)
+      .maybeSingle();
+    isPublic = Boolean(data?.is_public_example);
+  }
+  if (isPublic) {
     // 'layout' busts every page under the root layout — covers both / and
     // /examples in one call, matching the pattern in account/admin actions.
     revalidatePath("/", "layout");

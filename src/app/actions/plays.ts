@@ -29,6 +29,12 @@ import { timed } from "@/lib/perf/timed";
 import { resolveOpponentHiddenOnLoad } from "@/lib/playbook/opponent-visibility";
 import { recordRatingTrigger } from "@/app/actions/rating-prompt";
 import { maybeAwardReferralOnActivation } from "@/lib/data/referral-award";
+import { getRequestUser } from "@/lib/supabase/request-user";
+import {
+  nextSortOrder,
+  nextWristbandCode,
+  type PlayStatRow,
+} from "@/lib/plays/create-play-stats";
 
 /**
  * Returns true if the signed-in user has created at least one play in a
@@ -258,30 +264,15 @@ export async function createPlayAction(
     return { ok: false as const, error: "Supabase is not configured." };
   }
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Request-memoized auth — reuses the render pass's getUser() instead of a
+  // fresh GoTrue round-trip on every create.
+  const authResult = await getRequestUser();
+  const user = authResult.kind === "ok" ? authResult.user : null;
   if (!user) return { ok: false as const, error: "Not signed in." };
 
   const isTutorial = opts?.isTutorial === true;
 
-  if (!isTutorial) {
-    const ownerId = await getPlaybookOwnerId(playbookId);
-    if (ownerId) {
-      const lock = await assertNotLocked({ ownerId, playbookId });
-      if (!lock.ok) return { ok: false as const, error: lock.error };
-    }
-  }
-
-  const gameLock = await assertNoActiveGameSession(supabase, playbookId);
-  if (gameLock.locked) return gameModeLockedResult(gameLock.lock);
-
-  if (!isTutorial) {
-    const cap = await assertPlayCap(supabase, playbookId);
-    if (!cap.ok) return { ok: false as const, error: cap.error };
-  }
-
-  // Use the playbook's variant to drive both sport profile and default players.
+  // Variant / players are pure (no DB) — resolve before the read batch.
   const effectiveVariant: SportVariant = opts?.variant ?? "flag_7v7";
   const sportProfile = sportProfileForVariant(effectiveVariant);
   // The default roster follows the side. Defaulting to the offensive set on a
@@ -295,13 +286,61 @@ export async function createPlayAction(
       ? defaultDefendersForVariant(effectiveVariant, opts?.playerCount)
       : defaultPlayersForVariant(effectiveVariant, opts?.playerCount));
 
-  // Pull the playbook's marking defaults so a fresh play inherits the
-  // league preset's visibility (no-run zones on for IFAF flag, etc.).
-  const { data: pbRow } = await supabase
-    .from("playbooks")
-    .select("settings, custom_offense_count")
-    .eq("id", playbookId)
-    .maybeSingle();
+  // Owner drives the downgrade-lock gate. Tutorial plays bypass lock + cap,
+  // so skip the lookup entirely for them.
+  const ownerId = isTutorial ? null : await getPlaybookOwnerId(playbookId);
+
+  // Fire every independent gate + read concurrently. This path used to await
+  // ~11 queries in series (owner → lock → game → cap → settings → sort →
+  // wristband) even though none of the reads depend on the gates; the
+  // add-defense path already parallelizes the same guard trio.
+  // `assertNotLocked` / `assertPlayCap` are internally read-only, so they're
+  // safe to run alongside the reads.
+  const [lockRes, gameLock, capRes, pbRowRes, playRowsRes] = await Promise.all([
+    !isTutorial && ownerId
+      ? assertNotLocked({ ownerId, playbookId })
+      : Promise.resolve({ ok: true as const }),
+    assertNoActiveGameSession(supabase, playbookId),
+    isTutorial
+      ? Promise.resolve({ ok: true as const })
+      : assertPlayCap(supabase, playbookId),
+    // Marking defaults for the fresh play + the example-revalidate flag, in
+    // one read (was a separate SELECT at the end of the action).
+    supabase
+      .from("playbooks")
+      .select("settings, custom_offense_count, is_public_example")
+      .eq("id", playbookId)
+      .maybeSingle(),
+    // sort_order + wristband_code in one scan (was two separate SELECTs).
+    // `is_archived` is carried so the max-sort filter matches the old query.
+    supabase
+      .from("plays")
+      .select("sort_order, wristband_code, is_archived")
+      .eq("playbook_id", playbookId),
+  ]);
+
+  // Gate priority preserved from the original serial order: downgrade-lock →
+  // active game session → play cap. Structured codes let the client route each
+  // to the right modal instead of regex-sniffing the message string.
+  if (!lockRes.ok) {
+    return {
+      ok: false as const,
+      error: lockRes.error,
+      code: "DOWNGRADE_LOCKED" as const,
+    };
+  }
+  if (gameLock.locked) return gameModeLockedResult(gameLock.lock);
+  if (!capRes.ok) {
+    return {
+      ok: false as const,
+      error: capRes.error,
+      code: "CAP_EXCEEDED" as const,
+    };
+  }
+
+  // Pull the playbook's marking defaults so a fresh play inherits the league
+  // preset's visibility (no-run zones on for IFAF flag, etc.).
+  const pbRow = pbRowRes.data;
   const pbSettings = normalizePlaybookSettings(
     pbRow?.settings,
     effectiveVariant,
@@ -345,28 +384,13 @@ export async function createPlayAction(
   if (opts?.playName && opts.playName.trim()) {
     doc.metadata.coachName = opts.playName.trim();
   }
-  const { data: sortRow } = await supabase
-    .from("plays")
-    .select("sort_order")
-    .eq("playbook_id", playbookId)
-    .eq("is_archived", false)
-    .order("sort_order", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const nextSort = (sortRow?.sort_order ?? -1) + 1;
 
-  // Auto-assign next sequential wristband code for this playbook. Only considers
-  // codes that are pure integers (so manual tags like "HOT" don't break numbering).
-  const { data: codeRows } = await supabase
-    .from("plays")
-    .select("wristband_code")
-    .eq("playbook_id", playbookId);
-  const maxCode = (codeRows ?? [])
-    .map((r) => parseInt((r.wristband_code as string | null) ?? "", 10))
-    .filter((n): n is number => Number.isFinite(n))
-    .reduce((m, n) => Math.max(m, n), 0);
-  const nextCode = String(maxCode + 1).padStart(2, "0");
-  doc.metadata.wristbandCode = nextCode;
+  // sort_order (max over non-archived) + wristband code (max over ALL rows,
+  // integer codes only) — computed via the parity-tested helpers so the
+  // read-consolidation above keeps the exact legacy semantics.
+  const playRows = (playRowsRes.data ?? []) as PlayStatRow[];
+  const nextSort = nextSortOrder(playRows);
+  doc.metadata.wristbandCode = nextWristbandCode(playRows);
 
   const { data: play, error: playErr } = await supabase
     .from("plays")
@@ -433,7 +457,13 @@ export async function createPlayAction(
     });
   }
 
-  await revalidateExampleSurfacesIfPublicPlaybook(playbookId);
+  // Reuse the is_public_example flag from the batch read above so this
+  // revalidate doesn't cost an extra SELECT on every (overwhelmingly
+  // non-example) create.
+  await revalidateExampleSurfacesIfPublicPlaybook(
+    playbookId,
+    (pbRow?.is_public_example as boolean | null) ?? false,
+  );
 
   return { ok: true as const, playId: play.id, versionId: ver.id };
 }
