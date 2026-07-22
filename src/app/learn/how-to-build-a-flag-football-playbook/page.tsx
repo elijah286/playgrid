@@ -24,7 +24,7 @@ const SITE_URL =
 const PAGE_PATH = "/learn/how-to-build-a-flag-football-playbook";
 const PAGE_URL = `${SITE_URL}${PAGE_PATH}`;
 
-const PAGE_TITLE = "How to build a flag football playbook (step-by-step guide)";
+const PAGE_TITLE = "How to build a flag football playbook: step-by-step guide (2026)";
 const PAGE_DESCRIPTION =
   "A coach's guide to building a flag football playbook from scratch — how many plays to install, how to pick formations, how to organize by situation, and how to print wristbands. Works for 5v5, 6v6, and 7v7.";
 
@@ -32,7 +32,7 @@ const PAGE_DESCRIPTION =
 // (which Google demotes as low-quality signal). Bump when the article
 // gets a real content revision.
 const PUBLISHED_ISO = "2026-05-26";
-const MODIFIED_ISO = "2026-05-26";
+const MODIFIED_ISO = "2026-07-22";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -157,6 +157,20 @@ export default function HowToBuildFlagFootballPlaybookPage() {
           before your next practice.
         </p>
       </header>
+
+      {/* Front-loaded direct answer — the block AI engines extract. */}
+      <div className="mb-10 rounded-2xl border border-border bg-surface-raised p-5">
+        <h2 className="m-0 mb-2 text-base font-semibold">The short answer</h2>
+        <p className="m-0 text-sm leading-relaxed text-muted">
+          Build a flag football playbook in eight steps: install 8&ndash;12
+          plays (fewer for younger teams), run everything from one primary
+          formation, teach four pass concepts that beat man and zone plus two
+          runs and one trick play, organize the calls by situation (not
+          formation), add a two-call defense, and print wristbands. Aim for
+          recognizable in two practices, then polish over weeks two through
+          four.
+        </p>
+      </div>
 
       <section className="prose prose-lg max-w-none text-foreground prose-headings:text-foreground prose-p:text-muted prose-li:text-muted prose-strong:text-foreground prose-a:text-primary">
         <p>
