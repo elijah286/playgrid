@@ -60,8 +60,23 @@ export async function POST(_req: Request, ctx: { params: Promise<{ jobId: string
     return NextResponse.json({ error: outcome.error, jobId: job.id }, { status: 502 });
   }
   if (outcome.kind === "variant_mismatch") {
-    await finishJob(job.id, { status: "done", extraction: outcome.extraction, variantMismatch: outcome.mismatch });
-    return NextResponse.json({ jobId: job.id, variantMismatch: outcome.mismatch, capRemaining });
+    await finishJob(job.id, {
+      status: "done",
+      extraction: outcome.extraction,
+      variantMismatch: outcome.mismatch,
+      spec: outcome.spec,
+      mapping: outcome.mapping,
+      warnings: outcome.warnings,
+    });
+    return NextResponse.json({
+      jobId: job.id,
+      variantMismatch: outcome.mismatch,
+      extraction: outcome.extraction,
+      spec: outcome.spec,
+      mapping: outcome.mapping,
+      warnings: outcome.warnings,
+      capRemaining,
+    });
   }
 
   await finishJob(job.id, {

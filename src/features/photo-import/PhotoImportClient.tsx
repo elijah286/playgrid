@@ -19,12 +19,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, ClipboardCopy, Loader2, RefreshCw } from "lucide-react";
+import { AlertTriangle, ArrowRight, Camera, ClipboardCopy, FolderInput, Loader2, Plus, RefreshCw } from "lucide-react";
 import type { SportVariant } from "@/domain/play/types";
 import type { PlaySpec, PlayerAssignment, AssignmentAction } from "@/domain/play/spec";
 import { ROUTE_TEMPLATES } from "@/domain/play/routeTemplates";
+import { sportProfileForVariant, SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import { playSpecToCoachDiagram } from "@/domain/play/specRenderer";
 import { PlayDiagramEmbed } from "@/features/coach-ai/PlayDiagramEmbed";
+import { createPlaybookAction, listCopyTargetPlaybooksAction, type PlaybookRow } from "@/app/actions/playbooks";
 import type { PlayExtraction } from "@/lib/coach-ai/photo-import/schema";
 import {
   applySheetIdentity,
@@ -44,6 +46,7 @@ type Phase =
   | { step: "panels"; panels: Panel[] }
   | { step: "extracting"; label: string; panels: Panel[] | null }
   | { step: "resuming"; jobId: string }
+  | { step: "mismatch" }
   | { step: "review" }
   | { step: "saving" };
 
@@ -51,6 +54,25 @@ type VariantMismatchInfo = {
   photoPlayers: number;
   expectedPlayers: number;
   variant: string;
+  /** The variant the play actually looks like, by player count. Null when
+   *  no supported variant matches the observed count. */
+  inferredVariant?: SportVariant | null;
+};
+
+/** Where the reviewed play will be saved when it isn't the current
+ *  playbook — set by the mismatch recovery CTAs (create/import into a
+ *  compatible playbook). */
+type SaveTarget = { id: string; name: string; variant: SportVariant };
+
+/** The preserved mismatch read: the play drafted against its own inferred
+ *  variant, so the coach can still land it somewhere valid. */
+type MismatchState = {
+  info: VariantMismatchInfo;
+  spec: PlaySpec | null;
+  mapping: PlayerMapping[];
+  warnings: ImportWarning[];
+  extraction: PlayExtraction | null;
+  cropDataUrl: string | null;
 };
 
 type ExtractResponse = {
@@ -92,8 +114,13 @@ function humanizeVariant(variant: string): string {
 function mismatchMessage(vm: VariantMismatchInfo): string {
   return (
     `That looks like a ${vm.photoPlayers}-player play, but this playbook is ${humanizeVariant(vm.variant)} (${vm.expectedPlayers} players). ` +
-    `Open a playbook that matches the play's format and import it there — or re-crop if the panel caught players from a neighboring play.`
+    `Pick where it should go below — or try a different photo if the panel caught players from a neighboring play.`
   );
+}
+
+/** Friendly name for a variant, preferring the shared label map. */
+function variantLabel(variant: string): string {
+  return SPORT_VARIANT_LABELS[variant as SportVariant] ?? humanizeVariant(variant);
 }
 
 /** Rotating status lines + elapsed seconds, so a 20-60s model call
@@ -231,6 +258,16 @@ export function PhotoImportClient(props: {
   const [lastPanels, setLastPanels] = useState<Panel[] | null>(null);
   const [debugCopied, setDebugCopied] = useState(false);
   const [useSheetLabels, setUseSheetLabels] = useState(true);
+  // Format-mismatch recovery: the preserved read, and (when the coach
+  // routes it to a compatible book) where the review step should save.
+  const [mismatch, setMismatch] = useState<MismatchState | null>(null);
+  const [saveTarget, setSaveTarget] = useState<SaveTarget | null>(null);
+  // Mismatch-screen sub-UI: which CTA is expanded, the new-book name, the
+  // fetched compatible playbooks, and an in-flight guard for create/import.
+  const [mismatchMode, setMismatchMode] = useState<null | "create" | "pick">(null);
+  const [newBookName, setNewBookName] = useState("");
+  const [targets, setTargets] = useState<PlaybookRow[] | null>(null);
+  const [mismatchBusy, setMismatchBusy] = useState(false);
   const [recentJobs, setRecentJobs] = useState<(JobSummary & { stale: boolean })[]>([]);
   const [resumeJob, setResumeJob] = useState<JobFull | null>(null);
   const [resumeStale, setResumeStale] = useState(false);
@@ -267,6 +304,11 @@ export function PhotoImportClient(props: {
     ? null
     : `${capRemaining} of ${props.capLimit} photo imports left this month`;
 
+  // The variant the review renders and saves under: the current playbook
+  // by default, or a compatible target book when the coach routed a
+  // format-mismatched play there.
+  const reviewVariant = saveTarget?.variant ?? props.variant;
+
   // Live draft render — the same pipeline the save path validates:
   // spec → renderer → photo alignment (players start where the photo
   // shows them, motion drawn) → sheet letters/colors.
@@ -274,7 +316,7 @@ export function PhotoImportClient(props: {
     if (!spec) return null;
     try {
       const rendered = playSpecToCoachDiagram(spec);
-      const aligned = applyPhotoAlignment(rendered.diagram, mapping, props.variant);
+      const aligned = applyPhotoAlignment(rendered.diagram, mapping, reviewVariant);
       const identified = applySheetIdentity(aligned, mapping, { labels: useSheetLabels });
       return {
         json: JSON.stringify({ ...identified, title: playName || spec.title }),
@@ -283,7 +325,7 @@ export function PhotoImportClient(props: {
     } catch {
       return null;
     }
-  }, [spec, mapping, playName, useSheetLabels, props.variant]);
+  }, [spec, mapping, playName, useSheetLabels, reviewVariant]);
 
   const postJson = useCallback(async (url: string, body: unknown) => {
     const res = await fetch(url, {
@@ -302,10 +344,25 @@ export function PhotoImportClient(props: {
   const applyImportResult = useCallback(
     (json: ExtractResponse, cropDataUrl: string | null, fallbackName: string) => {
       setCapRemaining(json.capRemaining);
-      if (json.variantMismatch) throw new Error(mismatchMessage(json.variantMismatch));
+      // Format mismatch: the play doesn't fit THIS playbook, but the read
+      // is preserved (drafted against its own inferred variant). Route to
+      // the recovery screen instead of dead-ending.
+      if (json.variantMismatch) {
+        setMismatch({
+          info: json.variantMismatch,
+          spec: json.spec ?? null,
+          mapping: json.mapping ?? [],
+          warnings: json.warnings ?? [],
+          extraction: json.extraction ?? null,
+          cropDataUrl,
+        });
+        setPhase({ step: "mismatch" });
+        return;
+      }
       if (!json.spec || !json.extraction || !json.mapping) {
         throw new Error("The reader returned an incomplete result — try again.");
       }
+      setSaveTarget(null);
       setSpec(json.spec);
       setExtraction(json.extraction);
       setMapping(json.mapping);
@@ -459,20 +516,108 @@ export function PhotoImportClient(props: {
     if (!spec) return;
     setError(null);
     setPhase({ step: "saving" });
+    const targetPlaybookId = saveTarget?.id ?? props.playbookId;
     try {
       const json = (await postJson("/api/photo-import/save", {
-        playbookId: props.playbookId,
+        playbookId: targetPlaybookId,
         spec: { ...spec, title: playName || spec.title },
         name: playName || spec.title || "Imported play",
         mapping,
         useSheetLabels,
       })) as { url?: string };
-      router.push(json.url ?? `/playbooks/${props.playbookId}`);
+      router.push(json.url ?? `/playbooks/${targetPlaybookId}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed.");
       setPhase({ step: "review" });
     }
-  }, [spec, playName, mapping, useSheetLabels, postJson, props.playbookId, router]);
+  }, [spec, playName, mapping, useSheetLabels, postJson, props.playbookId, saveTarget, router]);
+
+  // Preview the preserved read in its OWN inferred format, so the coach
+  // sees the play is intact before choosing where it lands.
+  const mismatchPreview = useMemo(() => {
+    const m = mismatch;
+    if (!m?.spec || !m.info.inferredVariant) return null;
+    try {
+      const rendered = playSpecToCoachDiagram(m.spec);
+      const aligned = applyPhotoAlignment(rendered.diagram, m.mapping, m.info.inferredVariant);
+      const identified = applySheetIdentity(aligned, m.mapping, { labels: true });
+      return { json: JSON.stringify({ ...identified, title: m.spec.title }) };
+    } catch {
+      return null;
+    }
+  }, [mismatch]);
+
+  // Enter the standard review step for the drafted play, targeting a
+  // compatible playbook (created or picked). Reuses the whole review UI —
+  // only the save destination and render variant differ.
+  const reviewInTarget = useCallback(
+    (target: SaveTarget) => {
+      const m = mismatch;
+      if (!m?.spec) return;
+      setError(null);
+      setSaveTarget(target);
+      // Stamp the target's variant onto the spec so the review preview
+      // renders in the exact format it will be saved under. Safe because
+      // the target shares this play's offensive player count (the
+      // compatibility rule) — geometry is derived from the variant, so the
+      // semantic spec (formation + routes) re-renders cleanly.
+      setSpec({ ...m.spec, variant: target.variant });
+      setExtraction(m.extraction);
+      setMapping(m.mapping);
+      setWarnings(m.warnings);
+      setPlayName(m.spec.title ?? "Imported play");
+      setCropPreview(m.cropDataUrl);
+      setPhase({ step: "review" });
+    },
+    [mismatch],
+  );
+
+  // Create a new, correctly-formatted playbook (variant locked to the
+  // play's inferred format) and drop into review targeting it.
+  const onCreateCompatible = useCallback(async () => {
+    const inferred = mismatch?.info.inferredVariant;
+    const name = newBookName.trim();
+    if (!inferred || !name || mismatchBusy) return;
+    setMismatchBusy(true);
+    setError(null);
+    try {
+      const res = await createPlaybookAction(name, inferred);
+      if (!res.ok) {
+        setError(res.error || "Couldn't create the playbook.");
+        return;
+      }
+      reviewInTarget({ id: res.id, name, variant: inferred });
+    } finally {
+      setMismatchBusy(false);
+    }
+  }, [mismatch, newBookName, mismatchBusy, reviewInTarget]);
+
+  // Fetch the coach's playbooks and keep only those that FIT this play by
+  // offensive player count (Phase 1 compatibility rule), excluding the
+  // current book.
+  const loadCompatibleTargets = useCallback(async () => {
+    const count = mismatch?.info.photoPlayers ?? 0;
+    setTargets(null);
+    const res = await listCopyTargetPlaybooksAction();
+    if (!res.ok) {
+      setTargets([]);
+      return;
+    }
+    setTargets(
+      res.playbooks.filter(
+        (p) =>
+          p.id !== props.playbookId &&
+          sportProfileForVariant((p.sport_variant as SportVariant) ?? "flag_7v7").offensePlayerCount === count,
+      ),
+    );
+  }, [mismatch, props.playbookId]);
+
+  // Reset the mismatch screen back to a clean "pick where it goes" state.
+  const resetMismatchUi = useCallback(() => {
+    setMismatchMode(null);
+    setTargets(null);
+    setNewBookName("");
+  }, []);
 
   const sheetAssignment = useCallback(
     (sheetLabel: string) =>
@@ -704,6 +849,178 @@ export function PhotoImportClient(props: {
     );
   }
 
+  if (phase.step === "mismatch" && mismatch) {
+    const info = mismatch.info;
+    const inferred = info.inferredVariant ?? null;
+    const fmt = inferred ? variantLabel(inferred) : null;
+    return (
+      <div className="space-y-4">
+        {errorBox}
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+          <span>{mismatchMessage(info)}</span>
+        </div>
+
+        {mismatchPreview && (
+          <div className="grid gap-4 md:grid-cols-2">
+            {mismatch.cropDataUrl ? (
+              <div className="space-y-1.5">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted">From your photo</div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={mismatch.cropDataUrl}
+                  alt="Photographed play"
+                  className="w-full rounded-lg border border-border"
+                />
+              </div>
+            ) : null}
+            <div className="space-y-1.5">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted">
+                Read as {fmt ?? "a play"} — nothing lost
+              </div>
+              <PlayDiagramEmbed json={mismatchPreview.json} />
+            </div>
+          </div>
+        )}
+
+        {inferred ? (
+          <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
+            {/* CTA 1 — create a new, correctly-formatted playbook */}
+            <div className="p-3">
+              <button
+                type="button"
+                className="flex w-full items-center gap-2.5 text-left"
+                onClick={() => {
+                  if (mismatchMode === "create") {
+                    resetMismatchUi();
+                  } else {
+                    setMismatchMode("create");
+                    setTargets(null);
+                    setNewBookName(`${fmt} plays`);
+                  }
+                }}
+              >
+                <Plus className="size-4 shrink-0 text-brand-green" />
+                <span className="flex-1 text-sm font-semibold text-foreground">
+                  Create a new {fmt} playbook for it
+                </span>
+              </button>
+              {mismatchMode === "create" && (
+                <div className="mt-3 flex flex-wrap items-end gap-2 pl-6">
+                  <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+                    Playbook name
+                    <input
+                      className="w-60 rounded-md border border-border bg-surface px-2 py-1.5 text-sm text-foreground"
+                      value={newBookName}
+                      maxLength={80}
+                      disabled={mismatchBusy}
+                      autoFocus
+                      onChange={(e) => setNewBookName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") void onCreateCompatible();
+                      }}
+                    />
+                  </label>
+                  <div
+                    className="rounded-md border border-border bg-surface-raised px-2 py-1.5 text-xs font-medium text-muted"
+                    title="The format is locked to the play's size — that's what makes this playbook a fit."
+                  >
+                    Format: {fmt} · locked
+                  </div>
+                  <button
+                    type="button"
+                    disabled={mismatchBusy || !newBookName.trim()}
+                    onClick={() => void onCreateCompatible()}
+                    className="inline-flex items-center gap-2 rounded-lg border border-brand-green bg-brand-green px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-green-hover disabled:opacity-60"
+                  >
+                    {mismatchBusy && <Loader2 className="size-4 animate-spin" />}
+                    Create &amp; review
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* CTA 2 — import into an existing compatible playbook */}
+            <div className="p-3">
+              <button
+                type="button"
+                className="flex w-full items-center gap-2.5 text-left"
+                onClick={() => {
+                  if (mismatchMode === "pick") {
+                    resetMismatchUi();
+                  } else {
+                    setMismatchMode("pick");
+                    void loadCompatibleTargets();
+                  }
+                }}
+              >
+                <FolderInput className="size-4 shrink-0 text-brand-green" />
+                <span className="flex-1 text-sm font-semibold text-foreground">
+                  Import into another playbook
+                </span>
+              </button>
+              {mismatchMode === "pick" && (
+                <div className="mt-3 space-y-1.5 pl-6">
+                  {targets === null ? (
+                    <div className="flex items-center gap-2 text-sm text-muted">
+                      <Loader2 className="size-4 animate-spin" /> Finding {fmt} playbooks…
+                    </div>
+                  ) : targets.length === 0 ? (
+                    <p className="text-sm text-muted">
+                      You don&apos;t have another {fmt} playbook yet — create one above.
+                    </p>
+                  ) : (
+                    targets.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() =>
+                          reviewInTarget({
+                            id: p.id,
+                            name: p.name,
+                            variant: (p.sport_variant as SportVariant) ?? "flag_7v7",
+                          })
+                        }
+                        className="flex w-full items-center justify-between gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-left text-sm hover:border-brand-green hover:bg-surface-raised"
+                      >
+                        <span className="font-medium text-foreground">{p.name}</span>
+                        <span className="inline-flex items-center gap-1.5 text-xs text-muted">
+                          {variantLabel(p.sport_variant)}
+                          <ArrowRight className="size-3.5" />
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-muted">
+            This play&apos;s size ({info.photoPlayers} players) doesn&apos;t match any XO Gridmaker format, so it
+            can&apos;t be imported. Try a different photo if the panel caught players from a neighboring play.
+          </div>
+        )}
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              resetMismatchUi();
+              setMismatch(null);
+              setPhase(lastPanels && lastPanels.length > 1 ? { step: "panels", panels: lastPanels } : { step: "pick" });
+              setImage((img) => (lastPanels && lastPanels.length > 1 ? img : null));
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-foreground hover:bg-surface-raised"
+          >
+            <RefreshCw className="size-3.5" />
+            {lastPanels && lastPanels.length > 1 ? "Back to sheet" : "Try a different photo"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if ((phase.step === "review" || phase.step === "saving") && spec) {
     const saving = phase.step === "saving";
     const lowConfidence = (conf?: string) => conf === "med" || conf === "low";
@@ -720,6 +1037,15 @@ export function PhotoImportClient(props: {
     return (
       <div className="space-y-4">
         {errorBox}
+        {saveTarget && (
+          <div className="flex items-center gap-2 rounded-lg border border-brand-green/30 bg-brand-green/5 px-3 py-2 text-sm text-foreground">
+            <FolderInput className="size-4 shrink-0 text-brand-green" />
+            <span>
+              Saving to <span className="font-semibold">{saveTarget.name}</span> ({variantLabel(saveTarget.variant)}) — the
+              playbook that fits this play.
+            </span>
+          </div>
+        )}
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-1.5">
             <div className="text-xs font-semibold uppercase tracking-wide text-muted">From your photo</div>
@@ -950,11 +1276,19 @@ export function PhotoImportClient(props: {
               onClick={() => {
                 setSpec(null);
                 setExtraction(null);
+                // A play routed here from the format-mismatch screen goes
+                // back to that screen (its CTAs), not the panel picker.
+                if (saveTarget && mismatch) {
+                  setSaveTarget(null);
+                  resetMismatchUi();
+                  setPhase({ step: "mismatch" });
+                  return;
+                }
                 setPhase(lastPanels && lastPanels.length > 1 ? { step: "panels", panels: lastPanels } : { step: "pick" });
               }}
               className="rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground hover:bg-surface-raised"
             >
-              {lastPanels && lastPanels.length > 1 ? "Back to sheet" : "Start over"}
+              {saveTarget ? "Back" : lastPanels && lastPanels.length > 1 ? "Back to sheet" : "Start over"}
             </button>
             <button
               type="button"

@@ -9,7 +9,7 @@ import type { SportVariant } from "@/domain/play/types";
 import { loadPlaybookSettings } from "@/lib/coach-ai/play-tools";
 import { recordCoachCalImageUsed } from "@/lib/billing/coach-cal-image-cap";
 import { extractPanel } from "./llm-calls";
-import { synthesizePlaySpec, variantFit } from "./synthesize";
+import { synthesizePlaySpec, variantFit, variantForOffenseCount } from "./synthesize";
 import type { PlayExtraction } from "./schema";
 import type { ImportWarning, PlayerMapping } from "./synthesize";
 import type { PlaySpec } from "@/domain/play/spec";
@@ -20,8 +20,53 @@ export type VariantMismatch = {
   photoPlayers: number;
   expectedPlayers: number;
   delta: number;
+  /** The playbook the coach imported into (the one that didn't fit). */
   variant: SportVariant;
+  /** The variant the play actually looks like, by player count — the
+   *  format we offer to create/find a compatible playbook for. Null when
+   *  no supported variant matches the observed count. */
+  inferredVariant: SportVariant | null;
 };
+
+/** A mismatch, plus the play drafted against its INFERRED variant so the
+ *  coach can still land it in a correctly-formatted playbook (created or
+ *  existing) instead of losing the read. The draft is absent only when
+ *  the observed player count maps to no supported variant. */
+export type VariantMismatchDraft = {
+  mismatch: VariantMismatch;
+  spec: PlaySpec | null;
+  mapping: PlayerMapping[] | null;
+  warnings: ImportWarning[] | null;
+};
+
+/**
+ * Build the mismatch outcome for an extraction that doesn't fit the
+ * playbook it was imported into. Pure (no LLM, no DB) so it's unit
+ * testable: it synthesizes the draft against the play's own inferred
+ * variant, NOT the playbook's — forcing a 5-player play onto a 7-slot
+ * roster is exactly the "garbage by construction" this gate exists to
+ * prevent. The real save re-synthesizes against the chosen target
+ * playbook's variant (same player count), so this draft is a faithful
+ * preview the coach reviews before it persists.
+ */
+export function buildVariantMismatchDraft(
+  extraction: PlayExtraction,
+  playbookVariant: SportVariant,
+  title: string,
+): VariantMismatchDraft {
+  const fit = variantFit(extraction, playbookVariant);
+  const inferredVariant = variantForOffenseCount(fit.photoPlayers);
+  const mismatch: VariantMismatch = { ...fit, variant: playbookVariant, inferredVariant };
+  if (!inferredVariant) {
+    return { mismatch, spec: null, mapping: null, warnings: null };
+  }
+  const synthesis = synthesizePlaySpec(extraction, {
+    variant: inferredVariant,
+    maxThrowDepthYds: null,
+    title,
+  });
+  return { mismatch, spec: synthesis.spec, mapping: synthesis.mapping, warnings: synthesis.warnings };
+}
 
 export type PanelImportOutcome =
   | {
@@ -32,7 +77,17 @@ export type PanelImportOutcome =
       mapping: PlayerMapping[];
       warnings: ImportWarning[];
     }
-  | { ok: true; kind: "variant_mismatch"; extraction: PlayExtraction; mismatch: VariantMismatch }
+  | {
+      ok: true;
+      kind: "variant_mismatch";
+      extraction: PlayExtraction;
+      mismatch: VariantMismatch;
+      /** Draft play against the inferred variant (absent when the count
+       *  matches no supported variant). */
+      spec: PlaySpec | null;
+      mapping: PlayerMapping[] | null;
+      warnings: ImportWarning[] | null;
+    }
   | { ok: false; error: string };
 
 export async function runPanelImport(opts: {
@@ -92,11 +147,15 @@ export async function runPanelImport(opts: {
   // receiver, so it proceeds with the count-mismatch warning.
   const fit = variantFit(read.extraction, opts.variant);
   if (Math.abs(fit.delta) >= 2) {
+    const draft = buildVariantMismatchDraft(read.extraction, opts.variant, opts.label);
     return {
       ok: true,
       kind: "variant_mismatch",
       extraction: read.extraction,
-      mismatch: { ...fit, variant: opts.variant },
+      mismatch: draft.mismatch,
+      spec: draft.spec,
+      mapping: draft.mapping,
+      warnings: draft.warnings,
     };
   }
 

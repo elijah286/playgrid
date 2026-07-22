@@ -54,7 +54,17 @@ export type PhotoImportJob = PhotoImportJobSummary & {
 
 type JobOutcome =
   | { status: "done"; extraction: PlayExtraction; spec: PlaySpec; mapping: PlayerMapping[]; warnings: ImportWarning[] }
-  | { status: "done"; extraction: PlayExtraction; variantMismatch: VariantMismatch }
+  | {
+      status: "done";
+      extraction: PlayExtraction;
+      variantMismatch: VariantMismatch;
+      /** Draft against the inferred variant, persisted so a resumed
+       *  mismatch can offer the create/import CTAs (null when the count
+       *  matches no supported variant). */
+      spec: PlaySpec | null;
+      mapping: PlayerMapping[] | null;
+      warnings: ImportWarning[] | null;
+    }
   | { status: "error"; error: string };
 
 export async function createJob(opts: {
@@ -97,7 +107,12 @@ export async function finishJob(jobId: string | null, outcome: JobOutcome): Prom
       patch.extraction = outcome.extraction;
       patch.error = null;
       if ("variantMismatch" in outcome) {
+        // Persist the draft alongside the mismatch so a resumed job can
+        // still offer "create/import into a compatible playbook".
         patch.variant_mismatch = outcome.variantMismatch;
+        patch.spec = outcome.spec;
+        patch.mapping = outcome.mapping;
+        patch.warnings = outcome.warnings;
       } else {
         patch.spec = outcome.spec;
         patch.mapping = outcome.mapping;

@@ -11,6 +11,7 @@ import {
   formationCandidates,
   observedSkillPlayers,
   variantFit,
+  variantForOffenseCount,
   applySheetIdentity,
   applyPhotoAlignment,
   rewriteNotesToSheetLabels,
@@ -432,5 +433,28 @@ describe("formation candidates", () => {
   it("orders observed skill players by orderFromLeft and excludes C/Q", () => {
     const observed = observedSkillPlayers(tripsLeftExtraction());
     expect(observed.map((p) => p.label)).toEqual(["X", "B", "Y", "A", "Z"]);
+  });
+});
+
+describe("variantForOffenseCount — inferred format by player count", () => {
+  it("maps each supported offensive player count to its canonical variant", () => {
+    expect(variantForOffenseCount(4)).toBe("flag_4v4");
+    expect(variantForOffenseCount(5)).toBe("flag_5v5");
+    expect(variantForOffenseCount(6)).toBe("flag_6v6");
+    expect(variantForOffenseCount(7)).toBe("flag_7v7");
+    expect(variantForOffenseCount(11)).toBe("tackle_11");
+  });
+
+  it("returns null for counts no supported variant provides", () => {
+    for (const n of [0, 1, 2, 3, 8, 9, 10, 12]) {
+      expect(variantForOffenseCount(n)).toBeNull();
+    }
+  });
+
+  it("is the inverse of sportProfileForVariant for the flag variants", () => {
+    for (const v of ["flag_4v4", "flag_5v5", "flag_6v6", "flag_7v7", "tackle_11"] as const) {
+      const count = sportProfileForVariant(v).offensePlayerCount;
+      expect(variantForOffenseCount(count)).toBe(v);
+    }
   });
 });

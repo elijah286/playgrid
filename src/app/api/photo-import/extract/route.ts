@@ -104,8 +104,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: outcome.error, jobId }, { status: 502 });
   }
   if (outcome.kind === "variant_mismatch") {
-    await finishJob(jobId, { status: "done", extraction: outcome.extraction, variantMismatch: outcome.mismatch });
-    return NextResponse.json({ jobId, variantMismatch: outcome.mismatch, capRemaining });
+    await finishJob(jobId, {
+      status: "done",
+      extraction: outcome.extraction,
+      variantMismatch: outcome.mismatch,
+      spec: outcome.spec,
+      mapping: outcome.mapping,
+      warnings: outcome.warnings,
+    });
+    return NextResponse.json({
+      jobId,
+      variantMismatch: outcome.mismatch,
+      extraction: outcome.extraction,
+      spec: outcome.spec,
+      mapping: outcome.mapping,
+      warnings: outcome.warnings,
+      capRemaining,
+    });
   }
 
   await finishJob(jobId, {

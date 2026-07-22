@@ -203,6 +203,38 @@ export function variantFit(
   };
 }
 
+/**
+ * The canonical variant for a photographed play with `count` offensive
+ * players on the field (C + QB + skill). This is the inverse of
+ * `sportProfileForVariant(...).offensePlayerCount`, used when a photo
+ * doesn't fit the current playbook so we can offer the coach a
+ * correctly-formatted home for the play (a new or existing playbook of
+ * the matching size).
+ *
+ * Two counts are ambiguous — 6 (flag_6v6 / "other") and 7 (flag_7v7 /
+ * touch_7v7) — because the difference between those pairs is field size
+ * or rules, not roster. We resolve each to its most common flag variant;
+ * "compatible playbook" matching is done by player COUNT downstream, so a
+ * touch_7v7 playbook still qualifies as a target for a 7-player play.
+ * Returns null for counts no supported variant provides (e.g. 8, 9, 10).
+ */
+export function variantForOffenseCount(count: number): SportVariant | null {
+  switch (count) {
+    case 4:
+      return "flag_4v4";
+    case 5:
+      return "flag_5v5";
+    case 6:
+      return "flag_6v6";
+    case 7:
+      return "flag_7v7";
+    case 11:
+      return "tackle_11";
+    default:
+      return null;
+  }
+}
+
 function buildRouteAction(
   extracted: ExtractedAssignment,
   sheetLabel: string,
