@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, Calendar, Home, MessageCircle, Sparkles, Users } from "lucide-react";
+import { Calendar, Home, MessageCircle, Sparkles, Users } from "lucide-react";
 import { openCoachCal } from "@/features/coach-ai/openCoachCal";
 
 /**
@@ -29,6 +29,11 @@ const SLOTS: Slot[] = [
 
 export function PreviewBottomNav({ isCoach }: { isCoach: boolean }) {
   const pathname = usePathname() ?? "/app/home";
+  // Focused thread (Workstream 4): hide the bottom bar while a single team's
+  // message thread is open (/app/messages/<teamId>) so the composer gets full
+  // height and the thread reads as a focused view. The hub (/app/messages)
+  // keeps the bar. The thread's own header has a "‹ Messages" back link.
+  if (/^\/app\/messages\/[^/]+/.test(pathname)) return null;
   // Role-adaptive (Workstream 1): Cal is a coaching tool, so viewer-only users
   // (players/parents — coach on no team) don't get the center Cal slot; the
   // remaining four items re-center evenly. Everything else is identical, so a
@@ -110,14 +115,9 @@ export function PreviewSideNav() {
           </Link>
         );
       })}
-      <Link
-        href="/app/alerts"
-        aria-current={pathname.startsWith("/app/alerts") ? "page" : undefined}
-        className={linkCls(pathname.startsWith("/app/alerts"))}
-      >
-        <Bell className="size-5" aria-hidden />
-        Alerts
-      </Link>
+      {/* No "Alerts" here: the header bell (ShellAlertsButton) is the single
+          entry point for notifications (Decision F), so the sidebar doesn't
+          duplicate it. */}
     </div>
   );
 }
