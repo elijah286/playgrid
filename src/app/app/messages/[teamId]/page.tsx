@@ -5,6 +5,7 @@ import { getRequestUser } from "@/lib/supabase/request-user";
 import { createClient } from "@/lib/supabase/server";
 import { listPlaybookMessagesAction } from "@/app/actions/playbook-messages";
 import { PlaybookMessagesTab } from "@/features/messages/PlaybookMessagesTab";
+import { MessagesList } from "../MessagesList";
 
 /**
  * A single team's channel — reuses the production PlaybookMessagesTab verbatim
@@ -45,36 +46,43 @@ export default async function TeamChannelPage({
     | null;
 
   return (
-    // Fill the shell's main scroll frame (main is a bounded flex child whose
-    // pb-24 already reserves the fixed bottom nav), so the composer always
-    // lands above the nav regardless of ribbon/header height. The chat renders
-    // inline (layout="inline") so it stays inside this frame rather than
-    // position:fixed'ing to the production header/nav offsets.
-    <div className="mx-auto flex h-full max-w-2xl flex-col">
-      <Link
-        href="/app/messages"
-        className="mb-2 inline-flex items-center gap-1 text-sm font-semibold text-muted transition-colors hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" aria-hidden />
-        All messages
-      </Link>
-      <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-surface-raised">
-        <PlaybookMessagesTab
-          playbookId={teamId}
-          playbookName={pb.name}
-          viewer={{
-            id: user.id,
-            displayName: profile?.display_name ?? null,
-            avatarUrl: profile?.avatar_url ?? null,
-          }}
-          viewerRole={mem.role}
-          layout="inline"
-          initial={{
-            messages: msgRes.ok ? msgRes.messages : [],
-            hasMore: msgRes.ok ? msgRes.hasMore : false,
-            messagingEnabled: msgRes.ok ? msgRes.messagingEnabled : true,
-          }}
-        />
+    // Desktop (sm:+): master-detail — the persistent conversation list on the
+    // left, this thread on the right. Mobile: just the focused thread (the
+    // bottom nav is hidden here by PreviewBottomNav) with a back link to the
+    // hub. The chat renders inline (layout="inline") so it stays inside the
+    // shell's bounded main scroll frame.
+    <div className="flex h-full gap-4">
+      <aside className="hidden w-80 shrink-0 flex-col overflow-y-auto sm:flex">
+        <h1 className="mb-3 text-lg font-extrabold tracking-tight text-foreground">Messages</h1>
+        <MessagesList selectedTeamId={teamId} />
+      </aside>
+
+      <div className="mx-auto flex h-full min-w-0 max-w-2xl flex-1 flex-col">
+        <Link
+          href="/app/messages"
+          className="mb-2 inline-flex items-center gap-1 text-sm font-semibold text-muted transition-colors hover:text-foreground sm:hidden"
+        >
+          <ArrowLeft className="size-4" aria-hidden />
+          All messages
+        </Link>
+        <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-surface-raised">
+          <PlaybookMessagesTab
+            playbookId={teamId}
+            playbookName={pb.name}
+            viewer={{
+              id: user.id,
+              displayName: profile?.display_name ?? null,
+              avatarUrl: profile?.avatar_url ?? null,
+            }}
+            viewerRole={mem.role}
+            layout="inline"
+            initial={{
+              messages: msgRes.ok ? msgRes.messages : [],
+              hasMore: msgRes.ok ? msgRes.hasMore : false,
+              messagingEnabled: msgRes.ok ? msgRes.messagingEnabled : true,
+            }}
+          />
+        </div>
       </div>
     </div>
   );
