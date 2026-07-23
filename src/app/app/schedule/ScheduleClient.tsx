@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Check,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   Loader2,
   MapPin,
@@ -52,9 +54,48 @@ function headline(e: ScheduleEvent): string {
 }
 
 function dayKey(iso: string): string {
-  const d = new Date(iso);
+  return dkey(new Date(iso));
+}
+
+/** Local-timezone day key for a Date (matches dayKey(iso) for the same day). */
+function dkey(d: Date): string {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
+
+const WEEKDAY_INITIALS = ["S", "M", "T", "W", "T", "F", "S"];
+
+/** 42 cells (6 weeks) starting on the Sunday on/before the 1st of `cursor`'s month. */
+function monthCells(cursor: Date): Date[] {
+  const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+  const start = new Date(first);
+  start.setDate(first.getDate() - first.getDay());
+  return Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    return d;
+  });
+}
+
+/** The 7 dates (Sun→Sat) of the week containing `cursor`. */
+function weekDates(cursor: Date): Date[] {
+  const start = new Date(cursor);
+  start.setDate(cursor.getDate() - cursor.getDay());
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    return d;
+  });
+}
+
+function isSameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+type ScheduleView = "list" | "month" | "week";
 
 function dayLabel(iso: string): string {
   const d = new Date(iso);
@@ -94,6 +135,24 @@ export function ScheduleClient({
   const [pending, startTransition] = useTransition();
   const [sheetTeam, setSheetTeam] = useState<string | null>(null);
   const [pickTeam, setPickTeam] = useState(false);
+
+  // View switcher (Month · Week · List) — an axis independent of the team
+  // filter chips; both apply together. Choice persists across visits.
+  const [view, setView] = useState<ScheduleView>("list");
+  const [cursor, setCursor] = useState(() => new Date());
+  const [selectedDay, setSelectedDay] = useState(() => dkey(new Date()));
+  useEffect(() => {
+    const v = localStorage.getItem("app.schedule.view");
+    if (v === "month" || v === "week" || v === "list") setView(v);
+  }, []);
+  const changeView = (v: ScheduleView) => {
+    setView(v);
+    try {
+      localStorage.setItem("app.schedule.view", v);
+    } catch {
+      /* private mode — non-fatal */
+    }
+  };
 
   const pickChip = (value: string) => {
     if (value === selected) return;
@@ -142,12 +201,24 @@ export function ScheduleClient({
     return [...buckets.values()];
   }, [events]);
 
+  // Per-day map (Month/Week views). Keyed by local day; each day's events sorted.
+  const eventsByDay = useMemo(() => {
+    const m = new Map<string, ScheduleEvent[]>();
+    for (const e of [...events].sort((a, b) => a.startsAt.localeCompare(b.startsAt))) {
+      const k = dayKey(e.startsAt);
+      const arr = m.get(k) ?? [];
+      arr.push(e);
+      m.set(k, arr);
+    }
+    return m;
+  }, [events]);
+
   const canCreate = coachable.length > 0;
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-extrabold tracking-tight text-foreground">Schedule</h1>
+        <h1 className="text-xl font-extrabold tracking-tight text-foreground">Calendar</h1>
         {canCreate && (
           <button
             type="button"
@@ -175,39 +246,64 @@ export function ScheduleClient({
         {pending && <Loader2 className="size-4 shrink-0 animate-spin self-center text-muted" aria-hidden />}
       </div>
 
-      {days.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted">
-          Nothing scheduled{selected !== ALL_TEAMS ? " for this team" : ""}.
-          {canCreate && (
-            <>
-              {" "}
-              <button type="button" onClick={startNewEvent} className="font-semibold text-primary">
-                Add your first event
-              </button>
-              .
-            </>
-          )}
-        </div>
-      ) : (
-        <div className="space-y-5">
-          {days.map((group) => (
-            <section key={dayKey(group[0]!.startsAt)}>
-              <h2 className="mb-2 text-[11px] font-bold uppercase tracking-wide text-muted">
-                {dayLabel(group[0]!.startsAt)}
-              </h2>
-              <ul className="space-y-2">
-                {group.map((e) => (
-                  <EventRow
-                    key={`${e.id}:${e.occurrenceDate}`}
-                    e={e}
-                    scoped={selected !== ALL_TEAMS}
-                    onRsvp={rsvp}
-                  />
-                ))}
-              </ul>
-            </section>
-          ))}
-        </div>
+      <ViewSwitch view={view} onChange={changeView} />
+
+      {view === "list" &&
+        (days.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted">
+            Nothing scheduled{selected !== ALL_TEAMS ? " for this team" : ""}.
+            {canCreate && (
+              <>
+                {" "}
+                <button type="button" onClick={startNewEvent} className="font-semibold text-primary">
+                  Add your first event
+                </button>
+                .
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-5">
+            {days.map((group) => (
+              <section key={dayKey(group[0]!.startsAt)}>
+                <h2 className="mb-2 text-[11px] font-bold uppercase tracking-wide text-muted">
+                  {dayLabel(group[0]!.startsAt)}
+                </h2>
+                <ul className="space-y-2">
+                  {group.map((e) => (
+                    <EventRow
+                      key={`${e.id}:${e.occurrenceDate}`}
+                      e={e}
+                      scoped={selected !== ALL_TEAMS}
+                      onRsvp={rsvp}
+                    />
+                  ))}
+                </ul>
+              </section>
+            ))}
+          </div>
+        ))}
+
+      {view === "month" && (
+        <MonthView
+          cursor={cursor}
+          setCursor={setCursor}
+          eventsByDay={eventsByDay}
+          selectedDay={selectedDay}
+          setSelectedDay={setSelectedDay}
+          scoped={selected !== ALL_TEAMS}
+          onRsvp={rsvp}
+        />
+      )}
+
+      {view === "week" && (
+        <WeekView
+          cursor={cursor}
+          setCursor={setCursor}
+          eventsByDay={eventsByDay}
+          scoped={selected !== ALL_TEAMS}
+          onRsvp={rsvp}
+        />
       )}
 
       {sheetTeam && (
@@ -231,6 +327,252 @@ export function ScheduleClient({
           }}
           onClose={() => setPickTeam(false)}
         />
+      )}
+    </div>
+  );
+}
+
+function ViewSwitch({
+  view,
+  onChange,
+}: {
+  view: ScheduleView;
+  onChange: (v: ScheduleView) => void;
+}) {
+  const opts: ScheduleView[] = ["month", "week", "list"];
+  return (
+    <div className="inline-flex rounded-lg border border-border bg-surface-inset p-0.5">
+      {opts.map((o) => (
+        <button
+          key={o}
+          type="button"
+          onClick={() => onChange(o)}
+          aria-pressed={view === o}
+          className={`rounded-md px-3.5 py-1 text-xs font-bold capitalize transition-colors ${
+            view === o
+              ? "bg-surface-raised text-foreground shadow-sm"
+              : "text-muted hover:text-foreground"
+          }`}
+        >
+          {o}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function MonthNav({
+  label,
+  onPrev,
+  onNext,
+}: {
+  label: string;
+  onPrev: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-center gap-3">
+      <button
+        type="button"
+        onClick={onPrev}
+        aria-label="Previous"
+        className="grid size-8 place-items-center rounded-lg text-muted hover:bg-surface-inset hover:text-foreground"
+      >
+        <ChevronLeft className="size-4" aria-hidden />
+      </button>
+      <span className="min-w-[9rem] text-center text-sm font-bold text-foreground">{label}</span>
+      <button
+        type="button"
+        onClick={onNext}
+        aria-label="Next"
+        className="grid size-8 place-items-center rounded-lg text-muted hover:bg-surface-inset hover:text-foreground"
+      >
+        <ChevronRight className="size-4" aria-hidden />
+      </button>
+    </div>
+  );
+}
+
+/** Up to three team-color dots for a day cell (Month + Week headers). */
+function DayDots({ events }: { events: ScheduleEvent[] }) {
+  return (
+    <span className="mt-0.5 flex h-1.5 items-center gap-0.5">
+      {events.slice(0, 3).map((e, i) => (
+        <span
+          key={i}
+          className="size-1.5 rounded-full"
+          style={{ backgroundColor: e.playbookColor || FALLBACK }}
+          aria-hidden
+        />
+      ))}
+    </span>
+  );
+}
+
+function MonthView({
+  cursor,
+  setCursor,
+  eventsByDay,
+  selectedDay,
+  setSelectedDay,
+  scoped,
+  onRsvp,
+}: {
+  cursor: Date;
+  setCursor: (d: Date) => void;
+  eventsByDay: Map<string, ScheduleEvent[]>;
+  selectedDay: string;
+  setSelectedDay: (k: string) => void;
+  scoped: boolean;
+  onRsvp: (e: ScheduleEvent, status: "yes" | "maybe" | "no") => void;
+}) {
+  const today = new Date();
+  const cells = monthCells(cursor);
+  const monthLabel = cursor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const parts = selectedDay.split("-").map(Number);
+  const selDate = new Date(
+    parts[0] ?? today.getFullYear(),
+    parts[1] ?? today.getMonth(),
+    parts[2] ?? today.getDate(),
+  );
+  const selEvents = eventsByDay.get(selectedDay) ?? [];
+  return (
+    <div className="space-y-4">
+      <MonthNav
+        label={monthLabel}
+        onPrev={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}
+        onNext={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}
+      />
+      <div className="grid grid-cols-7 gap-1">
+        {WEEKDAY_INITIALS.map((w, i) => (
+          <div key={i} className="pb-1 text-center text-[10px] font-bold uppercase tracking-wide text-muted">
+            {w}
+          </div>
+        ))}
+        {cells.map((d) => {
+          const k = dkey(d);
+          const evs = eventsByDay.get(k) ?? [];
+          const inMonth = d.getMonth() === cursor.getMonth();
+          const isToday = isSameDay(d, today);
+          const isSel = k === selectedDay;
+          return (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setSelectedDay(k)}
+              aria-pressed={isSel}
+              className={`flex aspect-square flex-col items-center justify-start rounded-lg pt-1.5 transition-colors ${
+                isSel ? "bg-primary/10 ring-1 ring-primary" : "hover:bg-surface-inset"
+              } ${inMonth ? "" : "opacity-40"}`}
+            >
+              <span
+                className={`grid size-6 place-items-center rounded-full text-[11px] font-bold ${
+                  isToday ? "bg-primary text-white" : "text-foreground"
+                }`}
+              >
+                {d.getDate()}
+              </span>
+              <DayDots events={evs} />
+            </button>
+          );
+        })}
+      </div>
+      <section>
+        <h2 className="mb-2 text-[11px] font-bold uppercase tracking-wide text-muted">
+          {selDate.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
+        </h2>
+        {selEvents.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted">
+            Nothing scheduled.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {selEvents.map((e) => (
+              <EventRow key={`${e.id}:${e.occurrenceDate}`} e={e} scoped={scoped} onRsvp={onRsvp} />
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function WeekView({
+  cursor,
+  setCursor,
+  eventsByDay,
+  scoped,
+  onRsvp,
+}: {
+  cursor: Date;
+  setCursor: (d: Date) => void;
+  eventsByDay: Map<string, ScheduleEvent[]>;
+  scoped: boolean;
+  onRsvp: (e: ScheduleEvent, status: "yes" | "maybe" | "no") => void;
+}) {
+  const today = new Date();
+  const dates = weekDates(cursor);
+  const label = `${dates[0]!.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${dates[6]!.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+  const empty = dates.every((d) => (eventsByDay.get(dkey(d)) ?? []).length === 0);
+  return (
+    <div className="space-y-4">
+      <MonthNav
+        label={label}
+        onPrev={() => {
+          const d = new Date(cursor);
+          d.setDate(cursor.getDate() - 7);
+          setCursor(d);
+        }}
+        onNext={() => {
+          const d = new Date(cursor);
+          d.setDate(cursor.getDate() + 7);
+          setCursor(d);
+        }}
+      />
+      <div className="grid grid-cols-7 gap-1">
+        {dates.map((d) => {
+          const evs = eventsByDay.get(dkey(d)) ?? [];
+          const isToday = isSameDay(d, today);
+          return (
+            <div key={dkey(d)} className="flex flex-col items-center gap-0.5 py-1.5">
+              <span className="text-[9px] font-bold uppercase text-muted">
+                {WEEKDAY_INITIALS[d.getDay()]}
+              </span>
+              <span
+                className={`grid size-6 place-items-center rounded-full text-[11px] font-bold ${
+                  isToday ? "bg-primary text-white" : "text-foreground"
+                }`}
+              >
+                {d.getDate()}
+              </span>
+              <DayDots events={evs} />
+            </div>
+          );
+        })}
+      </div>
+      {empty ? (
+        <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">
+          Nothing scheduled this week.
+        </p>
+      ) : (
+        <div className="space-y-4">
+          {dates.map((d) => {
+            const evs = eventsByDay.get(dkey(d)) ?? [];
+            if (evs.length === 0) return null;
+            return (
+              <section key={dkey(d)}>
+                <h2 className="mb-2 text-[11px] font-bold uppercase tracking-wide text-muted">
+                  {d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
+                </h2>
+                <ul className="space-y-2">
+                  {evs.map((e) => (
+                    <EventRow key={`${e.id}:${e.occurrenceDate}`} e={e} scoped={scoped} onRsvp={onRsvp} />
+                  ))}
+                </ul>
+              </section>
+            );
+          })}
+        </div>
       )}
     </div>
   );
