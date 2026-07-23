@@ -1,20 +1,13 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { UX_PREVIEW_COOKIE } from "@/lib/site/ux-preview";
 
 export async function signOutAction() {
-  // Clear the per-session new-UX preview opt-in so the next login always
-  // starts on the production experience (belt-and-suspenders alongside the
-  // session-cookie lifetime).
-  try {
-    (await cookies()).delete(UX_PREVIEW_COOKIE);
-  } catch {
-    /* best-effort */
-  }
+  // The new-UX preview opt-in is persisted on the account
+  // (profiles.ux_preview_active), so it deliberately survives sign-out — opting
+  // back out is an explicit toggle, not a side effect of logging out.
   if (!hasSupabaseEnv()) redirect("/signed-out");
   const supabase = await createClient();
   await supabase.auth.signOut();

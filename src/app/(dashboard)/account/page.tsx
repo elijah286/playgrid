@@ -43,12 +43,13 @@ export default async function AccountPage() {
   let pendingCoachInvites: PendingCoachInvite[] = [];
   let pendingChange: { targetTier: SubscriptionTier; effectiveAt: string } | null = null;
   let pendingCancellation: { effectiveAt: string } | null = null;
+  let uxActivePref = false;
   try {
     const admin = createServiceRoleClient();
     const [profileResult, sessionsResult] = await Promise.all([
       admin
         .from("profiles")
-        .select("display_name, avatar_url")
+        .select("display_name, avatar_url, ux_preview_active")
         .eq("id", user.id)
         .maybeSingle(),
       admin
@@ -61,6 +62,7 @@ export default async function AccountPage() {
     ]);
     displayName = (profileResult.data?.display_name as string | null) ?? null;
     avatarUrl = (profileResult.data?.avatar_url as string | null) ?? null;
+    uxActivePref = (profileResult.data?.ux_preview_active as boolean | null) ?? false;
     const currentDeviceId = (await cookies()).get(DEVICE_ID_COOKIE)?.value ?? null;
     sessions = (sessionsResult.data ?? []).map((row) => ({
       id: row.id as string,
@@ -85,6 +87,7 @@ export default async function AccountPage() {
     isAuthed: true,
     userRole: uxRole,
     userEmail: user.email ?? null,
+    activePreference: uxActivePref,
   });
 
   // Referral standing — null when the program is disabled (card hidden).

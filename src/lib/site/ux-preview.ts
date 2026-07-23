@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import {
   getBetaFeatures,
   getBetaFeatureAllowlistEmails,
@@ -12,26 +11,26 @@ import {
  *   1. AVAILABILITY ("allowed") — governed by the `new_shell` beta flag scope +
  *      allowlist. Controls who is even permitted to preview. Admins manage this
  *      from Site Admin → Overview.
- *   2. ACTIVE STATE ("active") — a per-session cookie the user flips on/off. It
- *      defaults OFF (absent = production), so login always defaults to the
- *      production experience. The user opts in explicitly and can flip back
- *      from anywhere (the ribbon) or the admin banner.
+ *   2. ACTIVE STATE ("active") — a per-ACCOUNT opt-in the user flips on/off,
+ *      persisted on `profiles.ux_preview_active` so the choice follows them
+ *      across every device and survives browser restarts. It defaults OFF (=
+ *      production) for everyone, so a user who never opts in is unaffected. The
+ *      caller reads the persisted flag and passes it in as `activePreference`.
  *
  * The new UX renders only when BOTH are true. While the flag is "off" (the
  * default), this resolves to {allowed:false, active:false} with essentially no
  * extra work, so every other user is completely unaffected.
  */
-export const UX_PREVIEW_COOKIE = "xo_ux_preview";
-export const UX_PREVIEW_ON = "new";
-
 export type UxPreviewState = { allowed: boolean; active: boolean };
 
 export async function resolveUxPreview(args: {
   isAuthed: boolean;
   userRole: string | null;
   userEmail: string | null;
+  /** The caller's persisted `profiles.ux_preview_active` (defaults false). */
+  activePreference: boolean;
 }): Promise<UxPreviewState> {
-  const { isAuthed, userRole, userEmail } = args;
+  const { isAuthed, userRole, userEmail, activePreference } = args;
   if (!isAuthed) return { allowed: false, active: false };
 
   let scope: BetaFeatureScope;
@@ -63,7 +62,5 @@ export async function resolveUxPreview(args: {
 
   if (!allowed) return { allowed: false, active: false };
 
-  const store = await cookies();
-  const active = store.get(UX_PREVIEW_COOKIE)?.value === UX_PREVIEW_ON;
-  return { allowed: true, active };
+  return { allowed: true, active: activePreference };
 }

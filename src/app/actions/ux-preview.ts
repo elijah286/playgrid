@@ -1,40 +1,53 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { UX_PREVIEW_COOKIE, UX_PREVIEW_ON } from "@/lib/site/ux-preview";
+import { createClient } from "@/lib/supabase/server";
 
 /**
- * Per-user, per-session opt-in toggle for the new-UX preview shell.
+ * Per-account opt-in toggle for the new-UX preview shell.
  *
- * This ONLY flips a cookie. It does NOT grant access — availability is enforced
- * separately at render time (see `resolveUxPreview` / the `new_shell` beta flag
- * + allowlist). A user who isn't allowed can set this cookie and still see the
- * production UX, because the layout gate checks allowlist/admin regardless.
+ * The choice is persisted on `profiles.ux_preview_active` (not a per-browser
+ * cookie) so it follows the account across every device and survives browser
+ * restarts, until the user explicitly switches back to Production.
  *
- * The cookie is a SESSION cookie (no maxAge/expires) so it dies when the browser
- * session ends — combined with clearing it on sign-out, a fresh login always
- * defaults to the production experience, by design.
+ * This ONLY flips the preference. It does NOT grant access — availability is
+ * enforced separately at render time (see `resolveUxPreview` / the `new_shell`
+ * beta flag + allowlist). A user who isn't allowed can set this true and still
+ * see production, because the layout gate checks allowlist/admin regardless.
  */
 export async function setUxPreviewActiveAction(on: boolean) {
-  const store = await cookies();
-  if (on) {
-    store.set(UX_PREVIEW_COOKIE, UX_PREVIEW_ON, {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      // No maxAge/expires → session cookie (clears on browser close).
-    });
-  } else {
-    store.delete(UX_PREVIEW_COOKIE);
-  }
-  // Re-render the shell so the ribbon + (future) new chrome reflect the change.
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ ux_preview_active: on })
+    .eq("id", user.id);
+  if (error) return { ok: false as const, error: error.message };
+
+  // Re-render the shell so the ribbon + new chrome reflect the change.
   revalidatePath("/", "layout");
   return { ok: true as const, active: on };
 }
 
-/** Read the current per-session toggle state (for the admin banner's initial UI). */
+/** Read the current per-account toggle state (for the admin banner's initial UI). */
 export async function getUxPreviewActiveAction() {
-  const store = await cookies();
-  return { ok: true as const, active: store.get(UX_PREVIEW_COOKIE)?.value === UX_PREVIEW_ON };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: true as const, active: false };
+
+  const { data } = await supabase
+    .from("profiles")
+    .select("ux_preview_active")
+    .eq("id", user.id)
+    .maybeSingle();
+  return {
+    ok: true as const,
+    active: (data?.ux_preview_active as boolean | null) ?? false,
+  };
 }

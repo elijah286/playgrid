@@ -32,7 +32,7 @@ export default async function AppShellLayout({
   const supabase = await createClient();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("display_name, avatar_url, role")
+    .select("display_name, avatar_url, role, ux_preview_active")
     .eq("id", user.id)
     .maybeSingle();
   const role = (profile?.role as string | null) ?? null;
@@ -41,6 +41,7 @@ export default async function AppShellLayout({
     isAuthed: true,
     userRole: role,
     userEmail: user.email ?? null,
+    activePreference: (profile?.ux_preview_active as boolean | null) ?? false,
   });
   if (!ux.allowed || !ux.active) redirect("/home");
 
