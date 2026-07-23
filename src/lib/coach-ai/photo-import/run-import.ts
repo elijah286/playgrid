@@ -64,6 +64,7 @@ export function buildVariantMismatchDraft(
     variant: inferredVariant,
     maxThrowDepthYds: null,
     title,
+    centerEligible: inferredVariant === "flag_5v5",
   });
   return { mismatch, spec: synthesis.spec, mapping: synthesis.mapping, warnings: synthesis.warnings };
 }
@@ -164,6 +165,7 @@ export async function runPanelImport(opts: {
     variant: opts.variant,
     maxThrowDepthYds: settings.maxThrowDepthYds ?? null,
     title: opts.label,
+    centerEligible: settings.centerIsEligible ?? opts.variant === "flag_5v5",
   });
 
   return {

@@ -18,7 +18,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle, ArrowRight, Camera, ClipboardCopy, FolderInput, Loader2, Plus, RefreshCw } from "lucide-react";
 import type { SportVariant } from "@/domain/play/types";
 import type { PlaySpec, PlayerAssignment, AssignmentAction } from "@/domain/play/spec";
@@ -92,6 +92,9 @@ type JobSummary = {
   label: string;
   status: "running" | "done" | "error";
   hasMismatch: boolean;
+  playerCount: number | null;
+  playbookId: string;
+  playbookName: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -241,6 +244,7 @@ export function PhotoImportClient(props: {
   capExempt: boolean;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [phase, setPhase] = useState<Phase>({ step: "pick" });
@@ -258,6 +262,9 @@ export function PhotoImportClient(props: {
   const [lastPanels, setLastPanels] = useState<Panel[] | null>(null);
   const [debugCopied, setDebugCopied] = useState(false);
   const [useSheetLabels, setUseSheetLabels] = useState(true);
+  // On by default: recolor the draft to the photo's colors, coerced to the
+  // palette so no two players (or their routes) collide.
+  const [matchColors, setMatchColors] = useState(true);
   // Format-mismatch recovery: the preserved read, and (when the coach
   // routes it to a compatible book) where the review step should save.
   const [mismatch, setMismatch] = useState<MismatchState | null>(null);
@@ -277,7 +284,7 @@ export function PhotoImportClient(props: {
   // react-hooks purity rule, and it only needs job-fetch granularity).
   const refreshJobs = useCallback(async () => {
     try {
-      const res = await fetch(`/api/photo-import/jobs?playbookId=${encodeURIComponent(props.playbookId)}`);
+      const res = await fetch(`/api/photo-import/jobs`);
       if (!res.ok) return;
       const json = (await res.json()) as { jobs?: JobSummary[]; staleMs?: number };
       const threshold = typeof json.staleMs === "number" ? json.staleMs : 150_000;
@@ -292,7 +299,25 @@ export function PhotoImportClient(props: {
     } catch {
       // Recent-imports is a convenience — never block the flow on it.
     }
-  }, [props.playbookId]);
+  }, []);
+
+  // Deep-link resume: a recent import from ANOTHER playbook is opened on its
+  // own import page with ?resume=<jobId> (so it keeps that book's format +
+  // save target). Consume it once on mount → resuming screen, then strip the
+  // param so a later refresh / back-nav doesn't re-enter it. Effect-based
+  // (not a useState initializer) to avoid any SSR/hydration mismatch.
+  const consumedResumeRef = useRef(false);
+  useEffect(() => {
+    if (consumedResumeRef.current) return;
+    const resume = searchParams?.get("resume");
+    if (!resume) return;
+    consumedResumeRef.current = true;
+    setPhase({ step: "resuming", jobId: resume });
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("resume");
+    const qs = next.toString();
+    window.history.replaceState({}, "", qs ? `?${qs}` : window.location.pathname);
+  }, [searchParams]);
 
   useEffect(() => {
     // Deferred so the effect body itself stays setState-free.
@@ -317,7 +342,7 @@ export function PhotoImportClient(props: {
     try {
       const rendered = playSpecToCoachDiagram(spec);
       const aligned = applyPhotoAlignment(rendered.diagram, mapping, reviewVariant);
-      const identified = applySheetIdentity(aligned, mapping, { labels: useSheetLabels });
+      const identified = applySheetIdentity(aligned, mapping, { labels: useSheetLabels, matchColors });
       return {
         json: JSON.stringify({ ...identified, title: playName || spec.title }),
         renderWarnings: rendered.warnings,
@@ -325,7 +350,7 @@ export function PhotoImportClient(props: {
     } catch {
       return null;
     }
-  }, [spec, mapping, playName, useSheetLabels, reviewVariant]);
+  }, [spec, mapping, playName, useSheetLabels, matchColors, reviewVariant]);
 
   const postJson = useCallback(async (url: string, body: unknown) => {
     const res = await fetch(url, {
@@ -524,13 +549,14 @@ export function PhotoImportClient(props: {
         name: playName || spec.title || "Imported play",
         mapping,
         useSheetLabels,
+        matchColors,
       })) as { url?: string };
       router.push(json.url ?? `/playbooks/${targetPlaybookId}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed.");
       setPhase({ step: "review" });
     }
-  }, [spec, playName, mapping, useSheetLabels, postJson, props.playbookId, saveTarget, router]);
+  }, [spec, playName, mapping, useSheetLabels, matchColors, postJson, props.playbookId, saveTarget, router]);
 
   // Preview the preserved read in its OWN inferred format, so the coach
   // sees the play is intact before choosing where it lands.
@@ -540,7 +566,7 @@ export function PhotoImportClient(props: {
     try {
       const rendered = playSpecToCoachDiagram(m.spec);
       const aligned = applyPhotoAlignment(rendered.diagram, m.mapping, m.info.inferredVariant);
-      const identified = applySheetIdentity(aligned, m.mapping, { labels: true });
+      const identified = applySheetIdentity(aligned, m.mapping, { labels: true, matchColors: true });
       return { json: JSON.stringify({ ...identified, title: m.spec.title }) };
     } catch {
       return null;
@@ -637,26 +663,37 @@ export function PhotoImportClient(props: {
       <div className="space-y-3">
         {errorBox}
         <label
-          className={`flex min-h-56 cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border bg-surface p-8 text-center hover:bg-surface-raised ${busy ? "pointer-events-none opacity-70" : ""}`}
+          className={`flex min-h-64 cursor-pointer flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-border bg-surface p-8 text-center transition-colors hover:border-brand-green/60 hover:bg-surface-raised ${busy ? "pointer-events-none opacity-70" : ""}`}
         >
-          {busy ? <Loader2 className="size-8 animate-spin text-muted" /> : <Camera className="size-8 text-muted" />}
           {busy ? (
-            <StageTicker
-              stages={[
-                "Scanning the photo for play panels…",
-                "Reading panel borders and labels…",
-                "Cropping each play…",
-              ]}
-              note="usually 10–25 seconds"
-            />
+            <>
+              <Loader2 className="size-8 animate-spin text-muted" />
+              <StageTicker
+                stages={[
+                  "Scanning the photo for play panels…",
+                  "Reading panel borders and labels…",
+                  "Cropping each play…",
+                ]}
+                note="usually 10–25 seconds"
+              />
+            </>
           ) : (
-            <div className="text-sm font-medium text-foreground">Take a photo or choose one</div>
+            <>
+              <span className="flex size-14 items-center justify-center rounded-full bg-surface-raised">
+                <Camera className="size-7 text-brand-green" />
+              </span>
+              <div className="space-y-1">
+                <div className="text-base font-semibold text-foreground">Take a photo or choose one</div>
+                <div className="mx-auto max-w-sm text-xs leading-relaxed text-muted">
+                  Works with printed play-sheet exports (Playmaker X and similar) and clear hand-drawn plays.
+                </div>
+              </div>
+              <span className="inline-flex items-center gap-2 rounded-lg border border-brand-green bg-brand-green px-4 py-2 text-sm font-semibold text-white">
+                <Camera className="size-4" />
+                Choose a photo
+              </span>
+            </>
           )}
-          <div className="max-w-sm text-xs text-muted">
-            Works with printed play-sheet exports (Playmaker X and similar) and clear hand-drawn plays. Panels are
-            held privately for up to 24 hours while an import is in flight, then deleted.
-          </div>
-          {capText && <div className="text-xs font-medium text-muted">{capText}</div>}
           <input
             ref={fileInputRef}
             type="file"
@@ -670,6 +707,10 @@ export function PhotoImportClient(props: {
             }}
           />
         </label>
+        <p className="px-1 text-xs text-muted">
+          Panels are held privately for up to 24 hours while an import is in flight, then deleted.
+          {capText ? <span className="font-medium"> · {capText}</span> : null}
+        </p>
         {recentJobs.length > 0 && (
           <div className="rounded-xl border border-border bg-surface p-3">
             <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Recent imports</div>
@@ -692,6 +733,13 @@ export function PhotoImportClient(props: {
                     : j.status === "running" && !isStale
                       ? "text-muted"
                       : "text-amber-700";
+                const elsewhere = j.playbookId !== props.playbookId;
+                const meta = [
+                  j.playerCount != null ? `${j.playerCount} players` : null,
+                  j.playbookName ?? null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ");
                 return (
                   <button
                     key={j.id}
@@ -699,12 +747,21 @@ export function PhotoImportClient(props: {
                     disabled={busy}
                     onClick={() => {
                       setError(null);
+                      // A job from another playbook resumes on ITS OWN import
+                      // page, so it keeps that playbook's format + save target.
+                      if (elsewhere) {
+                        router.push(`/playbooks/${j.playbookId}/import-photo?resume=${j.id}`);
+                        return;
+                      }
                       setResumeJob(null);
                       setPhase({ step: "resuming", jobId: j.id });
                     }}
                     className="flex w-full items-center justify-between gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-left text-sm hover:bg-surface-raised"
                   >
-                    <span className="font-medium text-foreground">{j.label}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium text-foreground">{j.label}</span>
+                      {meta && <span className="block truncate text-xs text-muted">{meta}</span>}
+                    </span>
                     <span className={`shrink-0 text-xs font-medium ${tone}`}>{statusText}</span>
                   </button>
                 );
@@ -1268,6 +1325,19 @@ export function PhotoImportClient(props: {
               onChange={(e) => setUseSheetLabels(e.target.checked)}
             />
             Use the sheet&apos;s lettering
+          </label>
+          <label
+            className="flex items-center gap-2 text-sm text-foreground"
+            title="On: the draft wears the photo's colors, snapped to the app palette so no two players match. Off: the playbook's default colors."
+          >
+            <input
+              type="checkbox"
+              className="size-4 rounded border-border"
+              checked={matchColors}
+              disabled={saving}
+              onChange={(e) => setMatchColors(e.target.checked)}
+            />
+            Match the photo&apos;s colors
           </label>
           <div className="ml-auto flex items-center gap-2">
             <button

@@ -47,8 +47,11 @@ type SaveRequest = {
   spec?: unknown;
   name?: string;
   mapping?: unknown;
-  /** false → keep the playbook's slot letters (colors still applied). */
+  /** false → keep the playbook's slot letters. */
   useSheetLabels?: boolean;
+  /** false → keep the playbook's default fills instead of the photo's
+   *  colors (coerced to the palette with per-player uniqueness). */
+  matchColors?: boolean;
 };
 
 const pointSchema = z.object({ x: z.number().min(-40).max(40), y: z.number().min(-20).max(30) }).strict();
@@ -120,6 +123,7 @@ export async function POST(req: Request) {
   const aligned = applyPhotoAlignment({ ...resolved.diagram, variant, title: name }, mapping, variant);
   const diagram: CoachDiagram = applySheetIdentity(aligned, mapping, {
     labels: body.useSheetLabels !== false,
+    matchColors: body.matchColors !== false,
   });
   autoResolveColorClashes(diagram);
 

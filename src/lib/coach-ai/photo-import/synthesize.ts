@@ -32,7 +32,7 @@
  */
 
 import { synthesizeOffense } from "@/domain/play/offensiveSynthesize";
-import { findTemplate } from "@/domain/play/routeTemplates";
+import { findTemplate, ROUTE_TEMPLATES } from "@/domain/play/routeTemplates";
 import { sportProfileForVariant } from "@/domain/play/factory";
 import type { PlaySpec, PlayerAssignment, AssignmentAction, RouteModifier, Confidence } from "@/domain/play/spec";
 import { PLAY_SPEC_SCHEMA_VERSION } from "@/domain/play/spec";
@@ -50,6 +50,7 @@ export type ImportWarning = {
     | "player_unmapped"
     | "player_unassigned"
     | "family_unknown"
+    | "family_approximated"
     | "depth_raised"
     | "depth_capped"
     | "depth_over_throw_cap"
@@ -102,6 +103,15 @@ const NON_SKILL_ROSTER_IDS = new Set(["QB", "C", "LT", "LG", "RG", "RT"]);
 function isSheetSpecialLabel(label: string): boolean {
   const l = label.trim().toUpperCase();
   return l === "C" || l === "Q" || l === "QB";
+}
+
+function isCenterLabel(label: string): boolean {
+  return label.trim().toUpperCase() === "C";
+}
+
+function isQbLabel(label: string): boolean {
+  const l = label.trim().toUpperCase();
+  return l === "Q" || l === "QB";
 }
 
 /** Observed skill players (no C/Q), sorted left-to-right as drawn. */
@@ -235,13 +245,54 @@ export function variantForOffenseCount(count: number): SportVariant | null {
   }
 }
 
+/** Best catalog family for a name the exact lookup missed, by token
+ *  overlap / substring against every template name + alias. Lets an
+ *  off-vocabulary read ("deep cross", "skinny post") land on its closest
+ *  catalog family — Cal draws the nearest match — instead of dropping the
+ *  route. Returns null only when nothing overlaps at all. */
+function nearestRouteFamily(name: string): string | null {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+  const target = norm(name);
+  if (!target) return null;
+  const targetTokens = new Set(target.split(" "));
+  let best: { name: string; score: number } | null = null;
+  for (const t of ROUTE_TEMPLATES) {
+    for (const cand of [t.name, ...(t.aliases ?? [])]) {
+      const c = norm(cand);
+      if (!c) continue;
+      let score = 0;
+      if (c === target) score = 1000;
+      else if (target.includes(c) || c.includes(target)) score = 100 + Math.min(c.length, target.length);
+      else score = c.split(" ").filter((tok) => targetTokens.has(tok)).length * 10;
+      if (score > 0 && (!best || score > best.score)) best = { name: t.name, score };
+    }
+  }
+  return best ? best.name : null;
+}
+
 function buildRouteAction(
   extracted: ExtractedAssignment,
   sheetLabel: string,
   maxThrowDepthYds: number | null | undefined,
   warnings: ImportWarning[],
 ): AssignmentAction {
-  const template = extracted.family ? findTemplate(extracted.family) : null;
+  let template = extracted.family ? findTemplate(extracted.family) : null;
+  // Closest-match, never-drop: an off-catalog family name snaps to its
+  // nearest catalog family (Cal draws the closest route) rather than
+  // importing the player as unassigned. Only a truly unreadable path
+  // (no family at all, or zero overlap) stays unspecified for the coach.
+  if (!template && extracted.family) {
+    const near = nearestRouteFamily(extracted.family);
+    if (near) {
+      template = findTemplate(near);
+      if (template) {
+        warnings.push({
+          code: "family_approximated",
+          message: `${sheetLabel}: "${extracted.family}" isn't a catalog route — imported as the closest match, ${template.name}. Adjust it in the review step if needed.`,
+        });
+      }
+    }
+  }
   if (!template) {
     warnings.push({
       code: "family_unknown",
@@ -344,9 +395,15 @@ export function synthesizePlaySpec(
     /** Playbook's persistent max-throw-depth setting, when configured. */
     maxThrowDepthYds?: number | null;
     title?: string;
+    /** When the center is an eligible receiver (flag_5v5 by default), a
+     *  drawn center route imports instead of being dropped. Handled as a
+     *  bolt-on outside the receiver-slot zip, so receiver distribution and
+     *  variant-fit math are untouched. */
+    centerEligible?: boolean;
   },
 ): SynthesisResult {
   const warnings: ImportWarning[] = [];
+  const centerEligible = opts.centerEligible ?? opts.variant === "flag_5v5";
 
   // ── 1. Formation snap ────────────────────────────────────────────
   const candidates = formationCandidates(extraction);
@@ -432,6 +489,28 @@ export function synthesizePlaySpec(
     (a, b) => (sheetOrder.get(a.sheetLabel.trim().toUpperCase()) ?? 99) - (sheetOrder.get(b.sheetLabel.trim().toUpperCase()) ?? 99),
   );
 
+  // Eligible center running a route: map its sheet letter straight to the
+  // real roster slot "C" (placed on the ball at 0,0). Kept OUT of the
+  // skill-slot zip above so it never perturbs receiver distribution or the
+  // variantFit count math — it's a direct, one-off pairing that exists only
+  // so a drawn center route survives (today it's dropped, then the resolver
+  // auto-injects a generic Sit in its place). The center keeps its (0,0)
+  // synth position, so no alignment target is needed.
+  if (centerEligible) {
+    const centerPlayer = extraction.players.find((p) => isCenterLabel(p.label));
+    const centerRoutes = extraction.assignments.some(
+      (a) => isCenterLabel(a.player) && (a.kind === "route" || a.kind === "carry" || a.kind === "motion"),
+    );
+    if (centerPlayer && centerRoutes && !mapping.some((m) => m.rosterId === "C")) {
+      mapping.push({
+        sheetLabel: centerPlayer.label,
+        rosterId: "C",
+        ...(centerPlayer.color ? { sheetColor: centerPlayer.color } : {}),
+      });
+      rosterIdBySheetLabel.set(centerPlayer.label.trim().toUpperCase(), "C");
+    }
+  }
+
   // ── 2b. Alignment targets ─────────────────────────────────────────
   // Place each mapped player where the PHOTO shows them (bucket →
   // yards) rather than where the snapped formation's slot sits — the
@@ -476,14 +555,14 @@ export function synthesizePlaySpec(
   const assignedRosterIds = new Set<string>();
   for (const extracted of extraction.assignments) {
     const sheetLabel = extracted.player.trim().toUpperCase();
-    if (isSheetSpecialLabel(sheetLabel)) {
-      // v1 imports offense skill assignments only; C blocks and Q's
-      // dropback are implicit. A drawn QB run / center release is rare
-      // enough to hand-fix in the editor.
+    // The QB's dropback and an INELIGIBLE center's block are implicit — skip
+    // them. An ELIGIBLE center (mapped just above) falls through so its drawn
+    // route imports like any receiver's. A drawn QB run stays a hand-fix.
+    if (isQbLabel(sheetLabel) || (isCenterLabel(sheetLabel) && !centerEligible)) {
       if (extracted.kind !== "block" && extracted.kind !== "unclear") {
         warnings.push({
           code: "assignment_skipped",
-          message: `${extracted.player}: assignments for the center/QB aren't imported yet — add it in the editor if it matters.`,
+          message: `${extracted.player}: the ${isQbLabel(sheetLabel) ? "QB's" : "center's"} assignment isn't imported here — add it in the editor if it matters.`,
         });
       }
       continue;
@@ -563,25 +642,74 @@ export const SHEET_COLOR_HEX: Record<string, string> = {
   brown: "#92400E",
 };
 
+const SHEET_PALETTE = Object.values(SHEET_COLOR_HEX);
+
+function hexToRgb(hex: string): [number, number, number] | null {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function colorDistance(a: string, b: string): number {
+  const ra = hexToRgb(a);
+  const rb = hexToRgb(b);
+  if (!ra || !rb) return Number.POSITIVE_INFINITY;
+  return (ra[0] - rb[0]) ** 2 + (ra[1] - rb[1]) ** 2 + (ra[2] - rb[2]) ** 2;
+}
+
+/**
+ * Assign each mapped player its sheet color coerced to the curated
+ * palette, guaranteeing UNIQUENESS: if two sheet circles share a color
+ * (two "red" receivers), the second snaps to the nearest still-unused
+ * palette entry so every player — and every route, which inherits its
+ * carrier's fill — stays visually distinct. No colors outside the
+ * palette are ever introduced. Returns rosterId → hex for players that
+ * had a color read; players with no read color are omitted (keep default).
+ */
+function coerceUniqueColors(mapping: PlayerMapping[]): Map<string, string> {
+  const used = new Set<string>();
+  const out = new Map<string, string>();
+  for (const m of mapping) {
+    const base = m.sheetColor ? SHEET_COLOR_HEX[m.sheetColor] : undefined;
+    if (!base) continue;
+    let hex: string | undefined = base;
+    if (used.has(hex)) {
+      hex = SHEET_PALETTE.filter((c) => !used.has(c)).sort(
+        (a, b) => colorDistance(a, base) - colorDistance(b, base),
+      )[0];
+    }
+    if (!hex) continue; // palette exhausted (>11 players — unreachable here)
+    used.add(hex);
+    out.set(m.rosterId, hex);
+  }
+  return out;
+}
+
 /** Relabel + recolor mapped players so the draft wears the sheet's own
- *  letters and colors. IDs are untouched; unmapped players (C, QB)
- *  keep their defaults. `labels: false` keeps the playbook's slot
- *  letters and applies colors only (coach's choice at review time).
+ *  letters and colors. IDs are untouched; unmapped players (QB, and an
+ *  ineligible center) keep their defaults. `labels: false` keeps the
+ *  playbook's slot letters. `matchColors: false` keeps the playbook's
+ *  default fills (no sheet coloring). When `matchColors` is on (default),
+ *  colors are coerced to the palette with per-player uniqueness so no two
+ *  players — or their routes, which inherit the carrier fill — collide.
  *  Pure — returns a new diagram. */
 export function applySheetIdentity(
   diagram: CoachDiagram,
   mapping: PlayerMapping[],
-  opts: { labels?: boolean } = {},
+  opts: { labels?: boolean; matchColors?: boolean } = {},
 ): CoachDiagram {
   if (mapping.length === 0) return diagram;
   const labels = opts.labels !== false;
+  const matchColors = opts.matchColors !== false;
   const byRosterId = new Map(mapping.map((m) => [m.rosterId, m]));
+  const colorByRosterId = matchColors ? coerceUniqueColors(mapping) : new Map<string, string>();
   return {
     ...diagram,
     players: diagram.players.map((p) => {
       const m = byRosterId.get(p.id);
       if (!m) return p;
-      const hex = m.sheetColor ? SHEET_COLOR_HEX[m.sheetColor] : undefined;
+      const hex = colorByRosterId.get(p.id);
       return { ...p, ...(labels ? { role: m.sheetLabel } : {}), ...(hex ? { color: hex } : {}) };
     }),
   };

@@ -458,3 +458,102 @@ describe("variantForOffenseCount — inferred format by player count", () => {
     }
   });
 });
+
+/** A flag_5v5 read (C + Q + 3 skill) where the CENTER runs a slant. */
+function fivePlayerCenterRoute(): PlayExtraction {
+  return {
+    title: "Center Slant",
+    players: [
+      { label: "X", side: "left", orderFromLeft: 1, onLos: true, backfield: false },
+      { label: "C", side: "center", orderFromLeft: 2, onLos: true, backfield: false, color: "red" },
+      { label: "Q", side: "center", orderFromLeft: 3, onLos: false, backfield: true },
+      { label: "Y", side: "right", orderFromLeft: 4, onLos: true, backfield: false },
+      { label: "Z", side: "right", orderFromLeft: 5, onLos: false, backfield: false },
+    ],
+    formation: { name: "Spread", confidence: "med" },
+    assignments: [
+      { player: "X", kind: "route", family: "Go", confidence: "high" },
+      { player: "C", kind: "route", family: "Slant", depthYds: 5, confidence: "high" },
+      { player: "Y", kind: "route", family: "Hitch", confidence: "med" },
+      { player: "Z", kind: "route", family: "Corner", confidence: "med" },
+    ],
+  };
+}
+
+describe("synthesizePlaySpec — eligible center route (#3)", () => {
+  it("imports the center's drawn route when the center is eligible (flag_5v5)", () => {
+    const res = synthesizePlaySpec(fivePlayerCenterRoute(), { variant: "flag_5v5" });
+    const cAssign = res.spec.assignments.find((a) => a.player === "C");
+    expect(cAssign).toBeDefined();
+    expect(cAssign!.action).toMatchObject({ kind: "route", family: "Slant" });
+    // The center is in the mapping (so it wears its sheet color/letter).
+    expect(res.mapping.some((m) => m.rosterId === "C")).toBe(true);
+    // Still a valid spec, and no "center not imported" skip warning.
+    expect(parsePlaySpec(res.spec).success).toBe(true);
+    expect(res.warnings.some((w) => w.code === "assignment_skipped")).toBe(false);
+  });
+
+  it("skips the center's route when the center is ineligible", () => {
+    const res = synthesizePlaySpec(fivePlayerCenterRoute(), { variant: "flag_5v5", centerEligible: false });
+    expect(res.spec.assignments.find((a) => a.player === "C" && a.action.kind === "route")).toBeUndefined();
+    expect(res.mapping.some((m) => m.rosterId === "C")).toBe(false);
+    expect(res.warnings.some((w) => w.code === "assignment_skipped")).toBe(true);
+  });
+});
+
+describe("synthesizePlaySpec — closest-match routes (#2)", () => {
+  it("snaps an off-catalog family name to its closest catalog match instead of dropping it", () => {
+    const ext = tripsLeftExtraction();
+    ext.assignments[0] = { player: "X", kind: "route", family: "big slant thing", confidence: "low" };
+    const res = synthesizePlaySpec(ext, { variant: "flag_7v7" });
+    const x = res.mapping.find((m) => m.sheetLabel === "X")!.rosterId;
+    const action = res.spec.assignments.find((a) => a.player === x)!.action;
+    expect(action).toMatchObject({ kind: "route", family: "Slant" });
+    expect(res.warnings.some((w) => w.code === "family_approximated")).toBe(true);
+  });
+
+  it("leaves a truly unreadable family unspecified for the coach", () => {
+    const ext = tripsLeftExtraction();
+    ext.assignments[0] = { player: "X", kind: "route", family: "qwxyz nonsense", confidence: "low" };
+    const res = synthesizePlaySpec(ext, { variant: "flag_7v7" });
+    const x = res.mapping.find((m) => m.sheetLabel === "X")!.rosterId;
+    expect(res.spec.assignments.find((a) => a.player === x)!.action).toEqual({ kind: "unspecified" });
+    expect(res.warnings.some((w) => w.code === "family_unknown")).toBe(true);
+  });
+});
+
+describe("applySheetIdentity — unique color coercion (#4)", () => {
+  const baseDiagram = () =>
+    ({
+      variant: "flag_7v7",
+      players: [
+        { id: "X", role: "X", team: "O" },
+        { id: "Z", role: "Z", team: "O" },
+      ],
+      routes: [],
+    }) as unknown as CoachDiagram;
+
+  it("nudges two same-color players to distinct palette colors", () => {
+    const out = applySheetIdentity(baseDiagram(), [
+      { sheetLabel: "X", rosterId: "X", sheetColor: "red" },
+      { sheetLabel: "Z", rosterId: "Z", sheetColor: "red" },
+    ]);
+    const byId = new Map(out.players.map((p) => [p.id, p]));
+    const cx = (byId.get("X") as { color?: string }).color;
+    const cz = (byId.get("Z") as { color?: string }).color;
+    expect(cx).toBe(SHEET_COLOR_HEX.red);
+    expect(cz).toBeDefined();
+    expect(cz).not.toBe(cx);
+    // No colors outside the curated palette are ever introduced.
+    expect(Object.values(SHEET_COLOR_HEX)).toContain(cz);
+  });
+
+  it("keeps default fills when matchColors is off", () => {
+    const out = applySheetIdentity(
+      baseDiagram(),
+      [{ sheetLabel: "X", rosterId: "X", sheetColor: "red" }],
+      { matchColors: false },
+    );
+    expect((out.players.find((p) => p.id === "X") as { color?: string }).color).toBeUndefined();
+  });
+});

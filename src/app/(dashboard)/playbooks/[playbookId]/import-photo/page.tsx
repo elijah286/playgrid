@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { SportVariant } from "@/domain/play/types";
@@ -30,20 +31,19 @@ export default async function ImportPhotoPage({ params }: Props) {
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-6">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Import play from photo</h1>
-          <p className="mt-0.5 text-sm text-muted">
-            Photograph a play sheet or a hand-drawn play — review the read, fix anything, then save it to{" "}
-            <span className="font-medium text-foreground">{playbook.name}</span>.
-          </p>
-        </div>
-        <Link
-          href={`/playbooks/${playbookId}`}
-          className="whitespace-nowrap rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-foreground hover:bg-surface-raised"
-        >
-          Back to playbook
-        </Link>
+      <Link
+        href={`/playbooks/${playbookId}`}
+        className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-muted transition-colors hover:text-foreground"
+      >
+        <ArrowLeft className="size-4" />
+        Back to {playbook.name}
+      </Link>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Import a play from a photo</h1>
+        <p className="mt-1 max-w-xl text-sm text-muted">
+          Photograph a play sheet or a hand-drawn play. You&apos;ll review the read and fix anything before it&apos;s
+          saved to <span className="font-medium text-foreground">{playbook.name}</span>.
+        </p>
       </div>
       <PhotoImportClient
         playbookId={playbookId}

@@ -35,6 +35,13 @@ export type PhotoImportJobSummary = {
   label: string;
   status: "running" | "done" | "error";
   hasMismatch: boolean;
+  /** Offensive players the read found — shown on the recent-imports card
+   *  so a coach can tell formats apart at a glance. Null while running. */
+  playerCount: number | null;
+  /** Which playbook the import belongs to (recent imports span every
+   *  playbook now), so a card can name its home and route back to it. */
+  playbookId: string;
+  playbookName: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -133,6 +140,11 @@ function rowToJob(row: Record<string, unknown>): PhotoImportJob {
     label: (row.label as string) ?? "Imported play",
     status: row.status as PhotoImportJob["status"],
     hasMismatch: row.variant_mismatch != null,
+    playerCount: jobPlayerCount(row),
+    // The single-job fetch doesn't join the playbook name (resume doesn't
+    // need it — the list view supplies it). Kept null to satisfy the shared
+    // summary shape.
+    playbookName: null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
     cropBase64: (row.crop_base64 as string | null) ?? null,
@@ -147,26 +159,55 @@ function rowToJob(row: Record<string, unknown>): PhotoImportJob {
   };
 }
 
-export async function listJobs(userId: string, playbookId: string): Promise<PhotoImportJobSummary[]> {
+/** Offensive players a finished read found — from the draft extraction,
+ *  or the mismatch's observed count when the play didn't fit. Null while
+ *  still running (nothing read yet). */
+function jobPlayerCount(row: Record<string, unknown>): number | null {
+  const extraction = row.extraction as { players?: unknown[] } | null;
+  if (extraction?.players && Array.isArray(extraction.players)) return extraction.players.length;
+  const vm = row.variant_mismatch as { photoPlayers?: number } | null;
+  if (vm && typeof vm.photoPlayers === "number") return vm.photoPlayers;
+  return null;
+}
+
+export async function listJobs(userId: string): Promise<PhotoImportJobSummary[]> {
   try {
     const admin = createServiceRoleClient();
     // Lazy retention: this user's expired rows go first (crop included).
     const cutoff = new Date(Date.now() - JOB_TTL_HOURS * 3600_000).toISOString();
     await admin.from("photo_import_jobs").delete().eq("user_id", userId).lt("created_at", cutoff);
 
+    // Recent imports span EVERY playbook the coach imported into (not just
+    // the one they're viewing) — the whole point is to pick work back up
+    // wherever they left it.
     const { data, error } = await admin
       .from("photo_import_jobs")
-      .select("id, label, status, variant_mismatch, created_at, updated_at")
+      .select("id, label, status, variant_mismatch, extraction, playbook_id, created_at, updated_at")
       .eq("user_id", userId)
-      .eq("playbook_id", playbookId)
       .order("created_at", { ascending: false })
-      .limit(8);
+      .limit(12);
     if (error) throw error;
-    return (data ?? []).map((row) => ({
+    const rows = (data ?? []) as Record<string, unknown>[];
+
+    // Resolve playbook names in one batched read (service role — the jobs
+    // are already scoped to this user, so their books are fair to name).
+    const bookIds = Array.from(new Set(rows.map((r) => r.playbook_id as string).filter(Boolean)));
+    const nameById = new Map<string, string>();
+    if (bookIds.length > 0) {
+      const { data: books } = await admin.from("playbooks").select("id, name").in("id", bookIds);
+      for (const b of (books ?? []) as { id: string; name: string | null }[]) {
+        nameById.set(b.id, b.name ?? "Untitled playbook");
+      }
+    }
+
+    return rows.map((row) => ({
       id: row.id as string,
       label: (row.label as string) ?? "Imported play",
       status: row.status as PhotoImportJobSummary["status"],
       hasMismatch: row.variant_mismatch != null,
+      playerCount: jobPlayerCount(row),
+      playbookId: row.playbook_id as string,
+      playbookName: nameById.get(row.playbook_id as string) ?? null,
       createdAt: row.created_at as string,
       updatedAt: row.updated_at as string,
     }));
