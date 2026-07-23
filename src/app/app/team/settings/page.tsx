@@ -14,11 +14,15 @@ export default async function TeamSettingsPage() {
   const [approvalRes, settingsRes] = await Promise.all([
     supabase
       .from("playbooks")
-      .select("roster_approval_required")
+      .select("roster_approval_required, plays_shared_with_players")
       .eq("id", team.id)
       .maybeSingle(),
     getPlaybookSettingsAction(team.id),
   ]);
+
+  const bookRow = approvalRes.data as
+    | { roster_approval_required?: boolean; plays_shared_with_players?: boolean }
+    | null;
 
   return (
     <SettingsClient
@@ -30,10 +34,8 @@ export default async function TeamSettingsPage() {
         logoUrl: team.logoUrl,
         sportVariant: team.sportVariant,
       }}
-      approvalRequired={
-        !!(approvalRes.data as { roster_approval_required?: boolean } | null)
-          ?.roster_approval_required
-      }
+      approvalRequired={!!bookRow?.roster_approval_required}
+      playsShared={bookRow?.plays_shared_with_players !== false}
       settings={settingsRes.ok ? settingsRes.settings : null}
       canManage={team.role === "owner"}
     />

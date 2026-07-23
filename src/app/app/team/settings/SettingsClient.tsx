@@ -18,6 +18,7 @@ import {
   updatePlaybookSettingsAction,
   updateRosterApprovalRequiredAction,
 } from "@/app/actions/playbooks";
+import { setPlaybookPlaysSharedAction } from "@/app/actions/plays";
 
 const PALETTE = [
   "#F26522", "#1769FF", "#7C3AED", "#0891B2",
@@ -37,11 +38,13 @@ type Res = { ok: true } | { ok: false; error: string };
 export function SettingsClient({
   team,
   approvalRequired,
+  playsShared,
   settings,
   canManage,
 }: {
   team: Team;
   approvalRequired: boolean;
+  playsShared: boolean;
   settings: PlaybookSettings | null;
   canManage: boolean;
 }) {
@@ -51,6 +54,7 @@ export function SettingsClient({
   const [season, setSeason] = useState(team.season ?? "");
   const [color, setColor] = useState(team.color ?? "#134e2a");
   const [approval, setApproval] = useState(approvalRequired);
+  const [sharePlays, setSharePlays] = useState(playsShared);
   const [logoUrl, setLogoUrl] = useState(team.logoUrl ?? "");
   const [rules, setRules] = useState<PlaybookSettings | null>(settings);
   const [error, setError] = useState<string | null>(null);
@@ -234,6 +238,41 @@ export function SettingsClient({
             <span
               className={`inline-block size-5 rounded-full bg-white shadow transition-transform ${
                 approval ? "translate-x-5" : "translate-x-0.5"
+              }`}
+            />
+          </button>
+        </div>
+      </Card>
+
+      {/* Share plays with players (Workstream 2 — master switch) */}
+      <Card label="Share plays with players" savedNow={saved === "playsShared"}>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-muted">
+            When off, players and parents see no plays — the app stays useful for
+            schedule and messages without exposing the playbook. You can still
+            share individual plays.
+          </p>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={sharePlays}
+            aria-label="Share plays with players"
+            disabled={pending}
+            onClick={() => {
+              const next = !sharePlays;
+              run(
+                "playsShared",
+                () => setPlaybookPlaysSharedAction(team.id, next),
+                () => setSharePlays(next),
+              );
+            }}
+            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+              sharePlays ? "bg-primary" : "bg-border"
+            }`}
+          >
+            <span
+              className={`inline-block size-5 rounded-full bg-white shadow transition-transform ${
+                sharePlays ? "translate-x-5" : "translate-x-0.5"
               }`}
             />
           </button>
