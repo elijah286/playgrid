@@ -87,6 +87,9 @@ export type PlaybookDetailPlayRow = {
   is_archived: boolean;
   play_type: PlayType;
   special_teams_unit: SpecialTeamsUnit | null;
+  /** Per-play viewer visibility (Workstream 2). Coaches see every play and use
+   *  this to render share state; viewers only ever receive shared rows (RLS). */
+  shared_with_players: boolean;
   preview: {
     players: Player[];
     routes: Route[];
@@ -121,7 +124,7 @@ export async function listPlaysAction(
   let playsQ = supabase
     .from("plays")
     .select(
-      "id, name, wristband_code, shorthand, concept, formation_name, tags, tag, group_id, sort_order, updated_at, current_version_id, is_archived, play_type, special_teams_unit",
+      "id, name, wristband_code, shorthand, concept, formation_name, tags, tag, group_id, sort_order, updated_at, current_version_id, is_archived, play_type, special_teams_unit, shared_with_players",
     )
     .eq("playbook_id", playbookId)
     .is("deleted_at", null)
@@ -221,6 +224,9 @@ export async function listPlaysAction(
       is_archived: Boolean(r.is_archived),
       play_type: ((r.play_type as PlayType | null) ?? "offense"),
       special_teams_unit: (r.special_teams_unit as SpecialTeamsUnit | null) ?? null,
+      // Defaults true so legacy rows (pre-migration) read as shared, matching
+      // the column default and today's all-visible behavior.
+      shared_with_players: (r.shared_with_players as boolean | null) ?? true,
       preview: vid ? previewByVersion.get(vid) ?? null : null,
       hasNotes: vid ? notesByVersion.get(vid) ?? false : false,
     };
@@ -1969,6 +1975,87 @@ export async function renamePlayAction(playId: string, name: string) {
   }
 
   return { ok: true as const };
+}
+
+/**
+ * Coach gate (owner OR editor) for a playbook, with a friendly error instead of
+ * a silent zero-row RLS reject. Mirrors setPlaybookMessagingEnabledAction's
+ * membership check but accepts editors too (sharing is an editor-level action).
+ */
+async function assertCanEditPlaybook(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  playbookId: string,
+  userId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { data: membership } = await supabase
+    .from("playbook_members")
+    .select("role")
+    .eq("playbook_id", playbookId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!membership || (membership.role !== "owner" && membership.role !== "editor")) {
+    return { ok: false, error: "Only a coach can change play sharing." };
+  }
+  return { ok: true };
+}
+
+/**
+ * Toggle whether a single play is visible to players/parents (viewer role).
+ * Workstream 2 (opt-in play sharing). Coach-gated; the RLS split enforces the
+ * viewer-side effect, this just flips the flag + revalidates.
+ */
+export async function setPlaySharedAction(playId: string, shared: boolean) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { data: play } = await supabase
+    .from("plays")
+    .select("playbook_id")
+    .eq("id", playId)
+    .maybeSingle();
+  const playbookId = play?.playbook_id as string | undefined;
+  if (!playbookId) return { ok: false as const, error: "Play not found." };
+
+  const gate = await assertCanEditPlaybook(supabase, playbookId, user.id);
+  if (!gate.ok) return { ok: false as const, error: gate.error };
+
+  const { error } = await supabase
+    .from("plays")
+    .update({ shared_with_players: shared })
+    .eq("id", playId);
+  if (error) return { ok: false as const, error: error.message };
+
+  revalidatePath(`/playbooks/${playbookId}`);
+  return { ok: true as const, shared };
+}
+
+/**
+ * Master switch: whether players/parents see any plays in this playbook.
+ * When false, viewers see NO plays regardless of per-play flags (RLS enforced).
+ */
+export async function setPlaybookPlaysSharedAction(playbookId: string, shared: boolean) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const gate = await assertCanEditPlaybook(supabase, playbookId, user.id);
+  if (!gate.ok) return { ok: false as const, error: gate.error };
+
+  const { error } = await supabase
+    .from("playbooks")
+    .update({ plays_shared_with_players: shared })
+    .eq("id", playbookId);
+  if (error) return { ok: false as const, error: error.message };
+
+  revalidatePath(`/playbooks/${playbookId}`);
+  return { ok: true as const, shared };
 }
 
 export async function archivePlayAction(playId: string, archived: boolean) {

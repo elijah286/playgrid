@@ -55,6 +55,15 @@ export const FEATURES: FeatureEntry[] = [
   },
   // ── Roster & sharing ─────────────────────────────────────────────
   {
+    id: "opt-in-play-sharing",
+    name: "Choose which plays players see",
+    description:
+      "Coaches decide what the team can see: share the whole playbook, none of it, or hand-pick individual plays. Players and parents only see the plays a coach has shared — so the app works for schedule and communication without exposing the playbook.",
+    category: "Roster & sharing",
+    status: "beta",
+    addedDate: "2026-07-23",
+  },
+  {
     id: "join-puts-you-on-roster",
     name: "Joining puts players on the roster",
     description:
