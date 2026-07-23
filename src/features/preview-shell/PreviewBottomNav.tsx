@@ -21,14 +21,19 @@ type Slot = {
 
 const SLOTS: Slot[] = [
   { href: "/app/home", label: "Home", Icon: Home, match: (p) => p === "/app/home" || p === "/app" },
-  { href: "/app/schedule", label: "Schedule", Icon: Calendar, match: (p) => p.startsWith("/app/schedule") },
+  { href: "/app/schedule", label: "Calendar", Icon: Calendar, match: (p) => p.startsWith("/app/schedule") },
   { href: "/coach-cal/chat", label: "Cal", Icon: Sparkles, match: () => false, center: true },
   { href: "/app/messages", label: "Messages", Icon: MessageCircle, match: (p) => p.startsWith("/app/messages") },
   { href: "/app/team", label: "Team", Icon: Users, match: (p) => p.startsWith("/app/team") },
 ];
 
-export function PreviewBottomNav() {
+export function PreviewBottomNav({ isCoach }: { isCoach: boolean }) {
   const pathname = usePathname() ?? "/app/home";
+  // Role-adaptive (Workstream 1): Cal is a coaching tool, so viewer-only users
+  // (players/parents — coach on no team) don't get the center Cal slot; the
+  // remaining four items re-center evenly. Everything else is identical, so a
+  // user's bar never reorders across screens — only differs by who they are.
+  const slots = SLOTS.filter((s) => isCoach || !s.center);
   return (
     <nav
       aria-label="Primary"
@@ -41,7 +46,7 @@ export function PreviewBottomNav() {
         paddingRight: "env(safe-area-inset-right, 0px)",
       }}
     >
-      {SLOTS.map((s) => {
+      {slots.map((s) => {
         const active = s.match(pathname);
         if (s.center) {
           // Opens Coach Cal as a floating/dockable dialog over the current

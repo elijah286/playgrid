@@ -34,6 +34,10 @@ export function PreviewChrome({
   footballLibraryAvailable: boolean;
   children: React.ReactNode;
 }) {
+  // "Coach anywhere?" — the single role signal (Workstream 1/3). A user is a
+  // coach if they own or edit ANY team; otherwise they're a pure viewer
+  // (player/parent) and the nav drops Cal. Same signal the role-aware Home uses.
+  const isCoach = teams.some((t) => t.role === "owner" || t.role === "editor");
   return (
     <div
       data-app-shell
@@ -93,7 +97,7 @@ export function PreviewChrome({
           </div>
           <nav className="min-h-0 flex-1 overflow-y-auto p-3">
             <PreviewSideNav />
-            <CalCta />
+            {isCoach && <CalCta />}
             <ExploreNav
               footballLibraryAvailable={footballLibraryAvailable}
               isAdmin={user.isAdmin}
@@ -112,7 +116,7 @@ export function PreviewChrome({
         </main>
       </div>
 
-      <PreviewBottomNav />
+      <PreviewBottomNav isCoach={isCoach} />
     </div>
   );
 }
