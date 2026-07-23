@@ -28,6 +28,7 @@ export type ScheduleEvent = {
   type: "practice" | "game" | "scrimmage" | "other";
   title: string;
   startsAt: string;
+  durationMinutes: number;
   opponent: string | null;
   homeAway: "home" | "away" | "neutral" | null;
   locationName: string | null;
@@ -529,7 +530,7 @@ function WeekView({
           setCursor(d);
         }}
       />
-      <div className="grid grid-cols-7 gap-1">
+      <div className="grid grid-cols-7 gap-1 sm:hidden">
         {dates.map((d) => {
           const evs = eventsByDay.get(dkey(d)) ?? [];
           const isToday = isSameDay(d, today);
@@ -550,12 +551,16 @@ function WeekView({
           );
         })}
       </div>
+      {/* Desktop (sm:+): an hourly time grid. Mobile: the day-grouped list. */}
+      <div className="hidden sm:block">
+        <WeekGrid dates={dates} eventsByDay={eventsByDay} />
+      </div>
       {empty ? (
-        <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">
+        <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted sm:hidden">
           Nothing scheduled this week.
         </p>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-4 sm:hidden">
           {dates.map((d) => {
             const evs = eventsByDay.get(dkey(d)) ?? [];
             if (evs.length === 0) return null;
@@ -574,6 +579,170 @@ function WeekView({
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+const HOUR_PX = 44;
+
+function hourLabel(h: number): string {
+  const hr = ((h + 11) % 12) + 1;
+  return `${hr} ${h < 12 ? "AM" : "PM"}`;
+}
+
+/** The [startHour, endHour) window to show, derived from the week's events and
+ *  clamped to a sensible minimum span. */
+function weekHourWindow(
+  dates: Date[],
+  eventsByDay: Map<string, ScheduleEvent[]>,
+): [number, number] {
+  let min = 8;
+  let max = 18;
+  let seen = false;
+  for (const d of dates) {
+    for (const e of eventsByDay.get(dkey(d)) ?? []) {
+      const s = new Date(e.startsAt);
+      const startH = s.getHours();
+      const end = new Date(s.getTime() + Math.max(e.durationMinutes, 30) * 60000);
+      const endH = end.getHours() + (end.getMinutes() > 0 ? 1 : 0);
+      if (!seen) {
+        min = startH;
+        max = endH;
+        seen = true;
+      } else {
+        min = Math.min(min, startH);
+        max = Math.max(max, endH);
+      }
+    }
+  }
+  min = Math.max(0, Math.min(min, 8));
+  max = Math.min(24, Math.max(max, min + 6));
+  return [min, max];
+}
+
+type Placed = { e: ScheduleEvent; lane: number; lanes: number };
+
+/** Greedy interval layout: overlapping events split into side-by-side lanes. */
+function layoutDay(evs: ScheduleEvent[]): Placed[] {
+  const sorted = [...evs].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  const laneEnd: number[] = [];
+  const rows = sorted.map((e) => {
+    const start = new Date(e.startsAt).getTime();
+    const end = start + Math.max(e.durationMinutes, 30) * 60000;
+    let lane = laneEnd.findIndex((le) => le <= start);
+    if (lane === -1) {
+      lane = laneEnd.length;
+      laneEnd.push(end);
+    } else {
+      laneEnd[lane] = end;
+    }
+    return { e, lane };
+  });
+  const lanes = Math.max(1, laneEnd.length);
+  return rows.map((r) => ({ ...r, lanes }));
+}
+
+/** Desktop-only hourly Week grid: 7 day-columns × hourly rows, events sized by
+ *  duration and colored by team, with a "now" line on today. Scan-only (RSVP
+ *  lives in the List/Month views). */
+function WeekGrid({
+  dates,
+  eventsByDay,
+}: {
+  dates: Date[];
+  eventsByDay: Map<string, ScheduleEvent[]>;
+}) {
+  const today = new Date();
+  const [startHour, endHour] = weekHourWindow(dates, eventsByDay);
+  const hours = Array.from({ length: endHour - startHour }, (_, i) => startHour + i);
+  const bodyHeight = hours.length * HOUR_PX;
+  const nowMinutes = today.getHours() * 60 + today.getMinutes();
+  const nowTop = ((nowMinutes - startHour * 60) / 60) * HOUR_PX;
+  const nowVisible = nowMinutes >= startHour * 60 && nowMinutes <= endHour * 60;
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-border">
+      <div className="flex min-w-[680px]">
+        <div className="w-12 shrink-0">
+          <div className="h-9 border-b border-border" />
+          <div className="relative" style={{ height: bodyHeight }}>
+            {hours.map((h, i) => (
+              <div
+                key={h}
+                className="absolute right-1 -translate-y-1/2 text-[10px] text-muted"
+                style={{ top: i * HOUR_PX }}
+              >
+                {i === 0 ? "" : hourLabel(h)}
+              </div>
+            ))}
+          </div>
+        </div>
+        {dates.map((d) => {
+          const isToday = isSameDay(d, today);
+          const placed = layoutDay(eventsByDay.get(dkey(d)) ?? []);
+          return (
+            <div key={dkey(d)} className="min-w-0 flex-1 border-l border-border">
+              <div className="flex h-9 items-center justify-center gap-1 border-b border-border text-xs font-bold">
+                <span className="text-muted">{WEEKDAY_INITIALS[d.getDay()]}</span>
+                <span
+                  className={`grid size-5 place-items-center rounded-full text-[11px] ${
+                    isToday ? "bg-primary text-white" : "text-foreground"
+                  }`}
+                >
+                  {d.getDate()}
+                </span>
+              </div>
+              <div className="relative" style={{ height: bodyHeight }}>
+                {hours.map((h, i) => (
+                  <div
+                    key={h}
+                    className="absolute inset-x-0 border-t border-border/50"
+                    style={{ top: i * HOUR_PX }}
+                    aria-hidden
+                  />
+                ))}
+                {isToday && nowVisible && (
+                  <div
+                    className="absolute inset-x-0 z-10 border-t-2 border-red-500"
+                    style={{ top: nowTop }}
+                    aria-hidden
+                  >
+                    <span className="absolute -left-0.5 -top-1 size-2 rounded-full bg-red-500" />
+                  </div>
+                )}
+                {placed.map(({ e, lane, lanes }) => {
+                  const s = new Date(e.startsAt);
+                  const top =
+                    ((s.getHours() * 60 + s.getMinutes() - startHour * 60) / 60) * HOUR_PX;
+                  const height = Math.max(
+                    (Math.max(e.durationMinutes, 30) / 60) * HOUR_PX,
+                    22,
+                  );
+                  const color = e.playbookColor || FALLBACK;
+                  return (
+                    <div
+                      key={`${e.id}:${e.occurrenceDate}`}
+                      className="absolute overflow-hidden rounded-md px-1.5 py-0.5 text-[10px] leading-tight"
+                      style={{
+                        top,
+                        height,
+                        left: `calc(${(100 / lanes) * lane}% + 1px)`,
+                        width: `calc(${100 / lanes}% - 2px)`,
+                        backgroundColor: `${color}22`,
+                        borderLeft: `3px solid ${color}`,
+                      }}
+                      title={`${headline(e)} · ${timeLabel(e.startsAt)}`}
+                    >
+                      <div className="truncate font-bold text-foreground">{headline(e)}</div>
+                      <div className="truncate text-muted">{timeLabel(e.startsAt)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

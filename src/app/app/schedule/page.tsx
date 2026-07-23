@@ -47,6 +47,7 @@ export default async function AppSchedulePage() {
       type: e.type,
       title: e.title,
       startsAt: e.startsAt,
+      durationMinutes: e.durationMinutes,
       opponent: e.opponent,
       homeAway: e.homeAway,
       locationName: e.location.name,
