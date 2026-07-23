@@ -42,7 +42,11 @@ export default async function TeamPlaysPage() {
             return (
               <div key={p.id} className="group relative">
                 <Link
-                  href={`/plays/${p.id}/edit`}
+                  // Coaches open the editor; viewers (players/parents) open the
+                  // read-only mobile play viewer — never the editor (Rule 14,
+                  // one read-only render path). RLS already limits viewers to
+                  // shared plays, so this only ever routes shared plays.
+                  href={canEdit ? `/plays/${p.id}/edit` : `/m/play/${p.id}`}
                   className={`block rounded-xl p-1.5 transition-colors hover:bg-surface-inset ${
                     hidden ? "opacity-60" : ""
                   }`}
