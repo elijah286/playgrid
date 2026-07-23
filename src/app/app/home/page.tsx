@@ -41,6 +41,7 @@ export default async function AppHomePage() {
     color: t.color,
     logoUrl: t.logoUrl,
     season: t.season,
+    role: t.role,
   }));
 
   const nowMs = Date.now();

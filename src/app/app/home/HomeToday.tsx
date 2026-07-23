@@ -12,6 +12,7 @@ import {
   MapPin,
   MessageCircle,
   Plus,
+  Sparkles,
   UserPlus,
   Users,
 } from "lucide-react";
@@ -25,6 +26,7 @@ export type HomeTeam = {
   color: string | null;
   logoUrl: string | null;
   season: string | null;
+  role: "owner" | "editor" | "viewer";
 };
 
 export type TodayEvent = {
@@ -133,6 +135,11 @@ export function HomeToday({
     });
   };
 
+  // "Coach anywhere?" — owns/edits any team. Drives the whole role-aware layout
+  // (same signal as the nav): coaches lead with their books + get quick actions;
+  // viewers lead with the spine and get the soft "start a playbook" on-ramp.
+  const isCoach = teams.some((t) => t.role === "owner" || t.role === "editor");
+
   return (
     // Dashboard: kept at a tidy width so the list-style cards don't stretch,
     // even though the shell now allows wider (the play grid uses that room).
@@ -148,60 +155,17 @@ export function HomeToday({
         </div>
       )}
 
-      {/* Your teams — the direct way into a playbook's plays/roster. */}
-      <section>
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-[11px] font-bold uppercase tracking-wide text-muted">
-            Your teams
-          </h2>
-          {pending && <Loader2 className="size-3.5 animate-spin text-muted" aria-hidden />}
-        </div>
-        {teams.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted">
-            No teams yet.{" "}
-            <button
-              type="button"
-              onClick={() => setCreating(true)}
-              className="font-semibold text-primary hover:underline"
-            >
-              Create a team
-            </button>
-            .
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-            {teams.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => openTeam(t.id)}
-                disabled={pending}
-                className="group relative flex items-center gap-3 overflow-hidden rounded-xl border border-border bg-surface-raised py-3 pl-4 pr-3 text-left shadow-sm transition-colors hover:bg-surface-inset disabled:opacity-60"
-              >
-                {/* Team-color accent — the identity the flat chips had lost. */}
-                <span
-                  className="absolute inset-y-0 left-0 w-1.5"
-                  style={{ backgroundColor: t.color || FALLBACK }}
-                  aria-hidden
-                />
-                <TeamCardMark team={t} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-bold text-foreground">
-                    {t.name}
-                  </span>
-                  <span className="block truncate text-[11px] text-muted">
-                    {t.season || "Open team"}
-                  </span>
-                </span>
-                <ChevronRight
-                  className="size-4 shrink-0 text-muted transition-transform group-hover:translate-x-0.5"
-                  aria-hidden
-                />
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
+      {/* Coach: teams/playbook shelf leads (their books are the hero). Viewer:
+          teams render BELOW the spine (schedule + updates come first). */}
+      {isCoach && (
+        <TeamsSection
+          teams={teams}
+          pending={pending}
+          heading="Your teams"
+          onOpen={openTeam}
+          onCreate={() => setCreating(true)}
+        />
+      )}
 
       {/* Up next & Needs you sit side by side on wide screens (single column
           on mobile) — the dashboard uses the width instead of stacking. */}
@@ -329,19 +293,35 @@ export function HomeToday({
       </section>
       </div>
 
-      {/* Quick actions */}
-      <section>
-        <h2 className="mb-2 text-[11px] font-bold uppercase tracking-wide text-muted">
-          Quick actions
-        </h2>
-        <div className="flex flex-wrap gap-2">
-          <QuickAction href="/app/schedule" Icon={Plus} label="New event" />
-          <QuickAction href="/app/messages" Icon={MessageCircle} label="Message team" />
-          <QuickAction href="/app/team/roster" Icon={UserPlus} label="Add player" />
-          <QuickAction href="/app/schedule" Icon={Calendar} label="Schedule" />
-          <QuickAction href="/app/team/roster" Icon={Users} label="Roster" />
-        </div>
-      </section>
+      {/* Viewer: their team(s) + the soft coaching on-ramp sit BELOW the spine. */}
+      {!isCoach && (
+        <>
+          <TeamsSection
+            teams={teams}
+            pending={pending}
+            heading={teams.length === 1 ? "Your team" : "Your teams"}
+            onOpen={openTeam}
+            onCreate={() => setCreating(true)}
+          />
+          <StartCoachingCta onStart={() => setCreating(true)} />
+        </>
+      )}
+
+      {/* Quick actions — coach-only (new event, add player, …). */}
+      {isCoach && (
+        <section>
+          <h2 className="mb-2 text-[11px] font-bold uppercase tracking-wide text-muted">
+            Quick actions
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            <QuickAction href="/app/schedule" Icon={Plus} label="New event" />
+            <QuickAction href="/app/messages" Icon={MessageCircle} label="Message team" />
+            <QuickAction href="/app/team/roster" Icon={UserPlus} label="Add player" />
+            <QuickAction href="/app/schedule" Icon={Calendar} label="Schedule" />
+            <QuickAction href="/app/team/roster" Icon={Users} label="Roster" />
+          </div>
+        </section>
+      )}
 
       {creating && <CreateTeamSheet onClose={() => setCreating(false)} />}
     </div>
@@ -384,5 +364,97 @@ function TeamCardMark({ team }: { team: HomeTeam }) {
         team.name.trim().charAt(0).toUpperCase()
       )}
     </span>
+  );
+}
+
+/** The teams grid — a coach's playbook shelf (rendered on top for coaches) and a
+ *  viewer's way into their team/shared playbook (rendered below the spine).
+ *  Same component both places so the identity marks + colors stay consistent. */
+function TeamsSection({
+  teams,
+  pending,
+  heading,
+  onOpen,
+  onCreate,
+}: {
+  teams: HomeTeam[];
+  pending: boolean;
+  heading: string;
+  onOpen: (id: string) => void;
+  onCreate: () => void;
+}) {
+  return (
+    <section>
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="text-[11px] font-bold uppercase tracking-wide text-muted">{heading}</h2>
+        {pending && <Loader2 className="size-3.5 animate-spin text-muted" aria-hidden />}
+      </div>
+      {teams.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted">
+          No teams yet.{" "}
+          <button
+            type="button"
+            onClick={onCreate}
+            className="font-semibold text-primary hover:underline"
+          >
+            Create a team
+          </button>
+          .
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+          {teams.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => onOpen(t.id)}
+              disabled={pending}
+              className="group relative flex items-center gap-3 overflow-hidden rounded-xl border border-border bg-surface-raised py-3 pl-4 pr-3 text-left shadow-sm transition-colors hover:bg-surface-inset disabled:opacity-60"
+            >
+              <span
+                className="absolute inset-y-0 left-0 w-1.5"
+                style={{ backgroundColor: t.color || FALLBACK }}
+                aria-hidden
+              />
+              <TeamCardMark team={t} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-bold text-foreground">{t.name}</span>
+                <span className="block truncate text-[11px] text-muted">
+                  {t.season || "Open team"}
+                </span>
+              </span>
+              <ChevronRight
+                className="size-4 shrink-0 text-muted transition-transform group-hover:translate-x-0.5"
+                aria-hidden
+              />
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** Viewer-only on-ramp (Workstream 6): a calm, opt-in nudge to create their own
+ *  playbook. Creating one makes them an owner → "coach anywhere?" flips true and
+ *  the full coach layout unlocks automatically. Never pushed into the nav. */
+function StartCoachingCta({ onStart }: { onStart: () => void }) {
+  return (
+    <section className="rounded-2xl border border-primary/40 bg-gradient-to-br from-primary-light/60 to-transparent p-4">
+      <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+        <Sparkles className="size-4 text-primary" aria-hidden />
+        Coach a team of your own?
+      </div>
+      <p className="mt-1 text-xs text-muted">
+        Build a free playbook — the full designer and coaching toolset, in about two minutes.
+      </p>
+      <button
+        type="button"
+        onClick={onStart}
+        className="mt-3 inline-flex w-full items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-primary-dark sm:w-auto sm:px-6"
+      >
+        Start a playbook
+      </button>
+    </section>
   );
 }
