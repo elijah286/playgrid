@@ -1,4 +1,5 @@
 import { Calendar, ListChecks, MessageCircle, MoreHorizontal } from "lucide-react";
+import { DEFAULT_PLAYBOOK_ACCENT } from "@/lib/ui/playbook-accent";
 
 /**
  * Route-level loading UI shown by Next.js while the editor's server
@@ -23,7 +24,7 @@ export default function EditorLoading() {
       <div className="sticky top-0 z-30 -mx-6 bg-surface px-6 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] sm:hidden">
         <div
           className="-mx-6 flex items-center gap-2 px-4 py-3"
-          style={{ backgroundColor: "#F26522" }}
+          style={{ backgroundColor: DEFAULT_PLAYBOOK_ACCENT }}
         >
           <div className="size-9 rounded-lg bg-white/20" aria-hidden />
           <div className="size-9 rounded-lg bg-white/30" aria-hidden />

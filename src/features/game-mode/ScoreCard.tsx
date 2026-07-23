@@ -3,25 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import type { LiveScoreEvent } from "./live-session-types";
+import { isLightAccent } from "@/lib/ui/playbook-accent";
 
 type Side = "us" | "them";
-
-function hexLuminance(hex: string): number {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
-  if (!m) return 0.5;
-  const n = parseInt(m[1], 16);
-  const r = ((n >> 16) & 0xff) / 255;
-  const g = ((n >> 8) & 0xff) / 255;
-  const b = (n & 0xff) / 255;
-  const toLin = (c: number) =>
-    c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-  return 0.2126 * toLin(r) + 0.7152 * toLin(g) + 0.0722 * toLin(b);
-}
 
 /** Pick a legible on-accent text color (white or near-black) for a given
  *  background hex. Matches the rule used by the playbook header. */
 function onAccentText(hex: string): string {
-  return hexLuminance(hex) > 0.55 ? "#0f172a" : "#ffffff";
+  return isLightAccent(hex) ? "#0f172a" : "#ffffff";
 }
 
 export function ScoreCard({
@@ -64,7 +53,7 @@ export function ScoreCard({
   // Opponent tile: dark slate if the accent is light, else a bright
   // off-white — always the opposite luminance family from "us" so they
   // read as two separate teams at a glance.
-  const themBg = hexLuminance(accentColor) > 0.55 ? "#1f2937" : "#e5e7eb";
+  const themBg = isLightAccent(accentColor) ? "#1f2937" : "#e5e7eb";
   const themFg = onAccentText(themBg);
 
   return (

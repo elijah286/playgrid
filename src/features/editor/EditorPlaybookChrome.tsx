@@ -9,6 +9,7 @@ import { InboxBell } from "@/components/layout/InboxBell";
 import { useOfflineGate } from "@/components/offline/OfflineGate";
 import { useOfflineLogo } from "@/lib/offline/useOfflineLogo";
 import { BackIcon } from "@/components/ui/LinkPendingSpinner";
+import { accentUi, DEFAULT_PLAYBOOK_ACCENT } from "@/lib/ui/playbook-accent";
 
 /**
  * Slim chrome banner for the play editor — mirrors the colored playbook
@@ -59,12 +60,9 @@ export function EditorPlaybookChrome({
   // Only a data: URL needs the plain <img>; next/image can't optimize those (and
   // offline there's no optimizer to reach anyway).
   const logoIsInlined = effectiveLogoUrl?.startsWith("data:") ?? false;
-  const accentColor = playbookColor || "#F26522";
-  const isLightBg = hexLuminance(accentColor) > 0.55;
-  const onAccent = isLightBg ? "text-slate-900" : "text-white";
-  const onAccentMuted = isLightBg ? "text-slate-700" : "text-white/80";
-  const onAccentHover = isLightBg ? "hover:bg-black/10" : "hover:bg-white/15";
-  const gradient = `linear-gradient(135deg, ${accentColor} 0%, ${accentColor}dd 55%, ${accentColor}a8 100%)`;
+  const accentColor = playbookColor || DEFAULT_PLAYBOOK_ACCENT;
+  const { isLightBg, onAccent, onAccentMuted, onAccentHover, gradient } =
+    accentUi(accentColor);
   const initial = (playbookName ?? "P").trim().charAt(0).toUpperCase();
   const variantLabel =
     playbookVariant && playbookVariant in SPORT_VARIANT_LABELS
@@ -178,16 +176,4 @@ export function EditorPlaybookChrome({
       </div>
     </div>
   );
-}
-
-function hexLuminance(hex: string): number {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
-  if (!m) return 0.5;
-  const n = parseInt(m[1], 16);
-  const r = ((n >> 16) & 0xff) / 255;
-  const g = ((n >> 8) & 0xff) / 255;
-  const b = (n & 0xff) / 255;
-  const toLin = (c: number) =>
-    c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-  return 0.2126 * toLin(r) + 0.7152 * toLin(g) + 0.0722 * toLin(b);
 }

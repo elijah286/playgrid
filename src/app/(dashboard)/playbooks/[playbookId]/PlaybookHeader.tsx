@@ -65,6 +65,7 @@ import { isNativeApp } from "@/lib/native/isNativeApp";
 import { track } from "@/lib/analytics/track";
 import { tagShareUrl } from "@/lib/share/tag-url";
 import { firstNameCased } from "@/lib/format/name";
+import { accentUi } from "@/lib/ui/playbook-accent";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com";
 
@@ -89,17 +90,6 @@ function rulesSummary(s: PlaybookSettings): string {
   if (s.blockingAllowed) parts.push("blocking");
   if (s.centerIsEligible) parts.push("center eligible");
   return parts.join(" · ");
-}
-
-function hexLuminance(hex: string): number {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
-  if (!m) return 0.5;
-  const n = parseInt(m[1], 16);
-  const r = ((n >> 16) & 0xff) / 255;
-  const g = ((n >> 8) & 0xff) / 255;
-  const b = (n & 0xff) / 255;
-  const toLin = (c: number) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
-  return 0.2126 * toLin(r) + 0.7152 * toLin(g) + 0.0722 * toLin(b);
 }
 
 export type PlaybookHeaderPlayActions = {
@@ -483,11 +473,8 @@ export function PlaybookHeader({
     run(() => setPlaybookHeroExampleAction(playbookId, next));
   }
 
-  const isLightBg = hexLuminance(accentColor) > 0.55;
-  const onAccent = isLightBg ? "text-slate-900" : "text-white";
-  const onAccentMuted = isLightBg ? "text-slate-700" : "text-white/80";
-  const onAccentHover = isLightBg ? "hover:bg-black/10" : "hover:bg-white/15";
-  const gradient = `linear-gradient(135deg, ${accentColor} 0%, ${accentColor}dd 55%, ${accentColor}a8 100%)`;
+  const { isLightBg, onAccent, onAccentMuted, onAccentHover, gradient } =
+    accentUi(accentColor);
   const initial = name.trim().charAt(0).toUpperCase();
   const homeHref = isExamplePreview ? "/examples" : "/home";
 

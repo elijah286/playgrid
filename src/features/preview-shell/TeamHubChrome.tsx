@@ -11,6 +11,7 @@ import {
   Trophy,
   Users,
 } from "lucide-react";
+import { isLightAccent } from "@/lib/ui/playbook-accent";
 
 const FALLBACK = "#134e2a";
 
@@ -22,15 +23,6 @@ const TABS = [
   { href: "/app/team/formations", label: "Formations", Icon: Layers },
   { href: "/app/team/settings", label: "Settings", Icon: Settings },
 ];
-
-function hexLuminance(hex: string): number {
-  const m = hex.replace("#", "");
-  if (m.length < 6) return 0.3;
-  const r = parseInt(m.slice(0, 2), 16) / 255;
-  const g = parseInt(m.slice(2, 4), 16) / 255;
-  const b = parseInt(m.slice(4, 6), 16) / 255;
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
 
 /** Shared Team-hub chrome: the team-identity banner + the sub-nav, wrapping
  *  every /app/team/* screen so the team context is constant across them. */
@@ -49,7 +41,7 @@ export function TeamHubChrome({
 }) {
   const pathname = usePathname() ?? "/app/team";
   const color = team.color || FALLBACK;
-  const onColor = hexLuminance(color) > 0.6 ? "text-slate-900" : "text-white";
+  const onColor = isLightAccent(color) ? "text-slate-900" : "text-white";
 
   return (
     // Fluid: the team hub fills the shell width so the plays/formations grids
