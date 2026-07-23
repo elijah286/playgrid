@@ -5,6 +5,7 @@ import { listPlaysAction } from "@/app/actions/plays";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
 import { LoadError } from "@/features/preview-shell/LoadError";
 import { NewPlayButton } from "./NewPlayButton";
+import { PlayShareToggle } from "./PlayShareToggle";
 
 /** Team → Plays (default). The team's play library over real data; each card
  *  opens the existing full-screen play editor. */
@@ -34,30 +35,39 @@ export default async function TeamPlaysPage() {
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {plays.map((p) => (
-            <Link
-              key={p.id}
-              href={`/plays/${p.id}/edit`}
-              className="group block rounded-xl p-1.5 transition-colors hover:bg-surface-inset"
-            >
-              {p.preview ? (
-                // The real diagram — same canonical thumbnail the production
-                // playbook grid renders (pure SVG, no extra query: the preview
-                // ships with listPlaysAction). `thin` for the smaller card.
-                <PlayThumbnail preview={p.preview} thin />
-              ) : (
-                <div className="grid aspect-[16/10] w-full place-items-center rounded-lg border border-border bg-field/90">
-                  <ListChecks className="size-6 text-white/70" aria-hidden />
-                </div>
-              )}
-              <div className="px-1 pt-1.5">
-                <div className="truncate text-xs font-bold text-foreground">{p.name}</div>
-                {p.formation_name && (
-                  <div className="truncate text-[11px] text-muted">{p.formation_name}</div>
-                )}
+          {plays.map((p) => {
+            // Coaches see hidden plays dimmed + toggleable; viewers never
+            // receive an unshared row (RLS), so this only ever dims for coaches.
+            const hidden = canEdit && !p.shared_with_players;
+            return (
+              <div key={p.id} className="group relative">
+                <Link
+                  href={`/plays/${p.id}/edit`}
+                  className={`block rounded-xl p-1.5 transition-colors hover:bg-surface-inset ${
+                    hidden ? "opacity-60" : ""
+                  }`}
+                >
+                  {p.preview ? (
+                    // The real diagram — same canonical thumbnail the production
+                    // playbook grid renders (pure SVG, no extra query: the preview
+                    // ships with listPlaysAction). `thin` for the smaller card.
+                    <PlayThumbnail preview={p.preview} thin />
+                  ) : (
+                    <div className="grid aspect-[16/10] w-full place-items-center rounded-lg border border-border bg-field/90">
+                      <ListChecks className="size-6 text-white/70" aria-hidden />
+                    </div>
+                  )}
+                  <div className="px-1 pt-1.5">
+                    <div className="truncate text-xs font-bold text-foreground">{p.name}</div>
+                    {p.formation_name && (
+                      <div className="truncate text-[11px] text-muted">{p.formation_name}</div>
+                    )}
+                  </div>
+                </Link>
+                {canEdit && <PlayShareToggle playId={p.id} shared={p.shared_with_players} />}
               </div>
-            </Link>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>
