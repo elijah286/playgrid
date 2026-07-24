@@ -175,7 +175,11 @@ export function PreviewChrome({
           className={
             isFocusedThread
               ? "min-h-0 flex-1 overflow-hidden sm:p-6"
-              : "min-h-0 flex-1 overflow-y-auto px-4 pb-24 pt-4 sm:px-6 sm:pb-10"
+              : // Bottom clearance for the fixed nav (~48px) + protruding Cal
+                // button + the home-indicator safe area, so the last row never
+                // jams under the nav on a notched phone (plain pb-24 didn't
+                // account for the inset). Desktop has no nav → sm:pb-10.
+                "min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(6rem+env(safe-area-inset-bottom,0px))] pt-4 sm:px-6 sm:pb-10"
           }
         >
           <div
