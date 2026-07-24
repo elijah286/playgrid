@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -15,8 +16,6 @@ import {
 } from "lucide-react";
 import { EventSheet } from "@/features/calendar/EventSheet";
 import { setRsvpAction, clearRsvpAction } from "@/app/actions/calendar";
-import { setSelectedTeamAction } from "@/app/actions/app-shell";
-import { ALL_TEAMS } from "@/features/preview-shell/selected-team";
 
 export type ScheduleTeam = { id: string; name: string; color: string | null };
 export type ScheduleEvent = {
@@ -120,22 +119,59 @@ function mapsHref(e: ScheduleEvent): string | null {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
 }
 
+const TEAMS_STORAGE_KEY = "app.schedule.teams";
+
 export function ScheduleClient({
   events: initialEvents,
   teams,
   coachable,
-  selected,
 }: {
   events: ScheduleEvent[];
   teams: ScheduleTeam[];
   coachable: ScheduleTeam[];
-  selected: string;
 }) {
   const router = useRouter();
   const [events, setEvents] = useState(initialEvents);
   const [pending, startTransition] = useTransition();
   const [sheetTeam, setSheetTeam] = useState<string | null>(null);
   const [pickTeam, setPickTeam] = useState(false);
+
+  // Which teams' events are visible — a client-side multi-select (Calendar owns
+  // its own team scope). Defaults to ALL; the last selection persists. A team
+  // that no longer exists is dropped; an empty set falls back to all.
+  const allIds = useMemo(() => teams.map((t) => t.id), [teams]);
+  const [visibleTeams, setVisibleTeams] = useState<Set<string>>(() => new Set(allIds));
+  useEffect(() => {
+    let restored: string[] | null = null;
+    try {
+      const raw = localStorage.getItem(TEAMS_STORAGE_KEY);
+      if (raw) restored = JSON.parse(raw) as string[];
+    } catch {
+      /* ignore */
+    }
+    const valid = restored?.filter((id) => allIds.includes(id)) ?? [];
+    setVisibleTeams(valid.length > 0 ? new Set(valid) : new Set(allIds));
+    // allIds identity changes only when the team list does — safe to re-run then.
+  }, [allIds]);
+
+  const persistTeams = (next: Set<string>) => {
+    setVisibleTeams(next);
+    try {
+      localStorage.setItem(TEAMS_STORAGE_KEY, JSON.stringify([...next]));
+    } catch {
+      /* private mode — non-fatal */
+    }
+  };
+  const allVisible = visibleTeams.size === allIds.length;
+  const toggleTeam = (id: string) => {
+    const next = new Set(visibleTeams);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    // Never let the filter go fully empty (that would hide everything) — an
+    // empty pick reads as "all", matching the "All teams" affordance.
+    persistTeams(next.size === 0 ? new Set(allIds) : next);
+  };
+  const showAllTeams = () => persistTeams(new Set(allIds));
 
   // View switcher (Month · Week · List) — an axis independent of the team
   // filter chips; both apply together. Choice persists across visits.
@@ -153,14 +189,6 @@ export function ScheduleClient({
     } catch {
       /* private mode — non-fatal */
     }
-  };
-
-  const pickChip = (value: string) => {
-    if (value === selected) return;
-    startTransition(async () => {
-      await setSelectedTeamAction(value);
-      router.refresh();
-    });
   };
 
   const rsvp = (e: ScheduleEvent, status: "yes" | "maybe" | "no") => {
@@ -186,73 +214,81 @@ export function ScheduleClient({
   };
 
   const startNewEvent = () => {
-    if (selected !== ALL_TEAMS) setSheetTeam(selected);
+    // Prefer a single visible coachable team; else the only coachable team;
+    // else ask which team the event is for.
+    const visibleCoachable = coachable.filter((t) => visibleTeams.has(t.id));
+    if (visibleCoachable.length === 1) setSheetTeam(visibleCoachable[0]!.id);
     else if (coachable.length === 1) setSheetTeam(coachable[0]!.id);
     else setPickTeam(true);
   };
 
+  // Only the events for the teams the multi-select currently shows.
+  const shownEvents = useMemo(
+    () => events.filter((e) => visibleTeams.has(e.playbookId)),
+    [events, visibleTeams],
+  );
+
   const days = useMemo(() => {
     const buckets = new Map<string, ScheduleEvent[]>();
-    for (const e of [...events].sort((a, b) => a.startsAt.localeCompare(b.startsAt))) {
+    for (const e of [...shownEvents].sort((a, b) => a.startsAt.localeCompare(b.startsAt))) {
       const k = dayKey(e.startsAt);
       const arr = buckets.get(k) ?? [];
       arr.push(e);
       buckets.set(k, arr);
     }
     return [...buckets.values()];
-  }, [events]);
+  }, [shownEvents]);
 
   // Per-day map (Month/Week views). Keyed by local day; each day's events sorted.
   const eventsByDay = useMemo(() => {
     const m = new Map<string, ScheduleEvent[]>();
-    for (const e of [...events].sort((a, b) => a.startsAt.localeCompare(b.startsAt))) {
+    for (const e of [...shownEvents].sort((a, b) => a.startsAt.localeCompare(b.startsAt))) {
       const k = dayKey(e.startsAt);
       const arr = m.get(k) ?? [];
       arr.push(e);
       m.set(k, arr);
     }
     return m;
-  }, [events]);
+  }, [shownEvents]);
 
   const canCreate = coachable.length > 0;
+  // Hide the per-row team pill only when exactly one team is shown (it's then
+  // redundant); with several teams visible the colored pill disambiguates.
+  const scoped = visibleTeams.size === 1;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <div className="flex items-center justify-between gap-3">
+    // Full width on desktop so the Month/Week grids use the room; the list view
+    // caps itself to a readable column below.
+    <div className="mx-auto w-full max-w-2xl space-y-4 lg:max-w-none">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-extrabold tracking-tight text-foreground">Calendar</h1>
-        {canCreate && (
-          <button
-            type="button"
-            onClick={startNewEvent}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-bold text-white transition-colors hover:bg-primary-hover"
-          >
-            <Plus className="size-4" aria-hidden />
-            New event
-          </button>
-        )}
-      </div>
-
-      {/* Team filter chips (mirror the switcher pill) */}
-      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-        <Chip active={selected === ALL_TEAMS} onClick={() => pickChip(ALL_TEAMS)} label="All teams" />
-        {teams.map((t) => (
-          <Chip
-            key={t.id}
-            active={selected === t.id}
-            onClick={() => pickChip(t.id)}
-            label={t.name}
-            color={t.color}
+        <div className="flex items-center gap-2">
+          <TeamMultiSelect
+            teams={teams}
+            visible={visibleTeams}
+            allVisible={allVisible}
+            onToggle={toggleTeam}
+            onAll={showAllTeams}
           />
-        ))}
-        {pending && <Loader2 className="size-4 shrink-0 animate-spin self-center text-muted" aria-hidden />}
+          <ViewSwitch view={view} onChange={changeView} />
+          {canCreate && (
+            <button
+              type="button"
+              onClick={startNewEvent}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-bold text-white transition-colors hover:bg-primary-hover"
+            >
+              <Plus className="size-4" aria-hidden />
+              New event
+            </button>
+          )}
+          {pending && <Loader2 className="size-4 shrink-0 animate-spin text-muted" aria-hidden />}
+        </div>
       </div>
-
-      <ViewSwitch view={view} onChange={changeView} />
 
       {view === "list" &&
         (days.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted">
-            Nothing scheduled{selected !== ALL_TEAMS ? " for this team" : ""}.
+          <div className="mx-auto max-w-2xl rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted">
+            Nothing scheduled{scoped ? " for this team" : ""}.
             {canCreate && (
               <>
                 {" "}
@@ -264,7 +300,7 @@ export function ScheduleClient({
             )}
           </div>
         ) : (
-          <div className="space-y-5">
+          <div className="mx-auto max-w-2xl space-y-5">
             {days.map((group) => (
               <section key={dayKey(group[0]!.startsAt)}>
                 <h2 className="mb-2 text-[11px] font-bold uppercase tracking-wide text-muted">
@@ -275,7 +311,7 @@ export function ScheduleClient({
                     <EventRow
                       key={`${e.id}:${e.occurrenceDate}`}
                       e={e}
-                      scoped={selected !== ALL_TEAMS}
+                      scoped={scoped}
                       onRsvp={rsvp}
                     />
                   ))}
@@ -292,7 +328,7 @@ export function ScheduleClient({
           eventsByDay={eventsByDay}
           selectedDay={selectedDay}
           setSelectedDay={setSelectedDay}
-          scoped={selected !== ALL_TEAMS}
+          scoped={scoped}
           onRsvp={rsvp}
         />
       )}
@@ -302,7 +338,7 @@ export function ScheduleClient({
           cursor={cursor}
           setCursor={setCursor}
           eventsByDay={eventsByDay}
-          scoped={selected !== ALL_TEAMS}
+          scoped={scoped}
           onRsvp={rsvp}
         />
       )}
@@ -849,30 +885,114 @@ function RsvpBtn({
   );
 }
 
-function Chip({
-  active,
-  onClick,
-  label,
-  color,
+/** Multi-select team filter — a dropdown of color-swatched checkboxes plus an
+ *  "All teams" select-all. Replaces the old scrollable single-select chips so
+ *  the Calendar can overlay any subset of teams. */
+function TeamMultiSelect({
+  teams,
+  visible,
+  allVisible,
+  onToggle,
+  onAll,
 }: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  color?: string | null;
+  teams: ScheduleTeam[];
+  visible: Set<string>;
+  allVisible: boolean;
+  onToggle: (id: string) => void;
+  onAll: () => void;
 }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  const label = allVisible
+    ? "All teams"
+    : visible.size === 1
+      ? teams.find((t) => visible.has(t.id))?.name ?? "1 team"
+      : `${visible.size} teams`;
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-colors ${
-        active
-          ? "border-foreground bg-foreground text-surface"
-          : "border-border bg-surface-raised text-muted hover:text-foreground"
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface-raised px-3 py-1.5 text-sm font-bold text-foreground transition-colors hover:bg-surface-inset"
+      >
+        <span className="max-w-[40vw] truncate sm:max-w-[12rem]">{label}</span>
+        <ChevronDown className="size-3.5 shrink-0 text-muted" aria-hidden />
+      </button>
+
+      {open && (
+        <>
+          <button
+            type="button"
+            aria-label="Close"
+            className="fixed inset-0 z-40"
+            onClick={() => setOpen(false)}
+          />
+          <div
+            role="menu"
+            aria-label="Show teams"
+            className="absolute left-0 top-full z-50 mt-2 w-64 rounded-2xl border border-border bg-surface-raised p-1.5 shadow-elevated"
+          >
+            <button
+              type="button"
+              role="menuitemcheckbox"
+              aria-checked={allVisible}
+              onClick={onAll}
+              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-surface-inset"
+            >
+              <Checkbox checked={allVisible} />
+              <span className="flex-1 font-semibold text-foreground">All teams</span>
+            </button>
+            <div className="mt-1 max-h-64 overflow-y-auto border-t border-border pt-1">
+              {teams.map((t) => {
+                const on = visible.has(t.id);
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="menuitemcheckbox"
+                    aria-checked={on}
+                    onClick={() => onToggle(t.id)}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-surface-inset"
+                  >
+                    <Checkbox checked={on} />
+                    <span
+                      className="size-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: t.color || FALLBACK }}
+                      aria-hidden
+                    />
+                    <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+                      {t.name}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function Checkbox({ checked }: { checked: boolean }) {
+  return (
+    <span
+      className={`grid size-4 shrink-0 place-items-center rounded border transition-colors ${
+        checked ? "border-primary bg-primary text-white" : "border-border bg-surface"
       }`}
+      aria-hidden
     >
-      {color && <span className="size-2 rounded-full" style={{ backgroundColor: color }} aria-hidden />}
-      {label}
-    </button>
+      {checked && <Check className="size-3" />}
+    </span>
   );
 }
 

@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BookOpen, GraduationCap, Layers, Shield, Sparkles } from "lucide-react";
@@ -59,22 +58,29 @@ export function PreviewChrome({
         <div className="flex min-w-0 items-center gap-3">
           <Link
             href="/app/home"
-            className="flex shrink-0 items-center gap-2"
+            className="flex shrink-0 cursor-pointer items-center text-[#06255E] dark:text-foreground"
             aria-label="XO Gridmaker home"
           >
-            <Image
-              src="/brand/xogridmaker_monogram.svg"
-              alt=""
-              // The monogram is a wide 900×380 mark — size by height and let the
-              // width follow (h-7 w-auto) so it isn't squished into a square.
-              width={66}
-              height={28}
+            {/* The official wordmark — one "xogridmaker" token, x=#1769FF,
+                o=#95CC1F, "gridmaker" inherits currentColor for dark mode.
+                Matches the production SiteHeader exactly (no monogram + repeated
+                "XO Gridmaker" text). */}
+            <svg
+              viewBox="0 0 1600 320"
+              role="img"
+              aria-label="XO Gridmaker"
               className="h-7 w-auto"
-              unoptimized
-            />
-            <span className="text-sm font-black tracking-tight text-foreground">
-              XO Gridmaker
-            </span>
+            >
+              <text
+                y="210"
+                fontFamily='"DejaVu Sans", Arial, sans-serif'
+                fontSize="150"
+                fontStyle="oblique"
+                fontWeight="700"
+              >
+                <tspan x="278.24" fill="#1769FF">x</tspan><tspan x="378.68" fill="#95CC1F">o</tspan><tspan x="473.44" fill="currentColor">gridmaker</tspan>
+              </text>
+            </svg>
           </Link>
         </div>
         <div className="flex items-center gap-1">

@@ -1,8 +1,4 @@
 import { listUpcomingEventsAcrossPlaybooksAction } from "@/app/actions/calendar";
-import {
-  readSelectedTeam,
-  ALL_TEAMS,
-} from "@/features/preview-shell/selected-team-server";
 import { listShellTeams } from "@/features/preview-shell/team-context";
 import {
   ScheduleClient,
@@ -12,11 +8,12 @@ import {
 
 /**
  * One unified Schedule — the same events the production calendar shows
- * (listUpcomingEventsAcrossPlaybooksAction), scoped by the carried team via
- * filter chips. RSVP + create write through the SAME existing actions.
+ * (listUpcomingEventsAcrossPlaybooksAction), across ALL the user's teams. The
+ * client's own multi-select dropdown decides which teams are visible (Calendar
+ * is a cross-team surface — it owns its selection, not the carried cookie).
+ * RSVP + create write through the SAME existing actions.
  */
 export default async function AppSchedulePage() {
-  const selected = await readSelectedTeam();
   const [evRes, shellTeams] = await Promise.all([
     listUpcomingEventsAcrossPlaybooksAction(),
     listShellTeams(), // cached from the shell layout — no extra query
@@ -32,8 +29,7 @@ export default async function AppSchedulePage() {
     .filter((t) => t.role === "owner" || t.role === "editor")
     .map((t) => ({ id: t.id, name: t.name, color: t.color }));
 
-  let events = evRes.ok ? evRes.events : [];
-  if (selected !== ALL_TEAMS) events = events.filter((e) => e.playbookId === selected);
+  const events = evRes.ok ? evRes.events : [];
 
   const mapped: ScheduleEvent[] = events
     .slice()
@@ -56,12 +52,5 @@ export default async function AppSchedulePage() {
       myRsvp: e.myRsvp?.status ?? null,
     }));
 
-  return (
-    <ScheduleClient
-      events={mapped}
-      teams={teams}
-      coachable={coachable}
-      selected={selected}
-    />
-  );
+  return <ScheduleClient events={mapped} teams={teams} coachable={coachable} />;
 }
