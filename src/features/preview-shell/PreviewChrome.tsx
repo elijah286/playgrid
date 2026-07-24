@@ -79,11 +79,15 @@ export function PreviewChrome({
         </div>
         <div className="flex items-center gap-1">
           <ShellAlertsButton />
-          <ShellAccountMenu
-            user={user}
-            footballLibraryAvailable={footballLibraryAvailable}
-            variant="avatar"
-          />
+          {/* Desktop only: on mobile the account menu lives in the footer's
+              "More" tab, so the header stays brand + bell. */}
+          <div className="hidden sm:block">
+            <ShellAccountMenu
+              user={user}
+              footballLibraryAvailable={footballLibraryAvailable}
+              variant="avatar"
+            />
+          </div>
         </div>
       </header>
 
@@ -113,7 +117,11 @@ export function PreviewChrome({
         </main>
       </div>
 
-      <PreviewBottomNav isCoach={isCoach} />
+      <PreviewBottomNav
+        isCoach={isCoach}
+        user={user}
+        footballLibraryAvailable={footballLibraryAvailable}
+      />
     </div>
   );
 }

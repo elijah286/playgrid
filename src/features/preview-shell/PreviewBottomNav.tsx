@@ -2,14 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Calendar, Home, MessageCircle, Sparkles, Users } from "lucide-react";
+import { Calendar, Home, MessageCircle, Sparkles } from "lucide-react";
 import { openCoachCal } from "@/features/coach-ai/openCoachCal";
+import { ShellAccountMenu } from "@/features/preview-shell/ShellAccountMenu";
+import type { ShellUser } from "@/features/preview-shell/types";
 
 /**
  * The one stable footer of the new shell — identical on every screen:
- *   Home · Schedule · Cal · Messages · Team
- * Nothing moves or changes meaning across the old lobby↔team boundary. The
- * team-only surfaces (Plays/Roster/…) live INSIDE Team, not in a global "More".
+ *   Home · Calendar · Cal · Messages · More
+ * There is no "Team" tab: a team is entered from Home (its teams shelf), the
+ * same way team selection lives on the Team hub, not in global chrome. "More"
+ * opens the account + everything-else menu (the mobile footer's overflow).
  */
 type Slot = {
   href: string;
@@ -24,10 +27,17 @@ const SLOTS: Slot[] = [
   { href: "/app/schedule", label: "Calendar", Icon: Calendar, match: (p) => p.startsWith("/app/schedule") },
   { href: "/coach-cal/chat", label: "Cal", Icon: Sparkles, match: () => false, center: true },
   { href: "/app/messages", label: "Messages", Icon: MessageCircle, match: (p) => p.startsWith("/app/messages") },
-  { href: "/app/team", label: "Team", Icon: Users, match: (p) => p.startsWith("/app/team") },
 ];
 
-export function PreviewBottomNav({ isCoach }: { isCoach: boolean }) {
+export function PreviewBottomNav({
+  isCoach,
+  user,
+  footballLibraryAvailable,
+}: {
+  isCoach: boolean;
+  user: ShellUser;
+  footballLibraryAvailable: boolean;
+}) {
   const pathname = usePathname() ?? "/app/home";
   // Focused thread (Workstream 4): hide the bottom bar while a single team's
   // message thread is open (/app/messages/<teamId>) so the composer gets full
@@ -85,6 +95,14 @@ export function PreviewBottomNav({ isCoach }: { isCoach: boolean }) {
           </Link>
         );
       })}
+      {/* Last slot: "More" — the account + everything-else menu (opens upward).
+          Reuses ShellAccountMenu so the destinations never drift from the
+          desktop avatar menu. Replaces the old "Team" tab. */}
+      <ShellAccountMenu
+        user={user}
+        footballLibraryAvailable={footballLibraryAvailable}
+        variant="more"
+      />
     </nav>
   );
 }

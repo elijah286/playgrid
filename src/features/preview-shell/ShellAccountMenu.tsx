@@ -11,6 +11,7 @@ import {
   HelpCircle,
   Layers,
   LogOut,
+  MoreHorizontal,
   Shield,
   Sparkles,
 } from "lucide-react";
@@ -41,8 +42,12 @@ export function ShellAccountMenu({
 }: {
   user: ShellUser;
   footballLibraryAvailable: boolean;
-  /** "avatar" = round avatar button (mobile header). "full" = avatar + name row (desktop sidebar). */
-  variant?: "avatar" | "full";
+  /**
+   * "avatar" = round avatar button (desktop header). "full" = avatar + name row
+   * (desktop sidebar). "more" = a bottom-nav slot (••• + "More" label) that
+   * opens this same menu upward — the mobile footer's last tab.
+   */
+  variant?: "avatar" | "full" | "more";
   /** Open the menu upward (desktop sidebar sits at the bottom). */
   openUp?: boolean;
 }) {
@@ -83,8 +88,22 @@ export function ShellAccountMenu({
   );
 
   return (
-    <div ref={wrapRef} className="relative">
-      {variant === "avatar" ? (
+    <div ref={wrapRef} className={`relative ${variant === "more" ? "flex flex-1" : ""}`}>
+      {variant === "more" ? (
+        <button
+          type="button"
+          aria-label="More"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+          className={`flex min-h-[48px] w-full flex-col items-center justify-center gap-1 px-1 py-1.5 text-[11px] font-semibold transition-colors ${
+            open ? "text-primary" : "text-muted hover:text-foreground"
+          }`}
+        >
+          <MoreHorizontal className="size-5" aria-hidden />
+          <span className="truncate">More</span>
+        </button>
+      ) : variant === "avatar" ? (
         <button
           type="button"
           aria-label="Account & more"
@@ -118,8 +137,8 @@ export function ShellAccountMenu({
         <div
           role="menu"
           className={`absolute z-50 max-h-[calc(100dvh-5rem)] overflow-y-auto rounded-2xl border border-border bg-surface-raised shadow-elevated ${
-            openUp ? "bottom-full mb-2" : "top-full mt-2"
-          } ${variant === "avatar" ? "w-64 right-0" : "left-0 right-0"}`}
+            openUp || variant === "more" ? "bottom-full mb-2" : "top-full mt-2"
+          } ${variant === "full" ? "left-0 right-0" : "right-0 w-64"}`}
         >
           <div className="border-b border-border px-4 py-3">
             {user.displayName && (
