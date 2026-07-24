@@ -41,6 +41,13 @@ export function PreviewChrome({
   // (player/parent) and the nav drops Cal. Same signal the role-aware Home uses.
   const isCoach = teams.some((t) => t.role === "owner" || t.role === "editor");
 
+  // A focused message thread (/app/messages/<teamId>) is a full-screen,
+  // iMessage-style view: it must FILL the main area (composer pinned at the
+  // bottom), not sit in the padded, scrolling main as a short card. The bottom
+  // nav is already hidden there, so the bottom padding must go too.
+  const pathname = usePathname() ?? "";
+  const isFocusedThread = /^\/app\/messages\/[^/]+/.test(pathname);
+
   // Publish the header's bottom edge as --coach-dock-top so the docked Coach Cal
   // panel opens BELOW the header (not level with it): the header stays a
   // full-width fixed bar and only the content row makes room for the dock. On
@@ -163,8 +170,22 @@ export function PreviewChrome({
             displays. Reading/form pages cap themselves narrower (Messages,
             Alerts, Settings) — the frame sets the max, pages choose to go
             narrower. */}
-        <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-24 pt-4 sm:px-6 sm:pb-10">
-          <div className="mx-auto w-full max-w-[1600px]">{children}</div>
+        <main
+          className={
+            isFocusedThread
+              ? "min-h-0 flex-1 overflow-hidden sm:p-6"
+              : "min-h-0 flex-1 overflow-y-auto px-4 pb-24 pt-4 sm:px-6 sm:pb-10"
+          }
+        >
+          <div
+            className={
+              isFocusedThread
+                ? "flex h-full w-full flex-col"
+                : "mx-auto w-full max-w-[1600px]"
+            }
+          >
+            {children}
+          </div>
         </main>
       </div>
 

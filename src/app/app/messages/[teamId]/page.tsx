@@ -57,15 +57,17 @@ export default async function TeamChannelPage({
         <MessagesList selectedTeamId={teamId} />
       </aside>
 
+      {/* The thread fills the screen (iMessage-style): edge-to-edge on mobile
+          with the composer pinned at the bottom; a bordered panel on desktop. */}
       <div className="mx-auto flex h-full min-w-0 max-w-2xl flex-1 flex-col">
         <Link
           href="/app/messages"
-          className="mb-2 inline-flex items-center gap-1 text-sm font-semibold text-muted transition-colors hover:text-foreground sm:hidden"
+          className="inline-flex items-center gap-1 px-4 pt-3 pb-2 text-sm font-semibold text-muted transition-colors hover:text-foreground sm:hidden"
         >
           <ArrowLeft className="size-4" aria-hidden />
           All messages
         </Link>
-        <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-surface-raised">
+        <div className="min-h-0 flex-1 overflow-hidden bg-surface-raised sm:rounded-xl sm:border sm:border-border">
           <PlaybookMessagesTab
             playbookId={teamId}
             playbookName={pb.name}
