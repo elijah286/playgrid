@@ -6,6 +6,7 @@ import { ListChecks, Search, StickyNote } from "lucide-react";
 import type { PlayType } from "@/domain/play/types";
 import type { PlaybookDetailPlayRow } from "@/app/actions/plays";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
+import { LinkPendingSpinner } from "@/components/ui/LinkPendingSpinner";
 import { PlayShareToggle } from "./PlayShareToggle";
 import {
   TYPE_LABEL,
@@ -164,8 +165,12 @@ function PlayCard({
         // Coaches open the editor; viewers open the read-only mobile play
         // viewer (Rule 14) — RLS already limits viewers to shared plays.
         href={canEdit ? `/plays/${p.id}/edit` : `/m/play/${p.id}`}
-        className={`block rounded-xl p-2 ${hidden ? "opacity-60" : ""}`}
+        className={`relative block rounded-xl p-2 ${hidden ? "opacity-60" : ""}`}
       >
+        {/* Opening a play is a dynamic route with a server round-trip; show a
+            spinner over the tile the moment it's tapped so it doesn't read as
+            unresponsive (and doesn't get double-tapped). */}
+        <LinkPendingSpinner overlay />
         <div className="relative">
           {p.preview ? (
             // Same canonical thumbnail the production grid renders — bordered
