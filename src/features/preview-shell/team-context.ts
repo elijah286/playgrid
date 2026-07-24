@@ -107,3 +107,72 @@ export async function listSelectableTeams(): Promise<SelectableTeam[]> {
     season: t.season,
   }));
 }
+
+export type ShellPlaybook = TeamMeta & {
+  isArchived: boolean;
+  isExample: boolean;
+  updatedAt: string | null;
+};
+
+/**
+ * EVERY playbook the user belongs to — including archived and example books —
+ * for the Playbooks library (/app/playbooks). `listShellTeams` deliberately
+ * hides archived/example/default books (they'd clutter the nav + Home shelf);
+ * this is the exhaustive list the library filters client-side. Own query so it
+ * doesn't widen the hot `listShellTeams` path; request-cached all the same.
+ */
+export const listAllShellPlaybooks = cache(async (): Promise<ShellPlaybook[]> => {
+  const auth = await getRequestUser();
+  const user = auth.kind === "ok" ? auth.user : null;
+  if (!user) return [];
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("playbook_members")
+    .select(
+      "role, playbooks!inner(id, name, is_default, is_archived, is_example, logo_url, color, season, sport_variant, updated_at)",
+    )
+    .eq("user_id", user.id)
+    .eq("status", "active");
+  if (error || !data) return [];
+
+  type Row = {
+    role: "owner" | "editor" | "viewer";
+    playbooks:
+      | {
+          id: string;
+          name: string;
+          is_default: boolean | null;
+          is_archived: boolean | null;
+          is_example: boolean | null;
+          logo_url: string | null;
+          color: string | null;
+          season: string | null;
+          sport_variant: string | null;
+          updated_at: string | null;
+        }
+      | Array<Record<string, unknown>>
+      | null;
+  };
+
+  const out: ShellPlaybook[] = [];
+  for (const r of data as unknown as Row[]) {
+    const p = Array.isArray(r.playbooks) ? (r.playbooks[0] as Row["playbooks"]) : r.playbooks;
+    if (!p || Array.isArray(p)) continue;
+    if (p.is_default) continue; // the hidden default workspace is never a "playbook"
+    out.push({
+      id: p.id,
+      name: p.name,
+      color: p.color,
+      logoUrl: p.logo_url,
+      season: p.season,
+      role: r.role,
+      sportVariant: (p.sport_variant as SportVariant) ?? "flag_7v7",
+      isArchived: !!p.is_archived,
+      isExample: !!p.is_example,
+      updatedAt: (p.updated_at as string | null) ?? null,
+    });
+  }
+  out.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
+  return out;
+});

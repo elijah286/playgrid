@@ -383,11 +383,29 @@ function TeamsSection({
   onOpen: (id: string) => void;
   onCreate: () => void;
 }) {
+  // Home is a SUMMARY: show a finite, most-recent set here and send the coach to
+  // the full library for the rest, instead of an ever-growing list that buries
+  // Up next / Needs you. The library (/app/playbooks) holds archived + all.
+  const SHELF_MAX = 6;
+  const shown = teams.slice(0, SHELF_MAX);
+  const overflow = teams.length - shown.length;
+
   return (
     <section>
       <div className="mb-2 flex items-center justify-between">
         <h2 className="text-[11px] font-bold uppercase tracking-wide text-muted">{heading}</h2>
-        {pending && <Loader2 className="size-3.5 animate-spin text-muted" aria-hidden />}
+        <div className="flex items-center gap-2">
+          {pending && <Loader2 className="size-3.5 animate-spin text-muted" aria-hidden />}
+          {teams.length > 0 && (
+            <Link
+              href="/app/playbooks"
+              className="inline-flex items-center gap-0.5 text-xs font-semibold text-primary hover:underline"
+            >
+              {overflow > 0 ? `See all ${teams.length}` : "See all"}
+              <ChevronRight className="size-3.5" aria-hidden />
+            </Link>
+          )}
+        </div>
       </div>
       {teams.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted">
@@ -402,36 +420,30 @@ function TeamsSection({
           .
         </div>
       ) : (
-        // Cap the list at a fraction of the viewport and scroll overflow WITHIN
-        // it, so a coach with many teams doesn't push Up next / Needs you below
-        // the fold. Uncapped on wider screens (sm:+) where the multi-column grid
-        // + vertical room make the whole list fit anyway.
-        <div className="max-h-[42vh] overflow-y-auto pr-0.5 sm:max-h-none sm:overflow-visible sm:pr-0">
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-            {teams.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => onOpen(t.id)}
-                disabled={pending}
-                // The identity mark already carries the team color, so the old
-                // left color sliver was redundant visual noise — dropped.
-                className="group flex items-center gap-3 rounded-xl border border-border bg-surface-raised p-3 text-left shadow-sm transition-colors hover:bg-surface-inset disabled:opacity-60"
-              >
-                <TeamCardMark team={t} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-bold text-foreground">{t.name}</span>
-                  <span className="block truncate text-[11px] text-muted">
-                    {t.season || "Open team"}
-                  </span>
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+          {shown.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => onOpen(t.id)}
+              disabled={pending}
+              // The identity mark already carries the team color, so the old
+              // left color sliver was redundant visual noise — dropped.
+              className="group flex items-center gap-3 rounded-xl border border-border bg-surface-raised p-3 text-left shadow-sm transition-colors hover:bg-surface-inset disabled:opacity-60"
+            >
+              <TeamCardMark team={t} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-bold text-foreground">{t.name}</span>
+                <span className="block truncate text-[11px] text-muted">
+                  {t.season || "Open team"}
                 </span>
-                <ChevronRight
-                  className="size-4 shrink-0 text-muted transition-transform group-hover:translate-x-0.5"
-                  aria-hidden
-                />
-              </button>
-            ))}
-          </div>
+              </span>
+              <ChevronRight
+                className="size-4 shrink-0 text-muted transition-transform group-hover:translate-x-0.5"
+                aria-hidden
+              />
+            </button>
+          ))}
         </div>
       )}
     </section>

@@ -2,17 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Calendar, Home, MessageCircle, Sparkles } from "lucide-react";
+import { Calendar, Home, Library, MessageCircle, Sparkles } from "lucide-react";
 import { openCoachCal } from "@/features/coach-ai/openCoachCal";
 import { ShellAccountMenu } from "@/features/preview-shell/ShellAccountMenu";
 import type { ShellUser } from "@/features/preview-shell/types";
 
 /**
- * The one stable footer of the new shell — identical on every screen:
- *   Home · Calendar · Cal · Messages · More
- * There is no "Team" tab: a team is entered from Home (its teams shelf), the
- * same way team selection lives on the Team hub, not in global chrome. "More"
- * opens the account + everything-else menu (the mobile footer's overflow).
+ * Mobile footer:  Home · Calendar · Cal · Messages · More
+ * Desktop sidebar: Home · Playbooks · Calendar · Messages (Cal is the header).
+ * There is no "Team" tab: a team is entered from Home (its shelf) or the
+ * Playbooks library. "Playbooks" is desktop-only (sidebarOnly) — on mobile the
+ * library is reached from Home's "See all", keeping the footer to five slots.
+ * "More" opens the account + everything-else menu (the footer's overflow).
  */
 type Slot = {
   href: string;
@@ -20,10 +21,13 @@ type Slot = {
   Icon: React.ElementType;
   match: (p: string) => boolean;
   center?: boolean;
+  /** Shown in the desktop sidebar only, never in the mobile footer. */
+  sidebarOnly?: boolean;
 };
 
 const SLOTS: Slot[] = [
   { href: "/app/home", label: "Home", Icon: Home, match: (p) => p === "/app/home" || p === "/app" },
+  { href: "/app/playbooks", label: "Playbooks", Icon: Library, match: (p) => p.startsWith("/app/playbooks"), sidebarOnly: true },
   { href: "/app/schedule", label: "Calendar", Icon: Calendar, match: (p) => p.startsWith("/app/schedule") },
   { href: "/coach-cal/chat", label: "Cal", Icon: Sparkles, match: () => false, center: true },
   { href: "/app/messages", label: "Messages", Icon: MessageCircle, match: (p) => p.startsWith("/app/messages") },
@@ -48,7 +52,7 @@ export function PreviewBottomNav({
   // (players/parents — coach on no team) don't get the center Cal slot; the
   // remaining four items re-center evenly. Everything else is identical, so a
   // user's bar never reorders across screens — only differs by who they are.
-  const slots = SLOTS.filter((s) => isCoach || !s.center);
+  const slots = SLOTS.filter((s) => !s.sidebarOnly && (isCoach || !s.center));
   return (
     <nav
       aria-label="Primary"
