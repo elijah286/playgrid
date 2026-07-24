@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { TeamSwitcher } from "@/features/preview-shell/TeamSwitcher";
 import type { ShellTeam } from "@/features/preview-shell/types";
+import { PlaybookActionMenu } from "@/app/app/team/PlaybookActionMenu";
 
 const FALLBACK = "#134e2a";
 
@@ -60,6 +61,8 @@ export function TeamHubChrome({
   const isLight = hexLuminance(color) > 0.6;
   const onColor = isLight ? "text-slate-900" : "text-white";
   const onColorHover = isLight ? "hover:bg-black/10" : "hover:bg-white/15";
+  const role = teams.find((t) => t.id === selected)?.role;
+  const canEdit = role === "owner" || role === "editor";
 
   return (
     // Fluid: the team hub fills the shell width so the plays/formations grids
@@ -90,6 +93,14 @@ export function TeamHubChrome({
             {[team.season, team.sportLabel].filter(Boolean).join(" · ") || "Team"}
           </p>
         </div>
+        {/* Playbook-level download/manage menu (print/export, rename, settings,
+            archive). Print is open to all members; edits are coach-only. */}
+        <PlaybookActionMenu
+          playbookId={selected}
+          playbookName={team.name}
+          canEdit={canEdit}
+          onColorClassName={`${onColor} ${onColorHover}`}
+        />
       </div>
 
       <nav

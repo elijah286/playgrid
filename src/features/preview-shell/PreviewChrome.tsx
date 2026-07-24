@@ -143,12 +143,17 @@ export function PreviewChrome({
             the chrome hugs the viewport the same way the header does. Fixed;
             only the nav list inside scrolls. */}
         <aside className="hidden w-60 shrink-0 flex-col border-r border-border sm:flex">
-          <nav className="min-h-0 flex-1 overflow-y-auto p-3">
+          <nav className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
             <PreviewSideNav />
-            <ExploreNav
-              footballLibraryAvailable={footballLibraryAvailable}
-              isAdmin={user.isAdmin}
-            />
+            {/* Resources (Football library, tutorials, examples, Site Admin) sink
+                to the BOTTOM of the sidebar, separated from the primary nav —
+                secondary destinations, not peers of Home/Playbooks/Calendar. */}
+            <div className="mt-auto pt-6">
+              <ExploreNav
+                footballLibraryAvailable={footballLibraryAvailable}
+                isAdmin={user.isAdmin}
+              />
+            </div>
           </nav>
         </aside>
 
