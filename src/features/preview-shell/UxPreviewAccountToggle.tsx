@@ -52,7 +52,7 @@ export function UxPreviewAccountToggle({ initialActive }: { initialActive: boole
             disabled={pending}
             aria-pressed={!active}
             className={`rounded-lg px-3 py-1.5 transition-colors ${
-              !active ? "bg-foreground text-white" : "text-muted hover:text-foreground"
+              !active ? "bg-foreground text-surface" : "text-muted hover:text-foreground"
             }`}
           >
             Current

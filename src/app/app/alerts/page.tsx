@@ -1,43 +1,32 @@
 import { listInboxAlertsAction } from "@/app/actions/inbox";
 import { listActivityFeedAction } from "@/app/actions/activity";
 import {
-  readSelectedTeam,
-  ALL_TEAMS,
-} from "@/features/preview-shell/selected-team-server";
-import {
   AlertsClient,
   type AlertItem,
   type ActivityItem,
 } from "./AlertsClient";
 
-const NEEDS_YOU_KINDS = new Set([
-  "rsvp_pending",
-  "membership",
-  "coach_upgrade",
-  "roster_claim",
-  "share",
-]);
-
 /**
  * Alerts — action items ("Needs you") cleanly split from FYI ("Activity"),
  * the two concepts the production Inbox conflates. Same sources
- * (listInboxAlertsAction + listActivityFeedAction), scoped by the carried team.
+ * (listInboxAlertsAction + listActivityFeedAction).
+ *
+ * Cross-team by design: the header bell counts EVERY active alert across all
+ * teams (getInboxBadgeStateAction), so this page must too — scoping to the
+ * carried team, or dropping alert kinds, left the bell showing a count with
+ * nothing behind it. Alerts is a global surface like Messages/Home; team
+ * scope lives on the Team hub, not here.
  */
 export default async function AppAlertsPage() {
-  const selected = await readSelectedTeam();
   const [alertRes, actRes] = await Promise.all([
     listInboxAlertsAction(),
     listActivityFeedAction(),
   ]);
 
-  let alerts = alertRes.ok
-    ? alertRes.alerts.filter((a) => a.status === "active" && NEEDS_YOU_KINDS.has(a.kind))
-    : [];
-  let acts = actRes.ok ? actRes.entries : [];
-  if (selected !== ALL_TEAMS) {
-    alerts = alerts.filter((a) => a.playbookId === selected);
-    acts = acts.filter((a) => a.playbookId === selected);
-  }
+  // Every active alert the bell counts — no kind filter (system notices,
+  // feedback, billing, etc. all badge, so they all need a home here).
+  const alerts = alertRes.ok ? alertRes.alerts.filter((a) => a.status === "active") : [];
+  const acts = actRes.ok ? actRes.entries : [];
 
   const needsYou: AlertItem[] = alerts.map((a) => ({
     key: a.key,
@@ -67,10 +56,6 @@ export default async function AppAlertsPage() {
   }));
 
   return (
-    <AlertsClient
-      needsYou={needsYou}
-      activity={activity}
-      scoped={selected !== ALL_TEAMS}
-    />
+    <AlertsClient needsYou={needsYou} activity={activity} scoped={false} />
   );
 }

@@ -866,7 +866,7 @@ function Chip({
       onClick={onClick}
       className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-colors ${
         active
-          ? "border-foreground bg-foreground text-white"
+          ? "border-foreground bg-foreground text-surface"
           : "border-border bg-surface-raised text-muted hover:text-foreground"
       }`}
     >
