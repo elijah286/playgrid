@@ -404,10 +404,16 @@ export function EventSheet({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-5 py-4">
           <div className="space-y-4">
-            {/* Type chips */}
-            <div className="flex gap-2" role="radiogroup" aria-label="Event type">
+            {/* Type chips — a 2×2 grid on mobile, one row on desktop. (A plain
+                flex row overflowed the sheet on narrow screens and scrolled the
+                whole dialog sideways.) */}
+            <div
+              className="grid grid-cols-2 gap-2 sm:grid-cols-4"
+              role="radiogroup"
+              aria-label="Event type"
+            >
               {(Object.keys(EVENT_TYPE_META) as CalendarEventType[]).map((t) => {
                 const meta = EVENT_TYPE_META[t];
                 const Icon = meta.icon;
@@ -420,12 +426,12 @@ export function EventSheet({
                     type="button"
                     onClick={() => setType(t)}
                     className={
-                      "inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium ring-1 transition " +
+                      "inline-flex w-full min-w-0 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium ring-1 transition " +
                       (active ? meta.chipActive : meta.chipInactive)
                     }
                   >
-                    <Icon className="size-4" />
-                    {meta.label}
+                    <Icon className="size-4 shrink-0" />
+                    <span className="truncate">{meta.label}</span>
                   </button>
                 );
               })}

@@ -12,10 +12,12 @@ import {
   MapPin,
   Plus,
   Repeat,
+  Sparkles,
   X,
 } from "lucide-react";
 import { EventSheet } from "@/features/calendar/EventSheet";
 import { setRsvpAction, clearRsvpAction } from "@/app/actions/calendar";
+import { openCoachCal } from "@/features/coach-ai/openCoachCal";
 
 export type ScheduleTeam = { id: string; name: string; color: string | null };
 export type ScheduleEvent = {
@@ -260,9 +262,26 @@ export function ScheduleClient({
     // Full width on desktop so the Month/Week grids use the room; the list view
     // caps itself to a readable column below.
     <div className="mx-auto w-full max-w-2xl space-y-4 lg:max-w-none">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-extrabold tracking-tight text-foreground">Calendar</h1>
-        <div className="flex items-center gap-2">
+      {/* Two rows so nothing runs off the right edge on mobile: title + New
+          event, then the team filter + view switch. */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <h1 className="text-xl font-extrabold tracking-tight text-foreground">Calendar</h1>
+          <div className="flex items-center gap-2">
+            {pending && <Loader2 className="size-4 shrink-0 animate-spin text-muted" aria-hidden />}
+            {canCreate && (
+              <button
+                type="button"
+                onClick={startNewEvent}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-bold text-white transition-colors hover:bg-primary-hover"
+              >
+                <Plus className="size-4" aria-hidden />
+                New event
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-2">
           <TeamMultiSelect
             teams={teams}
             visible={visibleTeams}
@@ -271,34 +290,16 @@ export function ScheduleClient({
             onAll={showAllTeams}
           />
           <ViewSwitch view={view} onChange={changeView} />
-          {canCreate && (
-            <button
-              type="button"
-              onClick={startNewEvent}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-bold text-white transition-colors hover:bg-primary-hover"
-            >
-              <Plus className="size-4" aria-hidden />
-              New event
-            </button>
-          )}
-          {pending && <Loader2 className="size-4 shrink-0 animate-spin text-muted" aria-hidden />}
         </div>
       </div>
 
       {view === "list" &&
         (days.length === 0 ? (
-          <div className="mx-auto max-w-2xl rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted">
-            Nothing scheduled{scoped ? " for this team" : ""}.
-            {canCreate && (
-              <>
-                {" "}
-                <button type="button" onClick={startNewEvent} className="font-semibold text-primary">
-                  Add your first event
-                </button>
-                .
-              </>
-            )}
-          </div>
+          <EmptyCalendar
+            scoped={scoped}
+            canCreate={canCreate}
+            onManual={startNewEvent}
+          />
         ) : (
           <div className="mx-auto max-w-2xl space-y-5">
             {days.map((group) => (
@@ -394,6 +395,59 @@ function ViewSwitch({
           {o}
         </button>
       ))}
+    </div>
+  );
+}
+
+/** Empty-calendar state. For a coach it ELEVATES Coach Cal's schedule-the-season
+ *  ability (the highest-signal moment to show it off is a blank calendar), with
+ *  manual entry as the secondary option. Viewers just see the plain note. */
+function EmptyCalendar({
+  scoped,
+  canCreate,
+  onManual,
+}: {
+  scoped: boolean;
+  canCreate: boolean;
+  onManual: () => void;
+}) {
+  if (!canCreate) {
+    return (
+      <div className="mx-auto max-w-2xl rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted">
+        Nothing scheduled{scoped ? " for this team" : ""}.
+      </div>
+    );
+  }
+  return (
+    <div className="mx-auto max-w-2xl rounded-2xl border border-border bg-surface-raised p-6 text-center shadow-sm">
+      <span className="mx-auto grid size-11 place-items-center rounded-full bg-gradient-to-br from-primary to-primary-dark text-white shadow-card">
+        <Sparkles className="size-5" aria-hidden />
+      </span>
+      <h2 className="mt-3 text-base font-extrabold text-foreground">
+        Nothing scheduled{scoped ? " for this team" : ""} yet
+      </h2>
+      <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
+        Let Coach Cal lay out your season — recurring practices, games with opponents and
+        locations — and add every event in one conversation.
+      </p>
+      <div className="mt-4 flex flex-col items-center justify-center gap-2 sm:flex-row">
+        <button
+          type="button"
+          onClick={() => openCoachCal("playbook_schedule_season")}
+          className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-gradient-to-br from-primary to-primary-dark px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-opacity hover:opacity-95 sm:w-auto"
+        >
+          <Sparkles className="size-4" aria-hidden />
+          Plan with Coach Cal
+        </button>
+        <button
+          type="button"
+          onClick={onManual}
+          className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-4 py-2.5 text-sm font-bold text-foreground transition-colors hover:bg-surface-inset sm:w-auto"
+        >
+          <Plus className="size-4" aria-hidden />
+          Add manually
+        </button>
+      </div>
     </div>
   );
 }
