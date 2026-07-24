@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/supabase/server";
 import {
   getBetaFeatures,
   getBetaFeatureAllowlistEmails,
@@ -63,4 +64,47 @@ export async function resolveUxPreview(args: {
   if (!allowed) return { allowed: false, active: false };
 
   return { allowed: true, active: activePreference };
+}
+
+/**
+ * Whether the CURRENT user has the new-UX shell active — the signal production
+ * entry routes (`/home`, etc.) use to redirect an opted-in user INTO the shell,
+ * mirroring how the shell layout redirects a non-opted-in user OUT. Reads its
+ * own auth + profile so callers can gate a redirect without threading state.
+ *
+ * Cheap on the common path: if the `new_shell` beta is off (its default),
+ * returns false without any auth/DB work; if the user's persisted opt-in is
+ * false, returns false without the allowlist lookup.
+ */
+export async function isUxPreviewActiveForCurrentUser(): Promise<boolean> {
+  let scope: BetaFeatureScope;
+  try {
+    scope = (await getBetaFeatures()).new_shell;
+  } catch {
+    return false;
+  }
+  if (scope === "off") return false;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return false;
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, ux_preview_active")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  // Fast exit: not opted in → no shell, skip the allowlist lookup.
+  if (!(profile?.ux_preview_active as boolean | null)) return false;
+
+  const ux = await resolveUxPreview({
+    isAuthed: true,
+    userRole: (profile?.role as string | null) ?? null,
+    userEmail: user.email ?? null,
+    activePreference: true,
+  });
+  return ux.active;
 }

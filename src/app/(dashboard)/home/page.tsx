@@ -13,9 +13,11 @@ import { canUseAiFeatures } from "@/lib/billing/features";
 import { hasFreeCalPromptsRemaining } from "@/lib/billing/coach-cal-free-prompts";
 import { withTimeout } from "@/lib/perf/with-timeout";
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Trophy, ChevronRight } from "lucide-react";
 import { isLeagueOrganizer } from "@/lib/league/access";
+import { isUxPreviewActiveForCurrentUser } from "@/lib/site/ux-preview";
 import {
   getExamplePromoMode,
   resolveExamplePromo,
@@ -42,6 +44,13 @@ export default async function HomePage({ searchParams }: Props) {
   // overlay until the slowest of seven data fetches returns. The actual data
   // + DashboardClient render unchanged inside DashboardData below.
   const { error: errFromQuery, tab, welcome } = await searchParams;
+
+  // Persist the new-UX opt-in across navigation: a user who has switched to the
+  // shell should land in it from the production home too, not the old dashboard.
+  // Mirrors the shell layout, which redirects a non-opted-in user the other way.
+  // Cheap when the beta is off / the user isn't opted in (see the helper).
+  if (await isUxPreviewActiveForCurrentUser()) redirect("/app/home");
+
   return (
     <Suspense fallback={<DashboardSkeleton />}>
       <DashboardData errFromQuery={errFromQuery} tab={tab} welcome={welcome} />
