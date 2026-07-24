@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { isUxPreviewActiveForCurrentUser } from "@/lib/site/ux-preview";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getUserWithTimeout } from "@/lib/supabase/get-user-with-timeout";
@@ -43,7 +44,31 @@ import {
 } from "@/features/marketing/SharedViewerCta";
 import { StickyExampleCta } from "@/features/marketing/StickyExampleCta";
 
-type Props = { params: Promise<{ playbookId: string }> };
+type Props = {
+  params: Promise<{ playbookId: string }>;
+  searchParams: Promise<{ tab?: string }>;
+};
+
+/**
+ * When an opted-in coach returns to a playbook they belong to (most commonly
+ * the play editor's "Back to playbook", which hard-links here), send them to
+ * the matching new-UX shell surface instead of the old grid — the editor lives
+ * outside /app, so without this the new UX doesn't "persist" on exit. Public
+ * examples (whose viewers aren't members) and non-opted-in users are untouched.
+ */
+const SHELL_ROUTE_BY_TAB: Record<string, string> = {
+  messages: "/app/messages", // + "/{playbookId}"
+  calendar: "/app/schedule",
+  roster: "/app/team/roster",
+  formations: "/app/team/formations",
+  games: "/app/team/results",
+  results: "/app/team/results",
+  practice_plans: "/app/team/practice",
+};
+function shellRouteForPlaybook(playbookId: string, tab: string | undefined): string {
+  if (tab === "messages") return `/app/messages/${playbookId}`;
+  return (tab && SHELL_ROUTE_BY_TAB[tab]) || "/app/team";
+}
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { playbookId } = await params;
@@ -101,8 +126,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 }
 
-export default async function PlaybookDetailPage({ params }: Props) {
+export default async function PlaybookDetailPage({ params, searchParams }: Props) {
   const { playbookId } = await params;
+  const { tab } = await searchParams;
 
   if (!hasSupabaseEnv()) {
     return (
@@ -124,6 +150,25 @@ export default async function PlaybookDetailPage({ params }: Props) {
   );
 
   if (error || !book) notFound();
+
+  // Keep an opted-in coach in the new UX when they land back on their own
+  // playbook (e.g. the editor's "Back to playbook"). Never for public examples
+  // (their viewers aren't members) or non-opted-in users — see the note above.
+  if (!book.is_public_example && !book.is_example && (await isUxPreviewActiveForCurrentUser())) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const { data: mem } = await supabase
+        .from("playbook_members")
+        .select("role")
+        .eq("playbook_id", playbookId)
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .maybeSingle();
+      if (mem) redirect(shellRouteForPlaybook(playbookId, tab));
+    }
+  }
 
   // Auth doesn't depend on the playbook fan-out below, so kick it off
   // concurrently instead of awaiting the fan-out first. Time-bound it
