@@ -402,33 +402,36 @@ function TeamsSection({
           .
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-          {teams.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => onOpen(t.id)}
-              disabled={pending}
-              className="group relative flex items-center gap-3 overflow-hidden rounded-xl border border-border bg-surface-raised py-3 pl-4 pr-3 text-left shadow-sm transition-colors hover:bg-surface-inset disabled:opacity-60"
-            >
-              <span
-                className="absolute inset-y-0 left-0 w-1.5"
-                style={{ backgroundColor: t.color || FALLBACK }}
-                aria-hidden
-              />
-              <TeamCardMark team={t} />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-bold text-foreground">{t.name}</span>
-                <span className="block truncate text-[11px] text-muted">
-                  {t.season || "Open team"}
+        // Cap the list at a fraction of the viewport and scroll overflow WITHIN
+        // it, so a coach with many teams doesn't push Up next / Needs you below
+        // the fold. Uncapped on wider screens (sm:+) where the multi-column grid
+        // + vertical room make the whole list fit anyway.
+        <div className="max-h-[42vh] overflow-y-auto pr-0.5 sm:max-h-none sm:overflow-visible sm:pr-0">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+            {teams.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => onOpen(t.id)}
+                disabled={pending}
+                // The identity mark already carries the team color, so the old
+                // left color sliver was redundant visual noise — dropped.
+                className="group flex items-center gap-3 rounded-xl border border-border bg-surface-raised p-3 text-left shadow-sm transition-colors hover:bg-surface-inset disabled:opacity-60"
+              >
+                <TeamCardMark team={t} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-bold text-foreground">{t.name}</span>
+                  <span className="block truncate text-[11px] text-muted">
+                    {t.season || "Open team"}
+                  </span>
                 </span>
-              </span>
-              <ChevronRight
-                className="size-4 shrink-0 text-muted transition-transform group-hover:translate-x-0.5"
-                aria-hidden
-              />
-            </button>
-          ))}
+                <ChevronRight
+                  className="size-4 shrink-0 text-muted transition-transform group-hover:translate-x-0.5"
+                  aria-hidden
+                />
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </section>
