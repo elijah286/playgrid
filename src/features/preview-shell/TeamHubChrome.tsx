@@ -77,7 +77,12 @@ export function TeamHubChrome({
 
       <nav
         aria-label="Team sections"
-        className="-mx-1 flex gap-1 overflow-x-auto border-b border-border px-1"
+        // Horizontal-only scroller: overflow-y-hidden stops the browser from
+        // promoting the y-axis to `auto` (which it does when x is auto and y is
+        // visible), which was causing a transient vertical scrollbar + a few px
+        // of vertical drift. Scrollbar itself hidden to match the production
+        // playbook strip.
+        className="-mx-1 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-border px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {TABS.map((t) => {
           const active = t.exact ? pathname === t.href : pathname.startsWith(t.href);
