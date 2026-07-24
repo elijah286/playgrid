@@ -7,7 +7,6 @@ import { BookOpen, GraduationCap, Layers, Shield, Sparkles } from "lucide-react"
 import { openCoachCal } from "@/features/coach-ai/openCoachCal";
 import { ShellAlertsButton } from "@/features/preview-shell/ShellAlertsButton";
 import { ShellAccountMenu } from "@/features/preview-shell/ShellAccountMenu";
-import { TeamSwitcher } from "@/features/preview-shell/TeamSwitcher";
 import {
   PreviewBottomNav,
   PreviewSideNav,
@@ -15,21 +14,24 @@ import {
 import type { ShellTeam, ShellUser } from "@/features/preview-shell/types";
 
 /**
- * The new shell's frame: a persistent team switcher + primary nav + a prominent
- * Coach Cal action + the "everything else" account menu (Learning Center,
- * Football Library, tutorials, Site Admin, sign out). Desktop puts all of this
- * in a fixed left sidebar; mobile uses a top bar + bottom nav. Production
- * chrome is hidden on /app, so this is the only chrome here.
+ * The new shell's frame: primary nav + a prominent Coach Cal action + the
+ * "everything else" account menu (Learning Center, Football Library, tutorials,
+ * Site Admin, sign out). Desktop puts all of this in a fixed left sidebar;
+ * mobile uses a top bar + bottom nav. Production chrome is hidden on /app, so
+ * this is the only chrome here.
+ *
+ * There is NO global team switcher: Home/Calendar/Messages are cross-team and
+ * own their own controls (teams shelf, calendar multi-select, conversation
+ * list). Team selection lives only on the Team hub (TeamHubChrome), the one
+ * genuinely single-team surface.
  */
 export function PreviewChrome({
   teams,
-  selected,
   user,
   footballLibraryAvailable,
   children,
 }: {
   teams: ShellTeam[];
-  selected: string;
   user: ShellUser;
   footballLibraryAvailable: boolean;
   children: React.ReactNode;
@@ -50,13 +52,14 @@ export function PreviewChrome({
       className="flex flex-col overflow-hidden bg-surface box-border"
       style={{ height: "100dvh", paddingTop: "env(safe-area-inset-top, 0px)" }}
     >
-      {/* Persistent top bar. Desktop shows the brand (nav lives in the
-          sidebar); mobile shows the team switcher (no sidebar there). */}
+      {/* Persistent top bar — the brand on both platforms (nav lives in the
+          sidebar on desktop, the bottom bar on mobile). No team switcher: team
+          selection lives on the Team hub, not in global chrome. */}
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-surface-raised px-4 py-2">
         <div className="flex min-w-0 items-center gap-3">
           <Link
             href="/app/home"
-            className="hidden shrink-0 items-center gap-2 sm:flex"
+            className="flex shrink-0 items-center gap-2"
             aria-label="XO Gridmaker home"
           >
             <Image
@@ -73,9 +76,6 @@ export function PreviewChrome({
               XO Gridmaker
             </span>
           </Link>
-          <div className="min-w-0 sm:hidden">
-            <TeamSwitcher teams={teams} selected={selected} />
-          </div>
         </div>
         <div className="flex items-center gap-1">
           <ShellAlertsButton />
@@ -92,9 +92,6 @@ export function PreviewChrome({
             the chrome hugs the viewport the same way the header does. Fixed;
             only the nav list inside scrolls. */}
         <aside className="hidden w-60 shrink-0 flex-col border-r border-border sm:flex">
-          <div className="shrink-0 border-b border-border p-3">
-            <TeamSwitcher teams={teams} selected={selected} block />
-          </div>
           <nav className="min-h-0 flex-1 overflow-y-auto p-3">
             <PreviewSideNav />
             {isCoach && <CalCta />}

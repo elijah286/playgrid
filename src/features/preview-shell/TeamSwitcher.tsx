@@ -20,12 +20,21 @@ const FALLBACK_COLOR = "#64748B";
 export function TeamSwitcher({
   teams,
   selected,
-  block = false,
+  variant = "pill",
+  triggerClassName = "",
 }: {
   teams: ShellTeam[];
   selected: string;
-  /** Full-width block trigger (desktop sidebar) vs the compact pill (mobile header). */
-  block?: boolean;
+  /**
+   * "pill" — compact rounded trigger. "block" — full-width bordered trigger.
+   * "bare" — no border/background, inherits the caller's text color; used as the
+   * Team-hub banner title (the team name IS the switcher). The switcher only
+   * lives on the Team surface now — the shell dropped its global team selector,
+   * since Home/Calendar/Messages are cross-team and own their own controls.
+   */
+  variant?: "pill" | "block" | "bare";
+  /** Extra classes for the trigger — lets `bare` inherit on-color text/hover. */
+  triggerClassName?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -49,6 +58,8 @@ export function TeamSwitcher({
     });
   };
 
+  const bare = variant === "bare";
+  const block = variant === "block";
   return (
     <div className="relative">
       <button
@@ -56,18 +67,29 @@ export function TeamSwitcher({
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className={`min-h-11 items-center gap-2 border border-border bg-surface-raised text-sm font-bold text-foreground transition-colors hover:bg-surface-inset ${
-          block
-            ? "flex w-full rounded-xl px-2 py-1.5"
-            : "inline-flex max-w-[60vw] rounded-full py-1 pl-1.5 pr-2.5"
-        }`}
+        aria-label="Switch team"
+        className={
+          bare
+            ? `-ml-1.5 inline-flex max-w-full items-center gap-1.5 rounded-lg px-1.5 py-0.5 text-base font-extrabold tracking-tight transition-colors sm:text-2xl ${triggerClassName}`
+            : `min-h-11 items-center gap-2 border border-border bg-surface-raised text-sm font-bold text-foreground transition-colors hover:bg-surface-inset ${
+                block
+                  ? "flex w-full rounded-xl px-2 py-1.5"
+                  : "inline-flex max-w-[60vw] rounded-full py-1 pl-1.5 pr-2.5"
+              }`
+        }
       >
-        <TeamMark team={current} />
+        {!bare && <TeamMark team={current} />}
         <span className="truncate">{current ? current.name : "All teams"}</span>
         {pending ? (
-          <Loader2 className="size-3.5 shrink-0 animate-spin text-muted" aria-hidden />
+          <Loader2
+            className={`size-4 shrink-0 animate-spin ${bare ? "opacity-80" : "size-3.5 text-muted"}`}
+            aria-hidden
+          />
         ) : (
-          <ChevronDown className="size-3.5 shrink-0 text-muted" aria-hidden />
+          <ChevronDown
+            className={`shrink-0 ${bare ? "size-5 opacity-80" : "size-3.5 text-muted"}`}
+            aria-hidden
+          />
         )}
       </button>
 

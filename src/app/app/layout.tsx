@@ -63,7 +63,6 @@ export default async function AppShellLayout({
     <>
       <PreviewChrome
         teams={teams}
-        selected={selectedResolved}
         footballLibraryAvailable={footballLibraryAvailable}
         user={{
           email: user.email ?? "",

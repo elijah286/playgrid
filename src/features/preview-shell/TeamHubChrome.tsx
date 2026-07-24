@@ -11,6 +11,8 @@ import {
   Trophy,
   Users,
 } from "lucide-react";
+import { TeamSwitcher } from "@/features/preview-shell/TeamSwitcher";
+import type { ShellTeam } from "@/features/preview-shell/types";
 
 const FALLBACK = "#134e2a";
 
@@ -36,6 +38,8 @@ function hexLuminance(hex: string): number {
  *  every /app/team/* screen so the team context is constant across them. */
 export function TeamHubChrome({
   team,
+  teams,
+  selected,
   children,
 }: {
   team: {
@@ -45,11 +49,17 @@ export function TeamHubChrome({
     season: string | null;
     sportLabel: string | null;
   };
+  /** All the user's teams + the selected id — the Team hub is the ONE place the
+   *  team switcher lives now (the global switcher was removed). */
+  teams: ShellTeam[];
+  selected: string;
   children: React.ReactNode;
 }) {
   const pathname = usePathname() ?? "/app/team";
   const color = team.color || FALLBACK;
-  const onColor = hexLuminance(color) > 0.6 ? "text-slate-900" : "text-white";
+  const isLight = hexLuminance(color) > 0.6;
+  const onColor = isLight ? "text-slate-900" : "text-white";
+  const onColorHover = isLight ? "hover:bg-black/10" : "hover:bg-white/15";
 
   return (
     // Fluid: the team hub fills the shell width so the plays/formations grids
@@ -68,7 +78,14 @@ export function TeamHubChrome({
           )}
         </span>
         <div className={`min-w-0 flex-1 ${onColor}`}>
-          <h1 className="truncate text-lg font-extrabold">{team.name}</h1>
+          {/* The team name IS the switcher — click it to change teams. This is
+              the only team selector in the shell now. */}
+          <TeamSwitcher
+            teams={teams}
+            selected={selected}
+            variant="bare"
+            triggerClassName={`${onColor} ${onColorHover}`}
+          />
           <p className="truncate text-xs opacity-85">
             {[team.season, team.sportLabel].filter(Boolean).join(" · ") || "Team"}
           </p>

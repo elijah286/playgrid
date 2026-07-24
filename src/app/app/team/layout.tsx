@@ -1,6 +1,7 @@
 import {
   getSelectedTeamMeta,
   listSelectableTeams,
+  listShellTeams,
 } from "@/features/preview-shell/team-context";
 import { TeamHubChrome } from "@/features/preview-shell/TeamHubChrome";
 import { SPORT_VARIANT_LABELS } from "@/domain/playbook/settings";
@@ -21,6 +22,9 @@ export default async function TeamLayout({
     const teams = await listSelectableTeams();
     return <TeamPicker teams={teams} />;
   }
+  // The Team hub now owns the only team switcher in the shell, so it needs the
+  // full team list + the selected id (both request-cached — no extra query).
+  const teams = await listShellTeams();
   return (
     <TeamHubChrome
       team={{
@@ -30,6 +34,8 @@ export default async function TeamLayout({
         season: team.season,
         sportLabel: SPORT_VARIANT_LABELS[team.sportVariant] ?? null,
       }}
+      teams={teams}
+      selected={team.id}
     >
       {children}
     </TeamHubChrome>
