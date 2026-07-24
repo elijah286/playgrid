@@ -920,6 +920,21 @@ export function CoachAiLauncher({
             aria-hidden="true"
           />
 
+          {/* Mobile half-sheet: a light, NON-blocking dim behind the sheet so it
+              reads as a floating panel (the distinction was hard to see on a
+              dark page). pointer-events-none keeps the page Cal is acting on
+              fully tappable — it just recedes. Sits below the panel (z-30) and
+              above the page; the bottom nav (z-40) stays lit. */}
+          <div
+            className={cn(
+              "pointer-events-none fixed inset-0 z-20 bg-black/40 transition-opacity sm:hidden",
+              isNarrow && panelMode !== "fullscreen" && panelMode !== "docked"
+                ? "block"
+                : "hidden",
+            )}
+            aria-hidden="true"
+          />
+
           {/* ── Dialog window ───────────────────────────────────────────── */}
           <div
             ref={dialogRef}
@@ -971,7 +986,12 @@ export function CoachAiLauncher({
                 ? "border-l border-border shadow-2xl"
                 : panelMode === "fullscreen"
                   ? "rounded-2xl ring-1 ring-black/10 shadow-2xl"
-                  : "rounded-t-2xl border-t border-black/10 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] sm:rounded-2xl sm:border-0 sm:ring-1 sm:ring-black/10 sm:shadow-2xl",
+                  : // Mobile half-sheet: a CLEAR raised edge so it reads as a
+                    // panel floating over the page (a plain border-black/10 +
+                    // soft shadow vanished on a dark background). A theme border
+                    // (bright hairline in dark mode) + a deep upward shadow give
+                    // it obvious elevation; desktop float keeps its ring/shadow.
+                    "rounded-t-2xl border-t border-border shadow-[0_-14px_44px_-8px_rgba(0,0,0,0.45)] dark:border-white/15 sm:rounded-2xl sm:border-0 sm:ring-1 sm:ring-black/10 sm:shadow-2xl",
               adminTrainingActive && "ring-2 ring-amber-400",
               // Position. Fullscreen uses a custom class instead of
               // `inset-2 sm:inset-4` so it can respect
