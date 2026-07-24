@@ -9,7 +9,7 @@ import { MessagesList } from "./MessagesList";
 export default function AppMessagesPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-4">
-      <h1 className="text-xl font-extrabold tracking-tight text-foreground">Messages</h1>
+      <h1 className="text-xl font-extrabold tracking-tight text-foreground">Team Messages</h1>
 
       <MessagesList />
 

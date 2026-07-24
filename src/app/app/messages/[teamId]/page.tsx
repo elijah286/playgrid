@@ -53,7 +53,7 @@ export default async function TeamChannelPage({
     // shell's bounded main scroll frame.
     <div className="flex h-full gap-4">
       <aside className="hidden w-80 shrink-0 flex-col overflow-y-auto sm:flex">
-        <h1 className="mb-3 text-lg font-extrabold tracking-tight text-foreground">Messages</h1>
+        <h1 className="mb-3 text-lg font-extrabold tracking-tight text-foreground">Team Messages</h1>
         <MessagesList selectedTeamId={teamId} />
       </aside>
 
