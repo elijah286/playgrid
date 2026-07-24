@@ -425,6 +425,28 @@ html.coach-docked body {
   html.coach-docked body { transition: none; }
 }
 
+/* The docked panel's vertical extent. Defaults to the full viewport (top:0),
+ * matching the production layout. The /app shell sets --coach-dock-top to its
+ * header's bottom edge (see PreviewChrome) so the dock opens BELOW the header. */
+.cal-panel-docked {
+  top: var(--coach-dock-top, 0px);
+  bottom: 0;
+}
+
+/* /app shell: keep the header a full-width fixed bar above the dock. Rather than
+ * padding the whole body (which would shrink the header too), pad only the
+ * content row; the header spans the full viewport and the dock sits below it. */
+html.coach-docked body:has([data-app-shell]) {
+  padding-right: 0;
+}
+html.coach-docked [data-app-shell] .app-shell-content {
+  padding-right: var(--coach-dock-w, 0px);
+  transition: padding-right 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  html.coach-docked [data-app-shell] .app-shell-content { transition: none; }
+}
+
 /* Fixed-position floating bars (selection actions, reorder hints, consent)
  * are anchored to the viewport, so the body padding-right above doesn't shift
  * them. Apply `.coach-dock-aware` to any such bar to keep it centered in the

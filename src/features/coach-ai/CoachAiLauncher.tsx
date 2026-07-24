@@ -983,7 +983,7 @@ export function CoachAiLauncher({
               panelMode === "fullscreen"
                 ? "cal-panel-fullscreen"
                 : panelMode === "docked"
-                  ? "inset-y-0 right-0 hidden lg:flex"
+                  ? "cal-panel-docked right-0 hidden lg:flex"
                   : [
                       // Mobile: bottom HALF-sheet, lifted above the
                       // bottom nav. `bottom`/`height` are set via inline

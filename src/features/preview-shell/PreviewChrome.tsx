@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BookOpen, GraduationCap, Layers, Shield, Sparkles } from "lucide-react";
@@ -39,6 +40,26 @@ export function PreviewChrome({
   // coach if they own or edit ANY team; otherwise they're a pure viewer
   // (player/parent) and the nav drops Cal. Same signal the role-aware Home uses.
   const isCoach = teams.some((t) => t.role === "owner" || t.role === "editor");
+
+  // Publish the header's bottom edge as --coach-dock-top so the docked Coach Cal
+  // panel opens BELOW the header (not level with it): the header stays a
+  // full-width fixed bar and only the content row makes room for the dock. On
+  // production (no shell) the var is unset → the panel keeps its top:0 behavior.
+  const headerRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const root = document.documentElement;
+    const apply = () => {
+      const h = headerRef.current?.getBoundingClientRect().bottom ?? 0;
+      root.style.setProperty("--coach-dock-top", `${Math.round(h)}px`);
+    };
+    apply();
+    window.addEventListener("resize", apply);
+    return () => {
+      window.removeEventListener("resize", apply);
+      root.style.removeProperty("--coach-dock-top");
+    };
+  }, []);
+
   return (
     <div
       data-app-shell
@@ -54,7 +75,10 @@ export function PreviewChrome({
       {/* Persistent top bar — the brand on both platforms (nav lives in the
           sidebar on desktop, the bottom bar on mobile). No team switcher: team
           selection lives on the Team hub, not in global chrome. */}
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-surface-raised px-4 py-2">
+      <header
+        ref={headerRef}
+        className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-surface-raised px-4 py-2"
+      >
         <div className="flex min-w-0 items-center gap-3">
           <Link
             href="/app/home"
@@ -83,10 +107,23 @@ export function PreviewChrome({
             </svg>
           </Link>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
+          {/* Coach Cal launcher lives in the header (like production), not the
+              sidebar. Coach-only; opens the floating/dockable dialog. */}
+          {isCoach && (
+            <button
+              type="button"
+              onClick={() => openCoachCal()}
+              aria-label="Coach Cal"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-br from-primary to-primary-dark px-2.5 py-1.5 text-sm font-bold text-white shadow-sm transition-opacity hover:opacity-95"
+            >
+              <Sparkles className="size-4" aria-hidden />
+              <span className="hidden sm:inline">Coach Cal</span>
+            </button>
+          )}
           <ShellAlertsButton />
           {/* Desktop only: on mobile the account menu lives in the footer's
-              "More" tab, so the header stays brand + bell. */}
+              "More" tab, so the header stays brand + Cal + bell. */}
           <div className="hidden sm:block">
             <ShellAccountMenu
               user={user}
@@ -97,14 +134,16 @@ export function PreviewChrome({
         </div>
       </header>
 
-      <div className="flex min-h-0 w-full flex-1">
+      {/* app-shell-content: when Coach Cal is docked, THIS row makes room for
+          the dock (padding-right via globals.css) — the header above stays
+          full-width and fixed. */}
+      <div className="app-shell-content flex min-h-0 w-full flex-1">
         {/* Desktop sidebar — pinned to the frame's left edge (not centered), so
             the chrome hugs the viewport the same way the header does. Fixed;
             only the nav list inside scrolls. */}
         <aside className="hidden w-60 shrink-0 flex-col border-r border-border sm:flex">
           <nav className="min-h-0 flex-1 overflow-y-auto p-3">
             <PreviewSideNav />
-            {isCoach && <CalCta />}
             <ExploreNav
               footballLibraryAvailable={footballLibraryAvailable}
               isAdmin={user.isAdmin}
@@ -129,21 +168,6 @@ export function PreviewChrome({
         footballLibraryAvailable={footballLibraryAvailable}
       />
     </div>
-  );
-}
-
-/** Prominent Coach Cal action — opens the launcher as a floating/dockable
- *  dialog over the main view (openCoachCal), never full-screen. */
-function CalCta() {
-  return (
-    <button
-      type="button"
-      onClick={() => openCoachCal()}
-      className="mt-2 flex w-full items-center gap-2.5 rounded-xl bg-gradient-to-br from-primary to-primary-dark px-3 py-2.5 text-sm font-bold text-white shadow-card transition-opacity hover:opacity-95"
-    >
-      <Sparkles className="size-5" aria-hidden />
-      Coach Cal
-    </button>
   );
 }
 
