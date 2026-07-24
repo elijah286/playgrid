@@ -296,7 +296,7 @@ const OFFLINE_FALLBACK_HTML = `<!doctype html>
     <rect fill="none" height="130" rx="42" ry="42" stroke="#95CC1F" stroke-width="38" width="170" x="480" y="105" />
   </svg>
   <h1>Can&rsquo;t reach xogridmaker</h1>
-  <p>You appear to be offline or on a weak connection. Any playbooks you&rsquo;ve downloaded are still available.</p>
+  <p>You appear to be offline or on a weak connection. Any playbooks you&rsquo;ve already downloaded stay available offline &mdash; you can keep coaching from them.</p>
   <button onclick="location.replace('/home')">Try again</button>
 </body>
 </html>`;

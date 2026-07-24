@@ -222,17 +222,17 @@ final class RetryOverlayView: UIView {
         stack.spacing = 18
         stack.translatesAutoresizingMaskIntoConstraints = false
 
-        // Reuse the bundled launch image for branding; skip gracefully if the
-        // asset name ever changes.
-        if let logo = UIImage(named: "Splash") {
-            let imageView = UIImageView(image: logo)
-            imageView.contentMode = .scaleAspectFit
-            imageView.translatesAutoresizingMaskIntoConstraints = false
-            imageView.heightAnchor.constraint(equalToConstant: 88).isActive = true
-            imageView.widthAnchor.constraint(equalToConstant: 88).isActive = true
-            stack.addArrangedSubview(imageView)
-            stack.setCustomSpacing(24, after: imageView)
-        }
+        // Draw the brand monogram as a vector instead of reusing the launch
+        // image. The launch artboard centers a small mark on a full-screen
+        // canvas, so scaling it into a logo-sized box renders the mark tiny
+        // (only ~8% of the frame is the mark). The vector fills its frame and
+        // stays crisp, with zero bundled-asset dependency.
+        let logo = MonogramView()
+        logo.translatesAutoresizingMaskIntoConstraints = false
+        logo.heightAnchor.constraint(equalToConstant: 64).isActive = true
+        logo.widthAnchor.constraint(equalToConstant: 152).isActive = true
+        stack.addArrangedSubview(logo)
+        stack.setCustomSpacing(24, after: logo)
 
         let title = UILabel()
         title.text = "Can’t reach xogridmaker"
@@ -243,7 +243,7 @@ final class RetryOverlayView: UIView {
         stack.addArrangedSubview(title)
 
         let subtitle = UILabel()
-        subtitle.text = "You appear to be offline or on a weak connection. Any playbooks you’ve downloaded are still available."
+        subtitle.text = "You appear to be offline or on a weak connection. Any playbooks you’ve already downloaded stay available offline — you can keep coaching from them."
         subtitle.font = .systemFont(ofSize: 15)
         subtitle.textColor = .secondaryLabel
         subtitle.numberOfLines = 0
@@ -273,5 +273,68 @@ final class RetryOverlayView: UIView {
             stack.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 32),
             stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -32),
         ])
+    }
+}
+
+/// The brand monogram (the "XO" mark) drawn as a vector so it stays crisp at
+/// any size and never depends on a bundled raster that could go missing.
+///
+/// Mirrors `public/brand/xogridmaker_monogram.svg` (and the inline SVG in
+/// `public/sw.js`) exactly — same 900×380 design space: two blue strokes form
+/// the "X", a green rounded rectangle is the "O". Keeping the coordinates in
+/// lockstep means the native offline screen and the web offline shell show the
+/// identical mark.
+final class MonogramView: UIView {
+    /// The SVG viewBox the coordinates below are authored in.
+    private static let designSize = CGSize(width: 900, height: 380)
+    private static let blue = UIColor(red: 23 / 255, green: 105 / 255, blue: 255 / 255, alpha: 1) // #1769FF
+    private static let green = UIColor(red: 149 / 255, green: 204 / 255, blue: 31 / 255, alpha: 1) // #95CC1F
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .clear
+        isOpaque = false
+        contentMode = .redraw
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var intrinsicContentSize: CGSize {
+        CGSize(width: 152, height: 64)
+    }
+
+    override func draw(_ rect: CGRect) {
+        // Fit the 900×380 design space into bounds, preserving aspect ratio.
+        let scale = min(bounds.width / Self.designSize.width, bounds.height / Self.designSize.height)
+        let inset = CGPoint(
+            x: (bounds.width - Self.designSize.width * scale) / 2,
+            y: (bounds.height - Self.designSize.height * scale) / 2
+        )
+        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            CGPoint(x: inset.x + x * scale, y: inset.y + y * scale)
+        }
+
+        // "X" — two square-capped strokes, matching the SVG's stroke-linecap="square".
+        let cross = UIBezierPath()
+        cross.move(to: point(250, 100))
+        cross.addLine(to: point(380, 240))
+        cross.move(to: point(380, 100))
+        cross.addLine(to: point(250, 240))
+        cross.lineWidth = 52 * scale
+        cross.lineCapStyle = .square
+        Self.blue.setStroke()
+        cross.stroke()
+
+        // "O" — a green rounded-rect outline (fill: none in the SVG).
+        let ring = UIBezierPath(
+            roundedRect: CGRect(origin: point(480, 105), size: CGSize(width: 170 * scale, height: 130 * scale)),
+            cornerRadius: 42 * scale
+        )
+        ring.lineWidth = 38 * scale
+        Self.green.setStroke()
+        ring.stroke()
     }
 }
