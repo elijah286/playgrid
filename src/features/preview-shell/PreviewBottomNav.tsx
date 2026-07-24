@@ -43,8 +43,11 @@ export function PreviewBottomNav({
   footballLibraryAvailable: boolean;
 }) {
   const pathname = usePathname() ?? "/app/home";
-  // The bottom nav stays visible everywhere — including an open message thread
-  // (the chat fills the space ABOVE it; the shell reserves the bar's height).
+  // A message thread is a full-screen conversation (iMessage / ChatGPT
+  // convention): hide the bottom nav so the chat owns the screen and the
+  // composer sits at the very bottom (above the safe area). The "‹ All
+  // messages" back link returns to the hub, which keeps the nav.
+  if (/^\/app\/messages\/[^/]+/.test(pathname)) return null;
   // Role-adaptive (Workstream 1): Cal is a coaching tool, so viewer-only users
   // (players/parents — coach on no team) don't get the center Cal slot; the
   // remaining four items re-center evenly. Everything else is identical, so a

@@ -136,7 +136,11 @@ export function PlaybookMessagesTab({
         inline
           ? // Fill the host card (the shell sets its height); no fixed
             // positioning, no mobile-lock — the shell owns the scroll frame.
-            "flex h-full flex-col overflow-hidden bg-surface-raised"
+            // Pad the bottom by the safe-area inset (iMessage/ChatGPT
+            // convention) so the composer clears the home indicator + curved
+            // corners; the surface-raised bg fills that strip. env() is 0 on
+            // desktop / non-notched devices, so it's a no-op there.
+            "flex h-full flex-col overflow-hidden bg-surface-raised pb-[env(safe-area-inset-bottom,0px)]"
           : "messages-mobile-fixed flex flex-col overflow-hidden bg-surface-base sm:h-[calc(100dvh-340px)] sm:max-h-[760px] sm:rounded-2xl sm:border sm:border-border"
       }
     >

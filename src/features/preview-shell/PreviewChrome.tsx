@@ -41,10 +41,11 @@ export function PreviewChrome({
   // (player/parent) and the nav drops Cal. Same signal the role-aware Home uses.
   const isCoach = teams.some((t) => t.role === "owner" || t.role === "editor");
 
-  // A message thread (/app/messages/<teamId>) FILLS the main area with the
-  // composer pinned at the bottom (not a short card in the scrolling main). The
-  // bottom nav stays visible, so on mobile the thread reserves the bar's height
-  // (plus the protruding Cal button) instead of the usual pb-24 scroll gap.
+  // A message thread (/app/messages/<teamId>) is a full-screen conversation: it
+  // FILLS the main area (composer pinned at the bottom, above the safe area),
+  // not a short card in the scrolling main. The bottom nav is hidden here, so no
+  // footer padding — the composer's own safe-area inset keeps it off the curved
+  // corners / home indicator.
   const pathname = usePathname() ?? "";
   const isFocusedThread = /^\/app\/messages\/[^/]+/.test(pathname);
 
@@ -173,7 +174,7 @@ export function PreviewChrome({
         <main
           className={
             isFocusedThread
-              ? "min-h-0 flex-1 overflow-hidden pb-[calc(4rem+env(safe-area-inset-bottom,0px))] sm:p-6"
+              ? "min-h-0 flex-1 overflow-hidden sm:p-6"
               : "min-h-0 flex-1 overflow-y-auto px-4 pb-24 pt-4 sm:px-6 sm:pb-10"
           }
         >
