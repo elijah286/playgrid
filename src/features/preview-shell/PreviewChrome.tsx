@@ -108,17 +108,18 @@ export function PreviewChrome({
           </Link>
         </div>
         <div className="flex items-center gap-1.5">
-          {/* Coach Cal launcher lives in the header (like production), not the
-              sidebar. Coach-only; opens the floating/dockable dialog. */}
+          {/* Coach Cal launcher in the header — DESKTOP ONLY. On mobile Cal is
+              the bottom nav's center slot, so the header must not duplicate it.
+              Coach-only; opens the floating/dockable dialog. */}
           {isCoach && (
             <button
               type="button"
               onClick={() => openCoachCal()}
               aria-label="Coach Cal"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-br from-primary to-primary-dark px-2.5 py-1.5 text-sm font-bold text-white shadow-sm transition-opacity hover:opacity-95"
+              className="hidden items-center gap-1.5 rounded-lg bg-gradient-to-br from-primary to-primary-dark px-2.5 py-1.5 text-sm font-bold text-white shadow-sm transition-opacity hover:opacity-95 sm:inline-flex"
             >
               <Sparkles className="size-4" aria-hidden />
-              <span className="hidden sm:inline">Coach Cal</span>
+              <span>Coach Cal</span>
             </button>
           )}
           <ShellAlertsButton />
