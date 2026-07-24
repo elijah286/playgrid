@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ListChecks, Search, StickyNote } from "lucide-react";
+import { Check, ListChecks, Search, SlidersHorizontal, StickyNote } from "lucide-react";
 import type { PlayType } from "@/domain/play/types";
 import type { PlaybookDetailPlayRow } from "@/app/actions/plays";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
@@ -11,8 +11,12 @@ import { PlayShareToggle } from "./PlayShareToggle";
 import {
   TYPE_LABEL,
   filterPlays,
-  groupPlaysOffenseFirst,
+  sortPlays,
+  groupPlays,
   presentPlayTypes,
+  type GroupBy,
+  type PlayGroup,
+  type SortMode,
 } from "./team-plays-grouping";
 
 /**
@@ -44,37 +48,58 @@ const TYPE_BADGE: Record<PlayType, { label: string; className: string }> = {
 
 export function TeamPlaysClient({
   plays,
+  groups,
   canEdit,
 }: {
   plays: PlaybookDetailPlayRow[];
+  groups: PlayGroup[];
   canEdit: boolean;
 }) {
   const [q, setQ] = useState("");
   const [typeFilter, setTypeFilter] = useState<PlayType | "all">("all");
+  const [sortMode, setSortMode] = useState<SortMode>("manual");
+  const [groupBy, setGroupBy] = useState<GroupBy>("type");
+  const [showArchived, setShowArchived] = useState(false);
 
-  // The type-filter chips only offer types actually present, in offense-first
-  // order — so a flag team never sees a "Special Teams" filter it can't use.
-  const presentTypes = useMemo(() => presentPlayTypes(plays), [plays]);
-  const filtered = useMemo(() => filterPlays(plays, q, typeFilter), [plays, q, typeFilter]);
-  const sections = useMemo(() => groupPlaysOffenseFirst(filtered), [filtered]);
+  // filter → sort → group, so the chosen sort holds WITHIN each section.
+  const presentTypes = useMemo(
+    () => presentPlayTypes(plays.filter((p) => showArchived || !p.is_archived)),
+    [plays, showArchived],
+  );
+  const filtered = useMemo(
+    () => filterPlays(plays, q, typeFilter, showArchived),
+    [plays, q, typeFilter, showArchived],
+  );
+  const sorted = useMemo(() => sortPlays(filtered, sortMode), [filtered, sortMode]);
+  const sections = useMemo(() => groupPlays(sorted, groupBy, groups), [sorted, groupBy, groups]);
 
   return (
     <div className="space-y-4">
-      {/* Controls: search + type filter (the "sort and filter" the flat grid
-          lost). Only show the type chips when there's more than one type. */}
       <div className="space-y-2.5">
-        <div className="relative">
-          <Search
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted"
-            aria-hidden
-          />
-          <input
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search plays…"
-            aria-label="Search plays"
-            className="w-full rounded-lg border border-border bg-surface-raised py-2 pl-9 pr-3 text-sm outline-none focus:border-primary"
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted"
+              aria-hidden
+            />
+            <input
+              type="search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search plays…"
+              aria-label="Search plays"
+              className="w-full rounded-lg border border-border bg-surface-raised py-2 pl-9 pr-3 text-sm outline-none focus:border-primary"
+            />
+          </div>
+          <SortGroupMenu
+            sortMode={sortMode}
+            onSort={setSortMode}
+            groupBy={groupBy}
+            onGroup={setGroupBy}
+            hasGroups={groups.length > 0}
+            showArchived={showArchived}
+            onArchived={setShowArchived}
+            canEdit={canEdit}
           />
         </div>
 
@@ -98,17 +123,19 @@ export function TeamPlaysClient({
 
       {filtered.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted">
-          {plays.length === 0 ? "No plays yet." : "No plays match your search."}
+          {plays.length === 0 ? "No plays yet." : "No plays match your filters."}
         </div>
       ) : (
         sections.map((section) => (
-          <section key={section.type}>
-            <div className="mb-2 flex items-center gap-2">
-              <h2 className="text-sm font-extrabold tracking-tight text-foreground">
-                {section.label}
-              </h2>
-              <span className="text-[11px] font-bold text-muted">{section.plays.length}</span>
-            </div>
+          <section key={section.key}>
+            {section.label && (
+              <div className="mb-2 flex items-center gap-2">
+                <h2 className="text-sm font-extrabold tracking-tight text-foreground">
+                  {section.label}
+                </h2>
+                <span className="text-[11px] font-bold text-muted">{section.plays.length}</span>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {section.plays.map((p) => (
                 <PlayCard key={p.id} play={p} canEdit={canEdit} />
@@ -117,6 +144,143 @@ export function TeamPlaysClient({
           </section>
         ))
       )}
+    </div>
+  );
+}
+
+const SORT_OPTS: { value: SortMode; label: string }[] = [
+  { value: "manual", label: "Manual" },
+  { value: "recent", label: "Recent" },
+  { value: "name", label: "Name" },
+];
+
+/** Sort · Group · Show archived — a compact popover, mirroring the production
+ *  Filters menu. Type filtering stays on the always-visible chips. */
+function SortGroupMenu({
+  sortMode,
+  onSort,
+  groupBy,
+  onGroup,
+  hasGroups,
+  showArchived,
+  onArchived,
+  canEdit,
+}: {
+  sortMode: SortMode;
+  onSort: (m: SortMode) => void;
+  groupBy: GroupBy;
+  onGroup: (g: GroupBy) => void;
+  hasGroups: boolean;
+  showArchived: boolean;
+  onArchived: (v: boolean) => void;
+  canEdit: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const groupOpts: { value: GroupBy; label: string }[] = [
+    { value: "type", label: "Type" },
+    { value: "formation", label: "Formation" },
+    ...(hasGroups ? [{ value: "group" as const, label: "Group" }] : []),
+    { value: "none", label: "None" },
+  ];
+
+  return (
+    <div ref={wrapRef} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm font-bold text-foreground transition-colors hover:bg-surface-inset"
+      >
+        <SlidersHorizontal className="size-4 text-muted" aria-hidden />
+        <span className="hidden sm:inline">Sort</span>
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-50 mt-2 w-64 rounded-2xl border border-border bg-surface-raised p-3 shadow-elevated"
+        >
+          <Segmented
+            label="Sort"
+            value={sortMode}
+            options={SORT_OPTS}
+            onChange={(v) => onSort(v as SortMode)}
+          />
+          <div className="mt-3">
+            <Segmented
+              label="Group by"
+              value={groupBy}
+              options={groupOpts}
+              onChange={(v) => onGroup(v as GroupBy)}
+            />
+          </div>
+          {canEdit && (
+            <label className="mt-3 flex cursor-pointer items-center justify-between gap-2 rounded-lg px-1 py-1.5 text-sm">
+              <span className="font-semibold text-foreground">Show archived</span>
+              <input
+                type="checkbox"
+                checked={showArchived}
+                onChange={(e) => onArchived(e.target.checked)}
+                className="size-4 accent-primary"
+              />
+            </label>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Segmented<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div>
+      <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-muted">
+        {label}
+      </span>
+      <div className="flex flex-wrap gap-1 rounded-lg bg-surface-inset p-0.5">
+        {options.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(o.value)}
+            aria-pressed={value === o.value}
+            className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${
+              value === o.value
+                ? "bg-surface-raised text-foreground shadow-sm"
+                : "text-muted hover:text-foreground"
+            }`}
+          >
+            {value === o.value && <Check className="size-3" aria-hidden />}
+            {o.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
